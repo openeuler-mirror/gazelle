@@ -47,57 +47,6 @@ static __rte_always_inline struct gazelle_stack *get_kni_stack(void)
     return &kni_stack;
 }
 
-static int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count)
-{
-    uint32_t i;
-
-    if (get_ltran_config()->dpdk.kni_switch == GAZELLE_OFF) {
-        for (i = 0; i < count; ++i) {
-            rte_pktmbuf_free(pkts_burst[i]);
-            pkts_burst[i] = NULL;
-        }
-        return GAZELLE_OK;
-    }
-
-    i = rte_kni_tx_burst(get_libos_kni(), pkts_burst, count);
-    for (; i < count; ++i) {
-        rte_pktmbuf_free(pkts_burst[i]);
-        pkts_burst[i] = NULL;
-    }
-
-    return GAZELLE_OK;
-}
-
-static void kni_process_rx(uint16_t bond_port)
-{
-    if (get_ltran_config()->dpdk.kni_switch == GAZELLE_OFF) {
-        return;
-    }
-
-    struct rte_mbuf *pkts_burst[PACKET_READ_SIZE];
-    uint16_t nb_kni_rx = rte_kni_rx_burst(get_libos_kni(), pkts_burst, PACKET_READ_SIZE);
-    if (nb_kni_rx > 0) {
-        pthread_mutex_lock(get_kni_mutex());
-        uint16_t nb_rx = rte_eth_tx_burst(bond_port, 0, pkts_burst, nb_kni_rx);
-        pthread_mutex_unlock(get_kni_mutex());
-        for (uint16_t i = nb_rx; i < nb_kni_rx; ++i) {
-            rte_pktmbuf_free(pkts_burst[i]);
-            pkts_burst[i] = NULL;
-        }
-    }
-
-    return;
-}
-
-static inline void kni_process_req(struct rte_kni *kni)
-{
-    if (get_ltran_config()->dpdk.kni_switch == GAZELLE_OFF) {
-        return;
-    }
-
-    rte_kni_handle_request(kni);
-}
-
 static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rte_mbuf *mbuf)
 {
     uint64_t latency;
@@ -133,7 +82,6 @@ static __rte_always_inline void flush_rx_mbuf(struct gazelle_stack *stack, struc
         calculate_ltran_latency(stack, src);
     }
     rte_pktmbuf_free(src);
-    src = NULL;
 }
 
 static __rte_always_inline void backup_bufs_enque_rx_ring(struct gazelle_stack *stack)
@@ -454,7 +402,9 @@ static __rte_always_inline void upstream_forward_one(struct rte_mbuf *m)
     }
 
 forward_to_kni:
-    enqueue_rx_packet(get_kni_stack(), m);
+    if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
+        enqueue_rx_packet(get_kni_stack(), m);
+    }
     return;
 }
 
@@ -606,15 +556,6 @@ static __rte_always_inline void flush_all_stack(void)
     }
 }
 
-static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)
-{
-    for (uint32_t i = 0; i < rx_count; i++) {
-        uint64_t *priv = (uint64_t *)RTE_PTR_ADD(buf[i], sizeof(struct rte_mbuf));
-        *priv = time_stamp; // time stamp
-        *(priv + 1) = ~(*priv); // just for later vaid check
-    }
-}
-
 #define FWD_PREFETCH_OFFSET_ALREADY (FWD_PREFETCH_OFFSET * 2)
 #define FWD_PREFETCH_OFFSET    2
 static __rte_always_inline void upstream_forward_loop(uint32_t port_id, uint32_t queue_id)
@@ -700,8 +641,10 @@ void upstream_forward(const uint16_t *port)
             upstream_forward_loop(port_id, queue_id);
         }
 
-        flush_rx_ring(get_kni_stack());
-        kni_process_req(get_libos_kni());
+        if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
+            flush_rx_ring(get_kni_stack());
+            rte_kni_handle_request(get_gazelle_kni());
+        }
 
         now_time = get_current_time();
         if (now_time - aging_conn_last_time > GAZELLE_CONN_INTERVAL) {
@@ -807,7 +750,9 @@ int32_t downstream_forward(uint16_t *port)
 
     while (get_ltran_stop_flag() != GAZELLE_TRUE) {
         /* kni rx means read from kni and send to nic */
-        kni_process_rx(g_port_index);
+        if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
+            kni_process_rx(g_port_index);
+        }
 
         for (uint32_t queue_id = 0; queue_id < queue_num; queue_id++) {
             downstream_forward_loop(port_id, queue_id);

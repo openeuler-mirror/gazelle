@@ -14,6 +14,7 @@ project(ltran)
 set(COMMON_DIR ${PROJECT_SOURCE_DIR}/../common)
 
 set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D LTRAN_COMPILE")
 
 if($ENV{GAZELLE_COVERAGE_ENABLE})
 	message("Enable Coverage compile option")
@@ -22,9 +23,9 @@ endif($ENV{GAZELLE_COVERAGE_ENABLE})
 
 add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_stat.c ltran_errno.c
 				ltran_monitor.c ltran_instance.c ltran_stack.c ltran_tcp_conn.c ltran_tcp_sock.c
-				ltran_forward.c ltran_timer.c ${COMMON_DIR}/gazelle_dfx_msg.c)
+				ltran_forward.c ltran_timer.c ${COMMON_DIR}/gazelle_dfx_msg.c ${COMMON_DIR}/dpdk_common.c)
 
-target_include_directories(ltran PRIVATE ${COMMON_DIR})
+target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR})
 target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_FEATURE_CRC32=1 -DRTE_MACHINE_CPUFLAG_NEON
                -DRTE_MACHINE_CPUFLAG_CRC32 -DRTE_MACHINE_CPUFLAG_PMULL -DRTE_MACHINE_CPUFLAG_AES
                -DRTE_MACHINE_CPUFLAG_SHA1 -DRTE_MACHINE_CPUFLAG_SHA2 -include rte_config.h

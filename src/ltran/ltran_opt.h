@@ -21,7 +21,6 @@
 
 #define GAZELLE_PACKET_READ_SIZE     32
 
-#define GAZELLE_MAX_PKT_SZ           2048
 #define GAZELLE_MBUFS_RX_COUNT       (300 * 1024)
 #define GAZELLE_MBUFS_TX_COUNT       (30 * 1024)
 #define GAZELLE_MBUFS_CACHE_SIZE     512
@@ -31,8 +30,6 @@
 #define GAZELLE_RX_DESC_DEFAULT      512
 #define GAZELLE_TX_DESC_DEFAULT      512
 
-#define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
-#define GAZELLE_KNI_IFACES_NUM               1
 #define GAZELLE_KNI_MAX_PACKET_SIZE          2048
 #define GAZELLE_KNI_ETHERNET_HEADER_SIZE     14
 #define GAZELLE_KNI_ETHERNET_FCS_SIZE        4

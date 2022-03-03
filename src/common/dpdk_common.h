@@ -15,6 +15,8 @@
 
 #include <rte_mbuf.h>
 
+#define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
+
 /* time_stamp time_stamp_vaid_check . align 8 */
 #define GAZELLE_MBUFF_PRIV_SIZE  (sizeof(uint64_t) * 2)
 #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
@@ -53,5 +55,20 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf 
 
     return;
 }
+
+static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)
+{
+    for (uint32_t i = 0; i < rx_count; i++) {
+        uint64_t *priv = (uint64_t *)PTR_TO_PRIVATE(buf[i]);
+        *priv = time_stamp; // time stamp
+        *(priv + 1) = ~(*priv); // just for later vaid check
+    }
+}
+
+pthread_mutex_t *get_kni_mutex(void);
+struct rte_kni* get_gazelle_kni(void);
+int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool);
+int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count);
+void kni_process_rx(uint16_t port);
 
 #endif

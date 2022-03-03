@@ -16,26 +16,27 @@
 #include "lstack_thread_rpc.h"
 
 #define SOCK_RECV_RING_SIZE     (128)
-#define SOCK_SEND_RING_SIZE     (128)
+#define SOCK_SEND_RING_SIZE     (32)
 
 /* flags define last type PBUF_FLAG_TCP_FIN 0x20U in pbuf.h  */
 #define PBUF_FLAG_SND_SAVE_CPY   0x40U
 
-#define NETCONN_IS_ACCEPTIN(sock) (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
+#define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
+#define NETCONN_IS_DATAIN(sock)     ((rte_ring_count((sock)->recv_ring) || (sock)->recv_lastdata))
+#define NETCONN_IS_DATAOUT(sock)    rte_ring_free_count((sock)->send_ring)
 
-void get_sockaddr_by_fd(struct sockaddr_in *addr, struct lwip_sock *sock);
+void create_shadow_fd(struct rpc_msg *msg);
 void listen_list_add_node(int32_t head_fd, int32_t add_fd);
 void gazelle_init_sock(int32_t fd);
 void gazelle_clean_sock(int32_t fd);
-uint32_t stack_send(int32_t fd, int32_t flags);
+ssize_t write_lwip_data(struct lwip_sock *sock, int32_t fd, int32_t flags);
+ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
 ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
-ssize_t write_stack_data(int32_t fd, const void *buf, size_t len);
 ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags);
 void read_recv_list(void);
 void add_recv_list(int32_t fd);
 void get_lwip_conntable(struct rpc_msg *msg);
 void get_lwip_connnum(struct rpc_msg *msg);
-void stack_add_event(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);
 void stack_replenish_send_idlembuf(struct protocol_stack *stack);
 

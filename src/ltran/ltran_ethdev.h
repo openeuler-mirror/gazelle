@@ -31,7 +31,6 @@ uint16_t* get_bond_port(void);
 struct rte_mempool** get_pktmbuf_txpool(void);
 struct rte_mempool** get_pktmbuf_rxpool(void);
 
-pthread_mutex_t *get_kni_mutex(void);
 int32_t ltran_ethdev_init(void);
 
 #endif /* ifndef __GAZELLE_ETHDEV_H__ */

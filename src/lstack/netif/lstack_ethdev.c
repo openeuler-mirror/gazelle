@@ -51,10 +51,6 @@ static inline void eth_mbuf_reclaim(struct rte_mbuf *mbuf)
 
 static void eth_pbuf_reclaim(struct pbuf *pbuf)
 {
-    if (get_protocol_stack_group()->latency_start) {
-        calculate_lstack_latency(&get_protocol_stack()->latency, pbuf, GAZELLE_LATENCY_READ);
-    }
-
     if (pbuf != NULL) {
         struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
         eth_mbuf_reclaim(mbuf);
@@ -101,7 +97,9 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
 {
     int32_t ret;
     void *payload = NULL;
-    struct pbuf *next = NULL, *prev = NULL, *head = NULL;
+    struct pbuf *next = NULL;
+    struct pbuf *prev = NULL;
+    struct pbuf *head = NULL;
     struct pbuf_custom *pc = NULL;
     struct protocol_stack *stack = get_protocol_stack();
     struct rte_mbuf *m = mbuf;
@@ -152,6 +150,11 @@ int32_t eth_dev_poll(void)
     if (nr_pkts == 0) {
         return nr_pkts;
     }
+
+    if (get_protocol_stack_group()->latency_start) {
+            uint64_t time_stamp = get_current_time();
+            time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
+        }
 
     for (uint32_t i = 0; i < nr_pkts; i++) {
         /* copy arp into other stack */

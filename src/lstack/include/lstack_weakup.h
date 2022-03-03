@@ -16,24 +16,55 @@
 #include <rte_ring.h>
 #include "lstack_dpdk.h"
 
+#define EPOLL_MAX_EVENTS    256
+
 struct weakup_poll {
     sem_t event_sem;
+    struct lwip_sock *sock_list[EPOLL_MAX_EVENTS];
     struct rte_ring *event_ring;
 };
 
 #define WEAKUP_MAX           (32)
 
-static inline __attribute__((always_inline))
-void weakup_thread(struct rte_ring *weakup_ring)
+static inline __attribute__((always_inline)) void weakup_attach_sock(struct lwip_sock *sock)
+{
+    struct list_node *list = &(sock->attach_list);
+    struct list_node *node, *temp;
+    struct lwip_sock *attach_sock;
+    int32_t ret;
+
+    list_for_each_safe(node, temp, list) {
+        attach_sock = container_of(node, struct lwip_sock, attach_list);
+        if (attach_sock->weakup == NULL) {
+            continue;
+        }
+
+        ret = rte_ring_mp_enqueue(attach_sock->weakup->event_ring, (void *)attach_sock);
+        if (ret == 0) {
+            sem_post(&attach_sock->weakup->event_sem);
+            attach_sock->stack->stats.lwip_events++;
+        }
+    }
+}
+
+static inline __attribute__((always_inline)) void weakup_thread(struct rte_ring *weakup_ring)
 {
     uint32_t num;
     struct lwip_sock *sock[WEAKUP_MAX];
+    int32_t ret;
 
     num = rte_ring_sc_dequeue_burst(weakup_ring, (void **)sock, WEAKUP_MAX, NULL);
     for (uint32_t i = 0; i < num; ++i) {
-        rte_ring_sp_enqueue(sock[i]->weakup->event_ring, (void *)sock[i]);
-        sem_post(&sock[i]->weakup->event_sem);
-        sock[i]->stack->stats.lwip_events++;
+        ret = rte_ring_mp_enqueue(sock[i]->weakup->event_ring, (void *)sock[i]);
+        if (ret == 0) {
+            sem_post(&sock[i]->weakup->event_sem);
+            sock[i]->stack->stats.lwip_events++;
+        }
+
+        /* listen notice attach sock */
+        if (!list_is_empty(&sock[i]->attach_list)) {
+            weakup_attach_sock(sock[i]);
+        }
     }
 }
 

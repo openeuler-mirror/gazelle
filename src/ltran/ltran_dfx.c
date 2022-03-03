@@ -52,6 +52,8 @@ static int32_t g_ltran_rate_show_flag = GAZELLE_OFF;    // not show when first g
 static struct gazelle_stat_ltran_total g_last_ltran_total;
 static struct gazelle_stat_lstack_total g_last_lstack_total[GAZELLE_MAX_STACK_ARRAY_SIZE];
 
+static bool g_use_ltran;
+
 /* Use the largest data structure. */
 #define GAZELLE_CMD_RESP_BUFFER_SIZE (sizeof(struct gazelle_stack_dfx_data) / sizeof(char))
 
@@ -101,6 +103,20 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
 };
 
 static int32_t g_wait_reply = 1;
+
+static pid_t ltran_process_exist(void)
+{
+    #define LINE 1024
+    #define BASE_DEC_SCALE 10
+    char line[LINE];
+    FILE *cmd = popen("pidof ltran", "r");
+
+    (void)fgets(line, LINE, cmd);
+    pid_t pid = strtoul(line, NULL, BASE_DEC_SCALE);
+    (void)pclose(cmd);
+
+    return pid;
+}
 
 static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
@@ -158,10 +174,18 @@ static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
     }
 
     addr.sun_family = AF_UNIX;
-    ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
-        strlen(GAZELLE_DFX_SOCK_PATHNAME) + 1);
-    if (ret != EOK) {
-        printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+    if (g_use_ltran) {
+        ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
+            strlen(GAZELLE_DFX_SOCK_PATHNAME) + 1);
+        if (ret != EOK) {
+            printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        }
+    } else {
+        ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_PATHNAME,
+            strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
+        if (ret != EOK) {
+            printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        }
     }
 
     ret = connect(fd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_un));
@@ -516,6 +540,41 @@ static void gazelle_print_lstack_stat_brief(struct gazelle_stat_lstack_total *st
     return;
 }
 
+static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
+{
+    printf("\n------ stack tid: %6u ------\n", lstack_stat->tid);
+    printf("rx_pkts: %-20"PRIu64" ", lstack_stat->data.pkts.rx);
+    printf("rx_drop: %-20"PRIu64" ", lstack_stat->data.pkts.rx_drop);
+    printf("rx_allocmbuf_fail: %-10"PRIu64"\n", lstack_stat->data.pkts.rx_allocmbuf_fail);
+    printf("tx_pkts: %-20"PRIu64" ", lstack_stat->data.pkts.tx);
+    printf("tx_drop: %-20"PRIu64" ", lstack_stat->data.pkts.tx_drop);
+    printf("tx_allocmbuf_fail: %-10"PRIu64"\n", lstack_stat->data.pkts.tx_allocmbuf_fail);
+    printf("app_read: %-19"PRIu64" ", lstack_stat->data.pkts.app_read_cnt);
+    printf("read_lwip: %-18"PRIu64" ", lstack_stat->data.pkts.read_lwip_cnt);
+    printf("read_lwip_drop: %-13"PRIu64" \n", lstack_stat->data.pkts.read_lwip_drop);
+    printf("app_write: %-18"PRIu64" ", lstack_stat->data.pkts.app_write_cnt);
+    printf("app_write_drop: %-13"PRIu64" ", lstack_stat->data.pkts.app_write_drop);
+    printf("app_get_idlefail: %-11"PRIu64" \n", lstack_stat->data.pkts.app_write_idlefail);
+    printf("write_lwip: %-17"PRIu64" ", lstack_stat->data.pkts.write_lwip_cnt);
+    printf("write_lwip_drop: %-12"PRIu64" ", lstack_stat->data.pkts.write_lwip_drop);
+    printf("app_write_idlebuf: %-10"PRIu16" \n", lstack_stat->data.pkts.send_idle_ring_cnt);
+    printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list);
+    printf("weakup_ring_cnt: %-12"PRIu16" ", lstack_stat->data.pkts.weakup_ring_cnt);
+    printf("conn_num: %-19"PRIu16" \n", lstack_stat->data.pkts.conn_num);
+    printf("weakup_events: %-14"PRIu64" ", lstack_stat->data.pkts.weakup_events);
+    printf("lwip_events: %-16"PRIu64" ", lstack_stat->data.pkts.lwip_events);
+    printf("app_events: %-17"PRIu64"\n", lstack_stat->data.pkts.app_events);
+    printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
+    printf("read_null: %-18"PRIu64" ", lstack_stat->data.pkts.read_null);
+    printf("read_events: %-16"PRIu64" \n", lstack_stat->data.pkts.read_events);
+    printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
+    printf("event_null: %-17"PRIu64" ", lstack_stat->data.pkts.event_null);
+    printf("remove_event: %-15"PRIu64" \n", lstack_stat->data.pkts.remove_event);
+    printf("recv_empty: %-17"PRIu64" ", lstack_stat->data.pkts.recv_empty);
+    printf("write_events: %-15"PRIu64" ", lstack_stat->data.pkts.write_events);
+    printf("send_self_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.send_self_rpc);
+}
+
 static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lstack_stat,
                                              const struct gazelle_stat_msg_request *req_msg)
 {
@@ -523,9 +582,11 @@ static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lsta
 
     (void)req_msg;
     do {
-        int32_t ret = read_specied_len(g_unix_fd, (char *)lstack_stat, sizeof(*lstack_stat));
-        if (ret != GAZELLE_OK) {
-            break;
+        if (g_use_ltran || low_power_info_show == 0) {
+            int32_t ret = read_specied_len(g_unix_fd, (char *)lstack_stat, sizeof(*lstack_stat));
+            if (ret != GAZELLE_OK) {
+                break;
+            }
         }
 
         if (low_power_info_show != 0) {
@@ -541,29 +602,7 @@ static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lsta
             low_power_info_show = 0;
         }
 
-        printf("\n------ stack tid: %6u ------\n", lstack_stat->tid);
-        printf("rx_pkts: %-15"PRIu64" ", lstack_stat->data.pkts.rx);
-        printf("rx_drop: %-15"PRIu64" ", lstack_stat->data.pkts.rx_drop);
-        printf("rx_allocmbuf_fail: %-6"PRIu64"\n", lstack_stat->data.pkts.rx_allocmbuf_fail);
-        printf("tx_pkts: %-15"PRIu64" ", lstack_stat->data.pkts.tx);
-        printf("tx_drop: %-15"PRIu64" ", lstack_stat->data.pkts.tx_drop);
-        printf("tx_allocmbuf_fail: %-6"PRIu64"\n", lstack_stat->data.pkts.tx_allocmbuf_fail);
-        printf("read_lwip: %-13"PRIu64" ", lstack_stat->data.pkts.read_lwip_cnt);
-        printf("read_lwip_drop: %-8"PRIu64" ", lstack_stat->data.pkts.read_lwip_drop);
-        printf("weakup_ring_cnt: %-4"PRIu16"\n", lstack_stat->data.pkts.weakup_ring_cnt);
-        printf("write_lwip: %-12"PRIu64" ", lstack_stat->data.pkts.write_lwip_cnt);
-        printf("write_lwip_drop: %-7"PRIu64" ", lstack_stat->data.pkts.write_lwip_drop);
-        printf("call_msg: %-6"PRIu64" \n", lstack_stat->data.pkts.call_msg_cnt);
-        printf("app_read: %-14"PRIu64" ", lstack_stat->data.pkts.app_read_cnt);
-        printf("app_write: %-13"PRIu64" ", lstack_stat->data.pkts.app_write_cnt);
-        printf("app_write_idlefail: %-6"PRIu64" \n", lstack_stat->data.pkts.app_write_idlefail);
-        printf("app_write_idlebuf: %-5"PRIu16" ", lstack_stat->data.pkts.send_idle_ring_cnt);
-        printf("app_write_drop: %-8"PRIu64" ", lstack_stat->data.pkts.app_write_drop);
-        printf("conn_num: %-6"PRIu16" \n", lstack_stat->data.pkts.conn_num);
-        printf("weakup_events: %-9"PRIu64" ", lstack_stat->data.pkts.weakup_events);
-        printf("lwip_events: %-11"PRIu64" ", lstack_stat->data.pkts.lwip_events);
-        printf("app_events: %-6"PRIu64"\n", lstack_stat->data.pkts.app_events);
-        printf("recv_list: %-13"PRIu64" \n", lstack_stat->data.pkts.recv_list);
+        show_lstack_stats(lstack_stat);
 
         if (lstack_stat->eof) {
             break;
@@ -574,10 +613,12 @@ static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lsta
 
 static void gazelle_print_lstack_stat_total(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
-    printf("Statistics of lstack:\n");
-    gazelle_print_lstack_stat_brief((struct gazelle_stat_lstack_total *)buf, req_msg);
+    if (g_use_ltran) {
+        printf("Statistics of lstack:\n");
+        gazelle_print_lstack_stat_brief((struct gazelle_stat_lstack_total *)buf, req_msg);
+        printf("\n\nStatistics of lstack in app:\n");
+    }
 
-    printf("\n\nStatistics of lstack in app:\n");
     gazelle_print_lstack_stat_detail((struct gazelle_stack_dfx_data *)buf, req_msg);
     return;
 }
@@ -1070,7 +1111,9 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_START_LATENCY;
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_STOP_LATENCY;
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_LATENCY;
-        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW_LATENCY;
+        if (g_use_ltran) {
+            req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW_LATENCY;
+        }
 
         if (argc > GAZELLE_OPTIONS2_ARG_IDX) {
             delay = atoi(argv[GAZELLE_OPTIONS2_ARG_IDX]);
@@ -1136,6 +1179,25 @@ static int32_t parse_dfx_cmd_args(int32_t argc, char *argv[], struct gazelle_sta
     return num_cmd;
 }
 
+static int32_t check_cmd_support(enum GAZELLE_STAT_MODE stat_mode)
+{
+    switch (stat_mode) {
+        case GAZELLE_STAT_LSTACK_LOG_LEVEL_SET:
+        case GAZELLE_STAT_LSTACK_SHOW:
+        case GAZELLE_STAT_LSTACK_SHOW_SNMP:
+        case GAZELLE_STAT_LSTACK_SHOW_CONN:
+        case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
+        case GAZELLE_STAT_LSTACK_LOW_POWER_MDF:
+        case GAZELLE_STAT_LTRAN_START_LATENCY:
+            return 0;
+        default:
+            show_usage();
+            return -1;
+    }
+
+    return -1;
+}
+
 int32_t main(int32_t argc, char *argv[])
 {
     struct gazelle_stat_msg_request req_msg[GAZELLE_CMD_MAX] = {0};
@@ -1148,6 +1210,17 @@ int32_t main(int32_t argc, char *argv[])
     if (req_msg_num <= 0 || req_msg_num > GAZELLE_CMD_MAX) {
         show_usage();
         return 0;
+    }
+
+    g_use_ltran = ltran_process_exist() ? true : false;
+    if (!g_use_ltran) {
+        g_gazelle_dfx_tbl[GAZELLE_STAT_LSTACK_SHOW].recv_size = sizeof(struct gazelle_stack_dfx_data);
+        g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_START_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);
+        g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_STOP_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);
+        ret = check_cmd_support(req_msg[msg_index].stat_mode);
+        if (ret < 0) {
+            return 0;
+        }
     }
 
     for (;;) {

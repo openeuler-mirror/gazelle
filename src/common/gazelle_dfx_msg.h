@@ -15,6 +15,9 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <sys/stat.h>
+
+#include "gazelle_reg_msg.h"
 
 #define GAZELLE_CLIENT_NUM_MIN           1
 #define GAZELLE_LOG_LEVEL_MAX            10
@@ -77,6 +80,14 @@ struct gazelle_stat_pkts {
     uint64_t lwip_events;
     uint64_t weakup_events;
     uint64_t app_events;
+    uint64_t call_alloc_fail;
+    uint64_t read_events;
+    uint64_t write_events;
+    uint64_t read_null;
+    uint64_t recv_empty;
+    uint64_t event_null;
+    uint64_t remove_event;
+    uint64_t send_self_rpc;
 };
 
 /* same as define in lwip/stats.h - struct stats_mib2 */
@@ -225,4 +236,17 @@ struct gazelle_stat_msg_request {
 
 int write_specied_len(int fd, const char *buf, size_t target_size);
 int read_specied_len(int fd, char *buf, size_t target_size);
+
+static inline int32_t check_and_set_run_dir(void)
+{
+    int32_t ret;
+
+    if (access(GAZELLE_RUN_DIR, 0) != 0) {
+        ret = mkdir(GAZELLE_RUN_DIR, GAZELLE_FILE_PERMISSION);
+        if (ret != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
 #endif

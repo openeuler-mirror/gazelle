@@ -41,7 +41,7 @@ endif
 CFLAGS += $(SEC_FLAGS)
 
 SRCS =
-DIRS = core netif api
+DIRS = core netif api ../common
 
 define register_dir
 SRCS += $(patsubst %, $(1)/%, $(2))
