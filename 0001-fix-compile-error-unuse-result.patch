@@ -1,0 +1,28 @@
+From 9155ca505cc2b3f3aa70ff6c0b4401be517b194f Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Fri, 4 Mar 2022 14:19:14 +0800
+Subject: [PATCH] fix compile error
+
+---
+ src/ltran/ltran_dfx.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index c923de0..159fbb9 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -111,7 +111,10 @@ static pid_t ltran_process_exist(void)
+     char line[LINE];
+     FILE *cmd = popen("pidof ltran", "r");
+ 
+-    (void)fgets(line, LINE, cmd);
++    if(fgets(line, LINE, cmd) == NULL) {
++    	return 0;
++    }
++
+     pid_t pid = strtoul(line, NULL, BASE_DEC_SCALE);
+     (void)pclose(cmd);
+ 
+-- 
+2.30.0
+
