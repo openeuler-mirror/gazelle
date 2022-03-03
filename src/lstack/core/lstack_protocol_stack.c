@@ -14,8 +14,10 @@
 
 #include <lwip/sockets.h>
 #include <lwip/tcpip.h>
+#include <lwip/tcp.h>
 #include <lwip/memp_def.h>
 #include <lwipsock.h>
+#include <rte_kni.h>
 #include <securec.h>
 #include <numa.h>
 
@@ -30,7 +32,7 @@
 #include "lstack_control_plane.h"
 #include "lstack_stack_stat.h"
 
-static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX - 1;
+static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX;
 static struct protocol_stack_group g_stack_group = {0};
 static PER_THREAD long g_stack_tid = 0;
 
@@ -83,6 +85,9 @@ struct protocol_stack_group *get_protocol_stack_group(void)
 
 struct protocol_stack *get_protocol_stack(void)
 {
+    if (g_stack_idx >= PROTOCOL_STACK_MAX) {
+        return NULL;
+    }
     return g_stack_group.stacks[g_stack_idx];
 }
 
@@ -180,7 +185,7 @@ int32_t init_protocol_stack(void)
             return -EINVAL;
         }
 
-        ret = pktmbuf_pool_init(stack);
+        ret = pktmbuf_pool_init(stack, stack_group->stack_num);
         if (ret != 0) {
             return ret;
         }
@@ -191,6 +196,7 @@ int32_t init_protocol_stack(void)
         }
 
         init_list_node(&stack->recv_list);
+        init_list_node(&stack->listen_list);
 
         stack_replenish_send_idlembuf(stack);
 
@@ -199,7 +205,6 @@ int32_t init_protocol_stack(void)
 
     ret = init_stack_numa_cpuset();
     if (ret < 0) {
-        LSTACK_LOG(ERR, PORT, "shared_numa_init failed\n");
         return -1;
     }
 
@@ -215,7 +220,15 @@ int32_t init_protocol_stack(void)
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
             return -1;
         }
+
+        if (get_global_cfg_params()->kni_switch) {
+            ret = dpdk_init_lstack_kni();
+            if (ret < 0) {
+                return -1;
+            }
+        }
     }
+
     return 0;
 }
 
@@ -369,16 +382,62 @@ void stack_socket(struct rpc_msg *msg)
     gazelle_init_sock(fd);
 }
 
+static inline bool is_real_close(int32_t fd)
+{
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+
+    /* last sock */
+    if (list_is_empty(&sock->attach_list)) {
+        list_del_node_init(&sock->attach_list);
+        return true;
+    }
+
+    /* listen sock, but have attach sock */
+    if (sock->attach_fd == fd) {
+        sock->wait_close = true;
+        return false;
+    } else { /* attach sock */
+        /* listen sock is normal */
+        struct lwip_sock *listen_sock = get_socket_by_fd(sock->attach_fd);
+        if (listen_sock == NULL || !listen_sock->wait_close) {
+            list_del_node_init(&sock->attach_list);
+            return true;
+        }
+
+        /* listen sock is wait clsoe. check this is last attach sock */
+        struct list_node *list = &(sock->attach_list);
+        struct list_node *node, *temp;
+        uint32_t list_count = 0;
+        list_for_each_safe(node, temp, list) {
+            list_count++;
+        }
+        /* 2:listen sock is wait close and closing attach sock. close listen sock here */
+        if (list_count == 2) {
+            lwip_close(listen_sock->attach_fd);
+            gazelle_clean_sock(listen_sock->attach_fd);
+            posix_api->close_fn(listen_sock->attach_fd);
+            list_del_node_init(&listen_sock->attach_list);
+        }
+        list_del_node_init(&sock->attach_list);
+        return true;
+    }
+
+    list_del_node_init(&sock->attach_list);
+    return true;
+}
+
 void stack_close(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
 
+    if (!is_real_close(fd)) {
+        msg->result = 0;
+        return;
+    }
+
     msg->result = lwip_close(fd);
-    if (msg->result == 0) {
-        struct protocol_stack *stack = get_protocol_stack();
-        stack->conn_num--;
-    } else {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+    if (msg->result != 0) {
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 
     gazelle_clean_sock(fd);
@@ -390,26 +449,96 @@ void stack_bind(struct rpc_msg *msg)
 {
     msg->result = lwip_bind(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].socklen);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
+}
+
+static inline struct lwip_sock *reuse_listen(struct protocol_stack *stack, struct lwip_sock *listen_sock)
+{
+    struct list_node *node, *temp;
+    struct list_node *list = &(stack->listen_list);
+    struct lwip_sock *sock;
+
+    list_for_each_safe(node, temp, list) {
+        sock = container_of(node, struct lwip_sock, listen_list);
+        if (sock->conn->pcb.tcp->local_port == listen_sock->conn->pcb.tcp->local_port &&
+            sock->conn->pcb.tcp->local_ip.addr == listen_sock->conn->pcb.tcp->local_ip.addr) {
+            return sock;
+        }
+    }
+
+    return NULL;
 }
 
 void stack_listen(struct rpc_msg *msg)
 {
-    msg->result = lwip_listen(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i);
-    if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+    struct protocol_stack *stack = get_protocol_stack();
+    int32_t fd = msg->args[MSG_ARG_0].i;
+    int32_t backlog = msg->args[MSG_ARG_1].i;
+
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+    if (sock == NULL) {
+        msg->result = -1;
+        return;
+    }
+
+    /* stack have listen same ip+port, then attach to old listen */
+    struct lwip_sock *listen_sock = reuse_listen(stack, sock);
+    if (listen_sock) {
+        if (list_is_empty(&sock->attach_list)) {
+            list_add_node(&listen_sock->attach_list, &sock->attach_list);
+        }
+        sock->attach_fd = listen_sock->conn->socket;
+        msg->result = 0;
+        return;
+    }
+
+    /* new listen add to stack listen list */
+    msg->result = lwip_listen(fd, backlog);
+    if (msg->result == 0) {
+        if (list_is_empty(&sock->listen_list)) {
+            list_add_node(&stack->listen_list, &sock->listen_list);
+        }
+        sock->attach_fd = fd;
+    } else {
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
 void stack_accept(struct rpc_msg *msg)
 {
-    msg->result = lwip_accept(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
+    int32_t fd = msg->args[MSG_ARG_0].i;
+
+    /* listen sock attach_fd is self */
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        msg->result = -1;
+        return;
+    }
+    fd = sock->attach_fd;
+
+    msg->result = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
     if (msg->result > 0) {
         gazelle_init_sock(msg->result);
     } else {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
+            fd, msg->result);
     }
+
+    /* report remain accept event */
+    do {
+        struct lwip_sock *sock = get_socket(fd);
+        if (sock == NULL) {
+            break;
+        }
+
+        if ((sock->epoll_events & EPOLLIN) && NETCONN_IS_ACCEPTIN(sock)) {
+            add_epoll_event(sock->conn, EPOLLIN);
+            break;
+        }
+
+        fd = sock->nextfd;
+    } while (fd > 0);
 }
 
 void stack_connect(struct rpc_msg *msg)
@@ -421,7 +550,7 @@ void stack_getpeername(struct rpc_msg *msg)
 {
     msg->result = lwip_getpeername(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -429,7 +558,7 @@ void stack_getsockname(struct rpc_msg *msg)
 {
     msg->result = lwip_getsockname(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -438,7 +567,7 @@ void stack_getsockopt(struct rpc_msg *msg)
     msg->result = lwip_getsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
         msg->args[MSG_ARG_3].p, msg->args[MSG_ARG_4].p);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -447,7 +576,7 @@ void stack_setsockopt(struct rpc_msg *msg)
     msg->result = lwip_setsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
         msg->args[MSG_ARG_3].cp, msg->args[MSG_ARG_4].socklen);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -455,7 +584,7 @@ void stack_fcntl(struct rpc_msg *msg)
 {
     msg->result = lwip_fcntl(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].l);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -463,7 +592,7 @@ void stack_ioctl(struct rpc_msg *msg)
 {
     msg->result = lwip_ioctl(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].l, msg->args[MSG_ARG_2].p);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -477,7 +606,7 @@ void stack_sendmsg(struct rpc_msg *msg)
 {
     msg->result = lwip_sendmsg(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].i);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -485,7 +614,7 @@ void stack_recvmsg(struct rpc_msg *msg)
 {
     msg->result = lwip_recvmsg(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].i);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -497,19 +626,18 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
     struct protocol_stack *stack = NULL;
     int32_t ret;
 
-    for (int32_t i = 0; i < stack_group->stack_num; ++i) {
+    for (int32_t i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
-
         if (cur_stack == stack) {
-            mbuf_copy = mbuf;
-        } else {
-            mbuf_copy = rte_pktmbuf_alloc(stack->rpc_pool);
-            if (mbuf_copy == NULL) {
-                LSTACK_LOG(ERR, LSTACK, "alloc fail");
-                return;
-            }
-            copy_mbuf(mbuf_copy, mbuf);
+            continue;
         }
+
+        mbuf_copy = rte_pktmbuf_alloc(stack->rx_pktmbuf_pool);
+        if (mbuf_copy == NULL) {
+            stack->stats.rx_allocmbuf_fail++;
+            return;
+        }
+        copy_mbuf(mbuf_copy, mbuf);
 
         ret = rpc_call_arp(stack, mbuf_copy);
         if (ret != 0) {
@@ -544,7 +672,8 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 {
     struct protocol_stack *cur_stack = get_protocol_stack_by_fd(fd);
     struct protocol_stack *stack = NULL;
-    struct sockaddr_in addr;
+    struct sockaddr addr;
+    socklen_t addr_len = sizeof(addr);
     int32_t ret, clone_fd;
 
     struct lwip_sock *sock = get_socket(fd);
@@ -553,25 +682,19 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
         GAZELLE_RETURN(EINVAL);
     }
 
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    get_sockaddr_by_fd(&addr, sock);
+    ret = rpc_call_getsockname(fd, &addr, &addr_len);
+    if (ret != 0) {
+        return ret;
+    }
 
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
     for (int32_t i = 0; i < stack_group->stack_num; ++i) {
         stack = stack_group->stacks[i];
-
         if (stack != cur_stack) {
-            clone_fd = rpc_call_socket(AF_INET, SOCK_STREAM, 0);
+            clone_fd = rpc_call_shadow_fd(stack, fd, &addr, sizeof(addr));
             if (clone_fd < 0) {
                 stack_broadcast_close(fd);
                 return clone_fd;
-            }
-
-            listen_list_add_node(fd, clone_fd);
-
-            ret = rpc_call_bind(clone_fd, (struct sockaddr *)&addr, sizeof(addr));
-            if (ret < 0) {
-                stack_broadcast_close(fd);
-                return ret;
             }
         } else {
             clone_fd = fd;

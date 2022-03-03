@@ -27,8 +27,10 @@ struct protocol_stack;
 
 #define RX_NB_MBUF          ((5 * MAX_CLIENTS) + (VDEV_RX_QUEUE_SZ * DEFAULT_BACKUP_RING_SIZE_FACTOR))
 #define RX_MBUF_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
-#define TX_NB_MBUF          (VDEV_TX_QUEUE_SZ << 2)
-#define TX_MBUF_CACHE_SZ    (VDEV_TX_QUEUE_SZ)
+#define TX_NB_MBUF          (128 * DEFAULT_RING_SIZE)
+#define TX_MBUF_CACHE_SZ    (DEFAULT_RING_SIZE)
+#define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 2)
+#define KNI_MBUF_CACHE_SZ   (DEFAULT_RING_SIZE)
 
 #define MBUF_HEADER_LEN 64
 
@@ -59,12 +61,13 @@ int thread_affinity_init(int cpu_id);
 
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
 void dpdk_eal_init(void);
-int32_t pktmbuf_pool_init(struct protocol_stack *stack);
+int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
 struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id);
 int32_t create_shared_ring(struct protocol_stack *stack);
 void lstack_log_level_init(void);
 int dpdk_ethdev_init(void);
 int dpdk_ethdev_start(void);
 void dpdk_skip_nic_init(void);
+int32_t dpdk_init_lstack_kni(void);
 
 #endif /* LIBOS_DPDK_H */

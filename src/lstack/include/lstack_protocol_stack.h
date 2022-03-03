@@ -27,6 +27,7 @@ struct protocol_stack {
     uint16_t port_id;
     uint16_t socket_id;
     uint16_t cpu_id;
+    volatile uint16_t conn_num;
 
     // for dispatcher thread
     cpu_set_t idle_cpuset;
@@ -48,13 +49,13 @@ struct protocol_stack {
     uint32_t tx_ring_used;
 
     struct list_node recv_list;
+    struct list_node listen_list;
 
     struct gazelle_stat_pkts stats;
     struct gazelle_stack_latency latency;
     struct stats_ *lwip_stats;
 
     struct eth_dev_ops *dev_ops;
-    volatile uint16_t conn_num;
 };
 
 struct eth_params;
@@ -63,9 +64,14 @@ struct protocol_stack_group {
     uint16_t stack_num;
     uint16_t port_id;
     sem_t thread_inited;
+    struct rte_mempool *kni_pktmbuf_pool;
     struct eth_params *eth_params;
-    bool latency_start;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
+
+    /* dfx stats */
+    bool latency_start;
+    uint64_t call_alloc_fail;
+    uint64_t event_null;
 };
 
 long get_stack_tid(void);

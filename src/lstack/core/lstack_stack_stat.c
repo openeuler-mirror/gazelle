@@ -36,7 +36,7 @@ void stack_stat_init(void)
     g_cycles_per_us = (freq + US_PER_SEC - 1) / US_PER_SEC;
 }
 
-inline static uint64_t get_current_time(void)
+uint64_t get_current_time(void)
 {
     if (g_cycles_per_us == 0) {
         return 0;
@@ -97,20 +97,29 @@ void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_inf
     low_power_info->lpm_pkts_in_detect = cfg->lpm_pkts_in_detect;
 }
 
+static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+
+    dfx->loglevel = rte_log_get_level(RTE_LOGTYPE_LSTACK);
+    lstack_get_low_power_info(&dfx->low_power_info);
+    memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
+    dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
+    dfx->data.pkts.event_null = stack_group->event_null;
+    dfx->data.pkts.weakup_ring_cnt = rte_ring_count(stack->weakup_ring);
+    dfx->data.pkts.send_idle_ring_cnt = rte_ring_count(stack->send_idle_ring);
+    dfx->data.pkts.call_msg_cnt = rpc_call_msgcnt(stack);
+    dfx->data.pkts.recv_list = rpc_call_recvlistcnt(stack);
+    dfx->data.pkts.conn_num = stack->conn_num;
+}
+
 static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack,
     enum GAZELLE_STAT_MODE stat_mode)
 {
     switch (stat_mode) {
         case GAZELLE_STAT_LSTACK_SHOW:
         case GAZELLE_STAT_LSTACK_SHOW_RATE:
-            dfx->loglevel = rte_log_get_level(RTE_LOGTYPE_LSTACK);
-            lstack_get_low_power_info(&dfx->low_power_info);
-            memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
-            dfx->data.pkts.weakup_ring_cnt = rte_ring_count(stack->weakup_ring);
-            dfx->data.pkts.send_idle_ring_cnt = rte_ring_count(stack->send_idle_ring);
-            dfx->data.pkts.call_msg_cnt = rpc_call_msgcnt(stack);
-            dfx->data.pkts.recv_list = rpc_call_recvlistcnt(stack);
-            dfx->data.pkts.conn_num = stack->conn_num;
+            get_stack_stats(dfx, stack);
             break;
         case GAZELLE_STAT_LSTACK_SHOW_SNMP:
             memcpy_s(&dfx->data.snmp, sizeof(dfx->data.snmp), &stack->lwip_stats->mib2,

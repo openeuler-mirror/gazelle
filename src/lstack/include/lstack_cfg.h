@@ -76,6 +76,7 @@ struct cfg_params {
     uint32_t lpm_detect_ms;
     uint32_t lpm_pkts_in_detect;
     bool use_ltran; // ture:lstack read from nic false:read form ltran
+    bool kni_switch;
     int dpdk_argc;
     char **dpdk_argv;
 #ifdef USE_LIBOS_MEM

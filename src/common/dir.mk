@@ -8,19 +8,6 @@
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-2M", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
+SRC = dpdk_common.c
+$(eval $(call register_dir, ../common, $(SRC)))
 
-use_ltran=1
-kni_switch=0
-
-low_power_mode=0
-
-num_cpus="2"
-num_weakup="3"
-
-numa_bind=1
-
-host_addr="192.168.1.10"
-mask_addr="255.255.255.0"
-gateway_addr="192.168.1.1"
-devices="aa:bb:cc:dd:ee:ff"

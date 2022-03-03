@@ -15,6 +15,10 @@
 #include <stdbool.h>
 #include <securec.h>
 #include <pthread.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <net/if_arp.h>
 
 #include <rte_eal.h>
 #include <rte_lcore.h>
@@ -22,6 +26,8 @@
 #include <rte_malloc.h>
 #include <rte_bus.h>
 #include <rte_errno.h>
+#include <rte_kni.h>
+#include <lwip/posix_api.h>
 
 #include "lstack_log.h"
 #include "dpdk_common.h"
@@ -41,6 +47,7 @@ struct eth_params {
     struct rte_eth_rxconf rx_conf;
     struct rte_eth_txconf tx_conf;
 };
+struct rte_kni;
 
 int32_t thread_affinity_default(void)
 {
@@ -153,14 +160,21 @@ static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_
     return reg_buf;
 }
 
-int32_t pktmbuf_pool_init(struct protocol_stack *stack)
+int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
 {
-    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF, RX_MBUF_CACHE_SZ, stack->queue_id);
+    if (stack_num == 0) {
+        LSTACK_LOG(ERR, LSTACK, "stack_num=0.\n");
+        return -1;
+    }
+
+    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, RX_MBUF_CACHE_SZ,
+        stack->queue_id);
     if (stack->rx_pktmbuf_pool == NULL) {
         return -1;
     }
 
-    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF, TX_MBUF_CACHE_SZ, stack->queue_id);
+    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, TX_MBUF_CACHE_SZ,
+        stack->queue_id);
     if (stack->tx_pktmbuf_pool == NULL) {
         return -1;
     }
@@ -182,11 +196,10 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack)
 
 struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id)
 {
-    int32_t ret = 0;
     char ring_name[RTE_RING_NAMESIZE] = {0};
     struct rte_ring *ring;
 
-    ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1, "%s_%d", name, queue_id);
+    int32_t ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1, "%s_%d", name, queue_id);
     if (ret < 0) {
         return NULL;
     }
@@ -434,7 +447,6 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
 
 int32_t dpdk_ethdev_init(void)
 {
-    int32_t rss_enable = 0;
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
 
     int32_t port_id = ethdev_port_id(get_global_cfg_params()->ethdev.addr_bytes);
@@ -460,7 +472,7 @@ int32_t dpdk_ethdev_init(void)
         return -ENOMEM;
     }
     eth_params_checksum(&eth_params->conf, &dev_info);
-    rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
+    int32_t rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
     get_protocol_stack_group()->eth_params = eth_params;
     get_protocol_stack_group()->port_id = eth_params->port_id;
 
@@ -518,6 +530,44 @@ int32_t dpdk_ethdev_start(void)
         LSTACK_LOG(ERR, LSTACK, "cannot start ethdev: %d\n", (-ret));
         return ret;
     }
+
+    return 0;
+}
+
+static void set_kni_ip_mac(uint16_t port_id)
+{
+    struct cfg_params *cfg = get_global_cfg_params();
+
+    int32_t fd = posix_api->socket_fn(AF_INET, SOCK_DGRAM, 0);
+    struct ifreq set_ifr = {0};
+    struct sockaddr_in *sin = (struct sockaddr_in *)&set_ifr.ifr_addr;
+
+    sin->sin_family = AF_INET;
+    sin->sin_addr.s_addr = cfg->host_addr.addr;
+    strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME);
+    int32_t ret = posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "set kni ip=%u fail\n", cfg->host_addr.addr);
+    }
+
+    posix_api->close_fn(fd);
+}
+
+int32_t dpdk_init_lstack_kni(void)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+
+    stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, KNI_MBUF_CACHE_SZ, 0);
+    if (stack_group->kni_pktmbuf_pool == NULL) {
+        return -1;
+    }
+
+    int32_t ret = dpdk_kni_init(stack_group->port_id, stack_group->kni_pktmbuf_pool);
+    if (ret < 0) {
+        return -1;
+    }
+
+    set_kni_ip_mac(stack_group->port_id);
 
     return 0;
 }

@@ -651,6 +651,12 @@ static int32_t control_init_server(void)
     struct sockaddr_un address;
     int32_t ret;
 
+    ret = check_and_set_run_dir();
+    if (ret == -1) {
+        LSTACK_LOG(ERR, LSTACK, "create /var/run/gazelle failed\n");
+        return -1;
+    }
+
     ret = unlink(GAZELLE_REG_SOCK_PATHNAME);
     if (ret == -1) {
         LSTACK_LOG(ERR, LSTACK, "unlink failed, just skip it\n");

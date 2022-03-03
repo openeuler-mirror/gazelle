@@ -32,27 +32,10 @@
 
 uint32_t g_bond_num = 0;
 FILE* g_log_file = NULL;
-struct rte_kni *g_pkni = NULL;
 uint16_t g_bond_port[GAZELLE_MAX_BOND_NUM] = {GAZELLE_BOND_PORT_DEFAULT, GAZELLE_BOND_PORT_DEFAULT};
 struct port_info g_port_info[GAZELLE_MAX_BOND_NUM];
 struct rte_mempool *g_pktmbuf_rxpool[GAZELLE_MAX_BOND_NUM];
 struct rte_mempool *g_pktmbuf_txpool[GAZELLE_MAX_BOND_NUM];
-static pthread_mutex_t g_kni_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int32_t g_bond_dev_started = GAZELLE_OFF;
-
-/*
- * lock for preventing data race between tx thread and down operation.
- * Don't need to add lock on rx because down operation and rx are in the same thread
- */
-pthread_mutex_t *get_kni_mutex(void)
-{
-    return &g_kni_mutex;
-}
-
-struct rte_kni* get_libos_kni(void)
-{
-    return g_pkni;
-}
 
 /* record bond num, check the num is match or not, or exceed */
 void set_bond_num(const uint32_t bond_num)
@@ -462,104 +445,20 @@ static int32_t ltran_bond_port_init(void)
         }
     }
 
-    g_bond_dev_started = GAZELLE_ON;
     return GAZELLE_OK;
-}
-
-static int32_t ltran_kni_config_network_interface(uint16_t port_id, uint8_t if_up)
-{
-    int32_t ret = 0;
-
-    if ((port_id >= rte_eth_dev_count_avail()) || (port_id >= RTE_MAX_ETHPORTS)) {
-        LTRAN_ERR("Invalid port id %d \n", port_id);
-        return -EINVAL;
-    }
-
-    if (if_up != 0) { /* Configure network interface up */
-        if (g_bond_dev_started == GAZELLE_OFF) {
-            pthread_mutex_lock(&g_kni_mutex);
-            ret = rte_eth_dev_start(port_id);
-            pthread_mutex_unlock(&g_kni_mutex);
-            if (ret < 0) {
-                LTRAN_ERR("Failed to start port %d ret=%d\n", port_id, ret);
-            }
-            g_bond_dev_started = GAZELLE_ON;
-        } else {
-            LTRAN_WARN("trying to start a started dev. \n");
-        }
-    } else {  /* Configure network interface down */
-        if (g_bond_dev_started == GAZELLE_ON) {
-            pthread_mutex_lock(&g_kni_mutex);
-            rte_eth_dev_stop(port_id);
-            pthread_mutex_unlock(&g_kni_mutex);
-            g_bond_dev_started = GAZELLE_OFF;
-        } else {
-            LTRAN_WARN("trying to stop a stopped dev. \n");
-        }
-    }
-
-    LTRAN_INFO("Configure network interface of %d %s \n", port_id, if_up ? "up" : "down");
-    return ret;
 }
 
 static int32_t ltran_kni_init(void)
 {
-    int32_t ret;
-    struct rte_kni_ops ops;
-    struct rte_kni_conf conf;
-    const struct rte_bus *bus = NULL;
-    struct rte_eth_dev_info dev_info;
-    uint16_t* bond_port = get_bond_port();
-    const struct rte_pci_device *pci_dev = NULL;
-
     // if not use kni. skip kni init and return
     if (get_ltran_config()->dpdk.kni_switch == GAZELLE_OFF) {
         return GAZELLE_OK;
     }
 
-    ret = rte_kni_init(GAZELLE_KNI_IFACES_NUM);
-    if (ret < 0) {
-        LTRAN_ERR("rte_kni_init failed, errno: %d.\n", ret);
-        return GAZELLE_ERR;
-    }
+    uint16_t *bond_port = get_bond_port();
+    struct rte_mempool **txpool = get_pktmbuf_txpool();
 
-    if (bond_port[0] >= RTE_MAX_ETHPORTS) {
-        LTRAN_ERR("Bond port id out of range. \n");
-        return GAZELLE_ERR;
-    }
-
-    (void)memset_s(&dev_info, sizeof(dev_info), 0, sizeof(dev_info));
-    (void)memset_s(&conf, sizeof(conf), 0, sizeof(conf));
-    (void)memset_s(&ops, sizeof(ops), 0, sizeof(ops));
-
-    ret = snprintf_s(conf.name, RTE_KNI_NAMESIZE, RTE_KNI_NAMESIZE - 1, "%s", GAZELLE_KNI_NAME);
-    if (ret < 0) {
-        LTRAN_ERR("snprintf_s failed. ret=%d\n", ret);
-        return GAZELLE_ERR;
-    }
-
-    conf.mbuf_size = GAZELLE_MAX_PKT_SZ;
-    conf.group_id = bond_port[0];
-    rte_eth_dev_info_get(bond_port[0], &dev_info);
-    if (dev_info.device) {
-        bus = rte_bus_find_by_device(dev_info.device);
-    }
-    if (bus && !strcmp(bus->name, "pci")) {
-        pci_dev = RTE_DEV_TO_PCI(dev_info.device);
-        conf.id = pci_dev->id;
-        conf.addr = pci_dev->addr;
-    }
-
-    ops.change_mtu = NULL;
-    ops.config_network_if = ltran_kni_config_network_interface;
-    ops.port_id = bond_port[0];
-    struct rte_mempool** txpool = get_pktmbuf_txpool();
-    g_pkni = rte_kni_alloc(txpool[0], &conf, &ops);
-    if (g_pkni == NULL) {
-        LTRAN_ERR("Fail to create kni for port: %d \n", bond_port[0]);
-        return GAZELLE_ERR;
-    }
-    return GAZELLE_OK;
+    return dpdk_kni_init(bond_port[0], txpool[0]);
 }
 
 typedef int32_t (*ethdev_init_func)(void);

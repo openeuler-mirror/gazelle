@@ -292,7 +292,7 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
     return posix_api->read_fn(s, mem, len);
 }
 
-static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
+static inline ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
 {
     if (buf == NULL) {
         GAZELLE_RETURN(EINVAL);
@@ -302,28 +302,37 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
         return 0;
     }
 
-    if (select_path(sockfd) == PATH_LWIP) {
-        return rpc_call_send(sockfd, buf, len, flags);
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        GAZELLE_RETURN(EINVAL);
     }
 
-    return posix_api->send_fn(sockfd, buf, len, flags);
+    ssize_t send = write_stack_data(sock, buf, len);
+    if (send < 0 || sock->have_rpc_send) {
+        return send;
+    }
+
+    sock->have_rpc_send = true;
+    ssize_t ret = rpc_call_send(fd, buf, len, flags);
+    return (ret < 0) ? ret : send;
+}
+
+static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
+{
+    if (select_path(sockfd) != PATH_LWIP) {
+        return posix_api->send_fn(sockfd, buf, len, flags);
+    }
+
+    return gazelle_send(sockfd, buf, len, flags);
 }
 
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 {
-    if (mem == NULL) {
-        GAZELLE_RETURN(EINVAL);
+    if (select_path(s) != PATH_LWIP) {
+        return posix_api->write_fn(s, mem, size);
     }
 
-    if (size == 0) {
-        return 0;
-    }
-
-    if (select_path(s) == PATH_LWIP) {
-        return rpc_call_send(s, mem, size, 0);
-    }
-
-    return posix_api->write_fn(s, mem, size);
+    return gazelle_send(s, mem, size, 0);
 }
 
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)

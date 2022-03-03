@@ -45,20 +45,21 @@ static struct cfg_params g_config_params;
 
 static config_t g_config;
 
-static int parse_host_addr(void);
-static int parse_low_power_mode(void);
-static int parse_stack_cpu_number(void);
-static int parse_use_ltran(void);
-static int parse_weakup_cpu_number(void);
-static int parse_mask_addr(void);
-static int parse_devices(void);
-static int parse_dpdk_args(void);
-static int parse_numa_bind(void);
-static int parse_gateway_addr(void);
+static int32_t parse_host_addr(void);
+static int32_t parse_low_power_mode(void);
+static int32_t parse_stack_cpu_number(void);
+static int32_t parse_use_ltran(void);
+static int32_t parse_weakup_cpu_number(void);
+static int32_t parse_mask_addr(void);
+static int32_t parse_devices(void);
+static int32_t parse_dpdk_args(void);
+static int32_t parse_numa_bind(void);
+static int32_t parse_gateway_addr(void);
+static int32_t parse_kni_switch(void);
 
 struct config_vector_t {
     const char *name;
-    int (*f)(void);
+    int32_t (*f)(void);
 };
 
 static struct config_vector_t g_config_tbl[] = {
@@ -72,6 +73,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "mask_addr",    parse_mask_addr },
     { "devices",      parse_devices },
     { "gateway_addr", parse_gateway_addr },
+    { "kni_switch",   parse_kni_switch },
     { NULL,           NULL }
 };
 
@@ -80,7 +82,7 @@ struct cfg_params *get_global_cfg_params(void)
     return &g_config_params;
 }
 
-static int str_to_eth_addr(const char *src, unsigned char *dst, size_t dst_size)
+static int32_t str_to_eth_addr(const char *src, unsigned char *dst, size_t dst_size)
 {
     if (strlen(src) > DEV_MAC_LEN) {
         return -EINVAL;
@@ -88,11 +90,9 @@ static int str_to_eth_addr(const char *src, unsigned char *dst, size_t dst_size)
 
     struct rte_ether_addr tmp;
 
-    int ret = sscanf_s(src, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-                       /* 0、1、2 mac byte index */
-                       &tmp.addr_bytes[0], &tmp.addr_bytes[1], &tmp.addr_bytes[2],
-                       /* 3、4、5 byte index */
-                       &tmp.addr_bytes[3], &tmp.addr_bytes[4], &tmp.addr_bytes[5]);
+    int32_t ret = sscanf_s(src, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+        &tmp.addr_bytes[0], &tmp.addr_bytes[1], &tmp.addr_bytes[2], /* 0、1、2 mac byte index */
+        &tmp.addr_bytes[3], &tmp.addr_bytes[4], &tmp.addr_bytes[5]); /* 3、4、5 byte index */
     if (ret != RTE_ETHER_ADDR_LEN) {
         return -EINVAL;
     }
@@ -103,12 +103,13 @@ static int str_to_eth_addr(const char *src, unsigned char *dst, size_t dst_size)
     return 0;
 }
 
-static int parse_gateway_addr(void)
+static int32_t parse_gateway_addr(void)
 {
     char *value;
+    bool ok;
 
-    config_lookup_string(&g_config, "gateway_addr", (const char **)&value);
-    if (value == NULL) {
+    ok = config_lookup_string(&g_config, "gateway_addr", (const char **)&value);
+    if (!ok) {
         return -EINVAL;
     }
     g_config_params.gateway_addr.addr = inet_addr(value);
@@ -118,13 +119,14 @@ static int parse_gateway_addr(void)
     return 0;
 }
 
-static int parse_mask_addr(void)
+static int32_t parse_mask_addr(void)
 {
     char *value = NULL;
     uint32_t mask;
+    bool ok;
 
-    config_lookup_string(&g_config, "mask_addr", (const char **)&value);
-    if (value == NULL) {
+    ok = config_lookup_string(&g_config, "mask_addr", (const char **)&value);
+    if (!ok) {
         return -EINVAL;
     }
     g_config_params.netmask.addr = inet_addr(value);
@@ -139,12 +141,13 @@ static int parse_mask_addr(void)
     return 0;
 }
 
-static int parse_host_addr(void)
+static int32_t parse_host_addr(void)
 {
     char *value = NULL;
+    bool ok;
 
-    config_lookup_string(&g_config, "host_addr", (const char **)&value);
-    if (value == NULL) {
+    ok = config_lookup_string(&g_config, "host_addr", (const char **)&value);
+    if (!ok) {
         return -EINVAL;
     }
 
@@ -156,7 +159,7 @@ static int parse_host_addr(void)
     return 0;
 }
 
-int match_host_addr(uint32_t addr)
+int32_t match_host_addr(uint32_t addr)
 {
     /* network byte order */
     if (addr == g_config_params.host_addr.addr) {
@@ -165,9 +168,9 @@ int match_host_addr(uint32_t addr)
     return 0;
 }
 
-static int parse_devices(void)
+static int32_t parse_devices(void)
 {
-    int ret;
+    int32_t ret;
     const char *dev = NULL;
     const config_setting_t *devs = NULL;
 
@@ -188,9 +191,9 @@ static int parse_devices(void)
     return ret;
 }
 
-static int turn_str_to_array(char *args, uint16_t *array, int size)
+static int32_t turn_str_to_array(char *args, uint16_t *array, int32_t size)
 {
-    int val;
+    int32_t val;
     uint16_t cnt = 0;
     const char *delim = ",";
     char *elem = NULL;
@@ -217,10 +220,10 @@ static int turn_str_to_array(char *args, uint16_t *array, int size)
     return cnt;
 }
 
-static int get_param_idx(int argc, char **argv, const char *param)
+static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
 {
-    int ret;
-    int idx;
+    int32_t ret;
+    int32_t idx;
 
     if ((argc <= 0) || (argv == NULL) || (param == NULL)) {
         return -EINVAL;
@@ -235,13 +238,13 @@ static int get_param_idx(int argc, char **argv, const char *param)
     return -1;
 }
 
-static int parse_stack_cpu_number(void)
+static int32_t parse_stack_cpu_number(void)
 {
     const config_setting_t *num_cpus = NULL;
     const char *args = NULL;
 
-    int ret;
-    int idx;
+    int32_t ret;
+    int32_t idx;
 
     num_cpus = config_lookup(&g_config, "num_cpus");
     if (num_cpus == NULL) {
@@ -365,7 +368,7 @@ int32_t init_stack_numa_cpuset(void)
 }
 
 #ifdef USE_LIBOS_MEM
-static int gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vaddr)
+static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vaddr)
 {
     uint64_t viraddr;
     char *end = NULL;
@@ -382,7 +385,7 @@ static int gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vaddr)
     return 0;
 }
 
-static int gazelle_parse_socket_mem(const char *arg, struct secondary_attach_arg *sec_attach_arg)
+static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach_arg *sec_attach_arg)
 {
     size_t mem_size = 0;
     uint8_t count = 0;
@@ -428,7 +431,7 @@ static int gazelle_parse_socket_mem(const char *arg, struct secondary_attach_arg
     return 0;
 }
 
-int parse_param(const char* param)
+int32_t parse_param(const char* param)
 {
     if (g_config_params.dpdk_argc >= GAZELLE_MAX_REG_ARGS) {
         return -1;
@@ -444,11 +447,11 @@ int parse_param(const char* param)
 
 static void print_dpdk_param(void)
 {
-    int ret;
-    int skip = 0;
+    int32_t ret;
+    int32_t skip = 0;
 
     printf("pid(%d) file_prefix(%s) args: ", getpid(), g_config_params.sec_attach_arg.file_prefix);
-    for (int i = 0; i < g_config_params.dpdk_argc; ++i) {
+    for (int32_t i = 0; i < g_config_params.dpdk_argc; ++i) {
         /* BASE_VIRTADDR is sensitive information */
         ret = strncmp(g_config_params.dpdk_argv[i], OPT_BASE_VIRTADDR, strlen(OPT_BASE_VIRTADDR));
         if (ret == 0) {
@@ -465,11 +468,11 @@ static void print_dpdk_param(void)
     printf("\n");
 }
 
-static int turn_args_to_config(int argc, char **argv)
+static int32_t turn_args_to_config(int32_t argc, char **argv)
 {
     char host_addr[PATH_MAX];
-    int ret;
-    int idx;
+    int32_t ret;
+    int32_t idx;
 
     if ((argc <= 0) || (argv == NULL)) {
         return -EINVAL;
@@ -524,12 +527,12 @@ static int turn_args_to_config(int argc, char **argv)
     return 0;
 }
 
-int gazelle_copy_param(const char *param, bool is_double,
-    int *argc, char argv[][PATH_MAX])
+int32_t gazelle_copy_param(const char *param, bool is_double,
+    int32_t *argc, char argv[][PATH_MAX])
 {
-    int cnt = *argc;
-    int wanted_id;
-    int ret;
+    int32_t cnt = *argc;
+    int32_t wanted_id;
+    int32_t ret;
 
     wanted_id = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, param);
     if (wanted_id < 0) {
@@ -559,10 +562,10 @@ int gazelle_copy_param(const char *param, bool is_double,
     return 0;
 }
 
-int gazelle_param_init(int *argc, char **argv)
+int32_t gazelle_param_init(int32_t *argc, char **argv)
 {
-    int ret;
-    int wanted_id;
+    int32_t ret;
+    int32_t wanted_id;
     char param_buf[PATH_MAX];
 
     if (argv == NULL) {
@@ -596,7 +599,7 @@ int gazelle_param_init(int *argc, char **argv)
     }
 
     print_dpdk_param();
-    for (int i = 0; i < g_config_params.dpdk_argc; ++i) {
+    for (int32_t i = 0; i < g_config_params.dpdk_argc; ++i) {
         argv[i] = g_config_params.dpdk_argv[i];
     }
     *argc = g_config_params.dpdk_argc;
@@ -604,10 +607,10 @@ int gazelle_param_init(int *argc, char **argv)
     return 0;
 }
 
-static int parse_dpdk_args(void)
+static int32_t parse_dpdk_args(void)
 {
-    int i;
-    int start_index;
+    int32_t i;
+    int32_t start_index;
     char *p = NULL;
     const char *arg = NULL;
     const config_setting_t *args = NULL;
@@ -661,7 +664,7 @@ free_dpdk_args:
 }
 #endif
 
-static int parse_low_power_mode(void)
+static int32_t parse_low_power_mode(void)
 {
     const config_setting_t *setting = NULL;
 
@@ -680,12 +683,12 @@ static int parse_low_power_mode(void)
     return 0;
 }
 
-static int parse_weakup_cpu_number(void)
+static int32_t parse_weakup_cpu_number(void)
 {
     const config_setting_t *cfg_args = NULL;
     const char *args = NULL;
 
-    int ret;
+    int32_t ret;
 
     g_config_params.num_weakup = 0;
 
@@ -708,7 +711,7 @@ static int parse_weakup_cpu_number(void)
     return 0;
 }
 
-static int parse_numa_bind(void)
+static int32_t parse_numa_bind(void)
 {
     const config_setting_t *numa_bind = NULL;
 
@@ -725,7 +728,7 @@ static int parse_numa_bind(void)
     return 0;
 }
 
-static int parse_use_ltran(void)
+static int32_t parse_use_ltran(void)
 {
     const config_setting_t *arg = NULL;
 
@@ -737,17 +740,35 @@ static int parse_use_ltran(void)
 
     int32_t val = config_setting_get_int(arg);
     g_config_params.use_ltran = (val == 0) ? false : true;
-    if (g_config_params.use_ltran != 0 && g_config_params.use_ltran != 1) {
-        return -EINVAL;
+
+    return 0;
+}
+
+static int32_t parse_kni_switch(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "kni_switch");
+    if (arg == NULL) {
+        g_config_params.kni_switch = false;
+        return 0;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    g_config_params.kni_switch = (val == 0) ? false : true;
+
+    if (g_config_params.use_ltran && g_config_params.kni_switch) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "kni_switch=1 when use_ltran=1, invaild.\n");
+        return -1;
     }
 
     return 0;
 }
 
-static int parse_conf_file(const char *path)
+static int32_t parse_conf_file(const char *path)
 {
     char real_path[PATH_MAX];
-    int ret;
+    int32_t ret;
 
     if (realpath(path, real_path) == NULL) {
         return -1;
@@ -762,7 +783,7 @@ static int parse_conf_file(const char *path)
         return -EINVAL;
     }
 
-    for (int i = 0; g_config_tbl[i].name && g_config_tbl[i].f; ++i) {
+    for (int32_t i = 0; g_config_tbl[i].name && g_config_tbl[i].f; ++i) {
         ret = g_config_tbl[i].f();
         if (ret != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "error parsing parameter '%s' ret=%d\n.", g_config_tbl[i].name, ret);
@@ -775,9 +796,9 @@ static int parse_conf_file(const char *path)
     return 0;
 }
 
-int cfg_init(void)
+int32_t cfg_init(void)
 {
-    int ret;
+    int32_t ret;
     char *config_file = malloc(PATH_MAX * sizeof(char));
     if (config_file == NULL) {
         return -1;

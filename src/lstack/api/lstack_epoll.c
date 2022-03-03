@@ -41,10 +41,30 @@ enum POLL_TYPE {
     TYPE_EPOLL,
 };
 
+static inline bool report_events(struct lwip_sock *sock, uint32_t event)
+{
+    /* listen fd event */
+    if (sock->attach_fd > 0) {
+        return true;
+    }
+
+    /* error event */
+    if ((event & EPOLLERR) || (event & EPOLLHUP) || (event & EPOLLRDHUP)) {
+        return true;
+    }
+
+    return false;
+}
+
 void add_epoll_event(struct netconn *conn, uint32_t event)
 {
     /* conn sock nerver null, because lwip call this func */
     struct lwip_sock *sock = get_socket(conn->socket);
+
+    /* shadow_fd event notice listen_fd */
+    if (sock->shadowed_sock) {
+        sock = sock->shadowed_sock;
+    }
 
     /* sock not in monitoring */
     if (!sock->weakup) {
@@ -57,8 +77,8 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
 
     sock->events |= event & sock->epoll_events;
 
-    if (sock->in_event == 0) {
-        sock->in_event = 1;
+    if (!sock->have_event || report_events(sock, event)) {
+        sock->have_event = true;
         weakup_enqueue(sock->stack->weakup_ring, sock);
         sock->stack->stats.weakup_events++;
     }
@@ -70,7 +90,17 @@ static void raise_pending_events(struct lwip_sock *sock)
         return;
     }
 
-    struct netconn *conn = sock->conn;
+    struct lwip_sock *attach_sock = NULL;
+    if (sock->attach_fd > 0 && sock->attach_fd != sock->conn->socket) {
+        attach_sock = get_socket_by_fd(sock->attach_fd);
+        if (attach_sock == NULL) {
+            return;
+        }
+    } else {
+        attach_sock = sock;
+    }
+
+    struct netconn *conn = attach_sock->conn;
     struct tcp_pcb *tcp = conn->pcb.tcp;
     if ((tcp == NULL) || (tcp->state < ESTABLISHED)) {
         return;
@@ -78,26 +108,26 @@ static void raise_pending_events(struct lwip_sock *sock)
 
     uint32_t event = 0;
     if (sock->epoll_events & EPOLLIN) {
-        if (sock->recv_lastdata || rte_ring_count(sock->recv_ring) || NETCONN_IS_ACCEPTIN(sock)) {
+        if (attach_sock->recv_lastdata || rte_ring_count(attach_sock->recv_ring) || NETCONN_IS_ACCEPTIN(attach_sock)) {
             event |= EPOLLIN;
         }
     }
 
     if (sock->epoll_events & EPOLLOUT) {
-        if ((sock->sendevent > 0) ||
+        if ((attach_sock->sendevent > 0) ||
             ((tcp_sndbuf(conn->pcb.tcp) > TCP_SNDLOWAT) && (tcp_sndqueuelen(conn->pcb.tcp) < TCP_SNDQUEUELOWAT))) {
             event |= EPOLLOUT;
         }
     }
 
-    if (sock->epoll_events & EPOLLOUT) {
-        if (sock->errevent > 0) {
-            event |= POLLERR | POLLIN;
-        }
+    if (sock->errevent > 0) {
+        event |= POLLERR | POLLIN;
     }
 
     if (event != 0) {
-        rpc_call_addevent(sock->stack, sock, event);
+        sock->events |= event;
+        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+        sem_post(&sock->weakup->event_sem);
     }
 }
 
@@ -124,7 +154,7 @@ int32_t lstack_epoll_create(int32_t size)
     memset_s(weakup, sizeof(struct weakup_poll), 0, sizeof(struct weakup_poll));
     sem_init(&weakup->event_sem, 0, 0);
 
-    weakup->event_ring = create_ring("RING_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, fd);
+    weakup->event_ring = create_ring("RING_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SC_DEQ, fd);
     if (weakup->event_ring == NULL) {
         posix_api->close_fn(fd);
         GAZELLE_RETURN(ENOMEM);
@@ -168,30 +198,35 @@ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_even
     }
 
     uint32_t events = event->events | EPOLLERR | EPOLLHUP;
-    switch (op) {
-        case EPOLL_CTL_ADD:
-            sock->weakup = epoll_sock->weakup;
-            /* fall through */
-        case EPOLL_CTL_MOD:
-            sock->epoll_events = events;
-            sock->ep_data = event->data;
-            if (sock->conn && NETCONNTYPE_GROUP(netconn_type(sock->conn)) == NETCONN_TCP) {
-                raise_pending_events(sock);
-            }
-            break;
-        case EPOLL_CTL_DEL:
-            sock->epoll_events = 0;
-            break;
-        default:
-            GAZELLE_RETURN(EINVAL);
-    }
+    do {
+        switch (op) {
+            case EPOLL_CTL_ADD:
+                sock->weakup = epoll_sock->weakup;
+                /* fall through */
+            case EPOLL_CTL_MOD:
+                sock->epoll_events = events;
+                sock->ep_data = event->data;
+                if (sock->conn && NETCONNTYPE_GROUP(netconn_type(sock->conn)) == NETCONN_TCP) {
+                    raise_pending_events(sock);
+                }
+                break;
+            case EPOLL_CTL_DEL:
+                sock->epoll_events = 0;
+                break;
+            default:
+                GAZELLE_RETURN(EINVAL);
+        }
+        fd = sock->nextfd;
+        sock = get_socket(fd);
+    } while (fd > 0 && sock != NULL);
 
     return 0;
 }
 
-static inline int32_t save_fd_event(struct pollfd *fds, uint32_t maxevents, struct lwip_sock *sock, int32_t event_num)
+static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, struct lwip_sock *sock, int32_t event_num)
 {
     for (uint32_t i = 0; i < maxevents; i++) {
+        /* fds[i].revents != 0, the events is kernel events */
         if (fds[i].fd == sock->conn->socket && fds[i].revents == 0) {
             fds[i].revents = sock->events;
             event_num++;
@@ -200,6 +235,31 @@ static inline int32_t save_fd_event(struct pollfd *fds, uint32_t maxevents, stru
     }
 
     return event_num;
+}
+
+static int32_t check_event_vaild(struct epoll_event *events, int32_t event_num, struct lwip_sock *sock,
+    struct lwip_sock **sock_list, enum POLL_TYPE etype)
+{
+    /* remove duplicate event */
+    if (etype == TYPE_EPOLL) {
+        for (uint32_t i = 0; i < event_num; i++) {
+            if (sock_list[i] == sock) {
+                return -1;
+            }
+        }
+    }
+
+    /* non_listen_fd remove no data EPOLLIN event */
+    if (sock->events == EPOLLIN && sock->attach_fd < 0 && !NETCONN_IS_DATAIN(sock)) {
+        return -1;
+    }
+
+    /* remove no send_buff OUT event */
+    if (sock->events == EPOLLOUT && !NETCONN_IS_DATAOUT(sock)) {
+        return -1;
+    }
+
+    return 0;
 }
 
 static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t maxevents, enum POLL_TYPE etype)
@@ -212,32 +272,63 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
         return 0;
     }
 
-    maxevents = LWIP_MIN(events_cnt, maxevents);
+    if (etype == TYPE_EPOLL) {
+        maxevents = LWIP_MIN(EPOLL_MAX_EVENTS, maxevents);
+    }
+    events_cnt = LWIP_MIN(events_cnt, maxevents);
     int32_t event_num = 0;
     struct lwip_sock *sock = NULL;
-    while (event_num < maxevents) {
+
+    while (event_num < events_cnt) {
         int32_t ret = rte_ring_sc_dequeue(weakup->event_ring, (void **)&sock);
         if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "get event fail ret=%d\n", ret);
+            get_protocol_stack_group()->event_null++;
             break;
+        }
+
+        ret = check_event_vaild(events, event_num, sock, weakup->sock_list, etype);
+        if (ret != 0) {
+            events_cnt--;
+            sock->have_event = false;
+            sock->stack->stats.remove_event++;
+            continue;
         }
 
         if (etype == TYPE_EPOLL) {
             events[event_num].events = sock->events;
             events[event_num].data = sock->ep_data;
+            weakup->sock_list[event_num] = sock;
             event_num++;
         } else {
-            event_num = save_fd_event(fds, maxevents, sock, event_num);
+            /* save one event at a time */
+            event_num = save_poll_event(fds, maxevents, sock, event_num);
         }
 
-        sock->in_event = 0;
+        sock->stack->stats.app_events++;
         sem_trywait(&weakup->event_sem); /* each event post sem, so every read down sem */
     }
 
-    if (sock) {
-        sock->stack->stats.app_events += event_num;
-    }
     return event_num;
+}
+
+static inline int32_t remove_kernel_invaild_events(struct pollfd *fds, int32_t nfds, int32_t event_count)
+{
+    int32_t real_count = 0;
+
+    for (int i = 0; i < nfds && real_count < event_count; i++) {
+        if (fds[i].fd < 0 || fds[i].revents == 0) {
+            continue;
+        }
+
+        struct lwip_sock *sock = get_socket(fds[i].fd);
+        if (sock && CONN_TYPE_IS_LIBOS(sock->conn)) {
+            fds[i].revents = 0;
+        } else {
+            real_count++;
+        }
+    }
+
+    return real_count;
 }
 
 static int32_t poll_event(struct weakup_poll *weakup, int32_t epfd, void *out, int32_t maxevents, int32_t timeout)
@@ -245,7 +336,7 @@ static int32_t poll_event(struct weakup_poll *weakup, int32_t epfd, void *out, i
     struct epoll_event *events = (struct epoll_event *)out;
     struct pollfd *fds = (struct pollfd *)out;
     int32_t event_num = 0;
-    int32_t ret;
+    int32_t event_kernel_num = 0;
     struct timespec epoll_interval = {
         .tv_sec = 0,
         .tv_nsec = EPOLL_INTERVAL_10MS,
@@ -253,21 +344,30 @@ static int32_t poll_event(struct weakup_poll *weakup, int32_t epfd, void *out, i
     uint32_t start_time = sys_now();
 
     do {
-        /* gazelle events */
-        event_num += (epfd > 0) ? get_lwip_events(weakup, &events[event_num], maxevents - event_num, TYPE_EPOLL) :
-            get_lwip_events(weakup, fds, maxevents, TYPE_POLL);
-        if (event_num >= maxevents) {
-            break;
+        /* epoll_wait type */
+        if (epfd > 0) {
+            event_num += get_lwip_events(weakup, &events[event_num], maxevents - event_num, TYPE_EPOLL);
+            if (event_num >= maxevents) {
+                break;
+            }
+
+            event_kernel_num = posix_api->epoll_wait_fn(epfd, &events[event_num], maxevents - event_num, 0);
+            if (event_kernel_num < 0) {
+                break;
+            }
+            event_num += event_kernel_num;
+        } else {
+            /* for poll events, we need to distiguish kernel events and gazelle events */
+            event_kernel_num = posix_api->poll_fn(fds, maxevents, 0);
+            if (event_kernel_num < 0) {
+                break;
+            }
+            event_kernel_num = remove_kernel_invaild_events(fds, maxevents, event_kernel_num);
+            event_num += event_kernel_num;
+
+            event_num += get_lwip_events(weakup, fds, maxevents, TYPE_POLL);
         }
 
-        /* kernel events */
-        ret = (epfd > 0) ? posix_api->epoll_wait_fn(epfd, &events[event_num], maxevents - event_num, 0) :
-            posix_api->poll_fn(fds, maxevents, 0);
-        if (ret < 0) {
-            break;
-        }
-
-        event_num += ret;
         if (event_num > 0) {
             break;
         }
@@ -278,17 +378,16 @@ static int32_t poll_event(struct weakup_poll *weakup, int32_t epfd, void *out, i
         }
     } while (timeout != 0);
 
-    return (ret < 0) ? ret : event_num;
+    return (event_kernel_num < 0) ? event_kernel_num : event_num;
 }
 
-static int32_t poll_init(const struct pollfd *fds, const nfds_t nfds, struct weakup_poll *weakup)
+static int32_t poll_init(struct pollfd *fds, nfds_t nfds, struct weakup_poll *weakup)
 {
     int32_t stack_id = 0;
     int32_t stack_count[PROTOCOL_STACK_MAX] = {0};
 
     if (weakup->event_ring == NULL) {
-        weakup->event_ring = create_ring("POLL_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ,
-            rte_gettid());
+        weakup->event_ring = create_ring("POLL_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SC_DEQ, rte_gettid());
         if (weakup->event_ring == NULL) {
             GAZELLE_RETURN(ENOMEM);
         }
@@ -296,6 +395,7 @@ static int32_t poll_init(const struct pollfd *fds, const nfds_t nfds, struct wea
 
     for (uint32_t i = 0; i < nfds; i++) {
         int32_t fd = fds[i].fd;
+        fds[i].revents = 0;
 
         do {
             struct lwip_sock *sock = get_socket(fd);

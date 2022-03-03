@@ -150,19 +150,6 @@ ERROR:
     return GAZELLE_ERR;
 }
 
-static int32_t check_and_set_run_dir(void)
-{
-    int32_t ret;
-
-    if (access(GAZELLE_RUN_DIR, 0) != 0) {
-        ret = mkdir(GAZELLE_RUN_DIR, GAZELLE_FILE_PERMISSION);
-        if (ret != 0) {
-            return GAZELLE_ERR;
-        }
-    }
-    return GAZELLE_OK;
-}
-
 static int32_t gazelle_ep_event_init(struct epoll_event* event, enum sockfd_type type, int32_t listenfd)
 {
     event->data.ptr = sockfd_data_alloc(type, listenfd);

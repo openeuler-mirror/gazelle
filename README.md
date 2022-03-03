@@ -7,8 +7,8 @@ gazelle是高性能的用户态协议栈，通过dpdk在用户态直接读写网
 
 ## Compile
 - 编译依赖软件包  
-cmake gcc-c++ lwip dpdk-devel(>=19.11-0.h12)
-numactl-devel libpcap-devel libconfig-devel rpm-build
+cmake gcc-c++ lwip dpdk-devel(>=21.11-2)
+numactl-devel libpcap-devel libconfig-devel libboundscheck rpm-build
 - 编译
 ``` sh
 #创建目录
@@ -33,19 +33,22 @@ ls ~/rpmbuild/RPMS
 
 ## Install
 ``` sh 
-#dpdk >= 19.11-0.h12
+#dpdk >= 21.11-2
 yum install dpdk
 yum install libconfig
-yum install numact
+yum install numacttl
+yum install libboundscheck
 yum install libpcap
 yum install gazelle
+
 ```
 
 ## Use
-### 1. 安装igb_uio.ko
+### 1. 安装ko模块
 ``` sh
 modprobe uio
-insmod /lib/modules/4.19.90-vhulk2007.2.0.h188.eulerosv2r9.aarch64/extra/dpdk/igb_uio.ko
+insmod /usr/lib/modules/5.10.0-54.0.0.27.oe1.x86_64/extra/dpdk/igb_uio.ko
+insmod /usr/lib/modules/5.10.0-54.0.0.27.oe1.x86_64/extra/dpdk/rte_kni.ko carrier="on"
 ```
 
 ### 2. dpdk绑定网卡
@@ -91,7 +94,8 @@ mount -t hugetlbfs nodev /mnt/hugepages
 mount -t hugetlbfs nodev /mnt/hugepages-2M
 ```
 
-### 5. 重新编译应用，使其从内核协议栈切换至用户态协议栈  
+### 5. 应用程序从内核协议栈切换至用户态协议栈  
++ 一种方式：重新编译程序
 修改应用的makefile文件，使其链接liblstack.so。示例如下：
 ``` makefile
 #在makefile中添加
@@ -101,8 +105,50 @@ endif
 gcc test.c -o test $(LSTACK_LIBS)
 ```
 
++ 另一个方式：使用LD_PRELOAD
+```
+GAZELLE_BIND_PROCNAME=test(具体进程名) LD_PRELOAD=/usr/lib64/liblstack.so ./test
+```
+
 ### 6. 配置文件  
-- ltran.conf用于指定ltran启动的参数，Gazelle发布件会包括ltran.conf供用户参考，路径为/etc/gazelle/ltran.conf，配置文件格式如下  
+- lstack.conf用于指定lstack的启动参数，Gazelle发布件会包括ltran.conf供用户参考，路径为/etc/gazelle/lstack.conf, 配置文件参数如下  
+
+|选项|参数格式|说明|
+|:---|:---|:---|
+|dpdk_args|--socket-mem（必需）<br>--huge-dir（必需）<br>--proc-type（必需）<br>--legacy-mem<br>--map-perfect<br>等|dpdk初始化参数，参考dpdk说明|
+|use_ltran| 0/1 | 是否使用ltran |
+|num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量),仅在use_ltran=0时生效,如果机器不支持网卡多队列，lstack线程数量应该为1|
+|num_weakup|"1,3,5 ..."|weakup线程绑定的cpu编号，编号的数量为weakup线程个数，与lstack线程的数量保持一致|
+|numa_bind|0/1|是否支持将用户线程绑定到与某lstack线程相同numa内|
+|low_power_mode|0/1|是否开启低功耗模式，暂不支持|
+|kni_swith|0/1|rte_kni开关，默认为0|
+|host_addr|"192.168.xx.xx"|协议栈的IP地址，必须和redis-server配置<br>文件里的“bind”字段保存一致。|
+|mask_addr|"255.255.xx.xx"|掩码地址|
+|gateway_addr|"192.168.xx.1"|网关地址|
+|devices|"aa:bb:cc:dd:ee:ff"|网卡通信的mac地址，需要与ltran.conf的bond_macs配置一致|
+
+
+lstack.conf示例：
+``` conf
+dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-2M", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
+
+use_ltran=1
+kni_switch=0
+
+low_power_mode=0
+
+num_cpus="2"
+num_weakup="3"
+
+numa_bind=1
+
+host_addr="192.168.1.10"
+mask_addr="255.255.255.0"
+gateway_addr="192.168.1.1"
+devices="aa:bb:cc:dd:ee:ff"
+```
+
+- ltran.conf用于指定ltran启动的参数，Gazelle发布件会包括ltran.conf供用户参考，路径为/etc/gazelle/ltran.conf，仅在lstack.conf内配置use_ltran=1时生效,配置文件格式如下  
 
 |功能分类|选项|参数格式|说明|
 |:---|:---|:---|:---|
@@ -117,49 +163,28 @@ gcc test.c -o test $(LSTACK_LIBS)
 ||bond_ports|"0xaa"|使用的dpdk网卡，0x1表示第一块|
 ||bond_macs|"aa:bb:cc:dd:ee:ff"|绑定的网卡mac地址，需要跟kni的mac地址保持一致|
 ||bond_mtu|n|最大传输单元，默认是1500，不能超过1500，最小值为68，不能低于68|
-<style> table th:nth-of-type(3) { width: 130px; } </style>  
+
 ltran.conf示例：
 ``` conf
+forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages --proc-type primary --legacy-mem --map-perfect --syslog daemon"
 forward_kit="dpdk"
-forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages --proc-type primary --legacy-mem --map-perfect"
 
 kni_switch=0
 
+dispatch_max_clients=30
 dispatch_subnet="192.168.1.0"
 dispatch_subnet_length=8
-dispatch_max_clients=30
 
 bond_mode=1
-bond_miimon=100
 bond_mtu=1500
+bond_miimon=100
+bond_macs="aa:bb:cc:dd:ee:ff"
 bond_ports="0x1"
-bond_macs="30:fd:65:e3:39:63"
+
+tcp_conn_scan_interval=10
 ```  
-
-- lstack.conf用于指定lstack的启动参数，配置文件参数如下  
-
-|选项|参数格式|说明|
-|:---|:---|:---|
-|dpdk_args|-l<br>--socket-mem（必需）<br>--huge-dir（必需）<br>--proc-type（必需）<br>等|dpdk初始化参数，参考dpdk说明|
-|num_cpus|n|共享队列数量，该值目前不生效，默认为1<br>保留字段，目前未使用|
-|host_addr|"192.168.xx.xx"|协议栈的IP地址，必须和redis-server配置<br>文件里的“bind”字段保存一致。|
-|mask_addr|"255.255.xx.xx"|掩码地址|
-|gateway_addr|"192.168.xx.1"|网关地址|
-|devices|"aa:bb:cc:dd:ee:ff"|网卡通信的mac地址，需要与ltran.conf的bond_macs配置一致|
-<style> table th:nth-of-type(1) { width: 130px; } </style>
-<style> table th:nth-of-type(2) { width: 130px; } </style>
-
-lstack.conf示例：
-``` conf
-dpdk_args=["-l", "2", "--socket-mem", "2048,0,0,0","--huge-dir", "/mnt/hugepages-2M", "--proc-type", "primary"]
-num_cpus=1
-
-host_addr="192.168.1.10"
-mask_addr="255.255.255.0"
-gateway_addr="192.168.1.1"
-devices="30:fd:65:e3:39:63"
-```
 ### 7. 启动  
+- 不使用ltran模式(use_ltran=0)时，不需要启动ltran
 - 启动ltran，如果不指定--config-file，则使用默认路径/etc/gazelle/ltran.conf
 ``` sh
 ltran --config-file ./ltran.conf
@@ -171,9 +196,10 @@ redis-server redis.conf
 ```
 
 ### 8. API
-liblstack.so编译进应用程序后wrap网络编程标准接口，应用程序无需修改代码，但是应用程序必须使用epoll机制。
+liblstack.so编译进应用程序后wrap网络编程标准接口，应用程序无需修改代码。
 
 ### 9. gazellectl
+- 不使用ltran模式时不支持gazellectl ltran xxx 命令
 ```
 Usage: gazellectl [-h | help]
   or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time]
@@ -207,36 +233,25 @@ Usage: gazellectl [-h | help]
 + 注意有些机器会默认设置XDG_RUNTIME_DIR
 
 ## Constraints
-- Gazelle提供的命令行及配置文件仅root权限开源执行或修改。配置大页内存需要
-root用户执行操作。
-- 在将网卡绑定到igb_uio后（详见3），禁止将网卡绑回ixgbe。
-- 如果需要把Gazelle使用的网卡绑回ixgbe驱动，或者从igb_uio驱动解绑，不允许
-在Gazelle还在运行时执行上述操作，须先将Gazelle退出，再将执行unbind或者
-bind操作，否则会导致内核panic。
-- Gazelle不支持accept阻塞模式或者connect阻塞模式。
-- Gazelle最多只支持20000个链接（需要保证进程内，非网络连接的fd个数小于
-2000个）。支持20000个连接只作为功能完备性考虑。当流量较大时，可能会出
-现部分丢包。
-- Gazelle协议栈当前只支持tcp、icmp、arp、ipv4，使用其他协议可能导致实例异
-常。
-- Gazelle不允许在一个挂载点里面创建子目录重新挂载，否则可能对大页挂载路径
-重复初始化，导致应用启动失败。
-- Gazelle组件自身无数据安全风险，但是依赖dpdk的共享内存管理。如果dpdk的
-大页内存管理机制存在安全问题，Gazelle中的共享内存有被攻击的风险。
-- 在对端使用ping命令时，要求指定报文长度小于等于14000。报文长度超过14000
-时行为不可预测。
-- Gazelle不支持使用透明大页。
-- 需要保证ltran的可用大页内存 >=850M。
-- 需要保证lstack实例一个网络线程的可用大页内存 >=500M。
-- Gazelle不支持32位系统使用。
+- 提供的命令行、配置文件以及配置大页内存需要root权限执行或修改。非root用户使用，需先提权以及修改文件权限。
+- 若要把用户态网卡绑回内核驱动，必须先将Gazelle退出。
+- 不支持accept阻塞模式或者connect阻塞模式。
+- 最多只支持20000个链接（需要保证进程内，非网络连接的fd个数小于2000个）。
+- 协议栈当前只支持tcp、icmp、arp、ipv4。
+- 大页内存不支持在挂载点里创建子目录重新挂载。
+- 在对端ping时，要求指定报文长度小于等于14000。
+- 不支持使用透明大页。
+- 需要保证ltran的可用大页内存 >=1G
+- 需要保证应用实例协议栈线程的可用大页内存 >=800M
+- 不支持32位系统使用。
 - ltran不支持使用多种类型的网卡混合组bond。
-- ltran的bond1主备模式，只支持链路层故障主备切换（例如网线断开），不支持
-物理层故障主备切换（例如网卡下电、拔网卡）。
-- 构建X86版本使用-march=native选项，基于构建环境的CPU（Intel® Xeon® Gold
-5118 CPU @ 2.30GHz）指令集进行优化。要求运行环境CPU支持SSE4.2、AVX、
-AVX2、AVX-512指令集。
-- Gazelle的最大IP分片数为10（ping最大包长14790），TCP协议不使用IP分片。
-- 使用sysctl配置rp_filter参数为1，否则可能连接使用内核协议栈
+- ltran的bond1主备模式，只支持链路层故障主备切换（例如网线断开），不支持物理层故障主备切换（例如网卡下电、拔网卡）。
+- 构建X86版本使用-march=native选项，基于构建环境的CPU（Intel® Xeon® Gold 5118 CPU @ 2.30GHz）指令集进行优化。要求运行环境CPU支持SSE4.2、AVX、AVX2、AVX-512指令集。
+- 最大IP分片数为10（ping最大包长14790），TCP协议不使用IP分片。
+- sysctl配置网卡rp_filter参数为1，否则可能使用内核协议栈
+- 虚拟机网卡不支持多队列。
+- 不使用ltran模式，kni网口只支持本地通讯使用，且需要启动前配置NetworkManager不管理kni网卡
+- 虚拟kni网口的ip及mac地址，需要与lstack配置文件保持一致
 
 ## Security risk note
 gazelle有如下安全风险，用户需要评估使用场景风险  
