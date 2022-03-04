@@ -111,7 +111,10 @@ static pid_t ltran_process_exist(void)
     char line[LINE];
     FILE *cmd = popen("pidof ltran", "r");
 
-    (void)fgets(line, LINE, cmd);
+    if(fgets(line, LINE, cmd) == NULL) {
+    	return 0;
+    }
+
     pid_t pid = strtoul(line, NULL, BASE_DEC_SCALE);
     (void)pclose(cmd);
 
