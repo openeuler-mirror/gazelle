@@ -1,0 +1,482 @@
+From 012d15720728b615920b79de929f18a2a86d9d0a Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Tue, 8 Mar 2022 10:24:12 +0800
+Subject: [PATCH] reduce copy in send
+
+---
+ src/common/dpdk_common.h                |  23 +++---
+ src/lstack/core/lstack_dpdk.c           |  11 +--
+ src/lstack/core/lstack_lwip.c           |  82 ++++++++++++++-----
+ src/lstack/core/lstack_protocol_stack.c |  11 ++-
+ src/lstack/include/lstack_ethdev.h      |   4 -
+ src/lstack/include/lstack_lwip.h        |   6 +-
+ src/lstack/netif/lstack_ethdev.c        | 101 ++++--------------------
+ src/lstack/netif/lstack_vdev.c          |   3 +-
+ 8 files changed, 104 insertions(+), 137 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 165a64b..e9cacc3 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -21,30 +21,25 @@
+ #define GAZELLE_MBUFF_PRIV_SIZE  (sizeof(uint64_t) * 2)
+ #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
+ 
++/* NOTE!!! magic code, even the order.
++*  I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,
++*  and if there is no cache miss, it only take less than 20 cycle(store pipe is the bottleneck).
++*/
+ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf *src)
+ {
+-    /* NOTE!!! magic code, even the order.
+-        I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,
+-        and if there is no cache miss, it only take less than 20 cycle(store pipe is the bottleneck).
+-    */
+-    uint8_t *dst_data = NULL;
+-    uint8_t *src_data = NULL;
+-    uint32_t rx_desc_fields_len = 16;
+-    uint16_t data_len;
+-
+     /* In the direction of tx, data is copied from lstack to ltran. It is necessary to judge whether
+        the length of data transmitted from lstack has been tampered with to prevent overflow
+     */
+-    data_len = src->data_len;
++    uint16_t data_len = src->data_len;
+     if (data_len > RTE_MBUF_DEFAULT_BUF_SIZE)
+         return;
+ 
+     dst->ol_flags = src->ol_flags;
+-    // there is buf_len in rx_descriptor_fields1, copy it is dangerous acturely.
+-    rte_memcpy((uint8_t *)dst->rx_descriptor_fields1, (const uint8_t *)src->rx_descriptor_fields1, rx_desc_fields_len);
++    // there is buf_len in rx_descriptor_fields1, copy it is dangerous acturely. 16 : mbuf desc size
++    rte_memcpy((uint8_t *)dst->rx_descriptor_fields1, (const uint8_t *)src->rx_descriptor_fields1, 16);
+ 
+-    dst_data = rte_pktmbuf_mtod(dst, void*);
+-    src_data = rte_pktmbuf_mtod(src, void*);
++    uint8_t *dst_data = rte_pktmbuf_mtod(dst, void*);
++    uint8_t *src_data = rte_pktmbuf_mtod(src, void*);
+ 
+     rte_memcpy(dst_data, src_data, data_len);
+ 
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 1d355d4..280d643 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -34,6 +34,7 @@
+ #include "lstack_dpdk.h"
+ #include "lstack_lockless_queue.h"
+ #include "lstack_thread_rpc.h"
++#include "lstack_lwip.h"
+ #include "lstack_cfg.h"
+ 
+ struct eth_params {
+@@ -257,7 +258,7 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
+     while (remain > 0) {
+         batch = LWIP_MIN(remain, FREE_RX_QUEUE_SZ);
+ 
+-        ret = eth_mbuf_claim(mempool, free_buf, batch);
++	ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
+         if (ret != 0) {
+             LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %d ret=%d\n", (int32_t)batch, ret);
+             return -1;
+@@ -341,7 +342,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
+     if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
+ #if CHECKSUM_CHECK_IP_HW
+         rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
+-        CONFIG_VAR_APPEND("DEV_RX_OFFLOAD_IPV4_CKSUM ");
++	LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_IPV4_CKSUM\n");
+ #endif
+     }
+ 
+@@ -349,7 +350,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
+     if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
+ #if CHECKSUM_CHECK_TCP_HW
+         rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
+-        CONFIG_VAR_APPEND("DEV_RX_OFFLOAD_TCP_CKSUM ");
++        LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_TCP_CKSUM\n");
+ #endif
+     }
+ 
+@@ -357,7 +358,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
+     if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
+ #if CHECKSUM_GEN_IP_HW
+         tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
+-        CONFIG_VAR_APPEND("DEV_TX_OFFLOAD_IPV4_CKSUM ");
++        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_IPV4_CKSUM\n");
+ #endif
+     }
+ 
+@@ -365,7 +366,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
+     if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
+ #if CHECKSUM_GEN_TCP_HW
+         tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
+-        CONFIG_VAR_APPEND("DEV_TX_OFFLOAD_TCP_CKSUM ");
++        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_TCP_CKSUM\n");
+ #endif
+     }
+ 
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 379682c..fbb4d62 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -19,6 +19,7 @@
+ #include <lwip/priv/tcp_priv.h>
+ #include <securec.h>
+ #include <rte_errno.h>
++#include <rte_malloc.h>
+ 
+ #include "gazelle_base_func.h"
+ #include "lstack_ethdev.h"
+@@ -140,37 +141,80 @@ void gazelle_clean_sock(int32_t fd)
+     sock->stack->conn_num--;
+ }
+ 
+-static void gazelle_free_pbuf(struct pbuf *p)
++void gazelle_free_pbuf(struct pbuf *pbuf)
+ {
+-    struct rte_mbuf *mbuf = pbuf_to_mbuf(p);
+-    rte_pktmbuf_free(mbuf);
++    if (pbuf == NULL) {
++        return;
++    }
++
++    struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
++    if (mbuf->pool != NULL) {
++        rte_pktmbuf_free(mbuf);
++    } else {
++        rte_free(mbuf);
++    }
+ }
+ 
+-static struct pbuf *tcp_pktmbuf_alloc(struct rte_mempool *pool, pbuf_layer layer, u16_t len)
++static int32_t alloc_mbufs(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
++{
++    // alloc mbuf from pool
++    if (rte_pktmbuf_alloc_bulk(pool, mbufs, num) == 0) {
++        return 0;
++    }
++
++    // alloc mbuf from system
++    for (uint32_t i = 0; i < num; i++) {
++        struct rte_mbuf *mbuf = (struct rte_mbuf *)rte_malloc(NULL, pool->elt_size, sizeof(uint64_t));
++        if (mbuf == NULL) {
++            for (uint32_t j = 0; j < i; j++) {
++                rte_free(mbufs[j]);
++                mbufs[j] = NULL;
++            }
++            return -1;
++        }
++
++        mbufs[i] = mbuf;
++        rte_pktmbuf_init(pool, NULL, mbuf, 0);
++        rte_pktmbuf_reset(mbuf);
++        mbuf->pool = NULL;
++    }
++
++    return 0;
++}
++
++int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
+ {
+-    struct rte_mbuf *mbuf = NULL;
+-    struct pbuf *pbuf = NULL;
+     struct pbuf_custom *pbuf_custom = NULL;
+ 
+-    u16_t offset = layer;
+-    u16_t total_len = LWIP_MEM_ALIGN_SIZE(offset) + LWIP_MEM_ALIGN_SIZE(len);
++    int32_t ret = alloc_mbufs(pool, mbufs, num);
++    if (ret != 0) {
++        get_protocol_stack()->stats.tx_allocmbuf_fail++;
++        return ret;
++    }
+ 
+-    int32_t ret = rte_pktmbuf_alloc_bulk(pool, &mbuf, 1);
+-    if (ret) {
+-        LSTACK_LOG(ERR, LSTACK, "tid %ld pktmbuf_alloc failed ret=%d\n", get_stack_tid(), ret);
+-        return NULL;
++
++    for (uint32_t i = 0; i < num; i++) {
++        pbuf_custom = mbuf_to_pbuf(mbufs[i]);
++        pbuf_custom->custom_free_function = gazelle_free_pbuf;
+     }
+ 
+-    uint8_t *data = (uint8_t *)rte_pktmbuf_append(mbuf, total_len);
+-    if (!data) {
+-        rte_pktmbuf_free(mbuf);
++    return 0;
++}
++
++struct pbuf *lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type)
++{
++    struct rte_mbuf *mbuf;
++    int32_t ret = alloc_mbufs(get_protocol_stack()->tx_pktmbuf_pool, &mbuf, 1);
++    if (ret != 0) {
++        get_protocol_stack()->stats.tx_allocmbuf_fail++;
+         return NULL;
+     }
+ 
+-    pbuf_custom = mbuf_to_pbuf(mbuf);
++    struct pbuf_custom *pbuf_custom = mbuf_to_pbuf(mbuf);
+     pbuf_custom->custom_free_function = gazelle_free_pbuf;
+-    pbuf = pbuf_alloced_custom(layer, len, PBUF_RAM, pbuf_custom, data, total_len);
+-    pbuf->flags |= PBUF_FLAG_SND_SAVE_CPY;
++
++    void *data = rte_pktmbuf_mtod(mbuf, void *);
++    struct pbuf *pbuf = pbuf_alloced_custom(layer, length, type, pbuf_custom, data, MAX_PACKET_SZ);
+ 
+     return pbuf;
+ }
+@@ -180,7 +224,7 @@ void stack_replenish_send_idlembuf(struct protocol_stack *stack)
+     uint32_t replenish_cnt = rte_ring_free_count(stack->send_idle_ring);
+ 
+     for (uint32_t i = 0; i < replenish_cnt; i++) {
+-        struct pbuf *pbuf = tcp_pktmbuf_alloc(stack->tx_pktmbuf_pool, PBUF_TRANSPORT, TCP_MSS);
++	struct pbuf *pbuf = lwip_alloc_pbuf(PBUF_TRANSPORT, MAX_PACKET_SZ - PBUF_TRANSPORT, PBUF_RAM);
+         if (pbuf == NULL) {
+             break;
+         }
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index c0ab451..35665e6 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -198,8 +198,6 @@ int32_t init_protocol_stack(void)
+         init_list_node(&stack->recv_list);
+         init_list_node(&stack->listen_list);
+ 
+-        stack_replenish_send_idlembuf(stack);
+-
+         stack_group->stacks[i] = stack;
+     }
+ 
+@@ -290,6 +288,8 @@ static void stack_thread_init(struct protocol_stack *stack)
+ 
+     hugepage_init();
+ 
++    stack_replenish_send_idlembuf(stack);
++
+     tcpip_init(NULL, NULL);
+ 
+     if (use_ltran()) {
+@@ -631,10 +631,9 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
+         if (cur_stack == stack) {
+             continue;
+         }
+-
+-        mbuf_copy = rte_pktmbuf_alloc(stack->rx_pktmbuf_pool);
+-        if (mbuf_copy == NULL) {
+-            stack->stats.rx_allocmbuf_fail++;
++        
++	ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, &mbuf_copy, 1);
++        if (ret != 0) {
+             return;
+         }
+         copy_mbuf(mbuf_copy, mbuf);
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index 492a7c8..29e0c23 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -30,11 +30,7 @@ struct eth_dev_ops {
+ };
+ 
+ int32_t ethdev_init(struct protocol_stack *stack);
+-
+ int32_t eth_dev_poll(void);
+-int32_t eth_mbuf_claim(struct rte_mempool *pool, struct rte_mbuf **mbufs, unsigned count);
+-
+-
+ uint32_t eth_get_flow_cnt(void);
+ void eth_dev_recv(struct rte_mbuf *mbuf);
+ 
+diff --git a/src/lstack/include/lstack_lwip.h b/src/lstack/include/lstack_lwip.h
+index 3be365d..8bf0f29 100644
+--- a/src/lstack/include/lstack_lwip.h
++++ b/src/lstack/include/lstack_lwip.h
+@@ -14,13 +14,11 @@
+ #define __LIBOS_LWIP_H__
+ 
+ #include "lstack_thread_rpc.h"
++#include "lwipsock.h"
+ 
+ #define SOCK_RECV_RING_SIZE     (128)
+ #define SOCK_SEND_RING_SIZE     (32)
+ 
+-/* flags define last type PBUF_FLAG_TCP_FIN 0x20U in pbuf.h  */
+-#define PBUF_FLAG_SND_SAVE_CPY   0x40U
+-
+ #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
+ #define NETCONN_IS_DATAIN(sock)     ((rte_ring_count((sock)->recv_ring) || (sock)->recv_lastdata))
+ #define NETCONN_IS_DATAOUT(sock)    rte_ring_free_count((sock)->send_ring)
+@@ -39,5 +37,7 @@ void get_lwip_conntable(struct rpc_msg *msg);
+ void get_lwip_connnum(struct rpc_msg *msg);
+ void stack_recvlist_count(struct rpc_msg *msg);
+ void stack_replenish_send_idlembuf(struct protocol_stack *stack);
++int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num);
++void gazelle_free_pbuf(struct pbuf *pbuf);
+ 
+ #endif
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 5d7161c..796a46d 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -36,63 +36,11 @@
+ #include "lstack_stack_stat.h"
+ #include "lstack_log.h"
+ #include "lstack_dpdk.h"
++#include "lstack_lwip.h"
+ #include "lstack_ethdev.h"
+ 
+ #define PKTMBUF_MALLOC_FLAG     NULL
+ 
+-static inline void eth_mbuf_reclaim(struct rte_mbuf *mbuf)
+-{
+-    if (mbuf->pool != PKTMBUF_MALLOC_FLAG) {
+-        rte_pktmbuf_free(mbuf);
+-    } else {
+-        rte_free(mbuf);
+-    }
+-}
+-
+-static void eth_pbuf_reclaim(struct pbuf *pbuf)
+-{
+-    if (pbuf != NULL) {
+-        struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
+-        eth_mbuf_reclaim(mbuf);
+-    }
+-}
+-
+-int32_t eth_mbuf_claim(struct rte_mempool *mp, struct rte_mbuf **mbufs, unsigned count)
+-{
+-    struct rte_mbuf *m = NULL;
+-    uint32_t i;
+-
+-    // try alloc mbuf from mbufpoll
+-    if (rte_pktmbuf_alloc_bulk(mp, mbufs, count) == 0) {
+-        return 0;
+-    }
+-
+-    // try alloc mbuf from system
+-    for (i = 0; i < count; i++) {
+-        // elt_size == sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE + MBUF_SZ
+-        m = (struct rte_mbuf *)rte_malloc(NULL, mp->elt_size, sizeof(uint64_t));
+-        if (m == NULL) {
+-            LSTACK_LOG(ERR, LSTACK, "vdev failed to malloc mbuf\n");
+-            break;
+-        }
+-        // init mbuf
+-        mbufs[i] = m;
+-        rte_pktmbuf_init(mp, NULL, m, 0);
+-        rte_pktmbuf_reset(m);
+-        m->pool = PKTMBUF_MALLOC_FLAG;
+-    }
+-
+-    if (unlikely(i != count)) {
+-        for (uint32_t j = 0; j < i; j++) {
+-            rte_free(mbufs[j]);
+-            mbufs[j] = NULL;
+-        }
+-        return -1;
+-    }
+-
+-    return 0;
+-}
+-
+ void eth_dev_recv(struct rte_mbuf *mbuf)
+ {
+     int32_t ret;
+@@ -108,14 +56,11 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
+     while (m != NULL) {
+         len = (uint16_t)rte_pktmbuf_pkt_len(m);
+         payload = rte_pktmbuf_mtod(m, void *);
+-
+         pc = mbuf_to_pbuf(m);
+-        pc->custom_free_function = eth_pbuf_reclaim;
+-
++	pc->custom_free_function = gazelle_free_pbuf;
+         next = pbuf_alloced_custom(PBUF_RAW, (uint16_t)len, PBUF_RAM, pc, payload, (uint16_t)len);
+         if (next == NULL) {
+-            stack->stats.rx_drop++;
+-            LSTACK_LOG(ERR, LSTACK, "eth_dev_recv: failed to allocate pbuf!\n");
++            stack->stats.rx_allocmbuf_fail++;
+             break;
+         }
+ 
+@@ -185,42 +130,28 @@ uint32_t eth_get_flow_cnt(void)
+ 
+ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+ {
+-    uint8_t *data = NULL;
+-    int32_t ret;
+-    uint32_t sent_pkts;
+-    struct rte_mbuf *mbufs[DPDK_PKT_BURST_SIZE];
+-    uint16_t total_len = pbuf->tot_len;
+-    struct pbuf *head = pbuf;
+     struct protocol_stack *stack = get_protocol_stack();
++    struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
+ 
+-    ret = rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, &mbufs[0], 1);
+-    if (ret != 0) {
+-        stack->stats.tx_drop++;
+-        stack->stats.tx_allocmbuf_fail++;
+-        LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for output ret=%d\n", ret);
+-        return ERR_MEM;
+-    }
+-
+-    data = (uint8_t *)rte_pktmbuf_append(mbufs[0], total_len);
+-    if (data == NULL) {
++    if (mbuf->buf_addr == 0) {
+         stack->stats.tx_drop++;
+-        stack->stats.tx_allocmbuf_fail++;
+-        LSTACK_LOG(ERR, LSTACK, "eth_dev_output: append mbuf failed!\n");
+-        rte_pktmbuf_free(mbufs[0]);
+-        return ERR_MEM;
++        return ERR_BUF;
+     }
+ 
+-    for (; head != NULL; head = head->next) {
+-        rte_memcpy(data, head->payload, head->len);
+-        data += head->len;
+-    }
++    mbuf->data_len = pbuf->len;
++    mbuf->pkt_len = pbuf->tot_len;
++    rte_mbuf_refcnt_update(mbuf, 1);
++#if CHECKSUM_GEN_IP_HW || CHECKSUM_GEN_TCP_HW
++    mbuf->ol_flags = pbuf->ol_flags;
++    mbuf->l2_len = pbuf->l2_len;
++    mbuf->l3_len = pbuf->l3_len;
++#endif
+ 
+-    sent_pkts = stack->dev_ops->tx_xmit(stack, mbufs, 1);
++    uint32_t sent_pkts = stack->dev_ops->tx_xmit(stack, &mbuf, 1);
+     stack->stats.tx += sent_pkts;
+     if (sent_pkts < 1) {
+         stack->stats.tx_drop++;
+-        rte_pktmbuf_free(mbufs[0]);
+-        mbufs[0] = NULL;
++	rte_pktmbuf_free(mbuf);
+         return ERR_MEM;
+     }
+ 
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index 2b30334..a2f89fa 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -25,6 +25,7 @@
+ #include "lstack_ethdev.h"
+ #include "lstack_control_plane.h"
+ #include "lstack_log.h"
++#include "lstack_lwip.h"
+ #include "lstack_vdev.h"
+ 
+ /* INUSE_TX_PKTS_WATERMARK < VDEV_RX_QUEUE_SZ;
+@@ -46,7 +47,7 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
+     stack->rx_ring_used += rcvd_pkts;
+     if (unlikely(stack->rx_ring_used >= USED_RX_PKTS_WATERMARK)) {
+         uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, DPDK_PKT_BURST_SIZE);
+-        int32_t ret = eth_mbuf_claim(stack->rx_pktmbuf_pool, (struct rte_mbuf **)free_buf, free_cnt);
++	int32_t ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, (struct rte_mbuf **)free_buf, free_cnt);
+         if (likely(ret == 0)) {
+             nr_pkts = rte_ring_en_enqueue_bulk(stack->rx_ring, (void **)free_buf, free_cnt);
+             stack->rx_ring_used -= nr_pkts;
+-- 
+2.30.0
+

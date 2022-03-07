@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       1
+Release:       2
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -16,6 +16,7 @@ Requires:      dpdk >= 21.11-5
 Requires:      numactl libpcap libconfig libboundscheck
 
 Patch9001:     0001-fix-compile-error-unuse-result.patch
+Patch9002:     0002-reduce-copy-in-send.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -56,8 +57,11 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
-* Thu Mar 3 2022 wu-changsheng <wuchangsheng@huawei.com> - 1.0.1-1
+* Mon Mar 7 2022 wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-2
+- reduce copy in send
+
+* Thu Mar 3 2022 wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-1
 - support mysql with two mode:ltran+lstack and lstack.
 
-* Thu Feb 24 2022 wu-changsheng <wuchangsheng@huawei.com> - 1.0.0-1
+* Thu Feb 24 2022 wu-changsheng <wuchangsheng2@huawei.com> - 1.0.0-1
 - release initial version
