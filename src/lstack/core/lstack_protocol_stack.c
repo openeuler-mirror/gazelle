@@ -518,9 +518,7 @@ void stack_accept(struct rpc_msg *msg)
     fd = sock->attach_fd;
 
     msg->result = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
-    if (msg->result > 0) {
-        gazelle_init_sock(msg->result);
-    } else {
+    if (msg->result <= 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
             fd, msg->result);
     }
