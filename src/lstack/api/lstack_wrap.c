@@ -44,6 +44,14 @@ enum KERNEL_LWIP_PATH {
 
 static inline enum KERNEL_LWIP_PATH select_path(int fd)
 {
+    if (posix_api == NULL) {
+        /* link liblstack.so using LD_PRELOAD mode will read liblstack.so,
+           poisx_api need to be initialized here */
+        if (posix_api_init() != 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+        }
+        return PATH_KERNEL;
+    }
     struct lwip_sock *sock = posix_api->get_socket(fd);
 
     /* AF_UNIX case */
