@@ -28,6 +28,7 @@ struct protocol_stack {
     uint16_t socket_id;
     uint16_t cpu_id;
     volatile uint16_t conn_num;
+    volatile bool in_replenish;
 
     // for dispatcher thread
     cpu_set_t idle_cpuset;

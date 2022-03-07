@@ -240,7 +240,7 @@ void stack_replenish_send_idlembuf(struct protocol_stack *stack)
 ssize_t write_lwip_data(struct lwip_sock *sock, int32_t fd, int32_t flags)
 {
     struct pbuf *pbuf = NULL;
-    ssize_t send_ret;
+    ssize_t send_ret = 0;
     ssize_t send_len = 0;
 
     do {
@@ -327,7 +327,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         sock->have_event = false;
     }
 
-    if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK) {
+    if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK && !sock->stack->in_replenish) {
         rpc_call_replenish_idlembuf(sock->stack);
     }
 
