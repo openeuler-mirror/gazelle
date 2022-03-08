@@ -34,6 +34,7 @@
 #include "lstack_dpdk.h"
 #include "lstack_lockless_queue.h"
 #include "lstack_thread_rpc.h"
+#include "lstack_lwip.h"
 #include "lstack_cfg.h"
 
 struct eth_params {
@@ -257,7 +258,7 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
     while (remain > 0) {
         batch = LWIP_MIN(remain, FREE_RX_QUEUE_SZ);
 
-        ret = eth_mbuf_claim(mempool, free_buf, batch);
+	ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %d ret=%d\n", (int32_t)batch, ret);
             return -1;
@@ -341,7 +342,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
     if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
 #if CHECKSUM_CHECK_IP_HW
         rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
-        CONFIG_VAR_APPEND("DEV_RX_OFFLOAD_IPV4_CKSUM ");
+	LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_IPV4_CKSUM\n");
 #endif
     }
 
@@ -349,7 +350,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
     if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
 #if CHECKSUM_CHECK_TCP_HW
         rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
-        CONFIG_VAR_APPEND("DEV_RX_OFFLOAD_TCP_CKSUM ");
+        LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_TCP_CKSUM\n");
 #endif
     }
 
@@ -357,7 +358,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
     if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
 #if CHECKSUM_GEN_IP_HW
         tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
-        CONFIG_VAR_APPEND("DEV_TX_OFFLOAD_IPV4_CKSUM ");
+        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_IPV4_CKSUM\n");
 #endif
     }
 
@@ -365,7 +366,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
     if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
 #if CHECKSUM_GEN_TCP_HW
         tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
-        CONFIG_VAR_APPEND("DEV_TX_OFFLOAD_TCP_CKSUM ");
+        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_TCP_CKSUM\n");
 #endif
     }
 

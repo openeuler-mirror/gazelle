@@ -21,30 +21,25 @@
 #define GAZELLE_MBUFF_PRIV_SIZE  (sizeof(uint64_t) * 2)
 #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
 
+/* NOTE!!! magic code, even the order.
+*  I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,
+*  and if there is no cache miss, it only take less than 20 cycle(store pipe is the bottleneck).
+*/
 static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf *src)
 {
-    /* NOTE!!! magic code, even the order.
-        I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,
-        and if there is no cache miss, it only take less than 20 cycle(store pipe is the bottleneck).
-    */
-    uint8_t *dst_data = NULL;
-    uint8_t *src_data = NULL;
-    uint32_t rx_desc_fields_len = 16;
-    uint16_t data_len;
-
     /* In the direction of tx, data is copied from lstack to ltran. It is necessary to judge whether
        the length of data transmitted from lstack has been tampered with to prevent overflow
     */
-    data_len = src->data_len;
+    uint16_t data_len = src->data_len;
     if (data_len > RTE_MBUF_DEFAULT_BUF_SIZE)
         return;
 
     dst->ol_flags = src->ol_flags;
-    // there is buf_len in rx_descriptor_fields1, copy it is dangerous acturely.
-    rte_memcpy((uint8_t *)dst->rx_descriptor_fields1, (const uint8_t *)src->rx_descriptor_fields1, rx_desc_fields_len);
+    // there is buf_len in rx_descriptor_fields1, copy it is dangerous acturely. 16 : mbuf desc size
+    rte_memcpy((uint8_t *)dst->rx_descriptor_fields1, (const uint8_t *)src->rx_descriptor_fields1, 16);
 
-    dst_data = rte_pktmbuf_mtod(dst, void*);
-    src_data = rte_pktmbuf_mtod(src, void*);
+    uint8_t *dst_data = rte_pktmbuf_mtod(dst, void*);
+    uint8_t *src_data = rte_pktmbuf_mtod(src, void*);
 
     rte_memcpy(dst_data, src_data, data_len);
 

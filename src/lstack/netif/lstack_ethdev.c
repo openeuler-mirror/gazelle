@@ -36,62 +36,10 @@
 #include "lstack_stack_stat.h"
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
+#include "lstack_lwip.h"
 #include "lstack_ethdev.h"
 
 #define PKTMBUF_MALLOC_FLAG     NULL
-
-static inline void eth_mbuf_reclaim(struct rte_mbuf *mbuf)
-{
-    if (mbuf->pool != PKTMBUF_MALLOC_FLAG) {
-        rte_pktmbuf_free(mbuf);
-    } else {
-        rte_free(mbuf);
-    }
-}
-
-static void eth_pbuf_reclaim(struct pbuf *pbuf)
-{
-    if (pbuf != NULL) {
-        struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
-        eth_mbuf_reclaim(mbuf);
-    }
-}
-
-int32_t eth_mbuf_claim(struct rte_mempool *mp, struct rte_mbuf **mbufs, unsigned count)
-{
-    struct rte_mbuf *m = NULL;
-    uint32_t i;
-
-    // try alloc mbuf from mbufpoll
-    if (rte_pktmbuf_alloc_bulk(mp, mbufs, count) == 0) {
-        return 0;
-    }
-
-    // try alloc mbuf from system
-    for (i = 0; i < count; i++) {
-        // elt_size == sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE + MBUF_SZ
-        m = (struct rte_mbuf *)rte_malloc(NULL, mp->elt_size, sizeof(uint64_t));
-        if (m == NULL) {
-            LSTACK_LOG(ERR, LSTACK, "vdev failed to malloc mbuf\n");
-            break;
-        }
-        // init mbuf
-        mbufs[i] = m;
-        rte_pktmbuf_init(mp, NULL, m, 0);
-        rte_pktmbuf_reset(m);
-        m->pool = PKTMBUF_MALLOC_FLAG;
-    }
-
-    if (unlikely(i != count)) {
-        for (uint32_t j = 0; j < i; j++) {
-            rte_free(mbufs[j]);
-            mbufs[j] = NULL;
-        }
-        return -1;
-    }
-
-    return 0;
-}
 
 void eth_dev_recv(struct rte_mbuf *mbuf)
 {
@@ -108,14 +56,11 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
     while (m != NULL) {
         len = (uint16_t)rte_pktmbuf_pkt_len(m);
         payload = rte_pktmbuf_mtod(m, void *);
-
         pc = mbuf_to_pbuf(m);
-        pc->custom_free_function = eth_pbuf_reclaim;
-
+	pc->custom_free_function = gazelle_free_pbuf;
         next = pbuf_alloced_custom(PBUF_RAW, (uint16_t)len, PBUF_RAM, pc, payload, (uint16_t)len);
         if (next == NULL) {
-            stack->stats.rx_drop++;
-            LSTACK_LOG(ERR, LSTACK, "eth_dev_recv: failed to allocate pbuf!\n");
+            stack->stats.rx_allocmbuf_fail++;
             break;
         }
 
@@ -185,42 +130,28 @@ uint32_t eth_get_flow_cnt(void)
 
 static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 {
-    uint8_t *data = NULL;
-    int32_t ret;
-    uint32_t sent_pkts;
-    struct rte_mbuf *mbufs[DPDK_PKT_BURST_SIZE];
-    uint16_t total_len = pbuf->tot_len;
-    struct pbuf *head = pbuf;
     struct protocol_stack *stack = get_protocol_stack();
+    struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
 
-    ret = rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, &mbufs[0], 1);
-    if (ret != 0) {
+    if (mbuf->buf_addr == 0) {
         stack->stats.tx_drop++;
-        stack->stats.tx_allocmbuf_fail++;
-        LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for output ret=%d\n", ret);
-        return ERR_MEM;
+        return ERR_BUF;
     }
 
-    data = (uint8_t *)rte_pktmbuf_append(mbufs[0], total_len);
-    if (data == NULL) {
-        stack->stats.tx_drop++;
-        stack->stats.tx_allocmbuf_fail++;
-        LSTACK_LOG(ERR, LSTACK, "eth_dev_output: append mbuf failed!\n");
-        rte_pktmbuf_free(mbufs[0]);
-        return ERR_MEM;
-    }
+    mbuf->data_len = pbuf->len;
+    mbuf->pkt_len = pbuf->tot_len;
+    rte_mbuf_refcnt_update(mbuf, 1);
+#if CHECKSUM_GEN_IP_HW || CHECKSUM_GEN_TCP_HW
+    mbuf->ol_flags = pbuf->ol_flags;
+    mbuf->l2_len = pbuf->l2_len;
+    mbuf->l3_len = pbuf->l3_len;
+#endif
 
-    for (; head != NULL; head = head->next) {
-        rte_memcpy(data, head->payload, head->len);
-        data += head->len;
-    }
-
-    sent_pkts = stack->dev_ops->tx_xmit(stack, mbufs, 1);
+    uint32_t sent_pkts = stack->dev_ops->tx_xmit(stack, &mbuf, 1);
     stack->stats.tx += sent_pkts;
     if (sent_pkts < 1) {
         stack->stats.tx_drop++;
-        rte_pktmbuf_free(mbufs[0]);
-        mbufs[0] = NULL;
+	rte_pktmbuf_free(mbuf);
         return ERR_MEM;
     }
 
