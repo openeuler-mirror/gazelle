@@ -386,6 +386,94 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
     return recv_len;
 }
 
+ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
+{
+    ssize_t buflen = 0;
+    int32_t i;
+
+    if (message == NULL || message->msg_iovlen <= 0 || message->msg_iovlen > IOV_MAX) {
+        GAZELLE_RETURN(EINVAL);
+    }
+    for (i = 0; i < message->msg_iovlen; i++) {
+        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
+            ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
+            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
+          GAZELLE_RETURN(EINVAL);
+        }
+        buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
+    }
+    buflen = 0;
+    for (i = 0; i < message->msg_iovlen; i++) {
+        ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
+        if (recvd_local > 0) {
+            buflen += recvd_local;
+        }
+        if (recvd_local < 0 || (recvd_local < (int)message->msg_iov[i].iov_len) || (flags & MSG_PEEK)) {
+            if (buflen <= 0) {
+                buflen = recvd_local;
+            }
+            break;
+        }
+        flags |= MSG_DONTWAIT;
+    }
+
+    return buflen;
+}
+
+ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
+{
+    if (buf == NULL) {
+        GAZELLE_RETURN(EINVAL);
+    }
+
+    if (len == 0) {
+        return 0;
+    }
+
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        GAZELLE_RETURN(EINVAL);
+    }
+
+    ssize_t send = write_stack_data(sock, buf, len);
+    if (send < 0 || sock->have_rpc_send) {
+        return send;
+    }
+
+    sock->have_rpc_send = true;
+    ssize_t ret = rpc_call_send(fd, buf, len, flags);
+    return (ret < 0) ? ret : send;
+}
+
+ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+{
+    int32_t ret;
+    int32_t i;
+    ssize_t buflen = 0;
+
+    if (message == NULL || message->msg_iovlen <= 0 || message->msg_iovlen > IOV_MAX) {
+        GAZELLE_RETURN(EINVAL);
+    }
+    for (i = 0; i < message->msg_iovlen; i++) {
+        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
+            ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
+            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
+           GAZELLE_RETURN(EINVAL);
+        }
+        buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
+    }
+
+    for (i = 0; i < message->msg_iovlen; i++) {
+        ret = gazelle_send(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
+        if (ret < 0) {
+           return  buflen == 0 ? ret : buflen;
+        }
+        buflen += ret;
+    }
+
+    return buflen;
+}
+
 ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
 {
     size_t recv_left = len;

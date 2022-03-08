@@ -103,10 +103,6 @@ static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, in
 
 static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
 {
-    if (addr == NULL || addrlen == NULL) {
-        GAZELLE_RETURN(EINVAL);
-    }
-
     if (select_path(s) == PATH_KERNEL) {
         return posix_api->accept_fn(s, addr, addrlen);
     }
@@ -292,31 +288,6 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
     return posix_api->read_fn(s, mem, len);
 }
 
-static inline ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
-{
-    if (buf == NULL) {
-        GAZELLE_RETURN(EINVAL);
-    }
-
-    if (len == 0) {
-        return 0;
-    }
-
-    struct lwip_sock *sock = get_socket(fd);
-    if (sock == NULL) {
-        GAZELLE_RETURN(EINVAL);
-    }
-
-    ssize_t send = write_stack_data(sock, buf, len);
-    if (send < 0 || sock->have_rpc_send) {
-        return send;
-    }
-
-    sock->have_rpc_send = true;
-    ssize_t ret = rpc_call_send(fd, buf, len, flags);
-    return (ret < 0) ? ret : send;
-}
-
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
 {
     if (select_path(sockfd) != PATH_LWIP) {
@@ -342,7 +313,7 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
     }
 
     if (select_path(s) == PATH_LWIP) {
-        return rpc_call_recvmsg(s, message, flags);
+        return recvmsg_from_stack(s, message, flags);
     }
 
     return posix_api->recv_msg(s, message, flags);
@@ -355,7 +326,7 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
     }
 
     if (select_path(s) == PATH_LWIP) {
-        return rpc_call_sendmsg(s, message, flags);
+        return sendmsg_to_stack(s, message, flags);
     }
 
     return posix_api->send_msg(s, message, flags);
