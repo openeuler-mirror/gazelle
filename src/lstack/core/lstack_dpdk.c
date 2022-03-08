@@ -80,7 +80,6 @@ int32_t thread_affinity_init(int32_t cpu_id)
     ret = rte_thread_set_affinity(&cpuset);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "thread %d pthread_setaffinity_np failed ret=%d\n", rte_gettid(), ret);
-        return -1;
     }
 
     return 0;
