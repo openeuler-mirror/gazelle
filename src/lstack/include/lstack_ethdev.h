@@ -30,11 +30,7 @@ struct eth_dev_ops {
 };
 
 int32_t ethdev_init(struct protocol_stack *stack);
-
 int32_t eth_dev_poll(void);
-int32_t eth_mbuf_claim(struct rte_mempool *pool, struct rte_mbuf **mbufs, unsigned count);
-
-
 uint32_t eth_get_flow_cnt(void);
 void eth_dev_recv(struct rte_mbuf *mbuf);
 

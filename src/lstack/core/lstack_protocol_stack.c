@@ -198,8 +198,6 @@ int32_t init_protocol_stack(void)
         init_list_node(&stack->recv_list);
         init_list_node(&stack->listen_list);
 
-        stack_replenish_send_idlembuf(stack);
-
         stack_group->stacks[i] = stack;
     }
 
@@ -289,6 +287,8 @@ static void stack_thread_init(struct protocol_stack *stack)
     sys_calibrate_tsc();
 
     hugepage_init();
+
+    stack_replenish_send_idlembuf(stack);
 
     tcpip_init(NULL, NULL);
 
@@ -631,10 +631,9 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
         if (cur_stack == stack) {
             continue;
         }
-
-        mbuf_copy = rte_pktmbuf_alloc(stack->rx_pktmbuf_pool);
-        if (mbuf_copy == NULL) {
-            stack->stats.rx_allocmbuf_fail++;
+        
+	ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, &mbuf_copy, 1);
+        if (ret != 0) {
             return;
         }
         copy_mbuf(mbuf_copy, mbuf);

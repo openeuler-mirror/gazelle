@@ -14,12 +14,10 @@
 #define __LIBOS_LWIP_H__
 
 #include "lstack_thread_rpc.h"
+#include "lwipsock.h"
 
 #define SOCK_RECV_RING_SIZE     (128)
 #define SOCK_SEND_RING_SIZE     (32)
-
-/* flags define last type PBUF_FLAG_TCP_FIN 0x20U in pbuf.h  */
-#define PBUF_FLAG_SND_SAVE_CPY   0x40U
 
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
 #define NETCONN_IS_DATAIN(sock)     ((rte_ring_count((sock)->recv_ring) || (sock)->recv_lastdata))
@@ -39,5 +37,7 @@ void get_lwip_conntable(struct rpc_msg *msg);
 void get_lwip_connnum(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);
 void stack_replenish_send_idlembuf(struct protocol_stack *stack);
+int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num);
+void gazelle_free_pbuf(struct pbuf *pbuf);
 
 #endif

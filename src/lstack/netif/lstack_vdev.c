@@ -25,6 +25,7 @@
 #include "lstack_ethdev.h"
 #include "lstack_control_plane.h"
 #include "lstack_log.h"
+#include "lstack_lwip.h"
 #include "lstack_vdev.h"
 
 /* INUSE_TX_PKTS_WATERMARK < VDEV_RX_QUEUE_SZ;
@@ -46,7 +47,7 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
     stack->rx_ring_used += rcvd_pkts;
     if (unlikely(stack->rx_ring_used >= USED_RX_PKTS_WATERMARK)) {
         uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, DPDK_PKT_BURST_SIZE);
-        int32_t ret = eth_mbuf_claim(stack->rx_pktmbuf_pool, (struct rte_mbuf **)free_buf, free_cnt);
+	int32_t ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, (struct rte_mbuf **)free_buf, free_cnt);
         if (likely(ret == 0)) {
             nr_pkts = rte_ring_en_enqueue_bulk(stack->rx_ring, (void **)free_buf, free_cnt);
             stack->rx_ring_used -= nr_pkts;

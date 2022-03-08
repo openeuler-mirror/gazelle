@@ -19,6 +19,7 @@
 #include <lwip/priv/tcp_priv.h>
 #include <securec.h>
 #include <rte_errno.h>
+#include <rte_malloc.h>
 
 #include "gazelle_base_func.h"
 #include "lstack_ethdev.h"
@@ -140,37 +141,80 @@ void gazelle_clean_sock(int32_t fd)
     sock->stack->conn_num--;
 }
 
-static void gazelle_free_pbuf(struct pbuf *p)
+void gazelle_free_pbuf(struct pbuf *pbuf)
 {
-    struct rte_mbuf *mbuf = pbuf_to_mbuf(p);
-    rte_pktmbuf_free(mbuf);
+    if (pbuf == NULL) {
+        return;
+    }
+
+    struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
+    if (mbuf->pool != NULL) {
+        rte_pktmbuf_free(mbuf);
+    } else {
+        rte_free(mbuf);
+    }
 }
 
-static struct pbuf *tcp_pktmbuf_alloc(struct rte_mempool *pool, pbuf_layer layer, u16_t len)
+static int32_t alloc_mbufs(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
 {
-    struct rte_mbuf *mbuf = NULL;
-    struct pbuf *pbuf = NULL;
+    // alloc mbuf from pool
+    if (rte_pktmbuf_alloc_bulk(pool, mbufs, num) == 0) {
+        return 0;
+    }
+
+    // alloc mbuf from system
+    for (uint32_t i = 0; i < num; i++) {
+        struct rte_mbuf *mbuf = (struct rte_mbuf *)rte_malloc(NULL, pool->elt_size, sizeof(uint64_t));
+        if (mbuf == NULL) {
+            for (uint32_t j = 0; j < i; j++) {
+                rte_free(mbufs[j]);
+                mbufs[j] = NULL;
+            }
+            return -1;
+        }
+
+        mbufs[i] = mbuf;
+        rte_pktmbuf_init(pool, NULL, mbuf, 0);
+        rte_pktmbuf_reset(mbuf);
+        mbuf->pool = NULL;
+    }
+
+    return 0;
+}
+
+int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
+{
     struct pbuf_custom *pbuf_custom = NULL;
 
-    u16_t offset = layer;
-    u16_t total_len = LWIP_MEM_ALIGN_SIZE(offset) + LWIP_MEM_ALIGN_SIZE(len);
+    int32_t ret = alloc_mbufs(pool, mbufs, num);
+    if (ret != 0) {
+        get_protocol_stack()->stats.tx_allocmbuf_fail++;
+        return ret;
+    }
 
-    int32_t ret = rte_pktmbuf_alloc_bulk(pool, &mbuf, 1);
-    if (ret) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld pktmbuf_alloc failed ret=%d\n", get_stack_tid(), ret);
+
+    for (uint32_t i = 0; i < num; i++) {
+        pbuf_custom = mbuf_to_pbuf(mbufs[i]);
+        pbuf_custom->custom_free_function = gazelle_free_pbuf;
+    }
+
+    return 0;
+}
+
+struct pbuf *lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type)
+{
+    struct rte_mbuf *mbuf;
+    int32_t ret = alloc_mbufs(get_protocol_stack()->tx_pktmbuf_pool, &mbuf, 1);
+    if (ret != 0) {
+        get_protocol_stack()->stats.tx_allocmbuf_fail++;
         return NULL;
     }
 
-    uint8_t *data = (uint8_t *)rte_pktmbuf_append(mbuf, total_len);
-    if (!data) {
-        rte_pktmbuf_free(mbuf);
-        return NULL;
-    }
-
-    pbuf_custom = mbuf_to_pbuf(mbuf);
+    struct pbuf_custom *pbuf_custom = mbuf_to_pbuf(mbuf);
     pbuf_custom->custom_free_function = gazelle_free_pbuf;
-    pbuf = pbuf_alloced_custom(layer, len, PBUF_RAM, pbuf_custom, data, total_len);
-    pbuf->flags |= PBUF_FLAG_SND_SAVE_CPY;
+
+    void *data = rte_pktmbuf_mtod(mbuf, void *);
+    struct pbuf *pbuf = pbuf_alloced_custom(layer, length, type, pbuf_custom, data, MAX_PACKET_SZ);
 
     return pbuf;
 }
@@ -180,7 +224,7 @@ void stack_replenish_send_idlembuf(struct protocol_stack *stack)
     uint32_t replenish_cnt = rte_ring_free_count(stack->send_idle_ring);
 
     for (uint32_t i = 0; i < replenish_cnt; i++) {
-        struct pbuf *pbuf = tcp_pktmbuf_alloc(stack->tx_pktmbuf_pool, PBUF_TRANSPORT, TCP_MSS);
+	struct pbuf *pbuf = lwip_alloc_pbuf(PBUF_TRANSPORT, MAX_PACKET_SZ - PBUF_TRANSPORT, PBUF_RAM);
         if (pbuf == NULL) {
             break;
         }
