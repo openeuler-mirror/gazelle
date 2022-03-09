@@ -667,6 +667,12 @@ void get_lwip_conntable(struct rpc_msg *msg)
         conn_num++;
     }
 
+    for (pcb = tcp_tw_pcbs; pcb != NULL && conn_num < max_num; pcb = pcb->next) {
+        conn[conn_num].state = TIME_WAIT_LIST;
+        copy_pcb_to_conn(conn + conn_num, pcb);
+        conn_num++;
+    }
+
     for (struct tcp_pcb_listen *pcbl = tcp_listen_pcbs.listen_pcbs; pcbl != NULL && conn_num < max_num;
         pcbl = pcbl->next) {
         conn[conn_num].state = LISTEN_LIST;
@@ -677,12 +683,6 @@ void get_lwip_conntable(struct rpc_msg *msg)
         if (netconn != NULL && netconn->acceptmbox != NULL) {
             conn[conn_num].recv_cnt = rte_ring_count(netconn->acceptmbox->ring);
         }
-        conn_num++;
-    }
-
-    for (pcb = tcp_tw_pcbs; pcb != NULL && conn_num < max_num; pcb = pcb->next) {
-        conn[conn_num].state = TIME_WAIT_LIST;
-        copy_pcb_to_conn(conn + conn_num, pcb);
         conn_num++;
     }
 
