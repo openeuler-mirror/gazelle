@@ -556,9 +556,9 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("read_lwip: %-18"PRIu64" ", lstack_stat->data.pkts.read_lwip_cnt);
     printf("read_lwip_drop: %-13"PRIu64" \n", lstack_stat->data.pkts.read_lwip_drop);
     printf("app_write: %-18"PRIu64" ", lstack_stat->data.pkts.app_write_cnt);
-    printf("app_write_drop: %-13"PRIu64" ", lstack_stat->data.pkts.app_write_drop);
-    printf("app_get_idlefail: %-11"PRIu64" \n", lstack_stat->data.pkts.app_write_idlefail);
     printf("write_lwip: %-17"PRIu64" ", lstack_stat->data.pkts.write_lwip_cnt);
+    printf("app_get_idlefail: %-11"PRIu64" \n", lstack_stat->data.pkts.app_write_idlefail);
+    printf("app_write_drop: %-13"PRIu64" ", lstack_stat->data.pkts.app_write_drop);
     printf("write_lwip_drop: %-12"PRIu64" ", lstack_stat->data.pkts.write_lwip_drop);
     printf("app_write_idlebuf: %-10"PRIu16" \n", lstack_stat->data.pkts.send_idle_ring_cnt);
     printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list);
