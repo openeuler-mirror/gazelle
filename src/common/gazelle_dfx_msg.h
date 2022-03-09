@@ -83,6 +83,7 @@ struct gazelle_stat_pkts {
     uint64_t call_alloc_fail;
     uint64_t read_events;
     uint64_t write_events;
+    uint64_t accept_events;
     uint64_t read_null;
     uint64_t recv_empty;
     uint64_t event_null;

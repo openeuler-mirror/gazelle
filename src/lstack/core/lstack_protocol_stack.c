@@ -505,6 +505,24 @@ void stack_listen(struct rpc_msg *msg)
     }
 }
 
+static bool have_accept_event(int32_t fd)
+{
+    do {
+        struct lwip_sock *sock = get_socket(fd);
+        if (sock == NULL) {
+            break;
+        }
+
+        if (NETCONN_IS_ACCEPTIN(sock)) {
+            return true;
+        }
+
+        fd = sock->nextfd;
+    } while (fd > 0);
+
+    return false;
+}
+
 void stack_accept(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
@@ -522,21 +540,6 @@ void stack_accept(struct rpc_msg *msg)
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
             fd, msg->result);
     }
-
-    /* report remain accept event */
-    do {
-        struct lwip_sock *sock = get_socket(fd);
-        if (sock == NULL) {
-            break;
-        }
-
-        if ((sock->epoll_events & EPOLLIN) && NETCONN_IS_ACCEPTIN(sock)) {
-            add_epoll_event(sock->conn, EPOLLIN);
-            break;
-        }
-
-        fd = sock->nextfd;
-    } while (fd > 0);
 }
 
 void stack_connect(struct rpc_msg *msg)
@@ -710,7 +713,9 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
 {
     struct lwip_sock *min_sock = NULL;
-    int32_t min_fd;
+    int32_t head_fd = fd;
+    int32_t min_fd = fd;
+    int32_t ret = -1;
 
     while (fd > 0) {
         struct lwip_sock *sock = get_socket(fd);
@@ -731,8 +736,26 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
     }
 
     if (min_sock) {
-        return rpc_call_accept(min_fd, addr, addrlen);
+        ret = rpc_call_accept(min_fd, addr, addrlen);
     }
 
-    GAZELLE_RETURN(EAGAIN);
+    /* avoid miss accept event, call have_accept_event twice.
+       rpc_call_accept empty and have_event=true, then establish connection add event failed because of have_event */
+    struct lwip_sock *sock = get_socket(head_fd);
+    if (!have_accept_event(head_fd)) {
+        sock->have_event = false;
+    }
+
+    if (have_accept_event(head_fd)) {
+        sock->have_event = true;
+        sock->events |= EPOLLIN;
+        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+        sem_post(&sock->weakup->event_sem);
+        sock->stack->stats.accept_events++;
+    }
+
+    if(ret < 0) {
+        errno = EAGAIN;
+    }
+    return ret;
 }
