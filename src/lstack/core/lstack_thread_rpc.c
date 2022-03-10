@@ -194,10 +194,12 @@ static void rpc_replenish_idlembuf(struct rpc_msg *msg)
 {
     struct protocol_stack *stack = get_protocol_stack();
     stack_replenish_send_idlembuf(stack);
+    stack->in_replenish = 0;
 }
 
 void rpc_call_replenish_idlembuf(struct protocol_stack *stack)
 {
+    stack->in_replenish = 1;
     struct rpc_msg *msg = rpc_msg_alloc(stack->rpc_pool, rpc_replenish_idlembuf);
     if (msg == NULL) {
         return;
