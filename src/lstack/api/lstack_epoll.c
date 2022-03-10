@@ -43,15 +43,15 @@ enum POLL_TYPE {
 
 static inline bool check_event_vaild(struct lwip_sock *sock, uint32_t event)
 {
-    if (event == EPOLLIN && !NETCONN_IS_ACCEPTIN(sock) && !NETCONN_IS_DATAIN(sock)) {
-        return false;
+    if ((event & EPOLLIN) && !NETCONN_IS_ACCEPTIN(sock) && !NETCONN_IS_DATAIN(sock)) {
+        event &= ~EPOLLIN;
     }
 
-    if (sock->events == EPOLLOUT && !NETCONN_IS_DATAOUT(sock)) {
-        return false;
+    if ((event & EPOLLOUT) && !NETCONN_IS_DATAOUT(sock)) {
+        event &= ~EPOLLOUT;
     }
 
-    return true;
+    return (event) ? true : false;
 }
 
 static inline bool report_events(struct lwip_sock *sock, uint32_t event)
@@ -251,6 +251,11 @@ static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, st
 
 static bool remove_event(enum POLL_TYPE etype, struct lwip_sock **sock_list, int32_t event_num, struct lwip_sock *sock)
 {
+    /* close sock */
+    if (sock->stack == NULL) {
+        return true;
+    }
+
     /* remove duplicate event */
     for (uint32_t i = 0; i < event_num && etype == TYPE_EPOLL; i++) {
         if (sock_list[i] == sock) {
@@ -287,7 +292,9 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
         sock->have_event = false;
 
         if (remove_event(etype, weakup->sock_list, event_num, sock)) {
-            sock->stack->stats.remove_event++;
+            if (sock->stack) {
+                sock->stack->stats.remove_event++;
+            }
             continue;
         }
 

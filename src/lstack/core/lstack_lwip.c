@@ -128,7 +128,7 @@ void gazelle_init_sock(int32_t fd)
 void gazelle_clean_sock(int32_t fd)
 {
     struct lwip_sock *sock = get_socket_by_fd(fd);
-    if (sock == NULL) {
+    if (sock == NULL || sock->stack == NULL) {
         return;
     }
 
@@ -324,8 +324,12 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         sem_post(&sock->weakup->event_sem);
         sock->stack->stats.write_events++;
     }
+    if (!NETCONN_IS_DATAOUT(sock)) {
+        sock->events &= ~EPOLLOUT;
+    }
 
     if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK && !sock->stack->in_replenish) {
+        stack->in_replenish = true;
         rpc_call_replenish_idlembuf(sock->stack);
     }
 
@@ -522,6 +526,9 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
         rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
         sem_post(&sock->weakup->event_sem);
         sock->stack->stats.read_events++;
+    }
+    if (!NETCONN_IS_DATAIN(sock)) {
+        sock->events &= ~EPOLLIN;
     }
 
     if (recvd == 0) {
