@@ -63,16 +63,16 @@ struct config_vector_t {
 };
 
 static struct config_vector_t g_config_tbl[] = {
-    { "dpdk_args",    parse_dpdk_args },
+    { "host_addr",    parse_host_addr },
+    { "gateway_addr", parse_gateway_addr },
+    { "mask_addr",    parse_mask_addr },
     { "use_ltran",    parse_use_ltran },
+    { "devices",      parse_devices },
+    { "dpdk_args",    parse_dpdk_args },
     { "num_cpus",     parse_stack_cpu_number },
     { "num_weakup",   parse_weakup_cpu_number },
     { "numa_bind",    parse_numa_bind },
     { "low_power_mode", parse_low_power_mode },
-    { "host_addr",    parse_host_addr },
-    { "mask_addr",    parse_mask_addr },
-    { "devices",      parse_devices },
-    { "gateway_addr", parse_gateway_addr },
     { "kni_switch",   parse_kni_switch },
     { NULL,           NULL }
 };
@@ -302,8 +302,9 @@ static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t nu
     int32_t count = 0;
     char *elem = strtok(strbuf, "-");
     while (elem && count < num) {
-        while (elem && isspace(*elem))
+        while (elem && isspace(*elem)) {
             elem++;
+        }
         cpulist[count++] = (uint32_t)strtol(elem, NULL, 10); // 10 : decimal
 
         if (count % 2 == 0) // 2 : even
