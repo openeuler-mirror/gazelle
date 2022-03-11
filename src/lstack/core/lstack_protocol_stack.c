@@ -318,7 +318,7 @@ static void* gazelle_stack_thread(void *arg)
     stack_thread_init(stack);
 
     for (;;) {
-        poll_rpc_msg(&stack->rpc_queue, stack->rpc_pool);
+        poll_rpc_msg(stack);
 
         eth_dev_poll();
 

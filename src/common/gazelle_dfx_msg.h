@@ -89,6 +89,7 @@ struct gazelle_stat_pkts {
     uint64_t event_null;
     uint64_t remove_event;
     uint64_t send_self_rpc;
+    uint64_t call_null;
 };
 
 /* same as define in lwip/stats.h - struct stats_mib2 */

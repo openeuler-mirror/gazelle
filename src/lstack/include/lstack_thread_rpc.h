@@ -47,9 +47,8 @@ struct rpc_msg {
     union rpc_msg_arg args[RPM_MSG_ARG_SIZE]; /* resolve by type */
 };
 
-void poll_rpc_msg(lockless_queue *rpc_queue, struct rte_mempool *rpc_pool);
-
 struct protocol_stack;
+void poll_rpc_msg(struct protocol_stack *stack);
 void rpc_call_replenish_idlembuf(struct protocol_stack *stack);
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);

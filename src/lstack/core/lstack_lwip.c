@@ -26,6 +26,7 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_log.h"
 #include "lstack_weakup.h"
+#include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 #include "lstack_lwip.h"
 
@@ -82,9 +83,9 @@ static void reset_sock_data(struct lwip_sock *sock)
     }
 }
 
-
 void gazelle_init_sock(int32_t fd)
 {
+    static uint32_t name_tick = 0;
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
         return;
@@ -92,29 +93,15 @@ void gazelle_init_sock(int32_t fd)
 
     reset_sock_data(sock);
 
-    int32_t ret;
-    char name[RTE_RING_NAMESIZE] = {0};
-    static uint32_t name_tick = 0;
-
-    ret = snprintf_s(name, sizeof(name), RTE_RING_NAMESIZE - 1, "%s_%d", "sock_recv", name_tick++);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "%s create failed.\n", name);
-        return;
-    }
-    sock->recv_ring = rte_ring_create(name, SOCK_RECV_RING_SIZE, rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
+    sock->recv_ring = create_ring("sock_recv", SOCK_RECV_RING_SIZE, 0, name_tick++);
     if (sock->recv_ring == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "%s create failed. errno: %d.\n", name, rte_errno);
+        LSTACK_LOG(ERR, LSTACK, "sock_recv create failed. errno: %d.\n", rte_errno);
         return;
     }
 
-    ret = snprintf_s(name, sizeof(name), RTE_RING_NAMESIZE - 1, "%s_%d", "sock_send", name_tick++);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "%s create failed. errno: %d.\n", name, rte_errno);
-        return;
-    }
-    sock->send_ring = rte_ring_create(name, SOCK_SEND_RING_SIZE, rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
+    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, name_tick++);
     if (sock->send_ring == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "%s create failed. errno: %d.\n", name, rte_errno);
+        LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
 

@@ -133,7 +133,7 @@ static struct rte_mempool *create_rpc_mempool(const char *name, uint16_t queue_i
     if (ret < 0) {
         return NULL;
     }
-    pool = rte_mempool_create(pool_name, CALL_POOL_SZ, sizeof(struct rpc_msg), CALL_CACHE_SZ, 0, NULL, NULL, NULL,
+    pool = rte_mempool_create(pool_name, CALL_POOL_SZ, sizeof(struct rpc_msg), 0, 0, NULL, NULL, NULL,
         NULL, rte_socket_id(), 0);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
