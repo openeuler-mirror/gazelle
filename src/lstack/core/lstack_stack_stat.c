@@ -109,6 +109,10 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     dfx->data.pkts.send_idle_ring_cnt = rte_ring_count(stack->send_idle_ring);
     dfx->data.pkts.call_msg_cnt = rpc_call_msgcnt(stack);
     dfx->data.pkts.recv_list = rpc_call_recvlistcnt(stack);
+    dfx->data.pkts.event_list = rpc_call_eventlistcnt(stack);
+    if (stack->wakeup_list) {
+        dfx->data.pkts.wakeup_list = rpc_call_eventlistcnt(stack);
+    }
     dfx->data.pkts.conn_num = stack->conn_num;
 }
 

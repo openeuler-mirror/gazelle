@@ -110,6 +110,8 @@ void gazelle_init_sock(int32_t fd)
     init_list_node(&sock->recv_list);
     init_list_node(&sock->attach_list);
     init_list_node(&sock->listen_list);
+    init_list_node(&sock->event_list);
+    init_list_node(&sock->wakeup_list);
 }
 
 void gazelle_clean_sock(int32_t fd)
@@ -126,6 +128,8 @@ void gazelle_clean_sock(int32_t fd)
     list_del_node_init(&sock->recv_list);
     list_del_node_init(&sock->attach_list);
     list_del_node_init(&sock->listen_list);
+    list_del_node_init(&sock->event_list);
+    list_del_node_init(&sock->wakeup_list);
 }
 
 void gazelle_free_pbuf(struct pbuf *pbuf)
@@ -266,6 +270,30 @@ ssize_t write_lwip_data(struct lwip_sock *sock, int32_t fd, int32_t flags)
     return (send_ret < 0) ? send_ret : send_len;
 }
 
+void add_self_event(struct lwip_sock *sock, uint32_t events)
+{
+    struct weakup_poll *wakeup = sock->weakup;
+    struct protocol_stack *stack = sock->stack;
+    if (wakeup == NULL || stack == NULL) {
+        return;
+    }
+
+    sock->events |= events;
+
+    if (sock->have_event) {
+        return;
+    }
+
+    if (rte_ring_mp_enqueue(wakeup->self_ring, (void *)sock) == 0) {
+        sock->have_event = true;
+        sem_post(&sock->weakup->event_sem);
+        stack->stats.epoll_self_event++;
+    } else {
+        rpc_call_addevent(stack, sock);
+        stack->stats.epoll_self_call++;
+    }
+}
+
 ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 {
     uint32_t free_count = rte_ring_free_count(sock->send_ring);
@@ -303,14 +331,10 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         send_pkt++;
     }
 
-    if (!sock->have_event && (sock->epoll_events & EPOLLOUT) && NETCONN_IS_DATAOUT(sock)) {
-        sock->have_event = true;
-        sock->events |= EPOLLOUT;
-        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
-        sem_post(&sock->weakup->event_sem);
+    if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_DATAOUT(sock)) {
+        add_self_event(sock, EPOLLOUT);
         sock->stack->stats.write_events++;
-    }
-    if (!NETCONN_IS_DATAOUT(sock)) {
+    } else {
         sock->events &= ~EPOLLOUT;
     }
 
@@ -507,14 +531,10 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
         }
     }
 
-    if (!sock->have_event && (sock->epoll_events & EPOLLIN) && NETCONN_IS_DATAIN(sock)) {
-        sock->have_event = true;
-        sock->events |= EPOLLIN;
-        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
-        sem_post(&sock->weakup->event_sem);
+    if ((sock->epoll_events & EPOLLIN) && NETCONN_IS_DATAIN(sock)) {
+        add_self_event(sock, EPOLLIN);
         sock->stack->stats.read_events++;
-    }
-    if (!NETCONN_IS_DATAIN(sock)) {
+    } else {
         sock->events &= ~EPOLLIN;
     }
 
@@ -577,9 +597,14 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
         conn->recv_cnt = rte_ring_count(netconn->recvmbox->ring);
 
         struct lwip_sock *sock = get_socket(netconn->socket);
-        if (sock != NULL && sock->recv_ring != NULL && sock->send_ring != NULL) {
+        if (netconn->socket > 0 && sock != NULL && sock->recv_ring != NULL && sock->send_ring != NULL) {
             conn->recv_ring_cnt = rte_ring_count(sock->recv_ring);
             conn->send_ring_cnt = rte_ring_count(sock->send_ring);
+            struct weakup_poll *weakup = sock->weakup;
+            if (weakup) {
+                conn->event_ring_cnt = rte_ring_count(weakup->event_ring);
+                conn->self_ring_cnt = rte_ring_count(weakup->self_ring);
+            }
         }
     }
 }
@@ -696,10 +721,8 @@ void get_lwip_connnum(struct rpc_msg *msg)
     msg->result = conn_num;
 }
 
-void stack_recvlist_count(struct rpc_msg *msg)
+static uint32_t get_list_count(struct list_node *list)
 {
-    struct protocol_stack *stack = get_protocol_stack();
-    struct list_node *list = &(stack->recv_list);
     struct list_node *node, *temp;
     uint32_t count = 0;
 
@@ -707,5 +730,20 @@ void stack_recvlist_count(struct rpc_msg *msg)
         count++;
     }
 
-    msg->result = count;
+    return count;
+}
+
+void stack_wakeuplist_count(struct rpc_msg *msg)
+{
+    msg->result = get_list_count(get_protocol_stack()->wakeup_list);
+}
+
+void stack_eventlist_count(struct rpc_msg *msg)
+{
+    msg->result = get_list_count(&get_protocol_stack()->event_list);
+}
+
+void stack_recvlist_count(struct rpc_msg *msg)
+{
+    msg->result = get_list_count(&get_protocol_stack()->recv_list);
 }

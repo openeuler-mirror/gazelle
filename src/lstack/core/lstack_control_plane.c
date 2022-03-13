@@ -38,6 +38,7 @@
 #define RECONNECT_TO_LTRAN_DELAY        (1)
 #define GAZELLE_BADFD                    (-1)
 #define GAZELLE_LISTEN_BACKLOG           5
+#define GAZELLE_10MS                    (10000)
 
 static int32_t g_data_fd = -1;
 static volatile bool g_register_state = true;
@@ -701,6 +702,12 @@ void control_server_thread(void *arg)
     int32_t num, connfd;
     struct epoll_event evt_array;
     while (1) {
+        /* wait init finish */
+        if (posix_api->is_chld) {
+            usleep(GAZELLE_10MS);
+            continue;
+        }
+
         num = posix_api->epoll_wait_fn(epfd, &evt_array, 1, -1);
         if (num <= 0) {
             continue;
@@ -741,6 +748,12 @@ void control_client_thread(void *arg)
     }
 
     while (1) {
+        /* wait init finish */
+        if (posix_api->is_chld) {
+            usleep(GAZELLE_10MS);
+            continue;
+        }
+
         if (sockfd < 0) {
             set_register_state(false);
             sockfd = client_reg_proc_reconnect(epfd);

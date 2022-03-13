@@ -33,6 +33,8 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
 ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags);
 void read_recv_list(void);
 void add_recv_list(int32_t fd);
+void stack_eventlist_count(struct rpc_msg *msg);
+void stack_wakeuplist_count(struct rpc_msg *msg);
 void get_lwip_conntable(struct rpc_msg *msg);
 void get_lwip_connnum(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);
@@ -42,5 +44,6 @@ void gazelle_free_pbuf(struct pbuf *pbuf);
 ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags);
 ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags);
 ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags);
+void add_self_event(struct lwip_sock *sock, uint32_t events);
 
 #endif

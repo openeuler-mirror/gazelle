@@ -64,10 +64,12 @@ struct gazelle_stat_pkts {
     uint64_t rx_drop;
     uint64_t rx_allocmbuf_fail;
     uint64_t tx_allocmbuf_fail;
-    uint16_t weakup_ring_cnt;
     uint64_t call_msg_cnt;
+    uint16_t weakup_ring_cnt;
     uint16_t conn_num;
     uint16_t send_idle_ring_cnt;
+    uint64_t event_list;
+    uint64_t wakeup_list;
     uint64_t read_lwip_drop;
     uint64_t read_lwip_cnt;
     uint64_t write_lwip_drop;
@@ -89,6 +91,10 @@ struct gazelle_stat_pkts {
     uint64_t send_self_rpc;
     uint64_t call_null;
     uint64_t arp_copy_fail;
+    uint64_t epoll_pending;
+    uint64_t epoll_pending_call;
+    uint64_t epoll_self_call;
+    uint64_t epoll_self_event;
 };
 
 /* same as define in lwip/stats.h - struct stats_mib2 */
@@ -162,6 +168,8 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t send_ring_cnt;
     uint32_t recv_ring_cnt;
     uint32_t tcp_sub_state;
+    uint32_t event_ring_cnt;
+    uint32_t self_ring_cnt;
 };
 
 struct gazelle_stat_lstack_conn {
