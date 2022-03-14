@@ -582,6 +582,7 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
     printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
     printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.call_null);
+    printf("send_list: %-18"PRIu64" \n", lstack_stat->data.pkts.send_list);
 }
 
 static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lstack_stat,
@@ -884,7 +885,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     do {
         printf("\n------ stack tid: %6u ------\n", stat->tid);
         printf("No.   Proto  recv_cnt  recv_ring  in_send  send_ring  event  self_event  Local Address"
-            "     Foreign Address         State\n");
+            "          Foreign Address         State\n");
         uint32_t unread_pkts = 0;
         uint32_t unsend_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {

@@ -95,6 +95,7 @@ struct gazelle_stat_pkts {
     uint64_t epoll_pending_call;
     uint64_t epoll_self_call;
     uint64_t epoll_self_event;
+    uint64_t send_list;
 };
 
 /* same as define in lwip/stats.h - struct stats_mib2 */

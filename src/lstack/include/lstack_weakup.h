@@ -16,7 +16,7 @@
 #include <rte_ring.h>
 #include "lstack_dpdk.h"
 
-#define EPOLL_MAX_EVENTS    256
+#define EPOLL_MAX_EVENTS    512
 
 struct weakup_poll {
     sem_t event_sem;

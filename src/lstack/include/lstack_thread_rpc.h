@@ -55,6 +55,7 @@ int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t rpc_call_recvlistcnt(struct protocol_stack *stack);
 int32_t rpc_call_eventlistcnt(struct protocol_stack *stack);
+int32_t rpc_call_sendlistcnt(struct protocol_stack *stack);
 int32_t rpc_call_wakeuplistcnt(struct protocol_stack *stack);
 int32_t rpc_call_thread_regphase1(struct protocol_stack *stack, void *conn);
 int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn);

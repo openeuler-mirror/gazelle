@@ -197,6 +197,16 @@ int32_t rpc_call_eventlistcnt(struct protocol_stack *stack)
     return rpc_sync_call(&stack->rpc_queue, stack->rpc_pool, msg);
 }
 
+int32_t rpc_call_sendlistcnt(struct protocol_stack *stack)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_sendlist_count);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    return rpc_sync_call(&stack->rpc_queue, stack->rpc_pool, msg);
+}
+
 int32_t rpc_call_recvlistcnt(struct protocol_stack *stack)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_recvlist_count);
@@ -440,34 +450,6 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
     msg->args[MSG_ARG_2].p = argp;
 
     return rpc_sync_call(&stack->rpc_queue, stack->rpc_pool, msg);
-}
-
-static void stack_send(struct rpc_msg *msg)
-{
-    int32_t fd = msg->args[MSG_ARG_0].i;
-    int32_t flags = msg->args[MSG_ARG_2].i;
-
-    struct protocol_stack *stack = get_protocol_stack();
-    struct lwip_sock *sock = get_socket(fd);
-    if (sock == NULL) {
-        msg->result = -1;
-        msg->self_release = 0;
-        return;
-    }
-
-    msg->result = write_lwip_data(sock, fd, flags);
-    sock->have_rpc_send = false;
-
-    if (msg->result >= 0 && rte_ring_count(sock->send_ring)) {
-        sock->have_rpc_send = true;
-        sock->stack->stats.send_self_rpc++;
-        msg->self_release = 1;
-        rpc_call(&stack->rpc_queue, msg);
-    }
-
-    if (rte_ring_free_count(sock->send_ring)) {
-        add_epoll_event(sock->conn, EPOLLOUT);
-    }
 }
 
 ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags)

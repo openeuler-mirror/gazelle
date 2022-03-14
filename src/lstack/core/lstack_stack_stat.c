@@ -107,11 +107,22 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
     dfx->data.pkts.weakup_ring_cnt = rte_ring_count(stack->weakup_ring);
     dfx->data.pkts.send_idle_ring_cnt = rte_ring_count(stack->send_idle_ring);
-    dfx->data.pkts.call_msg_cnt = rpc_call_msgcnt(stack);
-    dfx->data.pkts.recv_list = rpc_call_recvlistcnt(stack);
-    dfx->data.pkts.event_list = rpc_call_eventlistcnt(stack);
+
+    int32_t rpc_call_result = rpc_call_msgcnt(stack);
+    dfx->data.pkts.call_msg_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
+
+    rpc_call_result = rpc_call_recvlistcnt(stack);
+    dfx->data.pkts.recv_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
+
+    rpc_call_result = rpc_call_eventlistcnt(stack);
+    dfx->data.pkts.event_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
+
+    rpc_call_result = rpc_call_sendlistcnt(stack);
+    dfx->data.pkts.send_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
+
     if (stack->wakeup_list) {
-        dfx->data.pkts.wakeup_list = rpc_call_eventlistcnt(stack);
+        rpc_call_result = rpc_call_eventlistcnt(stack);
+        dfx->data.pkts.wakeup_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
     }
     dfx->data.pkts.conn_num = stack->conn_num;
 }
@@ -119,6 +130,8 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
 static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack,
     enum GAZELLE_STAT_MODE stat_mode)
 {
+    int32_t rpc_call_result;
+
     switch (stat_mode) {
         case GAZELLE_STAT_LSTACK_SHOW:
         case GAZELLE_STAT_LSTACK_SHOW_RATE:
@@ -129,8 +142,10 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
                 sizeof(stack->lwip_stats->mib2));
             break;
         case GAZELLE_STAT_LSTACK_SHOW_CONN:
-            dfx->data.conn.conn_num = rpc_call_conntable(stack, dfx->data.conn.conn_list, GAZELLE_LSTACK_MAX_CONN);
-            dfx->data.conn.total_conn_num = rpc_call_connnum(stack);
+            rpc_call_result = rpc_call_conntable(stack, dfx->data.conn.conn_list, GAZELLE_LSTACK_MAX_CONN);
+            dfx->data.conn.conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
+            rpc_call_result = rpc_call_connnum(stack);
+            dfx->data.conn.total_conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
             break;
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
             memcpy_s(&dfx->data.latency, sizeof(dfx->data.latency), &stack->latency, sizeof(stack->latency));
