@@ -190,6 +190,12 @@ __attribute__((constructor)) void gazelle_network_init(void)
         LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
     }
 
+    /* to prevent crash , just ignore SIGPIPE when socket is closed */
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "signal error, errno:%d.", errno);
+        LSTACK_EXIT(1, "signal SIGPIPE SIG_IGN\n");
+    }
+
     /*
     * Phase 6: Init control plane and dpdk init */
     pthread_t tid;

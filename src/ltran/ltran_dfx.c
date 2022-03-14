@@ -1231,8 +1231,6 @@ int32_t main(int32_t argc, char *argv[])
 
     if (!g_use_ltran) {
         g_gazelle_dfx_tbl[GAZELLE_STAT_LSTACK_SHOW].recv_size = sizeof(struct gazelle_stack_dfx_data);
-        g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_START_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);
-        g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_STOP_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);
         ret = check_cmd_support(req_msg, req_msg_num);
         if (ret < 0) {
             return -1;
