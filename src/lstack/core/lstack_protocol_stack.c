@@ -426,14 +426,10 @@ void stack_arp(struct rpc_msg *msg)
 
 void stack_socket(struct rpc_msg *msg)
 {
-    int32_t fd = lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
-    msg->result = fd;
-    if (fd < 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, %d socket failed\n", get_stack_tid(), fd);
-        return;
+    msg->result = gazelle_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
+    if (msg->result < 0) {
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, %ld socket failed\n", get_stack_tid(), msg->result);
     }
-
-    gazelle_init_sock(fd);
 }
 
 static inline bool is_real_close(int32_t fd)
@@ -589,11 +585,22 @@ void stack_accept(struct rpc_msg *msg)
     }
     fd = sock->attach_fd;
 
-    msg->result = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
-    if (msg->result <= 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
-            fd, msg->result);
+    int32_t accept_fd = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
+    if (accept_fd > 0) {
+        sock = get_socket(accept_fd);
+        if (sock && sock->stack) {
+            msg->result = accept_fd;
+            return;
+        }
+
+        lwip_close(accept_fd);
+        gazelle_clean_sock(accept_fd);
+        posix_api->close_fn(accept_fd);
     }
+
+    LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
+            fd, accept_fd);
+    msg->result = -1;
 }
 
 void stack_connect(struct rpc_msg *msg)

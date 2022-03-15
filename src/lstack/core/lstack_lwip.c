@@ -657,19 +657,38 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
     dst_sock->conn->flags = src_sock->conn->flags;
 }
 
+int32_t gazelle_socket(int domain, int type, int protocol)
+{
+    int32_t fd = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return fd;
+    }
+
+    gazelle_init_sock(fd);
+
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL || sock->stack == NULL) {
+        lwip_close(fd);
+        gazelle_clean_sock(fd);
+        posix_api->close_fn(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
 void create_shadow_fd(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
     struct sockaddr *addr = msg->args[MSG_ARG_1].p;
     socklen_t addr_len = msg->args[MSG_ARG_2].socklen;
 
-    int32_t clone_fd = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    int32_t clone_fd = gazelle_socket(AF_INET, SOCK_STREAM, 0);
     if (clone_fd < 0) {
         LSTACK_LOG(ERR, LSTACK, "clone socket failed clone_fd=%d errno=%d\n", clone_fd, errno);
         msg->result = clone_fd;
         return;
     }
-    gazelle_init_sock(clone_fd);
 
     struct lwip_sock *sock = get_socket_by_fd(fd);
     struct lwip_sock *clone_sock = get_socket_by_fd(clone_fd);
