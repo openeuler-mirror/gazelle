@@ -323,25 +323,22 @@ static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t nu
 
 static int32_t stack_idle_cpuset(struct protocol_stack *stack, cpu_set_t *exclude)
 {
-    int32_t cpunum;
     uint32_t cpulist[CPUS_RANGE_NUM];
 
-    cpunum = numa_to_cpusnum(stack->socket_id, cpulist, CPUS_RANGE_NUM);
-    if (cpunum <= 0 || cpunum % 2 != 0) { // 2 : even
+    int32_t cpunum = numa_to_cpusnum(stack->socket_id, cpulist, CPUS_RANGE_NUM);
+    if (cpunum <= 0 ) {
         LSTACK_LOG(ERR, LSTACK, "numa_to_cpusnum failed\n");
         return -1;
     }
 
     CPU_ZERO(&stack->idle_cpuset);
-    for (uint32_t n = 0; n < cpunum; n += 2) { // 2 : even
-        for (uint32_t i = cpulist[n]; i <= cpulist[n + 1]; i++) {
-            /* skip stack cpu */
-            if (CPU_ISSET(i, exclude)) {
-                continue;
-            }
-
-            CPU_SET(i, &stack->idle_cpuset);
+    for (int32_t i = 0; i < cpunum; i++) {
+        /* skip stack cpu */
+        if (CPU_ISSET(cpulist[i], exclude)) {
+            continue;
         }
+
+        CPU_SET(cpulist[i], &stack->idle_cpuset);
     }
 
     return 0;
