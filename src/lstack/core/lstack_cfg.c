@@ -53,7 +53,6 @@ static int32_t parse_weakup_cpu_number(void);
 static int32_t parse_mask_addr(void);
 static int32_t parse_devices(void);
 static int32_t parse_dpdk_args(void);
-static int32_t parse_numa_bind(void);
 static int32_t parse_gateway_addr(void);
 static int32_t parse_kni_switch(void);
 
@@ -71,7 +70,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "dpdk_args",    parse_dpdk_args },
     { "num_cpus",     parse_stack_cpu_number },
     { "num_wakeup",   parse_weakup_cpu_number },
-    { "numa_bind",    parse_numa_bind },
     { "low_power_mode", parse_low_power_mode },
     { "kni_switch",   parse_kni_switch },
     { NULL,           NULL }
@@ -710,23 +708,6 @@ static int32_t parse_weakup_cpu_number(void)
         return -EINVAL;
     }
     g_config_params.num_wakeup = (uint16_t)ret;
-
-    return 0;
-}
-
-static int32_t parse_numa_bind(void)
-{
-    const config_setting_t *numa_bind = NULL;
-
-    numa_bind = config_lookup(&g_config, "numa_bind");
-    if (numa_bind == NULL) {
-        g_config_params.numa_bind = 1;
-        return 0;
-    }
-    g_config_params.numa_bind = (uint8_t)config_setting_get_bool(numa_bind);
-    if (g_config_params.numa_bind != 0 && g_config_params.numa_bind != 1) {
-        return -EINVAL;
-    }
 
     return 0;
 }

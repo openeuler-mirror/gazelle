@@ -63,7 +63,6 @@ struct cfg_params {
     ip4_addr_t netmask;
     ip4_addr_t gateway_addr;
     struct rte_ether_addr ethdev;
-    uint8_t numa_bind;
     uint16_t num_cpu;
     uint16_t cpus[CFG_MAX_CPUS];
     uint16_t num_wakeup;

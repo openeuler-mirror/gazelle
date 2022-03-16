@@ -414,12 +414,9 @@ static void stack_send(struct rpc_msg *msg)
     }
 
     msg->result = write_lwip_data(sock, fd, flags);
-    if (msg->result < 0 || rte_ring_count(sock->send_ring) == 0) {
-        msg->self_release = 0;
-        sock->have_rpc_send = false;
-    }
+    sock->have_rpc_send = false;
 
-    if (rte_ring_count(sock->send_ring)) {
+    if (msg->result >= 0 && rte_ring_count(sock->send_ring)) {
         sock->have_rpc_send = true;
         sock->stack->stats.send_self_rpc++;
         msg->self_release = 1;
@@ -443,6 +440,7 @@ ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
     msg->args[MSG_ARG_1].size = len;
     msg->args[MSG_ARG_2].i = flags;
 
+    msg->self_release = 0;
     rpc_call(&stack->rpc_queue, msg);
 
     return 0;
