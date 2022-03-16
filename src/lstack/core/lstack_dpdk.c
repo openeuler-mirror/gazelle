@@ -167,14 +167,12 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
         return -1;
     }
 
-    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, RX_MBUF_CACHE_SZ,
-        stack->queue_id);
+    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, 0, stack->queue_id);
     if (stack->rx_pktmbuf_pool == NULL) {
         return -1;
     }
 
-    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, TX_MBUF_CACHE_SZ,
-        stack->queue_id);
+    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, 0, stack->queue_id);
     if (stack->tx_pktmbuf_pool == NULL) {
         return -1;
     }
@@ -557,7 +555,7 @@ int32_t dpdk_init_lstack_kni(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, KNI_MBUF_CACHE_SZ, 0);
+    stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, 0, 0);
     if (stack_group->kni_pktmbuf_pool == NULL) {
         return -1;
     }

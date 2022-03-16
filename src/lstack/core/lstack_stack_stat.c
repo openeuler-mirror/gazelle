@@ -105,7 +105,6 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     lstack_get_low_power_info(&dfx->low_power_info);
     memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
-    dfx->data.pkts.event_null = stack_group->event_null;
     dfx->data.pkts.weakup_ring_cnt = rte_ring_count(stack->weakup_ring);
     dfx->data.pkts.send_idle_ring_cnt = rte_ring_count(stack->send_idle_ring);
     dfx->data.pkts.call_msg_cnt = rpc_call_msgcnt(stack);

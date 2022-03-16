@@ -390,7 +390,7 @@ static void gazelle_print_ltran_start_latency(void *buf, const struct gazelle_st
 static void gazelle_print_ltran_stat_latency(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
     struct in_addr *ip_addr = (struct in_addr *)buf;
-    struct gazelle_stat_lstack_total *stat = (struct gazelle_stat_lstack_total *)(buf + sizeof(*ip_addr));
+    struct gazelle_stat_lstack_total *stat = (struct gazelle_stat_lstack_total *)((char *)buf + sizeof(*ip_addr));
     uint64_t total_rx = 0;
     double total_latency = 0;
     uint64_t max = 0;
@@ -574,9 +574,8 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("read_null: %-18"PRIu64" ", lstack_stat->data.pkts.read_null);
     printf("recv_empty: %-17"PRIu64" \n", lstack_stat->data.pkts.recv_empty);
     printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
-    printf("event_null: %-17"PRIu64" ", lstack_stat->data.pkts.event_null);
-    printf("remove_event: %-15"PRIu64" \n", lstack_stat->data.pkts.remove_event);
-    printf("send_self_rpc: %-14"PRIu64" ", lstack_stat->data.pkts.send_self_rpc);
+    printf("remove_event: %-15"PRIu64" ", lstack_stat->data.pkts.remove_event);
+    printf("send_self_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.send_self_rpc);
     printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.call_null);
 }
 

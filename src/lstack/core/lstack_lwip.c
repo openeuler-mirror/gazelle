@@ -175,7 +175,6 @@ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs,
 
     int32_t ret = alloc_mbufs(pool, mbufs, num);
     if (ret != 0) {
-        get_protocol_stack()->stats.tx_allocmbuf_fail++;
         return ret;
     }
 
@@ -289,7 +288,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         }
 
         copy_len = (len - send_len > pbuf->len) ? pbuf->len : (len - send_len);
-        pbuf_take(pbuf, buf + send_len, copy_len);
+        pbuf_take(pbuf, (char *)buf + send_len, copy_len);
         pbuf->tot_len = pbuf->len = copy_len;
 
         ret = rte_ring_sp_enqueue(sock->send_ring, pbuf);
@@ -331,13 +330,13 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
 
     uint32_t free_count = rte_ring_free_count(sock->recv_ring);
     uint32_t data_count = rte_ring_count(sock->conn->recvmbox->ring);
-
+    uint32_t read_max = LWIP_MIN(free_count, data_count);
     struct pbuf *pbuf = NULL;
-    uint32_t read_count = LWIP_MIN(free_count, data_count);
+    uint32_t read_count = 0;
     ssize_t recv_len = 0;
     int32_t ret;
 
-    for (uint32_t i = 0; i < read_count; i++) {
+    for (uint32_t i = 0; i < read_max; i++) {
         err_t err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbuf, apiflags);
         if (err != ERR_OK) {
             if (recv_len > 0) {
@@ -356,6 +355,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
                 sock->stack->stats.read_lwip_drop++;
                 break;
             }
+            read_count++;
         }
 
         recv_len += pbuf->len;
@@ -364,7 +364,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
         apiflags |= NETCONN_DONTBLOCK | NETCONN_NOFIN;
     }
 
-    if (data_count > free_count) {
+    if (data_count > read_count) {
         add_recv_list(sock->conn->socket);
     }
 
@@ -481,6 +481,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
     while (recv_left > 0) {
         if (sock->recv_lastdata) {
             pbuf = sock->recv_lastdata;
+            sock->recv_lastdata = NULL;
         } else {
             ret = rte_ring_sc_dequeue(sock->recv_ring, (void **)&pbuf);
             if (ret != 0) {
@@ -490,7 +491,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
         }
 
         copy_len = (recv_left > pbuf->tot_len) ? pbuf->tot_len : (u16_t)recv_left;
-        pbuf_copy_partial(pbuf, buf + recvd, copy_len, 0);
+        pbuf_copy_partial(pbuf, (char *)buf + recvd, copy_len, 0);
 
         recvd += copy_len;
         recv_left -= copy_len;

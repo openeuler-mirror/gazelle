@@ -97,8 +97,8 @@ int32_t eth_dev_poll(void)
     }
 
     if (get_protocol_stack_group()->latency_start) {
-            uint64_t time_stamp = get_current_time();
-            time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
+        uint64_t time_stamp = get_current_time();
+        time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
     }
 
     for (uint32_t i = 0; i < nr_pkts; i++) {
