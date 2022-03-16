@@ -26,6 +26,7 @@
 void create_shadow_fd(struct rpc_msg *msg);
 void listen_list_add_node(int32_t head_fd, int32_t add_fd);
 void gazelle_init_sock(int32_t fd);
+int32_t gazelle_socket(int domain, int type, int protocol);
 void gazelle_clean_sock(int32_t fd);
 ssize_t write_lwip_data(struct lwip_sock *sock, int32_t fd, int32_t flags);
 ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
