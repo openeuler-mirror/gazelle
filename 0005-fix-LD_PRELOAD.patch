@@ -1,0 +1,31 @@
+From ff74c402d0502797fe4411178882bb3cb8e3ddd9 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Mon, 7 Mar 2022 23:30:12 +0800
+Subject: [PATCH 05/34] fix LD_PRELOAD
+
+---
+ src/lstack/api/lstack_wrap.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 7804ce9..6ee5639 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -44,6 +44,14 @@ enum KERNEL_LWIP_PATH {
+ 
+ static inline enum KERNEL_LWIP_PATH select_path(int fd)
+ {
++    if (posix_api == NULL) {
++        /* link liblstack.so using LD_PRELOAD mode will read liblstack.so,
++           poisx_api need to be initialized here */
++        if (posix_api_init() != 0) {
++            LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
++        }
++        return PATH_KERNEL;
++    }
+     struct lwip_sock *sock = posix_api->get_socket(fd);
+ 
+     /* AF_UNIX case */
+-- 
+1.8.3.1
+

@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       2
+Release:       3
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -17,6 +17,38 @@ Requires:      numactl libpcap libconfig libboundscheck
 
 Patch9001:     0001-fix-compile-error-unuse-result.patch
 Patch9002:     0002-reduce-copy-in-send.patch
+Patch9003:     0003-execute-gazelle_init_sock-before-read-event.patch
+Patch9004:     0004-recvmsg-sendmsg-should-use-recvmsg_from_stack-sendms.patch
+Patch9005:     0005-fix-LD_PRELOAD.patch
+Patch9006:     0006-reduce-replenish-send_idle_ring-rpc-call.patch
+Patch9007:     0007-parse_host_addr-should-be-executed-before-parse_dpdk.patch
+Patch9008:     0008-fix-gazellectl-l-option-error.patch
+Patch9009:     0009-bind-cpu-fail-just-walrm.patch
+Patch9010:     0010-mfix-close-not-release-sock.patch
+Patch9011:     0011-fix-evetns-err.patch
+Patch9012:     0012-fix-dfx-info-show.patch
+Patch9013:     0013-balance-acept.patch
+Patch9014:     0014-fix-miss-evetn.patch
+Patch9015:     0015-fix-too-much-evetns.patch
+Patch9016:     0016-fix-dead-loop.patch
+Patch9017:     0017-remove-unuse-event.patch
+Patch9018:     0018-fix-gazellectl-show.patch
+Patch9019:     0019-fix-repeate-msg.patch
+Patch9020:     0020-fix-wakeup-typos.patch
+Patch9021:     0021-fix-pasre-numacpulist.patch
+Patch9022:     0022-fix-get-data-error.patch
+Patch9023:     0023-delete-numa-bind-param.patch
+Patch9024:     0024-refactor-event.patch
+Patch9025:     0025-fix-event-miss.patch
+Patch9026:     0026-get-fin-notice-app.patch
+Patch9027:     0027-fix-parse-config.patch
+Patch9028:     0028-fix-lstack-show-latency.patch
+Patch9029:     0029-fix-code-check.patch
+Patch9030:     0030-fix-accept-init-sock-faile.patch
+Patch9031:     0031-fix-reuse-ip-listen-event-don-t-notice.patch
+Patch9032:     0032-modify-readme-to-add-constraint.patch
+Patch9033:     0033-fix-accept-check-remain-conn.patch
+Patch9034:     0034-fix-wakeup-list-dead-loop.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -57,6 +89,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Wed Mar 16 2022 jiangheng <jiangheng12@huawei.com> - 1.0.1-3
+- fix gazelle test issue
+
 * Mon Mar 7 2022 wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-2
 - reduce copy in send
 

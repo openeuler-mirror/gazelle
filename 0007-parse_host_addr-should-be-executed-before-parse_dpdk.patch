@@ -1,0 +1,50 @@
+From 6289822ec806dbcc0499378148e1b291d9f992f5 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Thu, 10 Mar 2022 21:03:59 +0800
+Subject: [PATCH 07/34] parse_host_addr() should be executed before
+ parse_dpdk_args()
+
+---
+ src/lstack/core/lstack_cfg.c | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 0f899b1..d8eaced 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -63,16 +63,16 @@ struct config_vector_t {
+ };
+ 
+ static struct config_vector_t g_config_tbl[] = {
+-    { "dpdk_args",    parse_dpdk_args },
++    { "host_addr",    parse_host_addr },
++    { "gateway_addr", parse_gateway_addr },
++    { "mask_addr",    parse_mask_addr },
+     { "use_ltran",    parse_use_ltran },
++    { "devices",      parse_devices },
++    { "dpdk_args",    parse_dpdk_args },
+     { "num_cpus",     parse_stack_cpu_number },
+     { "num_weakup",   parse_weakup_cpu_number },
+     { "numa_bind",    parse_numa_bind },
+     { "low_power_mode", parse_low_power_mode },
+-    { "host_addr",    parse_host_addr },
+-    { "mask_addr",    parse_mask_addr },
+-    { "devices",      parse_devices },
+-    { "gateway_addr", parse_gateway_addr },
+     { "kni_switch",   parse_kni_switch },
+     { NULL,           NULL }
+ };
+@@ -302,8 +302,9 @@ static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t nu
+     int32_t count = 0;
+     char *elem = strtok(strbuf, "-");
+     while (elem && count < num) {
+-        while (elem && isspace(*elem))
++        while (elem && isspace(*elem)) {
+             elem++;
++        }
+         cpulist[count++] = (uint32_t)strtol(elem, NULL, 10); // 10 : decimal
+ 
+         if (count % 2 == 0) // 2 : even
+-- 
+1.8.3.1
+

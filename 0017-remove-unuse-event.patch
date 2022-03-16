@@ -1,0 +1,110 @@
+From 0a2b49d63807e62c5b13418e70e641b3d50ce3f2 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Thu, 10 Mar 2022 20:19:14 +0800
+Subject: [PATCH 17/34] remove unuse event
+
+---
+ src/lstack/api/lstack_epoll.c       | 19 +++++++++++++------
+ src/lstack/core/lstack_lwip.c       |  9 ++++++++-
+ src/lstack/core/lstack_thread_rpc.c |  1 -
+ 3 files changed, 21 insertions(+), 8 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 6c9c582..b12ce58 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -43,15 +43,15 @@ enum POLL_TYPE {
+ 
+ static inline bool check_event_vaild(struct lwip_sock *sock, uint32_t event)
+ {
+-    if (event == EPOLLIN && !NETCONN_IS_ACCEPTIN(sock) && !NETCONN_IS_DATAIN(sock)) {
+-        return false;
++    if ((event & EPOLLIN) && !NETCONN_IS_ACCEPTIN(sock) && !NETCONN_IS_DATAIN(sock)) {
++        event &= ~EPOLLIN;
+     }
+ 
+-    if (sock->events == EPOLLOUT && !NETCONN_IS_DATAOUT(sock)) {
+-        return false;
++    if ((event & EPOLLOUT) && !NETCONN_IS_DATAOUT(sock)) {
++        event &= ~EPOLLOUT;
+     }
+ 
+-    return true;
++    return (event) ? true : false;
+ }
+ 
+ static inline bool report_events(struct lwip_sock *sock, uint32_t event)
+@@ -251,6 +251,11 @@ static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, st
+ 
+ static bool remove_event(enum POLL_TYPE etype, struct lwip_sock **sock_list, int32_t event_num, struct lwip_sock *sock)
+ {
++    /* close sock */
++    if (sock->stack == NULL) {
++        return true;
++    }
++
+     /* remove duplicate event */
+     for (uint32_t i = 0; i < event_num && etype == TYPE_EPOLL; i++) {
+         if (sock_list[i] == sock) {
+@@ -287,7 +292,9 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
+         sock->have_event = false;
+ 
+         if (remove_event(etype, weakup->sock_list, event_num, sock)) {
+-            sock->stack->stats.remove_event++;
++            if (sock->stack) {
++                sock->stack->stats.remove_event++;
++            }
+             continue;
+         }
+ 
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 4a79f46..fd334fb 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -128,7 +128,7 @@ void gazelle_init_sock(int32_t fd)
+ void gazelle_clean_sock(int32_t fd)
+ {
+     struct lwip_sock *sock = get_socket_by_fd(fd);
+-    if (sock == NULL) {
++    if (sock == NULL || sock->stack == NULL) {
+         return;
+     }
+ 
+@@ -324,8 +324,12 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+         sem_post(&sock->weakup->event_sem);
+         sock->stack->stats.write_events++;
+     }
++    if (!NETCONN_IS_DATAOUT(sock)) {
++        sock->events &= ~EPOLLOUT;
++    }
+ 
+     if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK && !sock->stack->in_replenish) {
++        stack->in_replenish = true;
+         rpc_call_replenish_idlembuf(sock->stack);
+     }
+ 
+@@ -523,6 +527,9 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+         sem_post(&sock->weakup->event_sem);
+         sock->stack->stats.read_events++;
+     }
++    if (!NETCONN_IS_DATAIN(sock)) {
++        sock->events &= ~EPOLLIN;
++    }
+ 
+     if (recvd == 0) {
+         sock->stack->stats.read_null++;
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 8b3d36c..af5fad3 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -199,7 +199,6 @@ static void rpc_replenish_idlembuf(struct rpc_msg *msg)
+ 
+ void rpc_call_replenish_idlembuf(struct protocol_stack *stack)
+ {
+-    stack->in_replenish = 1;
+     struct rpc_msg *msg = rpc_msg_alloc(stack->rpc_pool, rpc_replenish_idlembuf);
+     if (msg == NULL) {
+         return;
+-- 
+1.8.3.1
+
