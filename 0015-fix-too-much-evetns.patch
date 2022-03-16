@@ -1,0 +1,204 @@
+From a43b1b763b970660caeaf3f3206cd742990c0cd3 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Wed, 9 Mar 2022 23:05:41 +0800
+Subject: [PATCH 15/34] fix too much evetns
+
+---
+ src/lstack/api/lstack_epoll.c           | 50 +++++++++++++++++----------------
+ src/lstack/core/lstack_lwip.c           | 40 ++++++++------------------
+ src/lstack/core/lstack_protocol_stack.c |  8 +-----
+ src/ltran/ltran_dfx.c                   |  4 +--
+ 4 files changed, 41 insertions(+), 61 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index b1bb84c..6c9c582 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -41,6 +41,19 @@ enum POLL_TYPE {
+     TYPE_EPOLL,
+ };
+ 
++static inline bool check_event_vaild(struct lwip_sock *sock, uint32_t event)
++{
++    if (event == EPOLLIN && !NETCONN_IS_ACCEPTIN(sock) && !NETCONN_IS_DATAIN(sock)) {
++        return false;
++    }
++
++    if (sock->events == EPOLLOUT && !NETCONN_IS_DATAOUT(sock)) {
++        return false;
++    }
++
++    return true;
++}
++
+ static inline bool report_events(struct lwip_sock *sock, uint32_t event)
+ {
+     /* error event */
+@@ -48,7 +61,11 @@ static inline bool report_events(struct lwip_sock *sock, uint32_t event)
+         return true;
+     }
+ 
+-    return false;
++    if (sock->have_event) {
++        return false;
++    }
++
++    return check_event_vaild(sock, event);
+ }
+ 
+ void add_epoll_event(struct netconn *conn, uint32_t event)
+@@ -72,7 +89,7 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
+ 
+     sock->events |= event & sock->epoll_events;
+ 
+-    if (!sock->have_event || report_events(sock, event)) {
++    if (report_events(sock, event)) {
+         sock->have_event = true;
+         weakup_enqueue(sock->stack->weakup_ring, sock);
+         sock->stack->stats.weakup_events++;
+@@ -232,29 +249,16 @@ static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, st
+     return event_num;
+ }
+ 
+-static int32_t check_event_vaild(struct epoll_event *events, int32_t event_num, struct lwip_sock *sock,
+-    struct lwip_sock **sock_list, enum POLL_TYPE etype)
++static bool remove_event(enum POLL_TYPE etype, struct lwip_sock **sock_list, int32_t event_num, struct lwip_sock *sock)
+ {
+     /* remove duplicate event */
+-    if (etype == TYPE_EPOLL) {
+-        for (uint32_t i = 0; i < event_num; i++) {
+-            if (sock_list[i] == sock) {
+-                return -1;
+-            }
++    for (uint32_t i = 0; i < event_num && etype == TYPE_EPOLL; i++) {
++        if (sock_list[i] == sock) {
++            return true;
+         }
+     }
+ 
+-    /* non_listen_fd remove no data EPOLLIN event */
+-    if (sock->events == EPOLLIN && sock->attach_fd < 0 && !NETCONN_IS_DATAIN(sock)) {
+-        return -1;
+-    }
+-
+-    /* remove no send_buff OUT event */
+-    if (sock->events == EPOLLOUT && !NETCONN_IS_DATAOUT(sock)) {
+-        return -1;
+-    }
+-
+-    return 0;
++    return !check_event_vaild(sock, sock->events);
+ }
+ 
+ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t maxevents, enum POLL_TYPE etype)
+@@ -280,11 +284,9 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
+             get_protocol_stack_group()->event_null++;
+             break;
+         }
++        sock->have_event = false;
+ 
+-        ret = check_event_vaild(events, event_num, sock, weakup->sock_list, etype);
+-        if (ret != 0) {
+-            events_cnt--;
+-            sock->have_event = false;
++        if (remove_event(etype, weakup->sock_list, event_num, sock)) {
+             sock->stack->stats.remove_event++;
+             continue;
+         }
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 0561678..4a79f46 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -317,20 +317,12 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+         send_pkt++;
+     }
+ 
+-    if ((sock->epoll_events & EPOLLOUT)) {
+-        /* avoid miss EPOLLOUT event, call NETCONN_IS_DATAOUT twice.
+-           write data full and have_event=true, then data out add event failed because of have_event */
+-        if (!NETCONN_IS_DATAOUT(sock)) {
+-            sock->have_event = false;
+-        }
+-
+-        if (NETCONN_IS_DATAOUT(sock)) {
+-            sock->have_event = true;
+-            sock->events |= EPOLLOUT;
+-            rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+-            sem_post(&sock->weakup->event_sem);
+-            sock->stack->stats.write_events++;
+-        }
++    if (!sock->have_event && (sock->epoll_events & EPOLLOUT) && NETCONN_IS_DATAOUT(sock)) {
++        sock->have_event = true;
++        sock->events |= EPOLLOUT;
++        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
++        sem_post(&sock->weakup->event_sem);
++        sock->stack->stats.write_events++;
+     }
+ 
+     if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK && !sock->stack->in_replenish) {
+@@ -524,20 +516,12 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+         }
+     }
+ 
+-    if ((sock->epoll_events & EPOLLIN)) {
+-        /* avoid miss EPOLLIN event, call NETCONN_IS_DATAIN twice.
+-           read data empty and have_event=true, then data in add event failed because of have_event */
+-        if (!NETCONN_IS_DATAIN(sock)) {
+-            sock->have_event = false;
+-        }
+-
+-        if (NETCONN_IS_DATAIN(sock)) {
+-            sock->have_event = true;
+-            sock->events |= EPOLLIN;
+-            rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+-            sem_post(&sock->weakup->event_sem);
+-            sock->stack->stats.read_events++;
+-        }
++    if (!sock->have_event && (sock->epoll_events & EPOLLIN) && NETCONN_IS_DATAIN(sock)) {
++        sock->have_event = true;
++        sock->events |= EPOLLIN;
++        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
++        sem_post(&sock->weakup->event_sem);
++        sock->stack->stats.read_events++;
+     }
+ 
+     if (recvd == 0) {
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 197942f..68cc49d 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -739,14 +739,8 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
+         ret = rpc_call_accept(min_fd, addr, addrlen);
+     }
+ 
+-    /* avoid miss accept event, call have_accept_event twice.
+-       rpc_call_accept empty and have_event=true, then establish connection add event failed because of have_event */
+     struct lwip_sock *sock = get_socket(head_fd);
+-    if (!have_accept_event(head_fd)) {
+-        sock->have_event = false;
+-    }
+-
+-    if (have_accept_event(head_fd)) {
++    if (!sock->have_event && have_accept_event(head_fd)) {
+         sock->have_event = true;
+         sock->events |= EPOLLIN;
+         rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 1f4d88a..a552b40 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -556,9 +556,9 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
+     printf("read_lwip: %-18"PRIu64" ", lstack_stat->data.pkts.read_lwip_cnt);
+     printf("read_lwip_drop: %-13"PRIu64" \n", lstack_stat->data.pkts.read_lwip_drop);
+     printf("app_write: %-18"PRIu64" ", lstack_stat->data.pkts.app_write_cnt);
+-    printf("app_write_drop: %-13"PRIu64" ", lstack_stat->data.pkts.app_write_drop);
+-    printf("app_get_idlefail: %-11"PRIu64" \n", lstack_stat->data.pkts.app_write_idlefail);
+     printf("write_lwip: %-17"PRIu64" ", lstack_stat->data.pkts.write_lwip_cnt);
++    printf("app_get_idlefail: %-11"PRIu64" \n", lstack_stat->data.pkts.app_write_idlefail);
++    printf("app_write_drop: %-13"PRIu64" ", lstack_stat->data.pkts.app_write_drop);
+     printf("write_lwip_drop: %-12"PRIu64" ", lstack_stat->data.pkts.write_lwip_drop);
+     printf("app_write_idlebuf: %-10"PRIu16" \n", lstack_stat->data.pkts.send_idle_ring_cnt);
+     printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list);
+-- 
+1.8.3.1
+

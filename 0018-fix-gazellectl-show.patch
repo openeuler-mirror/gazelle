@@ -1,0 +1,45 @@
+From e531579c08a56b2a53ea605a7bbba70bedfbae45 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Fri, 11 Mar 2022 10:53:28 +0800
+Subject: [PATCH 18/34] fix gazellectl show
+
+---
+ src/lstack/core/lstack_lwip.c | 2 +-
+ src/ltran/ltran_dfx.c         | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index fd334fb..90ddecc 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -329,7 +329,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+     }
+ 
+     if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK && !sock->stack->in_replenish) {
+-        stack->in_replenish = true;
++        sock->stack->in_replenish = true;
+         rpc_call_replenish_idlembuf(sock->stack);
+     }
+ 
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index a552b40..a01d91f 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -1214,13 +1214,13 @@ int32_t main(int32_t argc, char *argv[])
+     struct gazelle_dfx_list *dfx = NULL;
+     char recv_buf[GAZELLE_CMD_RESP_BUFFER_SIZE + 1] = {0};
+ 
++    g_use_ltran = ltran_process_exist() ? true : false;
+     req_msg_num = parse_dfx_cmd_args(argc, argv, req_msg);
+     if (req_msg_num <= 0 || req_msg_num > GAZELLE_CMD_MAX) {
+         show_usage();
+         return 0;
+     }
+ 
+-    g_use_ltran = ltran_process_exist() ? true : false;
+     if (!g_use_ltran) {
+         g_gazelle_dfx_tbl[GAZELLE_STAT_LSTACK_SHOW].recv_size = sizeof(struct gazelle_stack_dfx_data);
+         g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_START_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);
+-- 
+1.8.3.1
+
