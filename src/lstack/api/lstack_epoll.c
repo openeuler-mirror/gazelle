@@ -73,6 +73,11 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
     /* conn sock nerver null, because lwip call this func */
     struct lwip_sock *sock = get_socket(conn->socket);
 
+    /* close_wait event should be (EPOLLRDHUP | EPOLLIN), but lwip is EPOLLERR */
+    if (event == EPOLLERR && conn->pcb.tcp && conn->pcb.tcp->state == CLOSE_WAIT) {
+        event = EPOLLRDHUP | EPOLLIN | EPOLLERR;
+    }
+
     /* shadow_fd event notice listen_fd */
     if (sock->shadowed_sock) {
         sock = sock->shadowed_sock;
@@ -286,7 +291,6 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
     struct epoll_event *events = (struct epoll_event *)out;
     struct pollfd *fds = (struct pollfd *)out;
 
-
     if (etype == TYPE_EPOLL) {
         maxevents = LWIP_MIN(EPOLL_MAX_EVENTS, maxevents);
     }
@@ -300,7 +304,7 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
         }
         /* close sock */
         if (sock->stack == NULL) {
-            return true;
+            continue;
         }
         __atomic_store_n(&sock->have_event, false, __ATOMIC_RELEASE);
 
