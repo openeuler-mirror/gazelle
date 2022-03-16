@@ -724,6 +724,7 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
         }
 
         if (!NETCONN_IS_ACCEPTIN(sock)) {
+            fd = sock->nextfd;
             continue;
         }
 
