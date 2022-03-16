@@ -343,7 +343,8 @@ static void send_stack_list(struct protocol_stack *stack)
     list_for_each_safe(node, temp, list) {
         sock = container_of(node, struct lwip_sock, send_list);
 
-        if (sock->conn == NULL) {
+        if (sock->conn == NULL || sock->stack == NULL) {
+            list_del_node_init(&sock->send_list);
             continue;
         }
 

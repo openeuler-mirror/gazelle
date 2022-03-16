@@ -37,12 +37,13 @@ static inline void wakeup_list_sock(struct list_node *wakeup_list)
         struct weakup_poll *weakup = sock->weakup;
         struct protocol_stack *stack = sock->stack;
         if (weakup == NULL || stack == NULL) {
+            list_del_node_init(&sock->wakeup_list);
             continue;
         }
 
         int32_t ret = rte_ring_mp_enqueue(weakup->event_ring, (void *)sock);
         if (ret == 0) {
-            list_del_node_init(&sock->event_list);
+            list_del_node_init(&sock->wakeup_list);
             sem_post(&weakup->event_sem);
             stack->stats.lwip_events++;
         } else {

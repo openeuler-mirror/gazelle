@@ -130,7 +130,6 @@ void gazelle_clean_sock(int32_t fd)
     list_del_node_init(&sock->attach_list);
     list_del_node_init(&sock->listen_list);
     list_del_node_init(&sock->event_list);
-    list_del_node_init(&sock->wakeup_list);
     list_del_node_init(&sock->send_list);
 }
 
