@@ -127,18 +127,18 @@ void gazelle_init_sock(int32_t fd)
 
 void gazelle_clean_sock(int32_t fd)
 {
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = get_socket_by_fd(fd);
     if (sock == NULL) {
         return;
     }
+
+    sock->stack->conn_num--;
 
     reset_sock_data(sock);
 
     list_del_node_init(&sock->recv_list);
     list_del_node_init(&sock->attach_list);
     list_del_node_init(&sock->listen_list);
-
-    sock->stack->conn_num--;
 }
 
 void gazelle_free_pbuf(struct pbuf *pbuf)
