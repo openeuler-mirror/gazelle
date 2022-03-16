@@ -1,0 +1,832 @@
+From d8c362e9a1af1c5ef50fbcda24fd4a127d591311 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Wed, 16 Mar 2022 16:26:28 +0800
+Subject: [PATCH 27/34] fix parse config
+
+---
+ src/common/dir.mk                          |  2 +-
+ src/common/dpdk_common.h                   |  4 +-
+ src/common/gazelle_parse_config.c          | 64 ++++++++++++++++++++++++++++
+ src/common/gazelle_parse_config.h          | 20 +++++++++
+ src/common/gazelle_reg_msg.h               |  2 +-
+ src/lstack/Makefile                        |  2 +-
+ src/lstack/core/lstack_cfg.c               | 67 +++++-------------------------
+ src/lstack/include/lstack_cfg.h            | 14 +++----
+ src/lstack/include/lstack_compiler.h       |  6 +--
+ src/lstack/include/lstack_control_plane.h  |  6 +--
+ src/lstack/include/lstack_dpdk.h           |  8 ++--
+ src/lstack/include/lstack_ethdev.h         |  6 +--
+ src/lstack/include/lstack_lockless_queue.h |  4 +-
+ src/lstack/include/lstack_lwip.h           |  4 +-
+ src/lstack/include/lstack_protocol_stack.h |  4 +-
+ src/lstack/include/lstack_signal.h         |  6 +--
+ src/lstack/include/lstack_thread_rpc.h     |  4 +-
+ src/lstack/include/lstack_vdev.h           |  6 +--
+ src/lstack/include/lstack_weakup.h         |  4 +-
+ src/lstack/include/posix/lstack_epoll.h    |  6 +--
+ src/lstack/include/posix/lstack_fcntl.h    |  6 +--
+ src/lstack/include/posix/lstack_fork.h     |  6 +--
+ src/lstack/include/posix/lstack_socket.h   |  6 +--
+ src/lstack/include/posix/lstack_unistd.h   |  6 +--
+ src/lstack/netif/lstack_ethdev.c           | 12 ------
+ src/ltran/CMakeLists.txt                   |  3 +-
+ src/ltran/ltran_base.h                     |  2 +-
+ src/ltran/ltran_config.c                   |  5 ++-
+ src/ltran/ltran_ethdev.h                   |  2 +-
+ src/ltran/ltran_param.c                    | 33 +++------------
+ 30 files changed, 162 insertions(+), 158 deletions(-)
+ create mode 100644 src/common/gazelle_parse_config.c
+ create mode 100644 src/common/gazelle_parse_config.h
+
+diff --git a/src/common/dir.mk b/src/common/dir.mk
+index b61edf3..68a2b72 100644
+--- a/src/common/dir.mk
++++ b/src/common/dir.mk
+@@ -8,6 +8,6 @@
+ # PURPOSE.
+ # See the Mulan PSL v2 for more details.
+ 
+-SRC = dpdk_common.c
++SRC = dpdk_common.c gazelle_parse_config.c
+ $(eval $(call register_dir, ../common, $(SRC)))
+ 
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index e9cacc3..6137bcb 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef __LIBOS_DPDK_COMMON_H__
+-#define __LIBOS_DPDK_COMMON_H__
++#ifndef __GAZELLE_DPDK_COMMON_H__
++#define __GAZELLE_DPDK_COMMON_H__
+ 
+ #include <rte_mbuf.h>
+ 
+diff --git a/src/common/gazelle_parse_config.c b/src/common/gazelle_parse_config.c
+new file mode 100644
+index 0000000..bbc8362
+--- /dev/null
++++ b/src/common/gazelle_parse_config.c
+@@ -0,0 +1,64 @@
++/*
++* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++
++#include <securec.h>
++#include <string.h>
++#include <limits.h>
++
++#include "gazelle_parse_config.h"
++
++static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
++{
++    const char *delim = "-";
++    char *elem = NULL;
++    char *next_token = NULL;
++    char *endptr = NULL;
++    int32_t cnt = 0;
++    int64_t start, end;
++
++    elem = strtok_s(args, delim, &next_token);
++    start = strtol(elem, &endptr, 0);
++
++    elem = strtok_s(NULL, delim, &next_token);
++    if (elem == NULL) {
++        /* just a single data */
++        array[cnt++] = start;
++        return cnt;
++    }
++    end = strtol(elem, &endptr, 0);
++
++    for (int64_t i = start; i <= end && cnt < array_size; i++) {
++        if (i < 0 || i > UINT_MAX) {
++            break;
++        }
++        array[cnt++] = i;
++    }
++
++    return cnt;
++}
++
++/* support '-' and ',' */
++int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size)
++{
++    const char *delim = ",";
++    char *elem = NULL;
++    char *next_token = NULL;
++    int32_t cnt = 0;
++
++    elem = strtok_s(args, delim, &next_token);
++    while (elem != NULL && cnt < array_size) {
++        cnt += parse_str_data(elem, &array[cnt], array_size - cnt);
++        elem = strtok_s(NULL, delim, &next_token);
++    }
++
++    return cnt;
++}
+diff --git a/src/common/gazelle_parse_config.h b/src/common/gazelle_parse_config.h
+new file mode 100644
+index 0000000..0f86d80
+--- /dev/null
++++ b/src/common/gazelle_parse_config.h
+@@ -0,0 +1,20 @@
++/*
++* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++
++#ifndef __GAZELLE_PARSE_CONFIG__
++#define __GAZELLE_PARSE_CONFIG__
++
++#include <stdint.h>
++
++int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size);
++
++#endif
+\ No newline at end of file
+diff --git a/src/common/gazelle_reg_msg.h b/src/common/gazelle_reg_msg.h
+index fa8f319..ff846fd 100644
+--- a/src/common/gazelle_reg_msg.h
++++ b/src/common/gazelle_reg_msg.h
+@@ -18,7 +18,7 @@
+ #include <lwip/reg_sock.h>
+ #include <rte_ether.h>
+ 
+-#define GAZELLE_REG_SOCK_PATHNAME    "/var/run/gazelle/libos_client.sock"
++#define GAZELLE_REG_SOCK_PATHNAME    "/var/run/gazelle/gazelle_client.sock"
+ #define GAZELLE_RUN_DIR              "/var/run/gazelle/"
+ #define GAZELLE_FILE_PERMISSION      0700
+ 
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 7a888de..8fc2435 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -27,7 +27,7 @@ INC = -I$(LSTACK_DIR)/include   \
+       -I$(LSTACK_DIR)/../common \
+       -I$(LWIP_INCLUDE_FILE)
+ 
+-CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC) -DUSE_LIBOS_MEM
++CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC)
+ 
+ ifeq ($(GAZELLE_COVERAGE_ENABLE), 1)
+ 	LDFLAGS += -fprofile-arcs -ftest-coverage
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index fcc1c0b..ca25b58 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -33,6 +33,7 @@
+ #include "gazelle_reg_msg.h"
+ #include "lstack_log.h"
+ #include "gazelle_base_func.h"
++#include "gazelle_parse_config.h"
+ #include "lstack_protocol_stack.h"
+ 
+ #define DEFAULT_CONF_FILE "/etc/gazelle/lstack.conf"
+@@ -189,35 +190,6 @@ static int32_t parse_devices(void)
+     return ret;
+ }
+ 
+-static int32_t turn_str_to_array(char *args, uint16_t *array, int32_t size)
+-{
+-    int32_t val;
+-    uint16_t cnt = 0;
+-    const char *delim = ",";
+-    char *elem = NULL;
+-    char *next_token = NULL;
+-
+-    memset_s(array, sizeof(*array) * size, 0, sizeof(*array) * size);
+-
+-    elem = strtok_s((char *)args, delim, &next_token);
+-    while (elem != NULL) {
+-        if (cnt >= size) {
+-            return -1;
+-        }
+-
+-        val = atoi(elem);
+-        if (val < 0) {
+-            return -1;
+-        }
+-        array[cnt] = (uint16_t)val;
+-        cnt++;
+-
+-        elem = strtok_s(NULL, delim, &next_token);
+-    }
+-
+-    return cnt;
+-}
+-
+ static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
+ {
+     int32_t ret;
+@@ -241,9 +213,6 @@ static int32_t parse_stack_cpu_number(void)
+     const config_setting_t *num_cpus = NULL;
+     const char *args = NULL;
+ 
+-    int32_t ret;
+-    int32_t idx;
+-
+     num_cpus = config_lookup(&g_config, "num_cpus");
+     if (num_cpus == NULL) {
+         return -EINVAL;
+@@ -254,7 +223,7 @@ static int32_t parse_stack_cpu_number(void)
+         return -EINVAL;
+     }
+ 
+-    idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
++    int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
+     if (idx < 0) {
+         g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+         g_config_params.dpdk_argc++;
+@@ -263,11 +232,14 @@ static int32_t parse_stack_cpu_number(void)
+         g_config_params.dpdk_argc++;
+     }
+ 
+-    ret = turn_str_to_array((char *)args, g_config_params.cpus, CFG_MAX_CPUS);
+-    if (ret <= 0) {
++    char *tmp_arg = strdup(args);
++    int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS);
++    free(tmp_arg);
++    if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
+         return -EINVAL;
+     }
+-    g_config_params.num_cpu = (uint16_t)ret;
++
++    g_config_params.num_cpu = cnt;
+     get_protocol_stack_group()->stack_num = g_config_params.num_cpu;
+ 
+     return 0;
+@@ -368,7 +340,6 @@ int32_t init_stack_numa_cpuset(void)
+     return 0;
+ }
+ 
+-#ifdef USE_LIBOS_MEM
+ static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vaddr)
+ {
+     uint64_t viraddr;
+@@ -389,14 +360,8 @@ static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vadd
+ static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach_arg *sec_attach_arg)
+ {
+     size_t mem_size = 0;
+-    uint8_t count = 0;
+     char socket_mem[PATH_MAX];
+ 
+-    const char *delim = ",";
+-    char *mem_elem = NULL;
+-    char *end = NULL;
+-    char *next_token = NULL;
+-
+     errno = 0;
+ 
+     if ((arg == NULL) || (sec_attach_arg == NULL)) {
+@@ -408,22 +373,13 @@ static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach
+         return -1;
+     }
+ 
+-    mem_elem = strtok_s(socket_mem, delim, &next_token);
+-    while (mem_elem != NULL) {
+-        if (count >= GAZELLE_MAX_NUMA_NODES) {
+-            return -1;
+-        }
+-        sec_attach_arg->socket_per_size[count] = strtoull(mem_elem, &end, BASE_DEC_SCALE);
++    int32_t count = separate_str_to_array(socket_mem, sec_attach_arg->socket_per_size, GAZELLE_MAX_NUMA_NODES);
++    for (uint32_t i = 0; i < count; i++) {
+         mem_size += sec_attach_arg->socket_per_size[count];
+-        if ((errno != 0) || end == NULL || (*end != '\0'))
+-            return -1;
+-
+-        mem_elem = strtok_s(NULL, delim, &next_token);
+-        count++;
+     }
+     mem_size *= 1024LL;
+     mem_size *= 1024LL;
+-    if (mem_size > (UINT64_MAX / 1024LL / 1024LL)) {
++    if (mem_size > (UINT64_MAX / 1024LL / 1024LL) || count > UINT8_MAX) {
+         return -1;
+     }
+     sec_attach_arg->socket_num = count;
+@@ -663,7 +619,6 @@ free_dpdk_args:
+     GAZELLE_FREE(g_config_params.dpdk_argv);
+     return -EINVAL;
+ }
+-#endif
+ 
+ static int32_t parse_low_power_mode(void)
+ {
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index 1a59c6c..48b7e44 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_NET_CFG_H
+-#define LIBOS_NET_CFG_H
++#ifndef _GAZELLE_NET_CFG_H_
++#define _GAZELLE_NET_CFG_H_
+ #include <stdbool.h>
+ 
+ #include <rte_ether.h>
+@@ -53,7 +53,7 @@
+ struct secondary_attach_arg {
+     uint8_t socket_num;
+     uint64_t socket_size;
+-    uint64_t socket_per_size[GAZELLE_MAX_NUMA_NODES];
++    uint32_t socket_per_size[GAZELLE_MAX_NUMA_NODES];
+     uintptr_t base_virtaddr;
+     char file_prefix[PATH_MAX];
+ };
+@@ -64,9 +64,9 @@ struct cfg_params {
+     ip4_addr_t gateway_addr;
+     struct rte_ether_addr ethdev;
+     uint16_t num_cpu;
+-    uint16_t cpus[CFG_MAX_CPUS];
++    uint32_t cpus[CFG_MAX_CPUS];
+     uint16_t num_wakeup;
+-    uint16_t weakup[CFG_MAX_CPUS];
++    uint32_t weakup[CFG_MAX_CPUS];
+     uint8_t num_ports;
+     uint16_t ports[CFG_MAX_PORTS];
+     char log_file[PATH_MAX];
+@@ -78,9 +78,7 @@ struct cfg_params {
+     bool kni_switch;
+     int dpdk_argc;
+     char **dpdk_argv;
+-#ifdef USE_LIBOS_MEM
+     struct secondary_attach_arg sec_attach_arg;
+-#endif
+ };
+ 
+ struct cfg_params *get_global_cfg_params(void);
+@@ -98,4 +96,4 @@ int gazelle_copy_param(const char *param, bool is_double,
+ int match_host_addr(uint32_t ipv4);
+ int32_t init_stack_numa_cpuset(void);
+ 
+-#endif /* LIBOS_NET_CFG_H */
++#endif /* GAZELLE_NET_CFG_H */
+diff --git a/src/lstack/include/lstack_compiler.h b/src/lstack/include/lstack_compiler.h
+index 1db27ae..c4880a5 100644
+--- a/src/lstack/include/lstack_compiler.h
++++ b/src/lstack/include/lstack_compiler.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_COMPILER_H
+-#define LIBOS_COMPILER_H
++#ifndef _GAZELLE_COMPILER_H_
++#define _GAZELLE_COMPILER_H_
+ 
+ #ifdef __GNUC__
+ 
+@@ -43,4 +43,4 @@
+ #define ACCESS_ONCE(x)   (*(volatile typeof(x) *)&(x))
+ #endif
+ 
+-#endif /* LIBOS_COMPILER_H */
++#endif /* GAZELLE_COMPILER_H */
+diff --git a/src/lstack/include/lstack_control_plane.h b/src/lstack/include/lstack_control_plane.h
+index 7c267e2..0af891a 100644
+--- a/src/lstack/include/lstack_control_plane.h
++++ b/src/lstack/include/lstack_control_plane.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_CONTROL_PLANE_H
+-#define LIBOS_CONTROL_PLANE_H
++#ifndef _GAZELLE_CONTROL_PLANE_H_
++#define _GAZELLE_CONTROL_PLANE_H_
+ 
+ #include "lstack_thread_rpc.h"
+ 
+@@ -33,4 +33,4 @@ bool get_register_state(void);
+ void thread_register_phase1(struct rpc_msg *msg);
+ void thread_register_phase2(struct rpc_msg *msg);
+ 
+-#endif /* LIBOS_CONTROL_PLANE_H */
++#endif /* GAZELLE_CONTROL_PLANE_H */
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index 7b623a7..e76a9a6 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -10,13 +10,11 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_DPDK_H
+-#define LIBOS_DPDK_H
++#ifndef _GAZELLE_DPDK_H_
++#define _GAZELLE_DPDK_H_
+ 
+-#ifdef USE_LIBOS_MEM
+ #include <rte_mbuf.h>
+ #include <rte_mempool.h>
+-#endif
+ 
+ #include <lwip/pbuf.h>
+ #include "lstack_lockless_queue.h"
+@@ -70,4 +68,4 @@ int dpdk_ethdev_start(void);
+ void dpdk_skip_nic_init(void);
+ int32_t dpdk_init_lstack_kni(void);
+ 
+-#endif /* LIBOS_DPDK_H */
++#endif /* GAZELLE_DPDK_H */
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index 29e0c23..573a413 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef __LIBOS_ETHDEV_H__
+-#define __LIBOS_ETHDEV_H__
++#ifndef __GAZELLE_ETHDEV_H__
++#define __GAZELLE_ETHDEV_H__
+ 
+ #include <lwip/ip_addr.h>
+ #include <lwip/netif.h>
+@@ -34,4 +34,4 @@ int32_t eth_dev_poll(void);
+ uint32_t eth_get_flow_cnt(void);
+ void eth_dev_recv(struct rte_mbuf *mbuf);
+ 
+-#endif /* __LIBOS_ETHDEV_H__ */
++#endif /* __GAZELLE_ETHDEV_H__ */
+diff --git a/src/lstack/include/lstack_lockless_queue.h b/src/lstack/include/lstack_lockless_queue.h
+index e015e93..c70b56a 100644
+--- a/src/lstack/include/lstack_lockless_queue.h
++++ b/src/lstack/include/lstack_lockless_queue.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef __LIBOS_LOCKLESS_QUEUE_H__
+-#define __LIBOS_LOCKLESS_QUEUE_H__
++#ifndef __GAZELLE_LOCKLESS_QUEUE_H__
++#define __GAZELLE_LOCKLESS_QUEUE_H__
+ 
+ typedef struct lockless_queue_node {
+     struct lockless_queue_node *volatile next;
+diff --git a/src/lstack/include/lstack_lwip.h b/src/lstack/include/lstack_lwip.h
+index cfd454d..285095a 100644
+--- a/src/lstack/include/lstack_lwip.h
++++ b/src/lstack/include/lstack_lwip.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef __LIBOS_LWIP_H__
+-#define __LIBOS_LWIP_H__
++#ifndef __GAZELLE_LWIP_H__
++#define __GAZELLE_LWIP_H__
+ 
+ #include "lstack_thread_rpc.h"
+ #include "lwipsock.h"
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 5b95dc9..39052e1 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef __LIBOS_PROTOCOL_STACK_H__
+-#define __LIBOS_PROTOCOL_STACK_H__
++#ifndef __GAZELLE_PROTOCOL_STACK_H__
++#define __GAZELLE_PROTOCOL_STACK_H__
+ 
+ #include <semaphore.h>
+ #include <lwip/list.h>
+diff --git a/src/lstack/include/lstack_signal.h b/src/lstack/include/lstack_signal.h
+index edc8de5..2541a37 100644
+--- a/src/lstack/include/lstack_signal.h
++++ b/src/lstack/include/lstack_signal.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef _LIBOS_SIGNAL_
+-#define _LIBOS_SIGNAL_
++#ifndef _GAZELLE_SIGNAL_
++#define _GAZELLE_SIGNAL_
+ 
+ void lstack_signal_init(void);
+-#endif // _LIBOS_SIGNAL_
++#endif // _GAZELLE_SIGNAL_
+diff --git a/src/lstack/include/lstack_thread_rpc.h b/src/lstack/include/lstack_thread_rpc.h
+index 76ba36a..20539d9 100644
+--- a/src/lstack/include/lstack_thread_rpc.h
++++ b/src/lstack/include/lstack_thread_rpc.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef __LIBOS_THREAD_RPC_H__
+-#define __LIBOS_THREAD_RPC_H__
++#ifndef __GAZELLE_THREAD_RPC_H__
++#define __GAZELLE_THREAD_RPC_H__
+ 
+ #include <pthread.h>
+ #include <arch/sys_arch.h>
+diff --git a/src/lstack/include/lstack_vdev.h b/src/lstack/include/lstack_vdev.h
+index 19b97f1..916b1e2 100644
+--- a/src/lstack/include/lstack_vdev.h
++++ b/src/lstack/include/lstack_vdev.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_VDEV_H
+-#define LIBOS_VDEV_H
++#ifndef _GAZELLE_VDEV_H_
++#define _GAZELLE_VDEV_H_
+ 
+ #include "lstack_ethdev.h"
+ #include "gazelle_reg_msg.h"
+@@ -33,4 +33,4 @@ struct eth_dev_ops;
+ void vdev_dev_ops_init(struct eth_dev_ops **dev_ops);
+ int vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple);
+ 
+-#endif /* LIBOS_VDEV_H */
++#endif /* _GAZELLE_VDEV_H_ */
+diff --git a/src/lstack/include/lstack_weakup.h b/src/lstack/include/lstack_weakup.h
+index 4f6321e..b051b72 100644
+--- a/src/lstack/include/lstack_weakup.h
++++ b/src/lstack/include/lstack_weakup.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef __LIBOS_WEAKUP_THREAD_H__
+-#define __LIBOS_WEAKUP_THREAD_H__
++#ifndef __GAZELLE_WEAKUP_THREAD_H__
++#define __GAZELLE_WEAKUP_THREAD_H__
+ 
+ #include <rte_ring.h>
+ #include "lstack_dpdk.h"
+diff --git a/src/lstack/include/posix/lstack_epoll.h b/src/lstack/include/posix/lstack_epoll.h
+index c97978f..2b3cff4 100644
+--- a/src/lstack/include/posix/lstack_epoll.h
++++ b/src/lstack/include/posix/lstack_epoll.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_EPOLL_H
+-#define LIBOS_EPOLL_H
++#ifndef _GAZELLE_EPOLL_H_
++#define _GAZELLE_EPOLL_H_
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -26,4 +26,4 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout);
+ }
+ #endif
+ 
+-#endif /* LIBOS_EPOLL_H */
++#endif /* _GAZELLE_EPOLL_H_ */
+diff --git a/src/lstack/include/posix/lstack_fcntl.h b/src/lstack/include/posix/lstack_fcntl.h
+index b3d6797..d1087a6 100644
+--- a/src/lstack/include/posix/lstack_fcntl.h
++++ b/src/lstack/include/posix/lstack_fcntl.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_FCNTL_H
+-#define LIBOS_FCNTL_H
++#ifndef _GAZELLE_FCNTL_H_
++#define _GAZELLE_FCNTL_H_
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -24,5 +24,5 @@ int lwip_ioctl(int s, int cmd, ...);
+ }
+ #endif
+ 
+-#endif /* LIBOS_FCNTL_H */
++#endif /* _GAZELLE_FCNTL_H_ */
+ 
+diff --git a/src/lstack/include/posix/lstack_fork.h b/src/lstack/include/posix/lstack_fork.h
+index 049903a..939534a 100644
+--- a/src/lstack/include/posix/lstack_fork.h
++++ b/src/lstack/include/posix/lstack_fork.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef _LIBOS_FORK_
+-#define _LIBOS_FORK_
++#ifndef _GAZELLE_FORK_
++#define _GAZELLE_FORK_
+ 
+ pid_t lstack_fork(void);
+-#endif // _LIBOS_FORK_
++#endif // _GAZELLE_FORK_
+diff --git a/src/lstack/include/posix/lstack_socket.h b/src/lstack/include/posix/lstack_socket.h
+index 6a44d41..776a6ab 100644
+--- a/src/lstack/include/posix/lstack_socket.h
++++ b/src/lstack/include/posix/lstack_socket.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_SOCKET_H
+-#define LIBOS_SOCKET_H
++#ifndef _GAZELLE_SOCKET_H_
++#define _GAZELLE_SOCKET_H_
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -40,4 +40,4 @@ ssize_t lwip_recv(int s, void *mem, size_t len, int flags);
+ }
+ #endif
+ 
+-#endif /* LIBOS_SOCKET_H */
++#endif /* _GAZELLE_SOCKET_H_ */
+diff --git a/src/lstack/include/posix/lstack_unistd.h b/src/lstack/include/posix/lstack_unistd.h
+index 8c57d3a..cdd46c9 100644
+--- a/src/lstack/include/posix/lstack_unistd.h
++++ b/src/lstack/include/posix/lstack_unistd.h
+@@ -10,8 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifndef LIBOS_UNISTD_H
+-#define LIBOS_UNISTD_H
++#ifndef _GAZELLE_UNISTD_H_
++#define _GAZELLE_UNISTD_H_
+ 
+ #include "lstack_fork.h"
+ #ifdef __cplusplus
+@@ -24,4 +24,4 @@ int lstack_sigaction(int signum, const struct sigaction *act, struct sigaction *
+ }
+ #endif
+ 
+-#endif /* LIBOS_UNISTD_H */
++#endif /* _GAZELLE_UNISTD_H_ */
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 026f545..c428bca 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -10,20 +10,8 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#ifdef USE_LIBOS_MEM
+ #include <rte_ethdev.h>
+ #include <rte_malloc.h>
+-#else
+-/* in dpdk 19.11 there is the following inclusion relationship
+- * >> rte_ethdev.h
+- * >> rte_eth_ctrl.h
+- * >> rte_flow.h
+- * >> rte_ip.h
+- * >> netinet/ip.h
+- * avoid conflicts with netinet/ip.h
+- */
+-#include <lwip/inet.h>
+-#endif
+ 
+ #include <lwip/debug.h>
+ #include <lwip/etharp.h>
+diff --git a/src/ltran/CMakeLists.txt b/src/ltran/CMakeLists.txt
+index 8662d7c..c21d88a 100644
+--- a/src/ltran/CMakeLists.txt
++++ b/src/ltran/CMakeLists.txt
+@@ -23,7 +23,8 @@ endif($ENV{GAZELLE_COVERAGE_ENABLE})
+ 
+ add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_stat.c ltran_errno.c
+ 				ltran_monitor.c ltran_instance.c ltran_stack.c ltran_tcp_conn.c ltran_tcp_sock.c
+-				ltran_forward.c ltran_timer.c ${COMMON_DIR}/gazelle_dfx_msg.c ${COMMON_DIR}/dpdk_common.c)
++				ltran_forward.c ltran_timer.c ${COMMON_DIR}/gazelle_dfx_msg.c ${COMMON_DIR}/dpdk_common.c
++                ${COMMON_DIR}/gazelle_parse_config.c)
+ 
+ target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR})
+ target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_FEATURE_CRC32=1 -DRTE_MACHINE_CPUFLAG_NEON
+diff --git a/src/ltran/ltran_base.h b/src/ltran/ltran_base.h
+index 0a284bc..4663257 100644
+--- a/src/ltran/ltran_base.h
++++ b/src/ltran/ltran_base.h
+@@ -94,6 +94,6 @@
+ 
+ #define GAZELLE_INET_ADDRSTRLEN          16
+ 
+-#define GAZELLE_DFX_SOCK_PATHNAME        "/var/run/gazelle/libos_cmd.sock"
++#define GAZELLE_DFX_SOCK_PATHNAME        "/var/run/gazelle/gazelle_cmd.sock"
+ 
+ #endif /* ifndef __GAZELLE_BASE_H__ */
+diff --git a/src/ltran/ltran_config.c b/src/ltran/ltran_config.c
+index 366f89c..d9c1bd7 100644
+--- a/src/ltran/ltran_config.c
++++ b/src/ltran/ltran_config.c
+@@ -10,13 +10,14 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#include "ltran_config.h"
+-
++#include <sys/types.h>
+ #include <string.h>
+ #include <getopt.h>
+ #include <syslog.h>
+ #include <securec.h>
++
+ #include "ltran_log.h"
++#include "ltran_config.h"
+ 
+ #define NO_ARGS             0
+ #define HAS_ARGS            1
+diff --git a/src/ltran/ltran_ethdev.h b/src/ltran/ltran_ethdev.h
+index 2a72704..de7cfbb 100644
+--- a/src/ltran/ltran_ethdev.h
++++ b/src/ltran/ltran_ethdev.h
+@@ -23,7 +23,7 @@ struct port_info {
+ };
+ 
+ uint32_t get_bond_num(void);
+-struct rte_kni* get_libos_kni(void);
++struct rte_kni* get_gazelle_kni(void);
+ void set_bond_num(const uint32_t bond_num);
+ struct port_info* get_port_info(void);
+ uint16_t* get_bond_port(void);
+diff --git a/src/ltran/ltran_param.c b/src/ltran/ltran_param.c
+index 44785bd..aafbeee 100644
+--- a/src/ltran/ltran_param.c
++++ b/src/ltran/ltran_param.c
+@@ -22,6 +22,7 @@
+ #include <stdlib.h>
+ 
+ #include "ltran_log.h"
++#include "gazelle_parse_config.h"
+ #include "gazelle_base_func.h"
+ 
+ #define HEX_BASE 16
+@@ -310,7 +311,6 @@ static int32_t is_bond_port_prefix_valid(const char *port_str)
+ 
+ static int32_t parse_bond_ports(const config_t *config, const char *key, struct ltran_config *ltran_config)
+ {
+-    const char *delim = ",";
+     const char *port_mask_str = NULL;
+     int32_t ret;
+ 
+@@ -334,32 +334,11 @@ static int32_t parse_bond_ports(const config_t *config, const char *key, struct
+         return GAZELLE_ERR;
+     }
+ 
+-    char *end = NULL;
+-    char *tmp = NULL;
+-    unsigned long one_port_mask;
+-    char *token = strtok_s(port_str, delim, &tmp);
+-    while (token != NULL) {
+-        if (ltran_config->bond.port_num == GAZELLE_MAX_BOND_NUM) {
+-            free(port_str);
+-            gazelle_set_errno(GAZELLE_ERANGE);
+-            return GAZELLE_ERR;
+-        }
+-
+-        one_port_mask = strtoul(token, &end, HEX_BASE);
+-        if ((end == NULL) || (*end != '\0')) {
+-            gazelle_set_errno(GAZELLE_ESTRTOUL);
+-            free(port_str);
+-            return GAZELLE_ERR;
+-        }
+-        if ((one_port_mask < GAZELLE_BOND_PORT_MASK_MIN) || (one_port_mask > GAZELLE_BOND_PORT_MASK_MAX)) {
+-            gazelle_set_errno(GAZELLE_ERANGE);
+-            free(port_str);
+-            return GAZELLE_ERR;
+-        }
+-
+-        token = strtok_s(NULL, delim, &tmp);
+-        ltran_config->bond.portmask[ltran_config->bond.port_num] = (uint32_t)one_port_mask;
+-        ltran_config->bond.port_num++;
++    ltran_config->bond.port_num = separate_str_to_array(port_str, ltran_config->bond.portmask, GAZELLE_MAX_BOND_NUM);
++    if (ltran_config->bond.port_num >= GAZELLE_MAX_BOND_NUM) {
++        free(port_str);
++        gazelle_set_errno(GAZELLE_ERANGE);
++        return GAZELLE_ERR;
+     }
+ 
+     free(port_str);
+-- 
+1.8.3.1
+

@@ -1,0 +1,248 @@
+From 4defcc589cfdd71234c2931ca8bee081ceab491a Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Wed, 9 Mar 2022 21:27:04 +0800
+Subject: [PATCH 14/34] fix miss evetn
+
+---
+ src/common/gazelle_dfx_msg.h            |  1 +
+ src/lstack/api/lstack_epoll.c           |  5 ---
+ src/lstack/core/lstack_lwip.c           | 16 ++++++---
+ src/lstack/core/lstack_protocol_stack.c | 59 +++++++++++++++++++++++----------
+ src/lstack/include/lstack_weakup.h      | 26 ++++++++++-----
+ src/ltran/ltran_dfx.c                   |  7 ++--
+ 6 files changed, 75 insertions(+), 39 deletions(-)
+
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index cde2fec..e681424 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -83,6 +83,7 @@ struct gazelle_stat_pkts {
+     uint64_t call_alloc_fail;
+     uint64_t read_events;
+     uint64_t write_events;
++    uint64_t accept_events;
+     uint64_t read_null;
+     uint64_t recv_empty;
+     uint64_t event_null;
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 99d1eac..b1bb84c 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -43,11 +43,6 @@ enum POLL_TYPE {
+ 
+ static inline bool report_events(struct lwip_sock *sock, uint32_t event)
+ {
+-    /* listen fd event */
+-    if (sock->attach_fd > 0) {
+-        return true;
+-    }
+-
+     /* error event */
+     if ((event & EPOLLERR) || (event & EPOLLHUP) || (event & EPOLLRDHUP)) {
+         return true;
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 8de032f..0561678 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -318,14 +318,18 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+     }
+ 
+     if ((sock->epoll_events & EPOLLOUT)) {
++        /* avoid miss EPOLLOUT event, call NETCONN_IS_DATAOUT twice.
++           write data full and have_event=true, then data out add event failed because of have_event */
++        if (!NETCONN_IS_DATAOUT(sock)) {
++            sock->have_event = false;
++        }
++
+         if (NETCONN_IS_DATAOUT(sock)) {
+             sock->have_event = true;
+             sock->events |= EPOLLOUT;
+             rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+             sem_post(&sock->weakup->event_sem);
+             sock->stack->stats.write_events++;
+-        } else {
+-            sock->have_event = false;
+         }
+     }
+ 
+@@ -521,14 +525,18 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+     }
+ 
+     if ((sock->epoll_events & EPOLLIN)) {
++        /* avoid miss EPOLLIN event, call NETCONN_IS_DATAIN twice.
++           read data empty and have_event=true, then data in add event failed because of have_event */
++        if (!NETCONN_IS_DATAIN(sock)) {
++            sock->have_event = false;
++        }
++
+         if (NETCONN_IS_DATAIN(sock)) {
+             sock->have_event = true;
+             sock->events |= EPOLLIN;
+             rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+             sem_post(&sock->weakup->event_sem);
+             sock->stack->stats.read_events++;
+-        } else {
+-            sock->have_event = false;
+         }
+     }
+ 
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index badcfd3..197942f 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -505,6 +505,24 @@ void stack_listen(struct rpc_msg *msg)
+     }
+ }
+ 
++static bool have_accept_event(int32_t fd)
++{
++    do {
++        struct lwip_sock *sock = get_socket(fd);
++        if (sock == NULL) {
++            break;
++        }
++
++        if (NETCONN_IS_ACCEPTIN(sock)) {
++            return true;
++        }
++
++        fd = sock->nextfd;
++    } while (fd > 0);
++
++    return false;
++}
++
+ void stack_accept(struct rpc_msg *msg)
+ {
+     int32_t fd = msg->args[MSG_ARG_0].i;
+@@ -522,21 +540,6 @@ void stack_accept(struct rpc_msg *msg)
+         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
+             fd, msg->result);
+     }
+-
+-    /* report remain accept event */
+-    do {
+-        struct lwip_sock *sock = get_socket(fd);
+-        if (sock == NULL) {
+-            break;
+-        }
+-
+-        if ((sock->epoll_events & EPOLLIN) && NETCONN_IS_ACCEPTIN(sock)) {
+-            add_epoll_event(sock->conn, EPOLLIN);
+-            break;
+-        }
+-
+-        fd = sock->nextfd;
+-    } while (fd > 0);
+ }
+ 
+ void stack_connect(struct rpc_msg *msg)
+@@ -710,7 +713,9 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
+ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
+ {
+     struct lwip_sock *min_sock = NULL;
+-    int32_t min_fd;
++    int32_t head_fd = fd;
++    int32_t min_fd = fd;
++    int32_t ret = -1;
+ 
+     while (fd > 0) {
+         struct lwip_sock *sock = get_socket(fd);
+@@ -731,8 +736,26 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
+     }
+ 
+     if (min_sock) {
+-        return rpc_call_accept(min_fd, addr, addrlen);
++        ret = rpc_call_accept(min_fd, addr, addrlen);
++    }
++
++    /* avoid miss accept event, call have_accept_event twice.
++       rpc_call_accept empty and have_event=true, then establish connection add event failed because of have_event */
++    struct lwip_sock *sock = get_socket(head_fd);
++    if (!have_accept_event(head_fd)) {
++        sock->have_event = false;
++    }
++
++    if (have_accept_event(head_fd)) {
++        sock->have_event = true;
++        sock->events |= EPOLLIN;
++        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
++        sem_post(&sock->weakup->event_sem);
++        sock->stack->stats.accept_events++;
+     }
+ 
+-    GAZELLE_RETURN(EAGAIN);
++    if(ret < 0) {
++        errno = EAGAIN;
++    }
++    return ret;
+ }
+diff --git a/src/lstack/include/lstack_weakup.h b/src/lstack/include/lstack_weakup.h
+index 6f11653..f334a0f 100644
+--- a/src/lstack/include/lstack_weakup.h
++++ b/src/lstack/include/lstack_weakup.h
+@@ -49,21 +49,29 @@ static inline __attribute__((always_inline)) void weakup_attach_sock(struct lwip
+ 
+ static inline __attribute__((always_inline)) void weakup_thread(struct rte_ring *weakup_ring)
+ {
+-    uint32_t num;
+-    struct lwip_sock *sock[WEAKUP_MAX];
++    struct lwip_sock *sock;
+     int32_t ret;
+ 
+-    num = rte_ring_sc_dequeue_burst(weakup_ring, (void **)sock, WEAKUP_MAX, NULL);
+-    for (uint32_t i = 0; i < num; ++i) {
+-        ret = rte_ring_mp_enqueue(sock[i]->weakup->event_ring, (void *)sock[i]);
++    for (uint32_t i = 0; i < WEAKUP_MAX; ++i) {
++        ret = rte_ring_sc_dequeue(weakup_ring, (void **)&sock);
++        if (ret != 0) {
++            break;
++        }
++
++        ret = rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+         if (ret == 0) {
+-            sem_post(&sock[i]->weakup->event_sem);
+-            sock[i]->stack->stats.lwip_events++;
++            sem_post(&sock->weakup->event_sem);
++            sock->stack->stats.lwip_events++;
+         }
+ 
+         /* listen notice attach sock */
+-        if (!list_is_empty(&sock[i]->attach_list)) {
+-            weakup_attach_sock(sock[i]);
++        if (!list_is_empty(&sock->attach_list)) {
++            weakup_attach_sock(sock);
++        }
++
++        /* event_ring of attach sock may have idle elem */
++        if (ret != 0) {
++            break;
+         }
+     }
+ }
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 2a268f7..1f4d88a 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -567,14 +567,15 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
+     printf("weakup_events: %-14"PRIu64" ", lstack_stat->data.pkts.weakup_events);
+     printf("lwip_events: %-16"PRIu64" ", lstack_stat->data.pkts.lwip_events);
+     printf("app_events: %-17"PRIu64"\n", lstack_stat->data.pkts.app_events);
++    printf("read_events: %-16"PRIu64" ", lstack_stat->data.pkts.read_events);
++    printf("write_events: %-15"PRIu64" ", lstack_stat->data.pkts.write_events);
++    printf("accept_events: %-14"PRIu64" \n", lstack_stat->data.pkts.accept_events);
+     printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
+     printf("read_null: %-18"PRIu64" ", lstack_stat->data.pkts.read_null);
+-    printf("read_events: %-16"PRIu64" \n", lstack_stat->data.pkts.read_events);
++    printf("recv_empty: %-17"PRIu64" \n", lstack_stat->data.pkts.recv_empty);
+     printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
+     printf("event_null: %-17"PRIu64" ", lstack_stat->data.pkts.event_null);
+     printf("remove_event: %-15"PRIu64" \n", lstack_stat->data.pkts.remove_event);
+-    printf("recv_empty: %-17"PRIu64" ", lstack_stat->data.pkts.recv_empty);
+-    printf("write_events: %-15"PRIu64" ", lstack_stat->data.pkts.write_events);
+     printf("send_self_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.send_self_rpc);
+ }
+ 
+-- 
+1.8.3.1
+

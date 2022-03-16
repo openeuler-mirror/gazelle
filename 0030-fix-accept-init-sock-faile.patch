@@ -1,0 +1,120 @@
+From 2da25e25b9553dfc014faaf9a3ebb869454615fd Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Tue, 15 Mar 2022 22:55:09 +0800
+Subject: [PATCH 30/34] fix accept init sock faile
+
+---
+ src/lstack/core/lstack_lwip.c           | 23 +++++++++++++++++++++--
+ src/lstack/core/lstack_protocol_stack.c | 29 ++++++++++++++++++-----------
+ src/lstack/include/lstack_lwip.h        |  1 +
+ 3 files changed, 40 insertions(+), 13 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 636840f..9766a87 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -657,19 +657,38 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
+     dst_sock->conn->flags = src_sock->conn->flags;
+ }
+ 
++int32_t gazelle_socket(int domain, int type, int protocol)
++{
++    int32_t fd = lwip_socket(AF_INET, SOCK_STREAM, 0);
++    if (fd < 0) {
++        return fd;
++    }
++
++    gazelle_init_sock(fd);
++
++    struct lwip_sock *sock = get_socket(fd);
++    if (sock == NULL || sock->stack == NULL) {
++        lwip_close(fd);
++        gazelle_clean_sock(fd);
++        posix_api->close_fn(fd);
++        return -1;
++    }
++
++    return fd;
++}
++
+ void create_shadow_fd(struct rpc_msg *msg)
+ {
+     int32_t fd = msg->args[MSG_ARG_0].i;
+     struct sockaddr *addr = msg->args[MSG_ARG_1].p;
+     socklen_t addr_len = msg->args[MSG_ARG_2].socklen;
+ 
+-    int32_t clone_fd = lwip_socket(AF_INET, SOCK_STREAM, 0);
++    int32_t clone_fd = gazelle_socket(AF_INET, SOCK_STREAM, 0);
+     if (clone_fd < 0) {
+         LSTACK_LOG(ERR, LSTACK, "clone socket failed clone_fd=%d errno=%d\n", clone_fd, errno);
+         msg->result = clone_fd;
+         return;
+     }
+-    gazelle_init_sock(clone_fd);
+ 
+     struct lwip_sock *sock = get_socket_by_fd(fd);
+     struct lwip_sock *clone_sock = get_socket_by_fd(clone_fd);
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index e297f7e..3193eeb 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -426,14 +426,10 @@ void stack_arp(struct rpc_msg *msg)
+ 
+ void stack_socket(struct rpc_msg *msg)
+ {
+-    int32_t fd = lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
+-    msg->result = fd;
+-    if (fd < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "tid %ld, %d socket failed\n", get_stack_tid(), fd);
+-        return;
++    msg->result = gazelle_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
++    if (msg->result < 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, %ld socket failed\n", get_stack_tid(), msg->result);
+     }
+-
+-    gazelle_init_sock(fd);
+ }
+ 
+ static inline bool is_real_close(int32_t fd)
+@@ -589,11 +585,22 @@ void stack_accept(struct rpc_msg *msg)
+     }
+     fd = sock->attach_fd;
+ 
+-    msg->result = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
+-    if (msg->result <= 0) {
+-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
+-            fd, msg->result);
++    int32_t accept_fd = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
++    if (accept_fd > 0) {
++        sock = get_socket(accept_fd);
++        if (sock && sock->stack) {
++            msg->result = accept_fd;
++            return;
++        }
++
++        lwip_close(accept_fd);
++        gazelle_clean_sock(accept_fd);
++        posix_api->close_fn(accept_fd);
+     }
++
++    LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %d\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
++            fd, accept_fd);
++    msg->result = -1;
+ }
+ 
+ void stack_connect(struct rpc_msg *msg)
+diff --git a/src/lstack/include/lstack_lwip.h b/src/lstack/include/lstack_lwip.h
+index 285095a..ffd3b80 100644
+--- a/src/lstack/include/lstack_lwip.h
++++ b/src/lstack/include/lstack_lwip.h
+@@ -26,6 +26,7 @@
+ void create_shadow_fd(struct rpc_msg *msg);
+ void listen_list_add_node(int32_t head_fd, int32_t add_fd);
+ void gazelle_init_sock(int32_t fd);
++int32_t gazelle_socket(int domain, int type, int protocol);
+ void gazelle_clean_sock(int32_t fd);
+ ssize_t write_lwip_data(struct lwip_sock *sock, int32_t fd, int32_t flags);
+ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
+-- 
+1.8.3.1
+
