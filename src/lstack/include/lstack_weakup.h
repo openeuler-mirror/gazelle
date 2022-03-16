@@ -49,21 +49,29 @@ static inline __attribute__((always_inline)) void weakup_attach_sock(struct lwip
 
 static inline __attribute__((always_inline)) void weakup_thread(struct rte_ring *weakup_ring)
 {
-    uint32_t num;
-    struct lwip_sock *sock[WEAKUP_MAX];
+    struct lwip_sock *sock;
     int32_t ret;
 
-    num = rte_ring_sc_dequeue_burst(weakup_ring, (void **)sock, WEAKUP_MAX, NULL);
-    for (uint32_t i = 0; i < num; ++i) {
-        ret = rte_ring_mp_enqueue(sock[i]->weakup->event_ring, (void *)sock[i]);
+    for (uint32_t i = 0; i < WEAKUP_MAX; ++i) {
+        ret = rte_ring_sc_dequeue(weakup_ring, (void **)&sock);
+        if (ret != 0) {
+            break;
+        }
+
+        ret = rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
         if (ret == 0) {
-            sem_post(&sock[i]->weakup->event_sem);
-            sock[i]->stack->stats.lwip_events++;
+            sem_post(&sock->weakup->event_sem);
+            sock->stack->stats.lwip_events++;
         }
 
         /* listen notice attach sock */
-        if (!list_is_empty(&sock[i]->attach_list)) {
-            weakup_attach_sock(sock[i]);
+        if (!list_is_empty(&sock->attach_list)) {
+            weakup_attach_sock(sock);
+        }
+
+        /* event_ring of attach sock may have idle elem */
+        if (ret != 0) {
+            break;
         }
     }
 }

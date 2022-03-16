@@ -567,14 +567,15 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("weakup_events: %-14"PRIu64" ", lstack_stat->data.pkts.weakup_events);
     printf("lwip_events: %-16"PRIu64" ", lstack_stat->data.pkts.lwip_events);
     printf("app_events: %-17"PRIu64"\n", lstack_stat->data.pkts.app_events);
+    printf("read_events: %-16"PRIu64" ", lstack_stat->data.pkts.read_events);
+    printf("write_events: %-15"PRIu64" ", lstack_stat->data.pkts.write_events);
+    printf("accept_events: %-14"PRIu64" \n", lstack_stat->data.pkts.accept_events);
     printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
     printf("read_null: %-18"PRIu64" ", lstack_stat->data.pkts.read_null);
-    printf("read_events: %-16"PRIu64" \n", lstack_stat->data.pkts.read_events);
+    printf("recv_empty: %-17"PRIu64" \n", lstack_stat->data.pkts.recv_empty);
     printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
     printf("event_null: %-17"PRIu64" ", lstack_stat->data.pkts.event_null);
     printf("remove_event: %-15"PRIu64" \n", lstack_stat->data.pkts.remove_event);
-    printf("recv_empty: %-17"PRIu64" ", lstack_stat->data.pkts.recv_empty);
-    printf("write_events: %-15"PRIu64" ", lstack_stat->data.pkts.write_events);
     printf("send_self_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.send_self_rpc);
 }
 

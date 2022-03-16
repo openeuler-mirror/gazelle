@@ -43,11 +43,6 @@ enum POLL_TYPE {
 
 static inline bool report_events(struct lwip_sock *sock, uint32_t event)
 {
-    /* listen fd event */
-    if (sock->attach_fd > 0) {
-        return true;
-    }
-
     /* error event */
     if ((event & EPOLLERR) || (event & EPOLLHUP) || (event & EPOLLRDHUP)) {
         return true;
