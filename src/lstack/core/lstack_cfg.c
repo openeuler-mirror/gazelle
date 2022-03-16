@@ -269,25 +269,7 @@ static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t nu
         return -1;
     }
 
-    int32_t count = 0;
-    char *elem = strtok(strbuf, "-");
-    while (elem && count < num) {
-        while (elem && isspace(*elem)) {
-            elem++;
-        }
-        if (elem == NULL) {
-            LSTACK_LOG(ERR, LSTACK, "parse %s failed\n", path);
-            return -1;
-        }
-        cpulist[count++] = (uint32_t)strtol(elem, NULL, 10); // 10 : decimal
-
-        if (count % 2 == 0) { // 2 : even
-            elem = strtok(NULL, "-");
-        } else {
-            elem = strtok(NULL, ",");
-        }
-    }
-
+    int32_t count = separate_str_to_array(strbuf, cpulist, num);
     return count;
 }
 
@@ -644,8 +626,6 @@ static int32_t parse_weakup_cpu_number(void)
     const config_setting_t *cfg_args = NULL;
     const char *args = NULL;
 
-    int32_t ret;
-
     g_config_params.num_wakeup = 0;
 
     cfg_args = config_lookup(&g_config, "num_wakeup");
@@ -658,11 +638,13 @@ static int32_t parse_weakup_cpu_number(void)
         return 0;
     }
 
-    ret = turn_str_to_array((char *)args, g_config_params.weakup, CFG_MAX_CPUS);
-    if (ret <= 0) {
+    char *tmp_arg = strdup(args);
+    int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.weakup, CFG_MAX_CPUS);
+    free(tmp_arg);
+    if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
         return -EINVAL;
     }
-    g_config_params.num_wakeup = (uint16_t)ret;
+    g_config_params.num_wakeup = cnt;
 
     return 0;
 }

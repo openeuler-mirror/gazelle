@@ -184,7 +184,6 @@ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs,
         return ret;
     }
 
-
     for (uint32_t i = 0; i < num; i++) {
         pbuf_custom = mbuf_to_pbuf(mbufs[i]);
         pbuf_custom->custom_free_function = gazelle_free_pbuf;
@@ -216,7 +215,7 @@ void stack_replenish_send_idlembuf(struct protocol_stack *stack)
     uint32_t replenish_cnt = rte_ring_free_count(stack->send_idle_ring);
 
     for (uint32_t i = 0; i < replenish_cnt; i++) {
-	struct pbuf *pbuf = lwip_alloc_pbuf(PBUF_TRANSPORT, MAX_PACKET_SZ - PBUF_TRANSPORT, PBUF_RAM);
+        struct pbuf *pbuf = lwip_alloc_pbuf(PBUF_TRANSPORT, MAX_PACKET_SZ - PBUF_TRANSPORT, PBUF_RAM);
         if (pbuf == NULL) {
             break;
         }

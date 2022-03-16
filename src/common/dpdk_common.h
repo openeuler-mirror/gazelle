@@ -40,7 +40,6 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf 
 
     uint8_t *dst_data = rte_pktmbuf_mtod(dst, void*);
     uint8_t *src_data = rte_pktmbuf_mtod(src, void*);
-
     rte_memcpy(dst_data, src_data, data_len);
 
     // copy private date.
