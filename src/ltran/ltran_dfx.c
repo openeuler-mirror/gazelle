@@ -879,7 +879,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     do {
         printf("\n------ stack tid: %6u ------\n", stat->tid);
         printf("No.   Proto  recv_cnt  recv_ring  in_send  send_ring  Local Address"
-            "             Foreign Address         State\n");
+            "     Foreign Address         State\n");
         unread_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
             struct gazelle_stat_lstack_conn_info *conn_info = &conn->conn_list[i];

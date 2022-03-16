@@ -709,17 +709,29 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 /* ergodic the protocol stack thread to find the connection, because all threads are listening */
 int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
 {
+    struct lwip_sock *min_sock = NULL;
+    int32_t min_fd;
+
     while (fd > 0) {
         struct lwip_sock *sock = get_socket(fd);
         if (sock == NULL) {
             GAZELLE_RETURN(EINVAL);
         }
 
-        if (NETCONN_IS_ACCEPTIN(sock)) {
-            return rpc_call_accept(fd, addr, addrlen);
+        if (!NETCONN_IS_ACCEPTIN(sock)) {
+            continue;
+        }
+
+        if (min_sock == NULL || min_sock->stack->conn_num > sock->stack->conn_num) {
+            min_sock = sock;
+            min_fd = fd;
         }
 
         fd = sock->nextfd;
+    }
+
+    if (min_sock) {
+        return rpc_call_accept(min_fd, addr, addrlen);
     }
 
     GAZELLE_RETURN(EAGAIN);
