@@ -177,6 +177,26 @@ int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn)
     return rpc_sync_call(&stack->rpc_queue, stack->rpc_pool, msg);
 }
 
+int32_t rpc_call_wakeuplistcnt(struct protocol_stack *stack)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_wakeuplist_count);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    return rpc_sync_call(&stack->rpc_queue, stack->rpc_pool, msg);
+}
+
+int32_t rpc_call_eventlistcnt(struct protocol_stack *stack)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_eventlist_count);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    return rpc_sync_call(&stack->rpc_queue, stack->rpc_pool, msg);
+}
+
 int32_t rpc_call_recvlistcnt(struct protocol_stack *stack)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_recvlist_count);
@@ -185,6 +205,28 @@ int32_t rpc_call_recvlistcnt(struct protocol_stack *stack)
     }
 
     return rpc_sync_call(&stack->rpc_queue, stack->rpc_pool, msg);
+}
+
+void add_epoll_event(struct netconn *conn, uint32_t event);
+static void rpc_add_event(struct rpc_msg *msg)
+{
+    struct lwip_sock *sock = (struct lwip_sock *)msg->args[MSG_ARG_0].p;
+    if (sock->conn) {
+        add_epoll_event(sock->conn, sock->events);
+    }
+}
+
+void rpc_call_addevent(struct protocol_stack *stack, void *sock)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, rpc_add_event);
+    if (msg == NULL) {
+        return;
+    }
+
+    msg->args[MSG_ARG_0].p = sock;
+
+    msg->self_release = 0;
+    rpc_call(&stack->rpc_queue, msg);
 }
 
 static void rpc_replenish_idlembuf(struct rpc_msg *msg)

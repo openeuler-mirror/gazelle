@@ -50,9 +50,12 @@ struct rpc_msg {
 struct protocol_stack;
 void poll_rpc_msg(struct protocol_stack *stack);
 void rpc_call_replenish_idlembuf(struct protocol_stack *stack);
+void rpc_call_addevent(struct protocol_stack *stack, void *sock);
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t rpc_call_recvlistcnt(struct protocol_stack *stack);
+int32_t rpc_call_eventlistcnt(struct protocol_stack *stack);
+int32_t rpc_call_wakeuplistcnt(struct protocol_stack *stack);
 int32_t rpc_call_thread_regphase1(struct protocol_stack *stack, void *conn);
 int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn);
 int32_t rpc_call_conntable(struct protocol_stack *stack, void *conn_table, uint32_t max_conn);

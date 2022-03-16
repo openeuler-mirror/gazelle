@@ -193,6 +193,7 @@ int32_t init_protocol_stack(void)
 
         init_list_node(&stack->recv_list);
         init_list_node(&stack->listen_list);
+        init_list_node(&stack->event_list);
 
         stack_group->stacks[i] = stack;
     }
@@ -261,8 +262,14 @@ static void* gazelle_weakup_thread(void *arg)
     thread_affinity_init(lcore_id);
     LSTACK_LOG(INFO, LSTACK, "weakup_%02d start\n", stack->queue_id);
 
+    struct list_node wakeup_list;
+    init_list_node(&wakeup_list);
+    stack->wakeup_list = &wakeup_list;
+
     for (;;) {
-        weakup_thread(stack->weakup_ring);
+        wakeup_list_sock(&wakeup_list);
+
+        weakup_thread(stack->weakup_ring, &wakeup_list);
     }
 
     return NULL;
@@ -307,6 +314,24 @@ static void stack_thread_init(struct protocol_stack *stack)
     LSTACK_LOG(INFO, LSTACK, "stack_%02d init success\n", queue_id);
 }
 
+static void report_stack_event(struct protocol_stack *stack)
+{
+    struct list_node *list = &(stack->event_list);
+    struct list_node *node, *temp;
+    struct lwip_sock *sock;
+
+    list_for_each_safe(node, temp, list) {
+        sock = container_of(node, struct lwip_sock, event_list);
+
+        if (weakup_enqueue(stack->weakup_ring, sock) == 0) {
+            list_del_node_init(&sock->event_list);
+            stack->stats.weakup_events++;
+        } else {
+            break;
+        }
+    }
+}
+
 static void* gazelle_stack_thread(void *arg)
 {
     struct protocol_stack *stack = (struct protocol_stack *)arg;
@@ -321,6 +346,8 @@ static void* gazelle_stack_thread(void *arg)
         read_recv_list();
 
         sys_timer_run();
+
+        report_stack_event(stack);
     }
 
     return NULL;
@@ -737,11 +764,8 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
     }
 
     struct lwip_sock *sock = get_socket(head_fd);
-    if (!sock->have_event && have_accept_event(head_fd)) {
-        sock->have_event = true;
-        sock->events |= EPOLLIN;
-        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
-        sem_post(&sock->weakup->event_sem);
+    if (have_accept_event(head_fd)) {
+        add_self_event(sock, EPOLLIN);
         sock->stack->stats.accept_events++;
     }
 

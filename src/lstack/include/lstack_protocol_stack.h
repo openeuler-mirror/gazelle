@@ -51,6 +51,8 @@ struct protocol_stack {
 
     struct list_node recv_list;
     struct list_node listen_list;
+    struct list_node event_list;
+    struct list_node *wakeup_list;
 
     struct gazelle_stat_pkts stats;
     struct gazelle_stack_latency latency;

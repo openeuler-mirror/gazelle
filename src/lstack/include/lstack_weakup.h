@@ -22,55 +22,93 @@ struct weakup_poll {
     sem_t event_sem;
     struct lwip_sock *sock_list[EPOLL_MAX_EVENTS];
     struct rte_ring *event_ring;
+    struct rte_ring *self_ring;
 };
 
 #define WEAKUP_MAX           (32)
 
-static inline __attribute__((always_inline)) void weakup_attach_sock(struct lwip_sock *sock)
+static inline void wakeup_list_sock(struct list_node *wakeup_list)
 {
-    struct list_node *list = &(sock->attach_list);
     struct list_node *node, *temp;
-    struct lwip_sock *attach_sock;
-    int32_t ret;
 
-    list_for_each_safe(node, temp, list) {
-        attach_sock = container_of(node, struct lwip_sock, attach_list);
-        if (attach_sock->weakup == NULL) {
+    list_for_each_safe(node, temp, wakeup_list) {
+        struct lwip_sock *sock = container_of(node, struct lwip_sock, wakeup_list);
+
+        struct weakup_poll *weakup = sock->weakup;
+        struct protocol_stack *stack = sock->stack;
+        if (weakup == NULL || stack == NULL) {
             continue;
         }
 
-        ret = rte_ring_mp_enqueue(attach_sock->weakup->event_ring, (void *)attach_sock);
+        int32_t ret = rte_ring_mp_enqueue(weakup->event_ring, (void *)sock);
         if (ret == 0) {
-            sem_post(&attach_sock->weakup->event_sem);
-            attach_sock->stack->stats.lwip_events++;
+            list_del_node_init(&sock->event_list);
+            sem_post(&weakup->event_sem);
+            stack->stats.lwip_events++;
+        } else {
+            break;
         }
     }
 }
 
-static inline __attribute__((always_inline)) void weakup_thread(struct rte_ring *weakup_ring)
+static inline int32_t weakup_attach_sock(struct list_node *attach_list)
+{
+    struct list_node *node, *temp;
+    int32_t wakeuped = -1;
+
+    list_for_each_safe(node, temp, attach_list) {
+        struct lwip_sock *sock = container_of(node, struct lwip_sock, attach_list);
+
+        struct weakup_poll *weakup = sock->weakup;
+        struct protocol_stack *stack = sock->stack;
+        if (weakup == NULL || stack == NULL) {
+            continue;
+        }
+
+        int32_t ret = rte_ring_mp_enqueue(weakup->event_ring, (void *)sock);
+        if (ret == 0) {
+            sem_post(&weakup->event_sem);
+            stack->stats.lwip_events++;
+            wakeuped = 0;
+        }
+    }
+
+    return wakeuped;
+}
+
+static inline void weakup_thread(struct rte_ring *weakup_ring, struct list_node *wakeup_list)
 {
     struct lwip_sock *sock;
-    int32_t ret;
 
     for (uint32_t i = 0; i < WEAKUP_MAX; ++i) {
-        ret = rte_ring_sc_dequeue(weakup_ring, (void **)&sock);
+        int32_t ret = rte_ring_sc_dequeue(weakup_ring, (void **)&sock);
         if (ret != 0) {
             break;
         }
 
-        ret = rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+        struct weakup_poll *weakup = sock->weakup;
+        struct protocol_stack *stack = sock->stack;
+        if (weakup == NULL || stack == NULL) {
+            continue;
+        }
+
+        ret = rte_ring_mp_enqueue(weakup->event_ring, (void *)sock);
         if (ret == 0) {
-            sem_post(&sock->weakup->event_sem);
-            sock->stack->stats.lwip_events++;
+            sem_post(&weakup->event_sem);
+            stack->stats.lwip_events++;
         }
 
         /* listen notice attach sock */
+        int32_t wakeuped = -1;
         if (!list_is_empty(&sock->attach_list)) {
-            weakup_attach_sock(sock);
+            wakeuped = weakup_attach_sock(&sock->attach_list);
         }
 
-        /* event_ring of attach sock may have idle elem */
-        if (ret != 0) {
+        /* notice any epoll enough */
+        if (ret != 0 && wakeuped != 0) {
+            if (list_is_empty(&sock->wakeup_list)) {
+                list_add_node(wakeup_list, &sock->wakeup_list);
+            }
             break;
         }
     }
@@ -79,13 +117,7 @@ static inline __attribute__((always_inline)) void weakup_thread(struct rte_ring 
 static inline __attribute__((always_inline))
 int weakup_enqueue(struct rte_ring *weakup_ring, struct lwip_sock *sock)
 {
-    int ret = rte_ring_sp_enqueue(weakup_ring, (void *)sock);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %d, failed\n", gettid());
-        return -1;
-    }
-
-    return 0;
+    return rte_ring_sp_enqueue(weakup_ring, (void *)sock);
 }
 
 #endif

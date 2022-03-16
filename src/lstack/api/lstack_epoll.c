@@ -87,19 +87,27 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
         return;
     }
 
-    sock->have_event = true;
-    weakup_enqueue(sock->stack->weakup_ring, sock);
-    sock->stack->stats.weakup_events++;
+    if (weakup_enqueue(sock->stack->weakup_ring, sock)) {
+        if (list_is_empty(&sock->event_list)) {
+            list_add_node(&sock->stack->event_list, &sock->event_list);
+        }
+    } else {
+        sock->have_event = true;
+        sock->stack->stats.weakup_events++;
+    }
 }
 
 static void raise_pending_events(struct lwip_sock *sock)
 {
-    if (!sock->conn) {
+    struct weakup_poll *wakeup = sock->weakup;
+    struct protocol_stack *stack = sock->stack;
+    struct netconn *conn = sock->conn;
+    if (wakeup == NULL || stack == NULL || conn == NULL) {
         return;
     }
 
     struct lwip_sock *attach_sock = NULL;
-    if (sock->attach_fd > 0 && sock->attach_fd != sock->conn->socket) {
+    if (sock->attach_fd > 0 && sock->attach_fd != conn->socket) {
         attach_sock = get_socket_by_fd(sock->attach_fd);
         if (attach_sock == NULL) {
             return;
@@ -108,7 +116,10 @@ static void raise_pending_events(struct lwip_sock *sock)
         attach_sock = sock;
     }
 
-    struct netconn *conn = attach_sock->conn;
+    conn = attach_sock->conn;
+    if (conn == NULL) {
+        return;
+    }
     struct tcp_pcb *tcp = conn->pcb.tcp;
     if ((tcp == NULL) || (tcp->state < ESTABLISHED)) {
         return;
@@ -132,10 +143,17 @@ static void raise_pending_events(struct lwip_sock *sock)
         event |= POLLERR | POLLIN;
     }
 
-    if (event != 0) {
-        sock->events |= event;
-        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
-        sem_post(&sock->weakup->event_sem);
+    if (event == 0) {
+        return;
+    }
+    sock->events |= event;
+    if (rte_ring_mp_enqueue(wakeup->event_ring, (void *)sock) == 0 ||
+        rte_ring_mp_enqueue(wakeup->self_ring, (void *)sock) == 0) {
+        sem_post(&wakeup->event_sem);
+        stack->stats.epoll_pending++;
+    } else {
+        rpc_call_addevent(stack, sock);
+        stack->stats.epoll_pending_call++;
     }
 }
 
@@ -164,6 +182,12 @@ int32_t lstack_epoll_create(int32_t size)
 
     weakup->event_ring = create_ring("RING_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SC_DEQ, fd);
     if (weakup->event_ring == NULL) {
+        posix_api->close_fn(fd);
+        GAZELLE_RETURN(ENOMEM);
+    }
+
+    weakup->self_ring = create_ring("SELF_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SC_DEQ, fd);
+    if (weakup->self_ring == NULL) {
         posix_api->close_fn(fd);
         GAZELLE_RETURN(ENOMEM);
     }
@@ -247,11 +271,6 @@ static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, st
 
 static bool remove_event(enum POLL_TYPE etype, struct lwip_sock **sock_list, int32_t event_num, struct lwip_sock *sock)
 {
-    /* close sock */
-    if (sock->stack == NULL) {
-        return true;
-    }
-
     /* remove duplicate event */
     for (uint32_t i = 0; i < event_num && etype == TYPE_EPOLL; i++) {
         if (sock_list[i] == sock) {
@@ -267,29 +286,26 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
     struct epoll_event *events = (struct epoll_event *)out;
     struct pollfd *fds = (struct pollfd *)out;
 
-    uint32_t events_cnt = rte_ring_count(weakup->event_ring);
-    if (events_cnt == 0) {
-        return 0;
-    }
 
     if (etype == TYPE_EPOLL) {
         maxevents = LWIP_MIN(EPOLL_MAX_EVENTS, maxevents);
     }
-    events_cnt = LWIP_MIN(events_cnt, maxevents);
     int32_t event_num = 0;
     struct lwip_sock *sock = NULL;
 
-    while (event_num < events_cnt) {
-        int32_t ret = rte_ring_sc_dequeue(weakup->event_ring, (void **)&sock);
-        if (ret != 0) {
+    while (event_num < maxevents) {
+        if (rte_ring_sc_dequeue(weakup->self_ring, (void **)&sock) &&
+            rte_ring_sc_dequeue(weakup->event_ring, (void **)&sock)) {
             break;
+        }
+        /* close sock */
+        if (sock->stack == NULL) {
+            return true;
         }
         sock->have_event = false;
 
         if (remove_event(etype, weakup->sock_list, event_num, sock)) {
-            if (sock->stack) {
-                sock->stack->stats.remove_event++;
-            }
+            sock->stack->stats.remove_event++;
             continue;
         }
 
@@ -388,6 +404,11 @@ static int32_t poll_init(struct pollfd *fds, nfds_t nfds, struct weakup_poll *we
     if (weakup->event_ring == NULL) {
         weakup->event_ring = create_ring("POLL_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SC_DEQ, rte_gettid());
         if (weakup->event_ring == NULL) {
+            GAZELLE_RETURN(ENOMEM);
+        }
+
+        weakup->self_ring = create_ring("SELF_EVENT", VDEV_EVENT_QUEUE_SZ, RING_F_SC_DEQ, rte_gettid());
+        if (weakup->self_ring == NULL) {
             GAZELLE_RETURN(ENOMEM);
         }
     }

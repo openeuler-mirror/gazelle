@@ -567,14 +567,20 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("weakup_events: %-14"PRIu64" ", lstack_stat->data.pkts.weakup_events);
     printf("lwip_events: %-16"PRIu64" ", lstack_stat->data.pkts.lwip_events);
     printf("app_events: %-17"PRIu64"\n", lstack_stat->data.pkts.app_events);
+    printf("epoll_pending: %-14"PRIu64" ", lstack_stat->data.pkts.epoll_pending);
+    printf("epoll_self_event: %-11"PRIu64" ", lstack_stat->data.pkts.epoll_self_event);
+    printf("remove_event: %-15"PRIu64" \n", lstack_stat->data.pkts.remove_event);
     printf("read_events: %-16"PRIu64" ", lstack_stat->data.pkts.read_events);
     printf("write_events: %-15"PRIu64" ", lstack_stat->data.pkts.write_events);
     printf("accept_events: %-14"PRIu64" \n", lstack_stat->data.pkts.accept_events);
-    printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
     printf("read_null: %-18"PRIu64" ", lstack_stat->data.pkts.read_null);
-    printf("call_alloc_fail: %-12"PRIu64" \n", lstack_stat->data.pkts.call_alloc_fail);
-    printf("remove_event: %-15"PRIu64" ", lstack_stat->data.pkts.remove_event);
+    printf("wakeup_list: %-16"PRIu64" ", lstack_stat->data.pkts.wakeup_list);
+    printf("event_list: %-17"PRIu64" \n", lstack_stat->data.pkts.event_list);
     printf("send_self_rpc: %-14"PRIu64" ", lstack_stat->data.pkts.send_self_rpc);
+    printf("epoll_pending_call: %-9"PRIu64" ", lstack_stat->data.pkts.epoll_pending_call);
+    printf("epoll_self_call: %-12"PRIu64" \n", lstack_stat->data.pkts.epoll_self_call);
+    printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
+    printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
     printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.call_null);
 }
 
@@ -866,8 +872,7 @@ static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_
 
 static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
-    int32_t ret;
-    uint32_t i, unread_pkts;
+    uint32_t i;
     struct in_addr rip;
     struct in_addr lip;
     char str_ip[GAZELLE_SUBNET_LENGTH_MAX] = {0};
@@ -878,30 +883,33 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     printf("Active Internet connections (servers and established)\n");
     do {
         printf("\n------ stack tid: %6u ------\n", stat->tid);
-        printf("No.   Proto  recv_cnt  recv_ring  in_send  send_ring  Local Address"
+        printf("No.   Proto  recv_cnt  recv_ring  in_send  send_ring  event  self_event  Local Address"
             "     Foreign Address         State\n");
-        unread_pkts = 0;
+        uint32_t unread_pkts = 0;
+        uint32_t unsend_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
             struct gazelle_stat_lstack_conn_info *conn_info = &conn->conn_list[i];
 
             rip.s_addr = conn_info->rip;
             lip.s_addr = conn_info->lip;
             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
-                printf("%-6utcp    %-10u%-11u%-9u%-11u%s:%hu\t%s:%hu\t%s\n", i, conn_info->recv_cnt,
-                    conn_info->recv_ring_cnt, conn_info->in_send, conn_info->send_ring_cnt,
-                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port, inet_ntop(AF_INET, &rip,
-                    str_rip, sizeof(str_rip)), conn_info->r_port, tcp_state_to_str(conn_info->tcp_sub_state));
+                printf("%-6utcp    %-10u%-11u%-9u%-11u%-7u%-12u%s:%hu\t%s:%hu\t%s\n", i, conn_info->recv_cnt,
+                    conn_info->recv_ring_cnt, conn_info->in_send, conn_info->send_ring_cnt, conn_info->event_ring_cnt,
+                    conn_info->self_ring_cnt, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
+                    inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
+                    tcp_state_to_str(conn_info->tcp_sub_state));
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
-                printf("%-6utcp    %-41u%s:%hu\t0.0.0.0:*\t\tLISTEN\n", i, conn_info->recv_cnt,
+                printf("%-6utcp    %-60u%s:%hu\t0.0.0.0:*\t\tLISTEN\n", i, conn_info->recv_cnt,
                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
             } else {
                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port, conn_info->state);
             }
             unread_pkts += conn_info->recv_ring_cnt;
+            unsend_pkts += conn_info->send_ring_cnt;
         }
         if (conn->conn_num > 0) {
-            printf("Total unread pkts:  %u \n", unread_pkts);
+            printf("Total unread pkts:%u  unsend pkts:%u\n", unread_pkts, unsend_pkts);
         }
 
         if (i < conn->total_conn_num) {
@@ -912,7 +920,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
         if (stat->eof != 0) {
             break;
         }
-        ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
+        int32_t ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
         if (ret != GAZELLE_OK) {
             return;
         }
