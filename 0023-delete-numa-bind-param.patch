@@ -1,0 +1,197 @@
+From efd5bfb1a4a070217a0ff174d32500130b629d0a Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Wed, 16 Mar 2022 15:35:20 +0800
+Subject: [PATCH 23/34] delete numa bind param
+
+---
+ src/common/gazelle_dfx_msg.h            |  1 -
+ src/lstack/api/lstack_epoll.c           | 11 ++++-------
+ src/lstack/core/lstack_cfg.c            | 19 -------------------
+ src/lstack/core/lstack_lwip.c           |  1 -
+ src/lstack/core/lstack_protocol_stack.c |  4 ----
+ src/lstack/core/lstack_thread_rpc.c     |  8 +++-----
+ src/lstack/include/lstack_cfg.h         |  1 -
+ src/lstack/lstack.conf                  |  2 --
+ src/ltran/ltran_dfx.c                   |  5 ++---
+ 9 files changed, 9 insertions(+), 43 deletions(-)
+
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index 3956c33..cea4200 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -85,7 +85,6 @@ struct gazelle_stat_pkts {
+     uint64_t write_events;
+     uint64_t accept_events;
+     uint64_t read_null;
+-    uint64_t recv_empty;
+     uint64_t remove_event;
+     uint64_t send_self_rpc;
+     uint64_t call_null;
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 885ec45..bcbb35e 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -83,16 +83,13 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
+     }
+     sock->events |= event & sock->epoll_events;
+ 
+-    /* sock not in monitoring */
+-    if (!sock->weakup) {
++    if (!sock->weakup || !report_events(sock, event)) {
+         return;
+     }
+ 
+-    if (report_events(sock, event)) {
+-        sock->have_event = true;
+-        weakup_enqueue(sock->stack->weakup_ring, sock);
+-        sock->stack->stats.weakup_events++;
+-    }
++    sock->have_event = true;
++    weakup_enqueue(sock->stack->weakup_ring, sock);
++    sock->stack->stats.weakup_events++;
+ }
+ 
+ static void raise_pending_events(struct lwip_sock *sock)
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 058a392..fcc1c0b 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -53,7 +53,6 @@ static int32_t parse_weakup_cpu_number(void);
+ static int32_t parse_mask_addr(void);
+ static int32_t parse_devices(void);
+ static int32_t parse_dpdk_args(void);
+-static int32_t parse_numa_bind(void);
+ static int32_t parse_gateway_addr(void);
+ static int32_t parse_kni_switch(void);
+ 
+@@ -71,7 +70,6 @@ static struct config_vector_t g_config_tbl[] = {
+     { "dpdk_args",    parse_dpdk_args },
+     { "num_cpus",     parse_stack_cpu_number },
+     { "num_wakeup",   parse_weakup_cpu_number },
+-    { "numa_bind",    parse_numa_bind },
+     { "low_power_mode", parse_low_power_mode },
+     { "kni_switch",   parse_kni_switch },
+     { NULL,           NULL }
+@@ -714,23 +712,6 @@ static int32_t parse_weakup_cpu_number(void)
+     return 0;
+ }
+ 
+-static int32_t parse_numa_bind(void)
+-{
+-    const config_setting_t *numa_bind = NULL;
+-
+-    numa_bind = config_lookup(&g_config, "numa_bind");
+-    if (numa_bind == NULL) {
+-        g_config_params.numa_bind = 1;
+-        return 0;
+-    }
+-    g_config_params.numa_bind = (uint8_t)config_setting_get_bool(numa_bind);
+-    if (g_config_params.numa_bind != 0 && g_config_params.numa_bind != 1) {
+-        return -EINVAL;
+-    }
+-
+-    return 0;
+-}
+-
+ static int32_t parse_use_ltran(void)
+ {
+     const config_setting_t *arg = NULL;
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 1a9d9b9..b157517 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -485,7 +485,6 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+         } else {
+             ret = rte_ring_sc_dequeue(sock->recv_ring, (void **)&pbuf);
+             if (ret != 0) {
+-                sock->stack->stats.recv_empty++;
+                 break;
+             }
+         }
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index db8a20a..c88f902 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -46,10 +46,6 @@ int32_t bind_to_stack_numa(int32_t stack_id)
+     struct protocol_stack *stack = get_protocol_stack_group()->stacks[stack_id];
+     pthread_t tid = pthread_self();
+ 
+-    if (get_global_cfg_params()->numa_bind == 0) {
+-        return 0;
+-    }
+-
+     if (last_stack_id == stack_id) {
+         return 0;
+     }
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 8af1077..b3665a7 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -414,12 +414,9 @@ static void stack_send(struct rpc_msg *msg)
+     }
+ 
+     msg->result = write_lwip_data(sock, fd, flags);
+-    if (msg->result < 0 || rte_ring_count(sock->send_ring) == 0) {
+-        msg->self_release = 0;
+-        sock->have_rpc_send = false;
+-    }
++    sock->have_rpc_send = false;
+ 
+-    if (rte_ring_count(sock->send_ring)) {
++    if (msg->result >= 0 && rte_ring_count(sock->send_ring)) {
+         sock->have_rpc_send = true;
+         sock->stack->stats.send_self_rpc++;
+         msg->self_release = 1;
+@@ -443,6 +440,7 @@ ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
+     msg->args[MSG_ARG_1].size = len;
+     msg->args[MSG_ARG_2].i = flags;
+ 
++    msg->self_release = 0;
+     rpc_call(&stack->rpc_queue, msg);
+ 
+     return 0;
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index 9096797..1a59c6c 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -63,7 +63,6 @@ struct cfg_params {
+     ip4_addr_t netmask;
+     ip4_addr_t gateway_addr;
+     struct rte_ether_addr ethdev;
+-    uint8_t numa_bind;
+     uint16_t num_cpu;
+     uint16_t cpus[CFG_MAX_CPUS];
+     uint16_t num_wakeup;
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index eb996f1..fdca602 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -18,8 +18,6 @@ low_power_mode=0
+ num_cpus="2"
+ num_wakeup="3"
+ 
+-numa_bind=1
+-
+ host_addr="192.168.1.10"
+ mask_addr="255.255.255.0"
+ gateway_addr="192.168.1.1"
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 5b3a95c..451f527 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -572,10 +572,9 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
+     printf("accept_events: %-14"PRIu64" \n", lstack_stat->data.pkts.accept_events);
+     printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
+     printf("read_null: %-18"PRIu64" ", lstack_stat->data.pkts.read_null);
+-    printf("recv_empty: %-17"PRIu64" \n", lstack_stat->data.pkts.recv_empty);
+-    printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
++    printf("call_alloc_fail: %-12"PRIu64" \n", lstack_stat->data.pkts.call_alloc_fail);
+     printf("remove_event: %-15"PRIu64" ", lstack_stat->data.pkts.remove_event);
+-    printf("send_self_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.send_self_rpc);
++    printf("send_self_rpc: %-14"PRIu64" ", lstack_stat->data.pkts.send_self_rpc);
+     printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.call_null);
+ }
+ 
+-- 
+1.8.3.1
+

@@ -1,0 +1,24 @@
+From 5755516a6d49b5fee68169521e974abe276801f1 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Thu, 10 Mar 2022 10:12:09 +0800
+Subject: [PATCH 16/34] fix dead loop
+
+---
+ src/lstack/core/lstack_protocol_stack.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 68cc49d..939543b 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -724,6 +724,7 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
+         }
+ 
+         if (!NETCONN_IS_ACCEPTIN(sock)) {
++            fd = sock->nextfd;
+             continue;
+         }
+ 
+-- 
+1.8.3.1
+
