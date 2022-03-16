@@ -1182,19 +1182,23 @@ static int32_t parse_dfx_cmd_args(int32_t argc, char *argv[], struct gazelle_sta
     return num_cmd;
 }
 
-static int32_t check_cmd_support(enum GAZELLE_STAT_MODE stat_mode)
+static int32_t check_cmd_support(struct gazelle_stat_msg_request *req_msg, int32_t req_msg_num)
 {
-    switch (stat_mode) {
+    switch (req_msg[0].stat_mode) {
         case GAZELLE_STAT_LSTACK_LOG_LEVEL_SET:
         case GAZELLE_STAT_LSTACK_SHOW:
         case GAZELLE_STAT_LSTACK_SHOW_SNMP:
         case GAZELLE_STAT_LSTACK_SHOW_CONN:
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
         case GAZELLE_STAT_LSTACK_LOW_POWER_MDF:
-        case GAZELLE_STAT_LTRAN_START_LATENCY:
             return 0;
         default:
-            show_usage();
+            if (req_msg[0].stat_mode == GAZELLE_STAT_LTRAN_START_LATENCY &&
+                req_msg[req_msg_num - 1].stat_mode == GAZELLE_STAT_LSTACK_SHOW_LATENCY) {
+                return 0;
+            }
+            /* keep output consistency */
+            printf("connect ltran failed. errno: 111 ret=-1\n");
             return -1;
     }
 
@@ -1220,9 +1224,9 @@ int32_t main(int32_t argc, char *argv[])
         g_gazelle_dfx_tbl[GAZELLE_STAT_LSTACK_SHOW].recv_size = sizeof(struct gazelle_stack_dfx_data);
         g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_START_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);
         g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_STOP_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);
-        ret = check_cmd_support(req_msg[msg_index].stat_mode);
+        ret = check_cmd_support(req_msg, req_msg_num);
         if (ret < 0) {
-            return 0;
+            return -1;
         }
     }
 
