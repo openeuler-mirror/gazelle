@@ -577,17 +577,9 @@ void stack_accept(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
 
-    /* listen sock attach_fd is self */
-    struct lwip_sock *sock = get_socket(fd);
-    if (sock == NULL) {
-        msg->result = -1;
-        return;
-    }
-    fd = sock->attach_fd;
-
     int32_t accept_fd = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
     if (accept_fd > 0) {
-        sock = get_socket(accept_fd);
+        struct lwip_sock *sock = get_socket(accept_fd);
         if (sock && sock->stack) {
             msg->result = accept_fd;
             return;
@@ -773,13 +765,19 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 /* ergodic the protocol stack thread to find the connection, because all threads are listening */
 int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
 {
-    struct lwip_sock *min_sock = NULL;
-    int32_t head_fd = fd;
-    int32_t min_fd = fd;
-    int32_t ret = -1;
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
 
+    fd = sock->attach_fd;
+    int32_t head_fd = fd;
+
+    struct lwip_sock *min_sock = NULL;
+    int32_t min_fd = fd;
     while (fd > 0) {
-        struct lwip_sock *sock = get_socket(fd);
+        sock = get_socket(fd);
         if (sock == NULL) {
             GAZELLE_RETURN(EINVAL);
         }
@@ -797,13 +795,14 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
         fd = sock->nextfd;
     }
 
+    int32_t ret = -1;
     if (min_sock) {
         ret = rpc_call_accept(min_fd, addr, addrlen);
     }
 
-    struct lwip_sock *sock = get_socket(head_fd);
     if (have_accept_event(head_fd)) {
         add_self_event(sock, EPOLLIN);
+        sock = get_socket(head_fd);
         sock->stack->stats.accept_events++;
     }
 
