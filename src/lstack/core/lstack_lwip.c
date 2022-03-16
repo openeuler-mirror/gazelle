@@ -317,20 +317,12 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         send_pkt++;
     }
 
-    if ((sock->epoll_events & EPOLLOUT)) {
-        /* avoid miss EPOLLOUT event, call NETCONN_IS_DATAOUT twice.
-           write data full and have_event=true, then data out add event failed because of have_event */
-        if (!NETCONN_IS_DATAOUT(sock)) {
-            sock->have_event = false;
-        }
-
-        if (NETCONN_IS_DATAOUT(sock)) {
-            sock->have_event = true;
-            sock->events |= EPOLLOUT;
-            rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
-            sem_post(&sock->weakup->event_sem);
-            sock->stack->stats.write_events++;
-        }
+    if (!sock->have_event && (sock->epoll_events & EPOLLOUT) && NETCONN_IS_DATAOUT(sock)) {
+        sock->have_event = true;
+        sock->events |= EPOLLOUT;
+        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+        sem_post(&sock->weakup->event_sem);
+        sock->stack->stats.write_events++;
     }
 
     if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK && !sock->stack->in_replenish) {
@@ -524,20 +516,12 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
         }
     }
 
-    if ((sock->epoll_events & EPOLLIN)) {
-        /* avoid miss EPOLLIN event, call NETCONN_IS_DATAIN twice.
-           read data empty and have_event=true, then data in add event failed because of have_event */
-        if (!NETCONN_IS_DATAIN(sock)) {
-            sock->have_event = false;
-        }
-
-        if (NETCONN_IS_DATAIN(sock)) {
-            sock->have_event = true;
-            sock->events |= EPOLLIN;
-            rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
-            sem_post(&sock->weakup->event_sem);
-            sock->stack->stats.read_events++;
-        }
+    if (!sock->have_event && (sock->epoll_events & EPOLLIN) && NETCONN_IS_DATAIN(sock)) {
+        sock->have_event = true;
+        sock->events |= EPOLLIN;
+        rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
+        sem_post(&sock->weakup->event_sem);
+        sock->stack->stats.read_events++;
     }
 
     if (recvd == 0) {

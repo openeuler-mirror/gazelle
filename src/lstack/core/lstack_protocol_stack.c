@@ -739,14 +739,8 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
         ret = rpc_call_accept(min_fd, addr, addrlen);
     }
 
-    /* avoid miss accept event, call have_accept_event twice.
-       rpc_call_accept empty and have_event=true, then establish connection add event failed because of have_event */
     struct lwip_sock *sock = get_socket(head_fd);
-    if (!have_accept_event(head_fd)) {
-        sock->have_event = false;
-    }
-
-    if (have_accept_event(head_fd)) {
+    if (!sock->have_event && have_accept_event(head_fd)) {
         sock->have_event = true;
         sock->events |= EPOLLIN;
         rte_ring_mp_enqueue(sock->weakup->event_ring, (void *)sock);
