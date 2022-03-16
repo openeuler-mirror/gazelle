@@ -61,7 +61,7 @@ static inline bool report_events(struct lwip_sock *sock, uint32_t event)
         return true;
     }
 
-    if (sock->have_event) {
+    if (__atomic_load_n(&sock->have_event, __ATOMIC_ACQUIRE)) {
         return false;
     }
 
@@ -92,7 +92,7 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
             list_add_node(&sock->stack->event_list, &sock->event_list);
         }
     } else {
-        sock->have_event = true;
+        __atomic_store_n(&sock->have_event, true, __ATOMIC_RELEASE);
         sock->stack->stats.weakup_events++;
     }
 }
@@ -302,7 +302,7 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
         if (sock->stack == NULL) {
             return true;
         }
-        sock->have_event = false;
+        __atomic_store_n(&sock->have_event, false, __ATOMIC_RELEASE);
 
         if (remove_event(etype, weakup->sock_list, event_num, sock)) {
             sock->stack->stats.remove_event++;

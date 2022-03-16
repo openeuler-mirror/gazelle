@@ -194,6 +194,7 @@ int32_t init_protocol_stack(void)
         init_list_node(&stack->recv_list);
         init_list_node(&stack->listen_list);
         init_list_node(&stack->event_list);
+        init_list_node(&stack->send_list);
 
         stack_group->stacks[i] = stack;
     }
@@ -324,10 +325,38 @@ static void report_stack_event(struct protocol_stack *stack)
         sock = container_of(node, struct lwip_sock, event_list);
 
         if (weakup_enqueue(stack->weakup_ring, sock) == 0) {
+            __atomic_store_n(&sock->have_event, true, __ATOMIC_RELEASE);
             list_del_node_init(&sock->event_list);
             stack->stats.weakup_events++;
         } else {
             break;
+        }
+    }
+}
+
+static void send_stack_list(struct protocol_stack *stack)
+{
+    struct list_node *list = &(stack->send_list);
+    struct list_node *node, *temp;
+    struct lwip_sock *sock;
+
+    list_for_each_safe(node, temp, list) {
+        sock = container_of(node, struct lwip_sock, send_list);
+
+        if (sock->conn == NULL) {
+            continue;
+        }
+
+        ssize_t ret = write_lwip_data(sock, sock->conn->socket, sock->send_flags);
+        __atomic_store_n(&sock->have_rpc_send, false, __ATOMIC_RELEASE);
+        if (ret >= 0 && rte_ring_count(sock->send_ring)) {
+            __atomic_store_n(&sock->have_rpc_send, true, __ATOMIC_RELEASE);
+        } else {
+            list_del_node_init(&sock->send_list);
+        }
+
+        if (rte_ring_free_count(sock->send_ring)) {
+            add_epoll_event(sock->conn, EPOLLOUT);
         }
     }
 }
@@ -348,6 +377,8 @@ static void* gazelle_stack_thread(void *arg)
         sys_timer_run();
 
         report_stack_event(stack);
+
+        send_stack_list(stack);
     }
 
     return NULL;

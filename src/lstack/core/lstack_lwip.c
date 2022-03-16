@@ -112,6 +112,7 @@ void gazelle_init_sock(int32_t fd)
     init_list_node(&sock->listen_list);
     init_list_node(&sock->event_list);
     init_list_node(&sock->wakeup_list);
+    init_list_node(&sock->send_list);
 }
 
 void gazelle_clean_sock(int32_t fd)
@@ -130,6 +131,7 @@ void gazelle_clean_sock(int32_t fd)
     list_del_node_init(&sock->listen_list);
     list_del_node_init(&sock->event_list);
     list_del_node_init(&sock->wakeup_list);
+    list_del_node_init(&sock->send_list);
 }
 
 void gazelle_free_pbuf(struct pbuf *pbuf)
@@ -280,12 +282,12 @@ void add_self_event(struct lwip_sock *sock, uint32_t events)
 
     sock->events |= events;
 
-    if (sock->have_event) {
+    if (__atomic_load_n(&sock->have_event, __ATOMIC_ACQUIRE)) {
         return;
     }
 
     if (rte_ring_mp_enqueue(wakeup->self_ring, (void *)sock) == 0) {
-        sock->have_event = true;
+        __atomic_store_n(&sock->have_event, true, __ATOMIC_RELEASE);
         sem_post(&sock->weakup->event_sem);
         stack->stats.epoll_self_event++;
     } else {
@@ -344,6 +346,34 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     }
 
     return send_len;
+}
+
+void stack_send(struct rpc_msg *msg)
+{
+    int32_t fd = msg->args[MSG_ARG_0].i;
+    int32_t flags = msg->args[MSG_ARG_2].i;
+
+    struct protocol_stack *stack = get_protocol_stack();
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        msg->result = -1;
+        return;
+    }
+
+    msg->result = write_lwip_data(sock, fd, flags);
+    __atomic_store_n(&sock->have_rpc_send, false, __ATOMIC_RELEASE);
+
+    if (msg->result >= 0 && rte_ring_count(sock->send_ring)) {
+        if (list_is_empty(&sock->send_list)) {
+            __atomic_store_n(&sock->have_rpc_send, true, __ATOMIC_RELEASE);
+            list_add_node(&stack->send_list, &sock->send_list);
+            sock->stack->stats.send_self_rpc++;
+        }
+    }
+
+    if (rte_ring_free_count(sock->send_ring)) {
+        add_epoll_event(sock->conn, EPOLLOUT);
+    }
 }
 
 ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
@@ -448,14 +478,19 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
         GAZELLE_RETURN(EINVAL);
     }
 
+    sock->send_flags = flags;
     ssize_t send = write_stack_data(sock, buf, len);
-    if (send < 0 || sock->have_rpc_send) {
-        return send;
+
+    ssize_t ret = 0;
+    if (!__atomic_load_n(&sock->have_rpc_send, __ATOMIC_ACQUIRE)) {
+        __atomic_store_n(&sock->have_rpc_send, true, __ATOMIC_RELEASE);
+        ret = rpc_call_send(fd, buf, len, flags);
     }
 
-    sock->have_rpc_send = true;
-    ssize_t ret = rpc_call_send(fd, buf, len, flags);
-    return (ret < 0) ? ret : send;
+    if (send <= 0 || ret < 0) {
+        GAZELLE_RETURN(EAGAIN);
+    }
+    return send;
 }
 
 ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
@@ -741,6 +776,11 @@ void stack_wakeuplist_count(struct rpc_msg *msg)
 void stack_eventlist_count(struct rpc_msg *msg)
 {
     msg->result = get_list_count(&get_protocol_stack()->event_list);
+}
+
+void stack_sendlist_count(struct rpc_msg *msg)
+{
+    msg->result = get_list_count(&get_protocol_stack()->send_list);
 }
 
 void stack_recvlist_count(struct rpc_msg *msg)
