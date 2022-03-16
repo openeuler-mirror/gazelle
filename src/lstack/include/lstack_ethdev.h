@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __LIBOS_ETHDEV_H__
-#define __LIBOS_ETHDEV_H__
+#ifndef __GAZELLE_ETHDEV_H__
+#define __GAZELLE_ETHDEV_H__
 
 #include <lwip/ip_addr.h>
 #include <lwip/netif.h>
@@ -34,4 +34,4 @@ int32_t eth_dev_poll(void);
 uint32_t eth_get_flow_cnt(void);
 void eth_dev_recv(struct rte_mbuf *mbuf);
 
-#endif /* __LIBOS_ETHDEV_H__ */
+#endif /* __GAZELLE_ETHDEV_H__ */

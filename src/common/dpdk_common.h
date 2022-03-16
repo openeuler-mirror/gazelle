@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __LIBOS_DPDK_COMMON_H__
-#define __LIBOS_DPDK_COMMON_H__
+#ifndef __GAZELLE_DPDK_COMMON_H__
+#define __GAZELLE_DPDK_COMMON_H__
 
 #include <rte_mbuf.h>
 

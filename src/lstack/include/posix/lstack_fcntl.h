@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_FCNTL_H
-#define LIBOS_FCNTL_H
+#ifndef _GAZELLE_FCNTL_H_
+#define _GAZELLE_FCNTL_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,5 +24,5 @@ int lwip_ioctl(int s, int cmd, ...);
 }
 #endif
 
-#endif /* LIBOS_FCNTL_H */
+#endif /* _GAZELLE_FCNTL_H_ */
 

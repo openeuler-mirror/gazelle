@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_EPOLL_H
-#define LIBOS_EPOLL_H
+#ifndef _GAZELLE_EPOLL_H_
+#define _GAZELLE_EPOLL_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,4 +26,4 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout);
 }
 #endif
 
-#endif /* LIBOS_EPOLL_H */
+#endif /* _GAZELLE_EPOLL_H_ */

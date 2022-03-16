@@ -10,13 +10,14 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include "ltran_config.h"
-
+#include <sys/types.h>
 #include <string.h>
 #include <getopt.h>
 #include <syslog.h>
 #include <securec.h>
+
 #include "ltran_log.h"
+#include "ltran_config.h"
 
 #define NO_ARGS             0
 #define HAS_ARGS            1

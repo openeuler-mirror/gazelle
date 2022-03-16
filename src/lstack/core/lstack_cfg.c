@@ -33,6 +33,7 @@
 #include "gazelle_reg_msg.h"
 #include "lstack_log.h"
 #include "gazelle_base_func.h"
+#include "gazelle_parse_config.h"
 #include "lstack_protocol_stack.h"
 
 #define DEFAULT_CONF_FILE "/etc/gazelle/lstack.conf"
@@ -189,35 +190,6 @@ static int32_t parse_devices(void)
     return ret;
 }
 
-static int32_t turn_str_to_array(char *args, uint16_t *array, int32_t size)
-{
-    int32_t val;
-    uint16_t cnt = 0;
-    const char *delim = ",";
-    char *elem = NULL;
-    char *next_token = NULL;
-
-    memset_s(array, sizeof(*array) * size, 0, sizeof(*array) * size);
-
-    elem = strtok_s((char *)args, delim, &next_token);
-    while (elem != NULL) {
-        if (cnt >= size) {
-            return -1;
-        }
-
-        val = atoi(elem);
-        if (val < 0) {
-            return -1;
-        }
-        array[cnt] = (uint16_t)val;
-        cnt++;
-
-        elem = strtok_s(NULL, delim, &next_token);
-    }
-
-    return cnt;
-}
-
 static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
 {
     int32_t ret;
@@ -241,9 +213,6 @@ static int32_t parse_stack_cpu_number(void)
     const config_setting_t *num_cpus = NULL;
     const char *args = NULL;
 
-    int32_t ret;
-    int32_t idx;
-
     num_cpus = config_lookup(&g_config, "num_cpus");
     if (num_cpus == NULL) {
         return -EINVAL;
@@ -254,7 +223,7 @@ static int32_t parse_stack_cpu_number(void)
         return -EINVAL;
     }
 
-    idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
+    int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
     if (idx < 0) {
         g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
         g_config_params.dpdk_argc++;
@@ -263,11 +232,14 @@ static int32_t parse_stack_cpu_number(void)
         g_config_params.dpdk_argc++;
     }
 
-    ret = turn_str_to_array((char *)args, g_config_params.cpus, CFG_MAX_CPUS);
-    if (ret <= 0) {
+    char *tmp_arg = strdup(args);
+    int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS);
+    free(tmp_arg);
+    if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
         return -EINVAL;
     }
-    g_config_params.num_cpu = (uint16_t)ret;
+
+    g_config_params.num_cpu = cnt;
     get_protocol_stack_group()->stack_num = g_config_params.num_cpu;
 
     return 0;
@@ -368,7 +340,6 @@ int32_t init_stack_numa_cpuset(void)
     return 0;
 }
 
-#ifdef USE_LIBOS_MEM
 static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vaddr)
 {
     uint64_t viraddr;
@@ -389,13 +360,7 @@ static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vadd
 static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach_arg *sec_attach_arg)
 {
     size_t mem_size = 0;
-    uint8_t count = 0;
     char socket_mem[PATH_MAX];
-
-    const char *delim = ",";
-    char *mem_elem = NULL;
-    char *end = NULL;
-    char *next_token = NULL;
 
     errno = 0;
 
@@ -408,22 +373,13 @@ static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach
         return -1;
     }
 
-    mem_elem = strtok_s(socket_mem, delim, &next_token);
-    while (mem_elem != NULL) {
-        if (count >= GAZELLE_MAX_NUMA_NODES) {
-            return -1;
-        }
-        sec_attach_arg->socket_per_size[count] = strtoull(mem_elem, &end, BASE_DEC_SCALE);
+    int32_t count = separate_str_to_array(socket_mem, sec_attach_arg->socket_per_size, GAZELLE_MAX_NUMA_NODES);
+    for (uint32_t i = 0; i < count; i++) {
         mem_size += sec_attach_arg->socket_per_size[count];
-        if ((errno != 0) || end == NULL || (*end != '\0'))
-            return -1;
-
-        mem_elem = strtok_s(NULL, delim, &next_token);
-        count++;
     }
     mem_size *= 1024LL;
     mem_size *= 1024LL;
-    if (mem_size > (UINT64_MAX / 1024LL / 1024LL)) {
+    if (mem_size > (UINT64_MAX / 1024LL / 1024LL) || count > UINT8_MAX) {
         return -1;
     }
     sec_attach_arg->socket_num = count;
@@ -663,7 +619,6 @@ free_dpdk_args:
     GAZELLE_FREE(g_config_params.dpdk_argv);
     return -EINVAL;
 }
-#endif
 
 static int32_t parse_low_power_mode(void)
 {

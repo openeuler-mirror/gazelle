@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_CONTROL_PLANE_H
-#define LIBOS_CONTROL_PLANE_H
+#ifndef _GAZELLE_CONTROL_PLANE_H_
+#define _GAZELLE_CONTROL_PLANE_H_
 
 #include "lstack_thread_rpc.h"
 
@@ -33,4 +33,4 @@ bool get_register_state(void);
 void thread_register_phase1(struct rpc_msg *msg);
 void thread_register_phase2(struct rpc_msg *msg);
 
-#endif /* LIBOS_CONTROL_PLANE_H */
+#endif /* GAZELLE_CONTROL_PLANE_H */

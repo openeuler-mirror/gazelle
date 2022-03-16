@@ -23,7 +23,7 @@ struct port_info {
 };
 
 uint32_t get_bond_num(void);
-struct rte_kni* get_libos_kni(void);
+struct rte_kni* get_gazelle_kni(void);
 void set_bond_num(const uint32_t bond_num);
 struct port_info* get_port_info(void);
 uint16_t* get_bond_port(void);

@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_UNISTD_H
-#define LIBOS_UNISTD_H
+#ifndef _GAZELLE_UNISTD_H_
+#define _GAZELLE_UNISTD_H_
 
 #include "lstack_fork.h"
 #ifdef __cplusplus
@@ -24,4 +24,4 @@ int lstack_sigaction(int signum, const struct sigaction *act, struct sigaction *
 }
 #endif
 
-#endif /* LIBOS_UNISTD_H */
+#endif /* _GAZELLE_UNISTD_H_ */

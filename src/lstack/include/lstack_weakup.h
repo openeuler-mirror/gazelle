@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __LIBOS_WEAKUP_THREAD_H__
-#define __LIBOS_WEAKUP_THREAD_H__
+#ifndef __GAZELLE_WEAKUP_THREAD_H__
+#define __GAZELLE_WEAKUP_THREAD_H__
 
 #include <rte_ring.h>
 #include "lstack_dpdk.h"

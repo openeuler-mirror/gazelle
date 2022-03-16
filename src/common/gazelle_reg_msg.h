@@ -18,7 +18,7 @@
 #include <lwip/reg_sock.h>
 #include <rte_ether.h>
 
-#define GAZELLE_REG_SOCK_PATHNAME    "/var/run/gazelle/libos_client.sock"
+#define GAZELLE_REG_SOCK_PATHNAME    "/var/run/gazelle/gazelle_client.sock"
 #define GAZELLE_RUN_DIR              "/var/run/gazelle/"
 #define GAZELLE_FILE_PERMISSION      0700
 

@@ -10,13 +10,11 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_DPDK_H
-#define LIBOS_DPDK_H
+#ifndef _GAZELLE_DPDK_H_
+#define _GAZELLE_DPDK_H_
 
-#ifdef USE_LIBOS_MEM
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
-#endif
 
 #include <lwip/pbuf.h>
 #include "lstack_lockless_queue.h"
@@ -70,4 +68,4 @@ int dpdk_ethdev_start(void);
 void dpdk_skip_nic_init(void);
 int32_t dpdk_init_lstack_kni(void);
 
-#endif /* LIBOS_DPDK_H */
+#endif /* GAZELLE_DPDK_H */

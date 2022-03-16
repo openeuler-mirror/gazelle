@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_SOCKET_H
-#define LIBOS_SOCKET_H
+#ifndef _GAZELLE_SOCKET_H_
+#define _GAZELLE_SOCKET_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,4 +40,4 @@ ssize_t lwip_recv(int s, void *mem, size_t len, int flags);
 }
 #endif
 
-#endif /* LIBOS_SOCKET_H */
+#endif /* _GAZELLE_SOCKET_H_ */

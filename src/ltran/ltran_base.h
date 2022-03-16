@@ -94,6 +94,6 @@
 
 #define GAZELLE_INET_ADDRSTRLEN          16
 
-#define GAZELLE_DFX_SOCK_PATHNAME        "/var/run/gazelle/libos_cmd.sock"
+#define GAZELLE_DFX_SOCK_PATHNAME        "/var/run/gazelle/gazelle_cmd.sock"
 
 #endif /* ifndef __GAZELLE_BASE_H__ */

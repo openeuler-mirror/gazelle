@@ -10,8 +10,11 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef _GAZELLE_SIGNAL_
-#define _GAZELLE_SIGNAL_
+#ifndef __GAZELLE_PARSE_CONFIG__
+#define __GAZELLE_PARSE_CONFIG__
 
-void lstack_signal_init(void);
-#endif // _GAZELLE_SIGNAL_
+#include <stdint.h>
+
+int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size);
+
+#endif
