@@ -45,7 +45,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
         len = (uint16_t)rte_pktmbuf_pkt_len(m);
         payload = rte_pktmbuf_mtod(m, void *);
         pc = mbuf_to_pbuf(m);
-	pc->custom_free_function = gazelle_free_pbuf;
+        pc->custom_free_function = gazelle_free_pbuf;
         next = pbuf_alloced_custom(PBUF_RAW, (uint16_t)len, PBUF_RAM, pc, payload, (uint16_t)len);
         if (next == NULL) {
             stack->stats.rx_allocmbuf_fail++;
@@ -139,7 +139,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
     stack->stats.tx += sent_pkts;
     if (sent_pkts < 1) {
         stack->stats.tx_drop++;
-	rte_pktmbuf_free(mbuf);
+        rte_pktmbuf_free(mbuf);
         return ERR_MEM;
     }
 

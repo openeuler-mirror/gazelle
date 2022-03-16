@@ -82,6 +82,7 @@ static __rte_always_inline void flush_rx_mbuf(struct gazelle_stack *stack, struc
         calculate_ltran_latency(stack, src);
     }
     rte_pktmbuf_free(src);
+    src = NULL;
 }
 
 static __rte_always_inline void backup_bufs_enque_rx_ring(struct gazelle_stack *stack)

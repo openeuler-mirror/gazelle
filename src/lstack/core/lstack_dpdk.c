@@ -223,6 +223,7 @@ int32_t create_shared_ring(struct protocol_stack *stack)
     if (stack->send_idle_ring == NULL) {
         return -1;
     }
+    stack->in_replenish = 0;
 
     if (use_ltran()) {
         stack->rx_ring = create_ring("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
@@ -255,7 +256,7 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
     while (remain > 0) {
         batch = LWIP_MIN(remain, FREE_RX_QUEUE_SZ);
 
-	ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
+        ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %d ret=%d\n", (int32_t)batch, ret);
             return -1;
@@ -339,7 +340,7 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
     if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
 #if CHECKSUM_CHECK_IP_HW
         rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
-	LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_IPV4_CKSUM\n");
+        LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_IPV4_CKSUM\n");
 #endif
     }
 
