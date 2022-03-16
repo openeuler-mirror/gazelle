@@ -78,11 +78,6 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
         event = EPOLLRDHUP | EPOLLIN | EPOLLERR;
     }
 
-    /* shadow_fd event notice listen_fd */
-    if (sock->shadowed_sock) {
-        sock = sock->shadowed_sock;
-    }
-
     if ((event & sock->epoll_events) == 0) {
         return;
     }
@@ -111,14 +106,9 @@ static void raise_pending_events(struct lwip_sock *sock)
         return;
     }
 
-    struct lwip_sock *attach_sock = NULL;
-    if (sock->attach_fd > 0 && sock->attach_fd != conn->socket) {
-        attach_sock = get_socket_by_fd(sock->attach_fd);
-        if (attach_sock == NULL) {
-            return;
-        }
-    } else {
-        attach_sock = sock;
+    struct lwip_sock *attach_sock = (sock->attach_fd > 0) ? get_socket_by_fd(sock->attach_fd) : sock;
+    if (attach_sock == NULL) {
+        return;
     }
 
     conn = attach_sock->conn;
@@ -144,20 +134,20 @@ static void raise_pending_events(struct lwip_sock *sock)
         }
     }
 
-    if (sock->errevent > 0) {
+    if (attach_sock->errevent > 0) {
         event |= POLLERR | POLLIN;
     }
 
     if (event == 0) {
         return;
     }
-    sock->events |= event;
+    attach_sock->events |= event;
     if (rte_ring_mp_enqueue(wakeup->event_ring, (void *)sock) == 0 ||
         rte_ring_mp_enqueue(wakeup->self_ring, (void *)sock) == 0) {
         sem_post(&wakeup->event_sem);
         stack->stats.epoll_pending++;
     } else {
-        rpc_call_addevent(stack, sock);
+        rpc_call_addevent(stack, attach_sock);
         stack->stats.epoll_pending_call++;
     }
 }
@@ -260,13 +250,14 @@ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_even
     return 0;
 }
 
-static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, struct lwip_sock *sock, int32_t event_num)
+static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, int32_t fd, uint32_t events)
 {
+    int32_t event_num = 0;
     for (uint32_t i = 0; i < maxevents; i++) {
         /* fds[i].revents != 0, the events is kernel events */
-        if (fds[i].fd == sock->conn->socket && fds[i].revents == 0) {
-            fds[i].revents = sock->events;
-            event_num++;
+        if (fds[i].fd == fd && fds[i].revents == 0) {
+            fds[i].revents = events;
+            event_num = 1;
             break;
         }
     }
@@ -274,7 +265,8 @@ static inline int32_t save_poll_event(struct pollfd *fds, uint32_t maxevents, st
     return event_num;
 }
 
-static bool remove_event(enum POLL_TYPE etype, struct lwip_sock **sock_list, int32_t event_num, struct lwip_sock *sock)
+static bool remove_event(enum POLL_TYPE etype, struct lwip_sock **sock_list, int32_t event_num, struct lwip_sock *sock,
+    struct lwip_sock *attach_sock)
 {
     /* remove duplicate event */
     for (uint32_t i = 0; i < event_num && etype == TYPE_EPOLL; i++) {
@@ -283,7 +275,7 @@ static bool remove_event(enum POLL_TYPE etype, struct lwip_sock **sock_list, int
         }
     }
 
-    return !check_event_vaild(sock, sock->events);
+    return !check_event_vaild(attach_sock, attach_sock->events);
 }
 
 static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t maxevents, enum POLL_TYPE etype)
@@ -302,25 +294,38 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
             rte_ring_sc_dequeue(weakup->event_ring, (void **)&sock)) {
             break;
         }
-        /* close sock */
+        __atomic_store_n(&sock->have_event, false, __ATOMIC_RELEASE);
+
+        /* sock->stack == NULL mean close sock */
         if (sock->stack == NULL) {
             continue;
         }
-        __atomic_store_n(&sock->have_event, false, __ATOMIC_RELEASE);
 
-        if (remove_event(etype, weakup->sock_list, event_num, sock)) {
+        /* attach listen is empty, all event in attached listen. attached listen attach_fd is self */
+        struct lwip_sock *attach_sock = (sock->attach_fd > 0) ? get_socket(sock->attach_fd) : sock;
+        if (attach_sock == NULL) {
+            continue;
+        }
+
+        if (remove_event(etype, weakup->sock_list, event_num, sock, attach_sock)) {
             sock->stack->stats.remove_event++;
             continue;
         }
 
         if (etype == TYPE_EPOLL) {
-            events[event_num].events = sock->events;
+            events[event_num].events = attach_sock->events;
             events[event_num].data = sock->ep_data;
             weakup->sock_list[event_num] = sock;
             event_num++;
         } else {
-            /* save one event at a time */
-            event_num = save_poll_event(fds, maxevents, sock, event_num);
+            /* shadow_fd event notice listen_fd */
+            if (attach_sock->shadowed_sock) {
+                attach_sock = attach_sock->shadowed_sock;
+            }
+
+            if (sock->conn) {
+                event_num += save_poll_event(fds, maxevents, sock->conn->socket, attach_sock->events);
+            }
         }
 
         sock->stack->stats.app_events++;
