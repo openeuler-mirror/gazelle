@@ -190,6 +190,11 @@ int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
         struct protocol_stack *stack = stack_group->stacks[i];
         get_stack_dfx_data(&dfx, stack, stat_mode);
 
+        if (!use_ltran() &&
+            (stat_mode == GAZELLE_STAT_LTRAN_START_LATENCY || stat_mode == GAZELLE_STAT_LTRAN_STOP_LATENCY)) {
+            continue;
+        }
+
         dfx.tid = stack->tid;
         if (i == stack_group->stack_num - 1) {
             dfx.eof = 1;
