@@ -80,14 +80,10 @@ void poll_rpc_msg(struct protocol_stack *stack)
     struct rpc_msg *msg = NULL;
 
     num = 0;
-    lockless_queue_node *first_node = NULL;
     while (num++ < HANDLE_RPC_MSG_MAX) {
         lockless_queue_node *node = lockless_queue_mpsc_pop(&stack->rpc_queue);
         if (node == NULL) {
             return;
-        }
-        if (first_node == NULL) {
-            first_node = node;
         }
 
         msg = container_of(node, struct rpc_msg, queue_node);
@@ -104,10 +100,6 @@ void poll_rpc_msg(struct protocol_stack *stack)
             pthread_spin_unlock(&msg->lock);
         } else {
             rpc_msg_free(stack->rpc_pool, msg);
-        }
-
-        if (first_node == node) {
-            break;
         }
     }
 }

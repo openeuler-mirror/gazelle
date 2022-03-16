@@ -78,16 +78,15 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
         sock = sock->shadowed_sock;
     }
 
+    if ((event & sock->epoll_events) == 0) {
+        return;
+    }
+    sock->events |= event & sock->epoll_events;
+
     /* sock not in monitoring */
     if (!sock->weakup) {
         return;
     }
-
-    if ((event & sock->epoll_events) == 0) {
-        return;
-    }
-
-    sock->events |= event & sock->epoll_events;
 
     if (report_events(sock, event)) {
         sock->have_event = true;
@@ -286,7 +285,6 @@ static int32_t get_lwip_events(struct weakup_poll *weakup, void *out, uint32_t m
     while (event_num < events_cnt) {
         int32_t ret = rte_ring_sc_dequeue(weakup->event_ring, (void **)&sock);
         if (ret != 0) {
-            get_protocol_stack_group()->event_null++;
             break;
         }
         sock->have_event = false;

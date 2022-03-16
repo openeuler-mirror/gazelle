@@ -72,7 +72,6 @@ struct protocol_stack_group {
     /* dfx stats */
     bool latency_start;
     uint64_t call_alloc_fail;
-    uint64_t event_null;
 };
 
 long get_stack_tid(void);
