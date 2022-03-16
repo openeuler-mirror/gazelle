@@ -1,0 +1,49 @@
+From 92b990c766e21fc275bd7cd80bbdccc819ac30f8 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Wed, 9 Mar 2022 20:13:16 +0800
+Subject: [PATCH 13/34] balance acept
+
+---
+ src/lstack/core/lstack_protocol_stack.c | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index f96d7a3..badcfd3 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -709,18 +709,30 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
+ /* ergodic the protocol stack thread to find the connection, because all threads are listening */
+ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
+ {
++    struct lwip_sock *min_sock = NULL;
++    int32_t min_fd;
++
+     while (fd > 0) {
+         struct lwip_sock *sock = get_socket(fd);
+         if (sock == NULL) {
+             GAZELLE_RETURN(EINVAL);
+         }
+ 
+-        if (NETCONN_IS_ACCEPTIN(sock)) {
+-            return rpc_call_accept(fd, addr, addrlen);
++        if (!NETCONN_IS_ACCEPTIN(sock)) {
++            continue;
++        }
++
++        if (min_sock == NULL || min_sock->stack->conn_num > sock->stack->conn_num) {
++            min_sock = sock;
++            min_fd = fd;
+         }
+ 
+         fd = sock->nextfd;
+     }
+ 
++    if (min_sock) {
++        return rpc_call_accept(min_fd, addr, addrlen);
++    }
++
+     GAZELLE_RETURN(EAGAIN);
+ }
+-- 
+1.8.3.1
+

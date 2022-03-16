@@ -1,0 +1,103 @@
+From e9294baffd16b59f481d787332f11c657d85473a Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Wed, 16 Mar 2022 14:34:43 +0800
+Subject: [PATCH 20/34] fix wakeup typos
+
+---
+ src/lstack/core/lstack_cfg.c    | 19 ++++++++++++-------
+ src/lstack/include/lstack_cfg.h |  2 +-
+ src/lstack/lstack.conf          |  2 +-
+ 3 files changed, 14 insertions(+), 9 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index d8eaced..e5a92ca 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -70,7 +70,7 @@ static struct config_vector_t g_config_tbl[] = {
+     { "devices",      parse_devices },
+     { "dpdk_args",    parse_dpdk_args },
+     { "num_cpus",     parse_stack_cpu_number },
+-    { "num_weakup",   parse_weakup_cpu_number },
++    { "num_wakeup",   parse_weakup_cpu_number },
+     { "numa_bind",    parse_numa_bind },
+     { "low_power_mode", parse_low_power_mode },
+     { "kni_switch",   parse_kni_switch },
+@@ -305,12 +305,17 @@ static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t nu
+         while (elem && isspace(*elem)) {
+             elem++;
+         }
++        if (elem == NULL) {
++            LSTACK_LOG(ERR, LSTACK, "parse %s failed\n", path);
++            return -1;
++        }
+         cpulist[count++] = (uint32_t)strtol(elem, NULL, 10); // 10 : decimal
+ 
+-        if (count % 2 == 0) // 2 : even
++        if (count % 2 == 0) { // 2 : even
+             elem = strtok(NULL, "-");
+-        else
++        } else {
+             elem = strtok(NULL, ",");
++        }
+     }
+ 
+     return count;
+@@ -353,7 +358,7 @@ int32_t init_stack_numa_cpuset(void)
+     for (int32_t idx = 0; idx < cfg->num_cpu; ++idx) {
+         CPU_SET(cfg->cpus[idx], &stack_cpuset);
+     }
+-    for (int32_t idx = 0; idx < cfg->num_weakup; ++idx) {
++    for (int32_t idx = 0; idx < cfg->num_wakeup; ++idx) {
+         CPU_SET(cfg->weakup[idx], &stack_cpuset);
+     }
+ 
+@@ -691,9 +696,9 @@ static int32_t parse_weakup_cpu_number(void)
+ 
+     int32_t ret;
+ 
+-    g_config_params.num_weakup = 0;
++    g_config_params.num_wakeup = 0;
+ 
+-    cfg_args = config_lookup(&g_config, "num_weakup");
++    cfg_args = config_lookup(&g_config, "num_wakeup");
+     if (cfg_args == NULL) {
+         return 0;
+     }
+@@ -707,7 +712,7 @@ static int32_t parse_weakup_cpu_number(void)
+     if (ret <= 0) {
+         return -EINVAL;
+     }
+-    g_config_params.num_weakup = (uint16_t)ret;
++    g_config_params.num_wakeup = (uint16_t)ret;
+ 
+     return 0;
+ }
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index a8f5ea0..9096797 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -66,7 +66,7 @@ struct cfg_params {
+     uint8_t numa_bind;
+     uint16_t num_cpu;
+     uint16_t cpus[CFG_MAX_CPUS];
+-    uint16_t num_weakup;
++    uint16_t num_wakeup;
+     uint16_t weakup[CFG_MAX_CPUS];
+     uint8_t num_ports;
+     uint16_t ports[CFG_MAX_PORTS];
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index 0f46e77..eb996f1 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -16,7 +16,7 @@ kni_switch=0
+ low_power_mode=0
+ 
+ num_cpus="2"
+-num_weakup="3"
++num_wakeup="3"
+ 
+ numa_bind=1
+ 
+-- 
+1.8.3.1
+
