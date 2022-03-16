@@ -83,16 +83,13 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
     }
     sock->events |= event & sock->epoll_events;
 
-    /* sock not in monitoring */
-    if (!sock->weakup) {
+    if (!sock->weakup || !report_events(sock, event)) {
         return;
     }
 
-    if (report_events(sock, event)) {
-        sock->have_event = true;
-        weakup_enqueue(sock->stack->weakup_ring, sock);
-        sock->stack->stats.weakup_events++;
-    }
+    sock->have_event = true;
+    weakup_enqueue(sock->stack->weakup_ring, sock);
+    sock->stack->stats.weakup_events++;
 }
 
 static void raise_pending_events(struct lwip_sock *sock)

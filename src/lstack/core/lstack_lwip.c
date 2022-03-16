@@ -485,7 +485,6 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
         } else {
             ret = rte_ring_sc_dequeue(sock->recv_ring, (void **)&pbuf);
             if (ret != 0) {
-                sock->stack->stats.recv_empty++;
                 break;
             }
         }

@@ -46,10 +46,6 @@ int32_t bind_to_stack_numa(int32_t stack_id)
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[stack_id];
     pthread_t tid = pthread_self();
 
-    if (get_global_cfg_params()->numa_bind == 0) {
-        return 0;
-    }
-
     if (last_stack_id == stack_id) {
         return 0;
     }
