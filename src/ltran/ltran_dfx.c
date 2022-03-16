@@ -1214,13 +1214,13 @@ int32_t main(int32_t argc, char *argv[])
     struct gazelle_dfx_list *dfx = NULL;
     char recv_buf[GAZELLE_CMD_RESP_BUFFER_SIZE + 1] = {0};
 
+    g_use_ltran = ltran_process_exist() ? true : false;
     req_msg_num = parse_dfx_cmd_args(argc, argv, req_msg);
     if (req_msg_num <= 0 || req_msg_num > GAZELLE_CMD_MAX) {
         show_usage();
         return 0;
     }
 
-    g_use_ltran = ltran_process_exist() ? true : false;
     if (!g_use_ltran) {
         g_gazelle_dfx_tbl[GAZELLE_STAT_LSTACK_SHOW].recv_size = sizeof(struct gazelle_stack_dfx_data);
         g_gazelle_dfx_tbl[GAZELLE_STAT_LTRAN_START_LATENCY].recv_size =sizeof(struct gazelle_stack_dfx_data);

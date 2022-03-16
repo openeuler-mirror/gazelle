@@ -329,7 +329,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     }
 
     if (rte_ring_free_count(sock->stack->send_idle_ring) > USED_IDLE_WATERMARK && !sock->stack->in_replenish) {
-        stack->in_replenish = true;
+        sock->stack->in_replenish = true;
         rpc_call_replenish_idlembuf(sock->stack);
     }
 
