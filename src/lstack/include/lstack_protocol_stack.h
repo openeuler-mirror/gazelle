@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __LIBOS_PROTOCOL_STACK_H__
-#define __LIBOS_PROTOCOL_STACK_H__
+#ifndef __GAZELLE_PROTOCOL_STACK_H__
+#define __GAZELLE_PROTOCOL_STACK_H__
 
 #include <semaphore.h>
 #include <lwip/list.h>

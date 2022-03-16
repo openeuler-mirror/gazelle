@@ -22,6 +22,7 @@
 #include <stdlib.h>
 
 #include "ltran_log.h"
+#include "gazelle_parse_config.h"
 #include "gazelle_base_func.h"
 
 #define HEX_BASE 16
@@ -310,7 +311,6 @@ static int32_t is_bond_port_prefix_valid(const char *port_str)
 
 static int32_t parse_bond_ports(const config_t *config, const char *key, struct ltran_config *ltran_config)
 {
-    const char *delim = ",";
     const char *port_mask_str = NULL;
     int32_t ret;
 
@@ -334,32 +334,11 @@ static int32_t parse_bond_ports(const config_t *config, const char *key, struct 
         return GAZELLE_ERR;
     }
 
-    char *end = NULL;
-    char *tmp = NULL;
-    unsigned long one_port_mask;
-    char *token = strtok_s(port_str, delim, &tmp);
-    while (token != NULL) {
-        if (ltran_config->bond.port_num == GAZELLE_MAX_BOND_NUM) {
-            free(port_str);
-            gazelle_set_errno(GAZELLE_ERANGE);
-            return GAZELLE_ERR;
-        }
-
-        one_port_mask = strtoul(token, &end, HEX_BASE);
-        if ((end == NULL) || (*end != '\0')) {
-            gazelle_set_errno(GAZELLE_ESTRTOUL);
-            free(port_str);
-            return GAZELLE_ERR;
-        }
-        if ((one_port_mask < GAZELLE_BOND_PORT_MASK_MIN) || (one_port_mask > GAZELLE_BOND_PORT_MASK_MAX)) {
-            gazelle_set_errno(GAZELLE_ERANGE);
-            free(port_str);
-            return GAZELLE_ERR;
-        }
-
-        token = strtok_s(NULL, delim, &tmp);
-        ltran_config->bond.portmask[ltran_config->bond.port_num] = (uint32_t)one_port_mask;
-        ltran_config->bond.port_num++;
+    ltran_config->bond.port_num = separate_str_to_array(port_str, ltran_config->bond.portmask, GAZELLE_MAX_BOND_NUM);
+    if (ltran_config->bond.port_num >= GAZELLE_MAX_BOND_NUM) {
+        free(port_str);
+        gazelle_set_errno(GAZELLE_ERANGE);
+        return GAZELLE_ERR;
     }
 
     free(port_str);

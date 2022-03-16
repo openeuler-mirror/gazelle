@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __LIBOS_LOCKLESS_QUEUE_H__
-#define __LIBOS_LOCKLESS_QUEUE_H__
+#ifndef __GAZELLE_LOCKLESS_QUEUE_H__
+#define __GAZELLE_LOCKLESS_QUEUE_H__
 
 typedef struct lockless_queue_node {
     struct lockless_queue_node *volatile next;

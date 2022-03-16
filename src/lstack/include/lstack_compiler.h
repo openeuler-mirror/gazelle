@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_COMPILER_H
-#define LIBOS_COMPILER_H
+#ifndef _GAZELLE_COMPILER_H_
+#define _GAZELLE_COMPILER_H_
 
 #ifdef __GNUC__
 
@@ -43,4 +43,4 @@
 #define ACCESS_ONCE(x)   (*(volatile typeof(x) *)&(x))
 #endif
 
-#endif /* LIBOS_COMPILER_H */
+#endif /* GAZELLE_COMPILER_H */

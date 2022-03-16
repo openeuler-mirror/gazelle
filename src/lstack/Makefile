@@ -27,7 +27,7 @@ INC = -I$(LSTACK_DIR)/include   \
       -I$(LSTACK_DIR)/../common \
       -I$(LWIP_INCLUDE_FILE)
 
-CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC) -DUSE_LIBOS_MEM
+CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC)
 
 ifeq ($(GAZELLE_COVERAGE_ENABLE), 1)
 	LDFLAGS += -fprofile-arcs -ftest-coverage

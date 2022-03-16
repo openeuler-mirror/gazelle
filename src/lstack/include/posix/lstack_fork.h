@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef _LIBOS_FORK_
-#define _LIBOS_FORK_
+#ifndef _GAZELLE_FORK_
+#define _GAZELLE_FORK_
 
 pid_t lstack_fork(void);
-#endif // _LIBOS_FORK_
+#endif // _GAZELLE_FORK_

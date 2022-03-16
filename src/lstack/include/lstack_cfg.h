@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef LIBOS_NET_CFG_H
-#define LIBOS_NET_CFG_H
+#ifndef _GAZELLE_NET_CFG_H_
+#define _GAZELLE_NET_CFG_H_
 #include <stdbool.h>
 
 #include <rte_ether.h>
@@ -53,7 +53,7 @@
 struct secondary_attach_arg {
     uint8_t socket_num;
     uint64_t socket_size;
-    uint64_t socket_per_size[GAZELLE_MAX_NUMA_NODES];
+    uint32_t socket_per_size[GAZELLE_MAX_NUMA_NODES];
     uintptr_t base_virtaddr;
     char file_prefix[PATH_MAX];
 };
@@ -64,9 +64,9 @@ struct cfg_params {
     ip4_addr_t gateway_addr;
     struct rte_ether_addr ethdev;
     uint16_t num_cpu;
-    uint16_t cpus[CFG_MAX_CPUS];
+    uint32_t cpus[CFG_MAX_CPUS];
     uint16_t num_wakeup;
-    uint16_t weakup[CFG_MAX_CPUS];
+    uint32_t weakup[CFG_MAX_CPUS];
     uint8_t num_ports;
     uint16_t ports[CFG_MAX_PORTS];
     char log_file[PATH_MAX];
@@ -78,9 +78,7 @@ struct cfg_params {
     bool kni_switch;
     int dpdk_argc;
     char **dpdk_argv;
-#ifdef USE_LIBOS_MEM
     struct secondary_attach_arg sec_attach_arg;
-#endif
 };
 
 struct cfg_params *get_global_cfg_params(void);
@@ -98,4 +96,4 @@ int gazelle_copy_param(const char *param, bool is_double,
 int match_host_addr(uint32_t ipv4);
 int32_t init_stack_numa_cpuset(void);
 
-#endif /* LIBOS_NET_CFG_H */
+#endif /* GAZELLE_NET_CFG_H */

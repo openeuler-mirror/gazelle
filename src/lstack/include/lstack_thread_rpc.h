@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __LIBOS_THREAD_RPC_H__
-#define __LIBOS_THREAD_RPC_H__
+#ifndef __GAZELLE_THREAD_RPC_H__
+#define __GAZELLE_THREAD_RPC_H__
 
 #include <pthread.h>
 #include <arch/sys_arch.h>

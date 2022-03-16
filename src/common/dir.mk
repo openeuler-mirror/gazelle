@@ -8,6 +8,6 @@
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-SRC = dpdk_common.c
+SRC = dpdk_common.c gazelle_parse_config.c
 $(eval $(call register_dir, ../common, $(SRC)))
 

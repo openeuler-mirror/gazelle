@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __LIBOS_LWIP_H__
-#define __LIBOS_LWIP_H__
+#ifndef __GAZELLE_LWIP_H__
+#define __GAZELLE_LWIP_H__
 
 #include "lstack_thread_rpc.h"
 #include "lwipsock.h"

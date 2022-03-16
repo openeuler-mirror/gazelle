@@ -10,20 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifdef USE_LIBOS_MEM
 #include <rte_ethdev.h>
 #include <rte_malloc.h>
-#else
-/* in dpdk 19.11 there is the following inclusion relationship
- * >> rte_ethdev.h
- * >> rte_eth_ctrl.h
- * >> rte_flow.h
- * >> rte_ip.h
- * >> netinet/ip.h
- * avoid conflicts with netinet/ip.h
- */
-#include <lwip/inet.h>
-#endif
 
 #include <lwip/debug.h>
 #include <lwip/etharp.h>
