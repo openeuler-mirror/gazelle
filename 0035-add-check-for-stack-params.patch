@@ -1,0 +1,27 @@
+From 35c5052da432255f3756d5bdc46c67597545908a Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Thu, 17 Mar 2022 16:10:51 +0800
+Subject: [PATCH] add check for stack params
+
+---
+ src/lstack/core/lstack_thread_rpc.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index c95f2c0..2a67333 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -29,6 +29,10 @@ struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
+     int32_t ret;
+     struct rpc_msg *msg = NULL;
+ 
++    if (stack == NULL) {
++        return NULL;
++    }
++
+     ret = rte_mempool_get(stack->rpc_pool, (void **)&msg);
+     if (ret < 0) {
+         get_protocol_stack_group()->call_alloc_fail++;
+-- 
+1.8.3.1
+
