@@ -252,6 +252,7 @@ Usage: gazellectl [-h | help]
 - 虚拟机网卡不支持多队列。
 - 不使用ltran模式，kni网口只支持本地通讯使用，且需要启动前配置NetworkManager不管理kni网卡
 - 虚拟kni网口的ip及mac地址，需要与lstack配置文件保持一致
+- gazelle运行过程中，不允许删除运行文件，如果删除，需要重启gazelle
 
 ## Security risk note
 gazelle有如下安全风险，用户需要评估使用场景风险  

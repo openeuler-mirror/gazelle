@@ -1,0 +1,59 @@
+From e991d6a693af629e466f549cdd322ac11fc80f2e Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Wed, 16 Mar 2022 21:40:01 +0800
+Subject: [PATCH 34/34] fix wakeup list dead loop
+
+---
+ src/lstack/core/lstack_lwip.c           | 1 -
+ src/lstack/core/lstack_protocol_stack.c | 3 ++-
+ src/lstack/include/lstack_weakup.h      | 3 ++-
+ 3 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 9766a87..7bab92f 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -130,7 +130,6 @@ void gazelle_clean_sock(int32_t fd)
+     list_del_node_init(&sock->attach_list);
+     list_del_node_init(&sock->listen_list);
+     list_del_node_init(&sock->event_list);
+-    list_del_node_init(&sock->wakeup_list);
+     list_del_node_init(&sock->send_list);
+ }
+ 
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 4a46044..1de546d 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -343,7 +343,8 @@ static void send_stack_list(struct protocol_stack *stack)
+     list_for_each_safe(node, temp, list) {
+         sock = container_of(node, struct lwip_sock, send_list);
+ 
+-        if (sock->conn == NULL) {
++        if (sock->conn == NULL || sock->stack == NULL) {
++            list_del_node_init(&sock->send_list);
+             continue;
+         }
+ 
+diff --git a/src/lstack/include/lstack_weakup.h b/src/lstack/include/lstack_weakup.h
+index b051b72..77f3b9d 100644
+--- a/src/lstack/include/lstack_weakup.h
++++ b/src/lstack/include/lstack_weakup.h
+@@ -37,12 +37,13 @@ static inline void wakeup_list_sock(struct list_node *wakeup_list)
+         struct weakup_poll *weakup = sock->weakup;
+         struct protocol_stack *stack = sock->stack;
+         if (weakup == NULL || stack == NULL) {
++            list_del_node_init(&sock->wakeup_list);
+             continue;
+         }
+ 
+         int32_t ret = rte_ring_mp_enqueue(weakup->event_ring, (void *)sock);
+         if (ret == 0) {
+-            list_del_node_init(&sock->event_list);
++            list_del_node_init(&sock->wakeup_list);
+             sem_post(&weakup->event_sem);
+             stack->stats.lwip_events++;
+         } else {
+-- 
+1.8.3.1
+

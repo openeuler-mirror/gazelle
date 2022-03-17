@@ -1,0 +1,38 @@
+From 175ea2338bc5f9f428b1155d3910f40a8a311c25 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Wed, 9 Mar 2022 17:34:59 +0800
+Subject: [PATCH 10/34] -mfix close not release sock
+
+---
+ src/lstack/core/lstack_lwip.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index a9ef824..87d99d3 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -127,18 +127,18 @@ void gazelle_init_sock(int32_t fd)
+ 
+ void gazelle_clean_sock(int32_t fd)
+ {
+-    struct lwip_sock *sock = get_socket(fd);
++    struct lwip_sock *sock = get_socket_by_fd(fd);
+     if (sock == NULL) {
+         return;
+     }
+ 
++    sock->stack->conn_num--;
++
+     reset_sock_data(sock);
+ 
+     list_del_node_init(&sock->recv_list);
+     list_del_node_init(&sock->attach_list);
+     list_del_node_init(&sock->listen_list);
+-
+-    sock->stack->conn_num--;
+ }
+ 
+ void gazelle_free_pbuf(struct pbuf *pbuf)
+-- 
+1.8.3.1
+

@@ -1,0 +1,27 @@
+From 23c3c39dda9ff0810ee16a5db7e2b21edc6a37d7 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Mon, 7 Mar 2022 23:14:21 +0800
+Subject: [PATCH 03/34] execute gazelle_init_sock() before read event
+
+---
+ src/lstack/core/lstack_protocol_stack.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 35665e6..f96d7a3 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -518,9 +518,7 @@ void stack_accept(struct rpc_msg *msg)
+     fd = sock->attach_fd;
+ 
+     msg->result = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
+-    if (msg->result > 0) {
+-        gazelle_init_sock(msg->result);
+-    } else {
++    if (msg->result <= 0) {
+         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d attach_fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i,
+             fd, msg->result);
+     }
+-- 
+1.8.3.1
+
