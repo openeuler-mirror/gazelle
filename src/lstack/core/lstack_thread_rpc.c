@@ -29,6 +29,10 @@ struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
     int32_t ret;
     struct rpc_msg *msg = NULL;
 
+    if (stack == NULL) {
+        return NULL;
+    }
+
     ret = rte_mempool_get(stack->rpc_pool, (void **)&msg);
     if (ret < 0) {
         get_protocol_stack_group()->call_alloc_fail++;
