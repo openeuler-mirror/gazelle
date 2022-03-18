@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       4
+Release:       5
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -50,6 +50,7 @@ Patch9032:     0032-modify-readme-to-add-constraint.patch
 Patch9033:     0033-fix-accept-check-remain-conn.patch
 Patch9034:     0034-fix-wakeup-list-dead-loop.patch
 Patch9035:     0035-add-check-for-stack-params.patch
+Patch9036:     0036-the-sending-of-sock-last-data-is-triggered-by-lstack.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -90,6 +91,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri Mar 18 2022 jiangheng <jiangheng12@huawei.com> - 1.0.1-5
+- limit lwip_alloc_pbuf size to TCP_MSS
+- sending of sock last data is triggered by lstack iteself 
+
 * Thu Mar 17 2022 jiangheng <jiangheng12@huawei.com> - 1.0.1-4
 - fix repeatede stack restart coredump
 
