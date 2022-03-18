@@ -214,7 +214,7 @@ void stack_replenish_send_idlembuf(struct protocol_stack *stack)
     uint32_t replenish_cnt = rte_ring_free_count(stack->send_idle_ring);
 
     for (uint32_t i = 0; i < replenish_cnt; i++) {
-        struct pbuf *pbuf = lwip_alloc_pbuf(PBUF_TRANSPORT, MAX_PACKET_SZ - PBUF_TRANSPORT, PBUF_RAM);
+        struct pbuf *pbuf = lwip_alloc_pbuf(PBUF_TRANSPORT, TCP_MSS, PBUF_RAM);
         if (pbuf == NULL) {
             break;
         }
@@ -361,7 +361,8 @@ void stack_send(struct rpc_msg *msg)
     msg->result = write_lwip_data(sock, fd, flags);
     __atomic_store_n(&sock->have_rpc_send, false, __ATOMIC_RELEASE);
 
-    if (msg->result >= 0 && rte_ring_count(sock->send_ring)) {
+    if (msg->result >= 0 &&
+        (rte_ring_count(sock->send_ring) || sock->send_lastdata)) {
         if (list_is_empty(&sock->send_list)) {
             __atomic_store_n(&sock->have_rpc_send, true, __ATOMIC_RELEASE);
             list_add_node(&stack->send_list, &sock->send_list);

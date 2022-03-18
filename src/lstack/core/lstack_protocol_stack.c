@@ -350,7 +350,8 @@ static void send_stack_list(struct protocol_stack *stack)
 
         ssize_t ret = write_lwip_data(sock, sock->conn->socket, sock->send_flags);
         __atomic_store_n(&sock->have_rpc_send, false, __ATOMIC_RELEASE);
-        if (ret >= 0 && rte_ring_count(sock->send_ring)) {
+        if (ret >= 0 &&
+            (rte_ring_count(sock->send_ring) || sock->send_lastdata)) {
             __atomic_store_n(&sock->have_rpc_send, true, __ATOMIC_RELEASE);
         } else {
             list_del_node_init(&sock->send_list);
