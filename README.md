@@ -199,7 +199,7 @@ redis-server redis.conf
 liblstack.so编译进应用程序后wrap网络编程标准接口，应用程序无需修改代码。
 
 ### 9. gazellectl
-- 不使用ltran模式时不支持gazellectl ltran xxx 命令
+- 不使用ltran模式时不支持gazellectl ltran xxx命令，以及-r, rate命令
 ```
 Usage: gazellectl [-h | help]
   or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time]
