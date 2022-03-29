@@ -51,6 +51,9 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
             stack->stats.rx_allocmbuf_fail++;
             break;
         }
+#if CHECKSUM_CHECK_IP_HW || CHECKSUM_CHECK_TCP_HW
+        next->ol_flags = m->ol_flags;
+#endif
 
         if (head == NULL) {
             head = next;
@@ -73,18 +76,19 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
     }
 }
 
+#define READ_PKTS_MAX   32
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;
-    struct rte_mbuf *pkts[DPDK_PKT_BURST_SIZE];
+    struct rte_mbuf *pkts[READ_PKTS_MAX];
     struct protocol_stack *stack = get_protocol_stack();
 
-    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, DPDK_PKT_BURST_SIZE);
+    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
     if (nr_pkts == 0) {
         return nr_pkts;
     }
 
-    if (get_protocol_stack_group()->latency_start) {
+    if (!use_ltran() && get_protocol_stack_group()->latency_start) {
         uint64_t time_stamp = get_current_time();
         time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
     }
@@ -146,19 +150,6 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
     return ERR_OK;
 }
 
-static err_t eth_dev_input(struct pbuf *p, struct netif *netif)
-{
-    err_t ret = ethernet_input(p, netif);
-    if (ret != ERR_OK) {
-        return ret;
-    }
-
-    if (get_protocol_stack_group()->latency_start) {
-        calculate_lstack_latency(&get_protocol_stack()->latency, p, GAZELLE_LATENCY_LWIP);
-    }
-    return ret;
-}
-
 static err_t eth_dev_init(struct netif *netif)
 {
     struct cfg_params *cfg = get_global_cfg_params();
@@ -200,7 +191,7 @@ int32_t ethdev_init(struct protocol_stack *stack)
     netif_set_default(&stack->netif);
 
     struct netif *netif = netif_add(&stack->netif, &cfg->host_addr, &cfg->netmask, &cfg->gateway_addr, NULL,
-        eth_dev_init, eth_dev_input);
+        eth_dev_init, ethernet_input);
     if (netif == NULL) {
         LSTACK_LOG(ERR, LSTACK, "netif_add failed\n");
         return ERR_IF;

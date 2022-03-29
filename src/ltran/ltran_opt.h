@@ -34,12 +34,12 @@
 #define GAZELLE_KNI_ETHERNET_HEADER_SIZE     14
 #define GAZELLE_KNI_ETHERNET_FCS_SIZE        4
 
-#define GAZELLE_PKT_MBUF_RX_POOL_NAME_FMT    "rx_pool%d"
-#define GAZELLE_PKT_MBUF_TX_POOL_NAME_FMT    "tx_pool%d"
+#define GAZELLE_PKT_MBUF_RX_POOL_NAME_FMT    "rx_pool%u"
+#define GAZELLE_PKT_MBUF_TX_POOL_NAME_FMT    "tx_pool%u"
 #define GAZELLE_PKT_MBUF_POOL_NAME_LENGTH    64
 
 #define GAZELLE_BOND_NAME_LENGTH             64
-#define GAZELLE_BOND_DEV_NAME_FMT            "net_bonding%d"
+#define GAZELLE_BOND_DEV_NAME_FMT            "net_bonding%hu"
 #define GAZELLE_BOND_QUEUE_MIN                1
 #define GAZELLE_BOND_QUEUE_MAX                64
 

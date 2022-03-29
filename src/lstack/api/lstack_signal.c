@@ -16,6 +16,7 @@
 #include <execinfo.h>
 #include <unistd.h>
 #include <lwip/lwipsock.h>
+#include <lwip/posix_api.h>
 
 #include "lstack_log.h"
 

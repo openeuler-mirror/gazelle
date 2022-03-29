@@ -66,7 +66,7 @@ struct cfg_params {
     uint16_t num_cpu;
     uint32_t cpus[CFG_MAX_CPUS];
     uint16_t num_wakeup;
-    uint32_t weakup[CFG_MAX_CPUS];
+    uint32_t wakeup[CFG_MAX_CPUS];
     uint8_t num_ports;
     uint16_t ports[CFG_MAX_PORTS];
     char log_file[PATH_MAX];

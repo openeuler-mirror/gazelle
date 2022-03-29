@@ -30,6 +30,7 @@
 #include <lwip/tcpip.h>
 #include <lwip/memp_def.h>
 #include <lwip/lwipopts.h>
+#include <lwip/posix_api.h>
 
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
@@ -225,16 +226,18 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     lstack_log_level_init();
 
-    /*
-    * Phase 8: memory and nic */
     ret = init_protocol_stack();
     if (ret != 0) {
         LSTACK_EXIT(1, "init_protocol_stack failed\n");
     }
 
-    ret = create_stack_thread();
-    if (ret != 0) {
-        LSTACK_EXIT(1, "create_stack_thread failed\n");
+    /*
+    * Phase 8: nic */
+    if (!use_ltran()) {
+        ret = init_dpdk_ethdev();
+        if (ret != 0) {
+            LSTACK_EXIT(1, "init_dpdk_ethdev failed\n");
+        }
     }
 
     /*
