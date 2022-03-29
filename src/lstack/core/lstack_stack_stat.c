@@ -105,8 +105,6 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     lstack_get_low_power_info(&dfx->low_power_info);
     memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
-    dfx->data.pkts.weakup_ring_cnt = rte_ring_count(stack->weakup_ring);
-    dfx->data.pkts.send_idle_ring_cnt = rte_ring_count(stack->send_idle_ring);
 
     int32_t rpc_call_result = rpc_call_msgcnt(stack);
     dfx->data.pkts.call_msg_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
@@ -120,10 +118,6 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     rpc_call_result = rpc_call_sendlistcnt(stack);
     dfx->data.pkts.send_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
-    if (stack->wakeup_list) {
-        rpc_call_result = rpc_call_eventlistcnt(stack);
-        dfx->data.pkts.wakeup_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
-    }
     dfx->data.pkts.conn_num = stack->conn_num;
 }
 

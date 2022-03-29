@@ -236,7 +236,7 @@ Usage: gazellectl [-h | help]
 - 提供的命令行、配置文件以及配置大页内存需要root权限执行或修改。非root用户使用，需先提权以及修改文件权限。
 - 若要把用户态网卡绑回内核驱动，必须先将Gazelle退出。
 - 不支持accept阻塞模式或者connect阻塞模式。
-- 最多只支持20000个链接（需要保证进程内，非网络连接的fd个数小于2000个）。
+- 最多只支持1500个连接。
 - 协议栈当前只支持tcp、icmp、arp、ipv4。
 - 大页内存不支持在挂载点里创建子目录重新挂载。
 - 在对端ping时，要求指定报文长度小于等于14000。
@@ -253,6 +253,7 @@ Usage: gazellectl [-h | help]
 - 不使用ltran模式，kni网口只支持本地通讯使用，且需要启动前配置NetworkManager不管理kni网卡
 - 虚拟kni网口的ip及mac地址，需要与lstack配置文件保持一致
 - gazelle运行过程中，不允许删除运行文件，如果删除，需要重启gazelle
+- lstack配置的ip需要与应用程序的ip保持一致
 
 ## Security risk note
 gazelle有如下安全风险，用户需要评估使用场景风险  

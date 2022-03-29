@@ -17,6 +17,8 @@
 extern "C" {
 #endif
 
+#include <poll.h>
+
 int32_t lstack_epoll_create(int32_t size);
 int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event *event);
 int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event *events, int32_t maxevents, int32_t timeout);

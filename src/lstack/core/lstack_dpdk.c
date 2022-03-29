@@ -28,6 +28,7 @@
 #include <rte_errno.h>
 #include <rte_kni.h>
 #include <lwip/posix_api.h>
+#include <lwipopts.h>
 
 #include "lstack_log.h"
 #include "dpdk_common.h"
@@ -109,35 +110,39 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
     char pool_name[PATH_MAX];
     struct rte_mempool *pool;
 
-    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%d", name, queue_id);
+    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
     if (ret < 0) {
         return NULL;
     }
 
     /* time stamp before pbuf_custom as priv_data */
+    pthread_mutex_lock(get_mem_mutex());
     pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size,
         sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE, MBUF_SZ, rte_socket_id());
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
     }
+    pthread_mutex_unlock(get_mem_mutex());
     return pool;
 }
 
-static struct rte_mempool *create_rpc_mempool(const char *name, uint16_t queue_id)
+struct rte_mempool *create_rpc_mempool(const char *name, uint16_t queue_id)
 {
     char pool_name[PATH_MAX];
     struct rte_mempool *pool;
     int32_t ret;
 
-    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%d", name, queue_id);
+    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
     if (ret < 0) {
         return NULL;
     }
+    pthread_mutex_lock(get_mem_mutex());
     pool = rte_mempool_create(pool_name, CALL_POOL_SZ, sizeof(struct rpc_msg), 0, 0, NULL, NULL, NULL,
         NULL, rte_socket_id(), 0);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
     }
+    pthread_mutex_unlock(get_mem_mutex());
     return pool;
 }
 
@@ -147,7 +152,7 @@ static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_
     char pool_name[PATH_MAX];
     struct reg_ring_msg *reg_buf;
 
-    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%d", name, queue_id);
+    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
     if (ret < 0) {
         return NULL;
     }
@@ -167,18 +172,15 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
         return -1;
     }
 
-    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, 0, stack->queue_id);
+    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, RX_MBUF_CACHE_SZ,
+        stack->queue_id);
     if (stack->rx_pktmbuf_pool == NULL) {
         return -1;
     }
 
-    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, 0, stack->queue_id);
+    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, TX_MBUF_CACHE_SZ,
+        stack->queue_id);
     if (stack->tx_pktmbuf_pool == NULL) {
-        return -1;
-    }
-
-    stack->rpc_pool = create_rpc_mempool("rpc_msg", stack->queue_id);
-    if (stack->rpc_pool == NULL) {
         return -1;
     }
 
@@ -214,16 +216,12 @@ int32_t create_shared_ring(struct protocol_stack *stack)
 {
     lockless_queue_init(&stack->rpc_queue);
 
-    stack->weakup_ring = create_ring("SHARED_WEAKUP_RING", VDEV_WEAKUP_QUEUE_SZ, 0, stack->queue_id);
-    if (stack->weakup_ring == NULL) {
-        return -1;
+    if (get_protocol_stack_group()->wakeup_enable) {
+        stack->wakeup_ring = create_ring("WAKEUP_RING", VDEV_WAKEUP_QUEUE_SZ, 0, stack->queue_id);
+        if (stack->wakeup_ring == NULL) {
+            return -1;
+        }
     }
-
-    stack->send_idle_ring = create_ring("SEND_IDLE_RING", VDEV_IDLE_QUEUE_SZ, 0, stack->queue_id);
-    if (stack->send_idle_ring == NULL) {
-        return -1;
-    }
-    stack->in_replenish = 0;
 
     if (use_ltran()) {
         stack->rx_ring = create_ring("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
@@ -328,8 +326,19 @@ static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
     return eth_params;
 }
 
+uint64_t get_eth_params_rx_ol(void)
+{
+    return use_ltran() ? 0 : get_protocol_stack_group()->eth_params->conf.rxmode.offloads;
+}
+
+uint64_t get_eth_params_tx_ol(void)
+{
+    return use_ltran() ? 0 : get_protocol_stack_group()->eth_params->conf.txmode.offloads;
+}
+
 static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
 {
+#if CHECKSUM_OFFLOAD_ALL
     uint64_t rx_ol = 0;
     uint64_t tx_ol = 0;
 
@@ -337,43 +346,48 @@ static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_inf
     uint64_t tx_ol_capa = dev_info->tx_offload_capa;
 
     // rx ip
-    if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
 #if CHECKSUM_CHECK_IP_HW
+    if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
         rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
         LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_IPV4_CKSUM\n");
-#endif
     }
+#endif
 
     // rx tcp
-    if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
 #if CHECKSUM_CHECK_TCP_HW
+    if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
         rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
         LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_TCP_CKSUM\n");
-#endif
     }
+#endif
 
     // tx ip
-    if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
 #if CHECKSUM_GEN_IP_HW
+    if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
         tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
         LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_IPV4_CKSUM\n");
-#endif
     }
+#endif
 
     // tx tcp
-    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
 #if CHECKSUM_GEN_TCP_HW
+    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
         tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
         LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_TCP_CKSUM\n");
+    }
 #endif
+    if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
+        rx_ol = 0;
+    }
+    if (!(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) || !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
+        tx_ol = 0;
     }
 
     conf->rxmode.offloads = rx_ol;
     conf->txmode.offloads = tx_ol;
 
-#if CHECKSUM_CHECK_IP_HW || CHECKSUM_CHECK_TCP_HW || CHECKSUM_GEN_IP_HW || CHECKSUM_GEN_TCP_HW
     LSTACK_LOG(INFO, LSTACK, "set checksum offloads\n");
-#endif
+#endif /* CHECKSUM_OFFLOAD_ALL */
 
     return 0;
 }
@@ -580,3 +594,30 @@ void dpdk_skip_nic_init(void)
     }
 }
 
+int32_t init_dpdk_ethdev(void)
+{
+    int32_t ret;
+
+    ret = dpdk_ethdev_init();
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
+        return -1;
+    }
+
+    ret = dpdk_ethdev_start();
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
+        return -1;
+    }
+
+    if (get_global_cfg_params()->kni_switch) {
+        ret = dpdk_init_lstack_kni();
+        if (ret < 0) {
+            return -1;
+        }
+    }
+
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    sem_post(&stack_group->ethdev_init);
+    return 0;
+}

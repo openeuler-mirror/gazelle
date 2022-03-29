@@ -14,6 +14,7 @@
 #define __GAZELLE_PROTOCOL_STACK_H__
 
 #include <semaphore.h>
+#include <pthread.h>
 #include <lwip/list.h>
 #include <lwip/netif.h>
 #include "dpdk_common.h"
@@ -28,38 +29,32 @@ struct protocol_stack {
     uint16_t socket_id;
     uint16_t cpu_id;
     volatile uint16_t conn_num;
-    volatile bool in_replenish;
-
-    // for dispatcher thread
-    cpu_set_t idle_cpuset;
+    cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
 
     lockless_queue rpc_queue;
-    struct rte_ring *weakup_ring;
-
     struct rte_mempool *rx_pktmbuf_pool;
     struct rte_mempool *tx_pktmbuf_pool;
-    struct rte_mempool *rpc_pool;
     struct rte_ring  *rx_ring;
     struct rte_ring *tx_ring;
     struct rte_ring *reg_ring;
-    struct rte_ring *send_idle_ring;
+    struct rte_ring *wakeup_ring;
+
     struct reg_ring_msg *reg_buf;
 
     struct netif netif;
     uint32_t rx_ring_used;
     uint32_t tx_ring_used;
+    struct eth_dev_ops *dev_ops;
 
     struct list_node recv_list;
     struct list_node listen_list;
-    struct list_node event_list;
     struct list_node send_list;
-    struct list_node *wakeup_list;
+    struct list_node event_list;
+    pthread_spinlock_t event_lock;
 
     struct gazelle_stat_pkts stats;
     struct gazelle_stack_latency latency;
     struct stats_ *lwip_stats;
-
-    struct eth_dev_ops *dev_ops;
 };
 
 struct eth_params;
@@ -67,25 +62,35 @@ struct eth_params;
 struct protocol_stack_group {
     uint16_t stack_num;
     uint16_t port_id;
-    sem_t thread_inited;
+    sem_t thread_phase1;
+    sem_t ethdev_init;
     struct rte_mempool *kni_pktmbuf_pool;
     struct eth_params *eth_params;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
+    bool wakeup_enable;
 
     /* dfx stats */
     bool latency_start;
     uint64_t call_alloc_fail;
 };
 
+struct wakeup_poll {
+    bool init;
+    struct protocol_stack *bind_stack;
+    struct list_node event_list; /* epoll temp use poll */
+    sem_t event_sem;
+};
+
 long get_stack_tid(void);
+pthread_mutex_t *get_mem_mutex(void);
 struct protocol_stack *get_protocol_stack(void);
 struct protocol_stack *get_protocol_stack_by_fd(int32_t fd);
 struct protocol_stack *get_minconn_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
 int32_t init_protocol_stack(void);
-int32_t create_stack_thread(void);
-int bind_to_stack_numa(int stack_id);
+int32_t bind_to_stack_numa(struct protocol_stack *stack);
+int32_t init_dpdk_ethdev(void);
 
 /* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
 void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack);

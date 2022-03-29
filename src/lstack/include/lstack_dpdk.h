@@ -37,10 +37,10 @@ struct protocol_stack;
 
 #define MBUF_SZ (MAX_PACKET_SZ + RTE_PKTMBUF_HEADROOM)
 
-#define MAX_CORE_NUM  256
+#define MAX_CORE_NUM            256
 #define CALL_MSG_RING_SIZE      (unsigned long long)32
-#define CALL_CACHE_SZ 64
-#define CALL_POOL_SZ ((VDEV_CALL_QUEUE_SZ << 1) + (2 * CALL_CACHE_SZ * MAX_CORE_NUM))
+#define CALL_CACHE_SZ           0
+#define CALL_POOL_SZ            128
 
 /* Layout:
  * | rte_mbuf | pbuf | custom_free_function | payload |
@@ -62,6 +62,7 @@ void dpdk_eal_init(void);
 int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
 struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id);
 int32_t create_shared_ring(struct protocol_stack *stack);
+struct rte_mempool *create_rpc_mempool(const char *name, uint16_t queue_id);
 void lstack_log_level_init(void);
 int dpdk_ethdev_init(void);
 int dpdk_ethdev_start(void);
