@@ -1,0 +1,5 @@
+---
+version_control: git
+src_repo: openEuler/gazelle
+tag_prefix: "^1"
+seperator: "."
