@@ -1,0 +1,25 @@
+From 0a62cc1547009c6e382c08d7e99c8727201dd56a Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Mon, 21 Mar 2022 09:50:49 +0800
+Subject: [PATCH] addd gazellectl lstack constraint
+
+---
+ README.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index e914b26..eef6362 100644
+--- a/README.md
++++ b/README.md
+@@ -199,7 +199,7 @@ redis-server redis.conf
+ liblstack.so编译进应用程序后wrap网络编程标准接口，应用程序无需修改代码。
+ 
+ ### 9. gazellectl
+-- 不使用ltran模式时不支持gazellectl ltran xxx 命令
++- 不使用ltran模式时不支持gazellectl ltran xxx命令，以及-r, rate命令
+ ```
+ Usage: gazellectl [-h | help]
+   or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time]
+-- 
+1.8.3.1
+
