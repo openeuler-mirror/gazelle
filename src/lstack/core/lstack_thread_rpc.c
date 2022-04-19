@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 #include <sys/types.h>
+#include <stdatomic.h>
 #include <lwip/sockets.h>
 #include <lwipsock.h>
 #include <rte_mempool.h>
@@ -36,7 +37,7 @@ struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
 
     static uint16_t pool_index = 0;
     if (rpc_pool == NULL) {
-        rpc_pool = create_rpc_mempool("rpc_msg", pool_index++);
+        rpc_pool = create_rpc_mempool("rpc_msg", atomic_fetch_add(&pool_index, 1));
         if (rpc_pool == NULL) {
             return NULL;
         }

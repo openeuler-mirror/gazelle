@@ -11,6 +11,7 @@
 */
 
 #include <sys/types.h>
+#include <stdatomic.h>
 #include <lwip/sockets.h>
 #include <lwip/tcp.h>
 #include <lwipsock.h>
@@ -138,25 +139,25 @@ void gazelle_init_sock(int32_t fd)
 
     reset_sock_data(sock);
 
-    sock->recv_ring = create_ring("sock_recv", SOCK_RECV_RING_SIZE, 0, name_tick++);
+    sock->recv_ring = create_ring("sock_recv", SOCK_RECV_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
     if (sock->recv_ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "sock_recv create failed. errno: %d.\n", rte_errno);
         return;
     }
 
-    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, name_tick++);
+    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
     if (sock->recv_wait_free == NULL) {
         LSTACK_LOG(ERR, LSTACK, "wait_free create failed. errno: %d.\n", rte_errno);
         return;
     }
 
-    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, name_tick++);
+    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
     if (sock->send_ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
 
-    sock->send_idle_ring = create_ring("idle_send", SOCK_SEND_RING_SIZE, 0, name_tick++);
+    sock->send_idle_ring = create_ring("idle_send", SOCK_SEND_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
     if (sock->send_idle_ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "idle_send create failed. errno: %d.\n", rte_errno);
         return;
