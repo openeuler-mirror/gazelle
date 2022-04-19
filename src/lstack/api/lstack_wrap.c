@@ -52,10 +52,15 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd)
         }
         return PATH_KERNEL;
     }
+
+    if (unlikely(posix_api->is_chld)) {
+        return PATH_KERNEL;
+    }
+
     struct lwip_sock *sock = posix_api->get_socket(fd);
 
     /* AF_UNIX case */
-    if (!sock || unlikely(posix_api->is_chld)) {
+    if (!sock) {
         return PATH_KERNEL;
     }
 
