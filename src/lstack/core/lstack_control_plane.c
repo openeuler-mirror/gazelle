@@ -446,6 +446,15 @@ int32_t client_reg_thrd_ring(void)
     return 0;
 }
 
+void control_fd_close(void)
+{
+    if (g_data_fd != 0) {
+        close(g_data_fd);
+        /* 200ms: wait ltran instance logout */
+        rte_delay_ms(200);
+    }
+}
+
 int32_t control_init_client(bool is_reconnect)
 {
     int32_t ret;
