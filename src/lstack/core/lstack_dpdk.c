@@ -495,6 +495,12 @@ int32_t dpdk_ethdev_init(void)
         return ret;
     }
 
+    ret = dpdk_ethdev_start();
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
+        return ret;
+    }
+
     if (rss_enable) {
         rss_setup(port_id, nb_queues);
     }
@@ -601,12 +607,6 @@ int32_t init_dpdk_ethdev(void)
     ret = dpdk_ethdev_init();
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
-        return -1;
-    }
-
-    ret = dpdk_ethdev_start();
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
         return -1;
     }
 
