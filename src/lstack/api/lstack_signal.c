@@ -19,8 +19,9 @@
 #include <lwip/posix_api.h>
 
 #include "lstack_log.h"
+#include "lstack_control_plane.h"
 
-static int g_hijack_signal[] = { SIGTERM, SIGINT, SIGSEGV, SIGBUS, SIGFPE, SIGILL };
+static int g_hijack_signal[] = { SIGTERM, SIGINT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGKILL};
 #define HIJACK_SIGNAL_COUNT (sizeof(g_hijack_signal) / sizeof(g_hijack_signal[0]))
 #define BACKTRACE_SIZE 64
 static void dump_stack(void)
@@ -54,6 +55,7 @@ static inline bool match_hijack_signal(int sig)
 static void lstack_sig_default_handler(int sig)
 {
     LSTACK_LOG(ERR, LSTACK, "lstack dumped，caught signal：%d\n", sig);
+    control_fd_close();
     dump_stack();
     lwip_exit();
     (void)kill(getpid(), sig);
