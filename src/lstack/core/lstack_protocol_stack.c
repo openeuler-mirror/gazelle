@@ -217,7 +217,7 @@ static void* gazelle_weakup_thread(void *arg)
     return NULL;
 }
 
-static void init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
@@ -241,6 +241,31 @@ static void init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     stack_stat_init();
 
     stack_group->stacks[queue_id] = stack;
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(stack->cpu_id, &cpuset);
+    if (rte_thread_set_affinity(&cpuset) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_thread_set_affinity failed\n");
+        return -1;
+    }
+    RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
+
+    stack->socket_id = numa_node_of_cpu(stack->cpu_id);
+    if (stack->socket_id < 0) {
+        LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
+        return -1;
+    }
+
+    if (pktmbuf_pool_init(stack, stack_group->stack_num) != 0) {
+        return -1;
+    }
+
+    if (create_shared_ring(stack) != 0) {
+        return -1;
+    }
+
+    return 0;
 }
 
 void wait_sem_value(sem_t *sem, int32_t wait_value)
@@ -260,33 +285,8 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
         return NULL;
     }
-    init_stack_value(stack, queue_id);
 
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(stack->cpu_id, &cpuset);
-    if (rte_thread_set_affinity(&cpuset) != 0) {
-        LSTACK_LOG(ERR, LSTACK, "rte_thread_set_affinity failed\n");
-        free(stack);
-        return NULL;
-    }
-    RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
-
-    stack->socket_id = numa_node_of_cpu(stack->cpu_id);
-    if (stack->socket_id < 0) {
-        LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
-        free(stack);
-        return NULL;
-    }
-
-    int32_t ret = pktmbuf_pool_init(stack, stack_group->stack_num);
-    if (ret != 0) {
-        free(stack);
-        return NULL;
-    }
-
-    ret = create_shared_ring(stack);
-    if (ret != 0) {
+    if (init_stack_value(stack, queue_id) != 0) {
         free(stack);
         return NULL;
     }
@@ -298,8 +298,7 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
     tcpip_init(NULL, NULL);
 
     if (use_ltran()) {
-        ret = client_reg_thrd_ring();
-        if (ret != 0) {
+        if (client_reg_thrd_ring() != 0) {
             free(stack);
             return NULL;
         }
@@ -311,15 +310,13 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
         wait_sem_value(&stack_group->ethdev_init, 1);
     }
 
-
-    ret = ethdev_init(stack);
-    if (ret != 0) {
+    if (ethdev_init(stack) != 0) {
         free(stack);
         return NULL;
     }
 
     if (stack_group->wakeup_enable) {
-        ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_weakup_thread);
+        int32_t ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_weakup_thread);
         if (ret != 0) {
             free(stack);
             return NULL;
@@ -363,6 +360,28 @@ static void* gazelle_stack_thread(void *arg)
     return NULL;
 }
 
+static int32_t init_protocol_sem(void)
+{
+    int32_t ret;
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+
+    if (!use_ltran()) {
+        ret = sem_init(&stack_group->ethdev_init, 0, 0);
+        if (ret < 0) {
+            LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
+            return -1;
+        }
+    }
+
+    ret = sem_init(&stack_group->thread_phase1, 0, 0);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
+        return -1;
+    }
+    
+    return 0;
+}
+
 int32_t init_protocol_stack(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
@@ -371,17 +390,7 @@ int32_t init_protocol_stack(void)
     stack_group->stack_num = get_global_cfg_params()->num_cpu;
     stack_group->wakeup_enable = (get_global_cfg_params()->num_wakeup > 0) ? true : false;
 
-    if (!use_ltran()) {
-        ret = sem_init(&stack_group->ethdev_init, 0, 0);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, PORT, "sem_init failed\n");
-            return -1;
-        }
-    }
-
-    ret = sem_init(&stack_group->thread_phase1, 0, 0);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, PORT, "sem_init failed\n");
+    if (init_protocol_sem() != 0) {
         return -1;
     }
 

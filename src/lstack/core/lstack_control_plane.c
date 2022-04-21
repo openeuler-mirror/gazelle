@@ -705,7 +705,7 @@ void control_server_thread(void *arg)
 
     int32_t epfd = init_epoll(listenfd);
     if (epfd < 0) {
-        LSTACK_LOG(ERR, LSTACK, "control_init_server failed\n");
+        LSTACK_LOG(ERR, LSTACK, "init_epoll failed\n");
         return;
     }
 
