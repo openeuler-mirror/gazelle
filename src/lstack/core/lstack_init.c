@@ -48,6 +48,13 @@
 #define LSTACK_PRELOAD_NAME_LEN     PATH_MAX
 #define LSTACK_PRELOAD_ENV_PROC     "GAZELLE_BIND_PROCNAME"
 
+static volatile int32_t g_init_fail = 0;
+
+void set_init_fail(void)
+{
+    g_init_fail = 1;
+}
+
 struct lstack_preload {
     int32_t preload_switch;
     char env_procname[LSTACK_PRELOAD_NAME_LEN];
@@ -207,7 +214,11 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
     } else {
-        dpdk_eal_init();
+        ret = dpdk_eal_init();
+        if (ret < 0) {
+            LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
+        }
+
         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
     }
     if (ret != 0) {
@@ -248,7 +259,14 @@ __attribute__((constructor)) void gazelle_network_init(void)
     * Phase 10: register core sig handler func to dumped stack */
     lstack_signal_init();
 
+    /* wait stack thread and kernel_event thread init finish */
+    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
+    if (g_init_fail) {
+        LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
+    }
+
     lstack_prelog_uninit();
     posix_api->is_chld = 0;
     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
+    rte_smp_mb();
 }

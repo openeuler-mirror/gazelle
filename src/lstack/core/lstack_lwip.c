@@ -145,13 +145,13 @@ void gazelle_init_sock(int32_t fd)
         return;
     }
 
-    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
+    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
     if (sock->recv_wait_free == NULL) {
         LSTACK_LOG(ERR, LSTACK, "wait_free create failed. errno: %d.\n", rte_errno);
         return;
     }
 
-    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
+    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
     if (sock->send_ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;

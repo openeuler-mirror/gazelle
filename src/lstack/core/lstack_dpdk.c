@@ -86,21 +86,26 @@ int32_t thread_affinity_init(int32_t cpu_id)
     return 0;
 }
 
-void dpdk_eal_init(void)
+int32_t dpdk_eal_init(void)
 {
     int32_t ret;
     struct cfg_params *global_params = get_global_cfg_params();
 
     ret = rte_eal_init(global_params->dpdk_argc, global_params->dpdk_argv);
     if (ret < 0) {
-        if (rte_errno == EALREADY)
+        if (rte_errno == EALREADY) {
             LSTACK_PRE_LOG(LSTACK_INFO, "rte_eal_init aleady init\n");
-        else
+	    /* maybe other program inited, merge init param share init */
+	    ret = 0;
+        }
+        else {
             LSTACK_PRE_LOG(LSTACK_ERR, "rte_eal_init failed init, rte_errno %d\n", rte_errno);
-
-        LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
+        }
+    } else {
+        LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
     }
-    LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
+
+    return ret;
 }
 
 static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
@@ -116,13 +121,11 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
     }
 
     /* time stamp before pbuf_custom as priv_data */
-    pthread_mutex_lock(get_mem_mutex());
     pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size,
         sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE, MBUF_SZ, rte_socket_id());
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
     }
-    pthread_mutex_unlock(get_mem_mutex());
     return pool;
 }
 
@@ -136,13 +139,13 @@ struct rte_mempool *create_rpc_mempool(const char *name, uint16_t queue_id)
     if (ret < 0) {
         return NULL;
     }
-    pthread_mutex_lock(get_mem_mutex());
+
     pool = rte_mempool_create(pool_name, CALL_POOL_SZ, sizeof(struct rpc_msg), 0, 0, NULL, NULL, NULL,
         NULL, rte_socket_id(), 0);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
     }
-    pthread_mutex_unlock(get_mem_mutex());
+
     return pool;
 }
 

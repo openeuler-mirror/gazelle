@@ -39,18 +39,13 @@
 static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX;
 static struct protocol_stack_group g_stack_group = {0};
 static PER_THREAD long g_stack_tid = 0;
-static pthread_mutex_t g_mem_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+void set_init_fail(void);
 typedef void *(*stack_thread_func)(void *arg);
 
 #ifdef GAZELLE_USE_EPOLL_EVENT_STACK
 void update_stack_events(struct protocol_stack *stack);
 #endif
-
-pthread_mutex_t *get_mem_mutex(void)
-{
-    return &g_mem_mutex;
-}
 
 int32_t bind_to_stack_numa(struct protocol_stack *stack)
 {
@@ -248,6 +243,14 @@ static void init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     stack_group->stacks[queue_id] = stack;
 }
 
+void wait_sem_value(sem_t *sem, int32_t wait_value)
+{
+    int32_t sem_val;
+    do {
+        sem_getvalue(sem, &sem_val);
+    } while (sem_val < wait_value);
+}
+
 static struct protocol_stack * stack_thread_init(uint16_t queue_id)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
@@ -304,10 +307,10 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
 
     sem_post(&stack_group->thread_phase1);
 
-    int32_t sem_val;
-    do {
-        sem_getvalue(&stack_group->ethdev_init, &sem_val);
-    } while (!sem_val && !use_ltran());
+    if (!use_ltran()) {
+        wait_sem_value(&stack_group->ethdev_init, 1);
+    }
+
 
     ret = ethdev_init(stack);
     if (ret != 0) {
@@ -332,10 +335,13 @@ static void* gazelle_stack_thread(void *arg)
 
     struct protocol_stack *stack = stack_thread_init(queue_id);
     if (stack == NULL) {
-        pthread_mutex_lock(&g_mem_mutex);
-        LSTACK_EXIT(1, "stack_thread_init failed\n");
-        pthread_mutex_unlock(&g_mem_mutex);
+        /* exit in main thread, avoid create mempool and exit at the same time */
+        set_init_fail();
+        sem_post(&get_protocol_stack_group()->all_init);
+        LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%d\n", queue_id);
+        return NULL;
     }
+    sem_post(&get_protocol_stack_group()->all_init);
     LSTACK_LOG(INFO, LSTACK, "stack_%02d init success\n", queue_id);
 
     for (;;) {
@@ -386,10 +392,7 @@ int32_t init_protocol_stack(void)
         }
     }
 
-    int32_t thread_inited_num;
-    do {
-        sem_getvalue(&stack_group->thread_phase1, &thread_inited_num);
-    } while (thread_inited_num < stack_group->stack_num);
+    wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
 
     ret = init_stack_numa_cpuset();
     if (ret < 0) {
