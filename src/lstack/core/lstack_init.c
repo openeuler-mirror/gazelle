@@ -270,7 +270,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
     lwip_sock_init();
 
     /* wait stack thread and kernel_event thread init finish */
-    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
+    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num * 2);
     if (g_init_fail) {
         LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
     }

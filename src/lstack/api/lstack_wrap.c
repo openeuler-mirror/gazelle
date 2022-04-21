@@ -45,8 +45,7 @@ enum KERNEL_LWIP_PATH {
 static inline enum KERNEL_LWIP_PATH select_path(int fd)
 {
     if (posix_api == NULL) {
-        /* link liblstack.so using LD_PRELOAD mode will read liblstack.so,
-           poisx_api need to be initialized here */
+        /* posix api maybe call before gazelle init */
         if (posix_api_init() != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
         }
@@ -78,8 +77,7 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd)
 static inline int32_t do_epoll_create(int32_t size)
 {
     if (posix_api == NULL) {
-        /* link liblstack.so using LD_PRELOAD mode will read liblstack.so,
-           poisx_api need to be initialized here */
+        /* posix api maybe call before gazelle init */
         if (posix_api_init() != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
         }
@@ -99,22 +97,12 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
-    struct lwip_sock *sock = get_socket_by_fd(epfd);
-    if (sock == NULL || sock->wakeup == NULL) {
-        return posix_api->epoll_ctl_fn(epfd, op, fd, event);
-    }
-
     return lstack_epoll_ctl(epfd, op, fd, event);
 }
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
     if (unlikely(posix_api->is_chld)) {
-        return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
-    }
-
-    struct lwip_sock *sock = get_socket_by_fd(epfd);
-    if (sock == NULL || sock->wakeup == NULL) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
@@ -362,6 +350,11 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
 
 static inline int32_t do_close(int32_t s)
 {
+    struct lwip_sock *sock = get_socket_by_fd(s);
+    if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
+        return lstack_epoll_close(s);
+    }
+
     if (select_path(s) == PATH_KERNEL) {
         return posix_api->close_fn(s);
     }
