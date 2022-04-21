@@ -58,7 +58,7 @@ int thread_affinity_default(void);
 int thread_affinity_init(int cpu_id);
 
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
-void dpdk_eal_init(void);
+int32_t dpdk_eal_init(void);
 int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
 struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id);
 int32_t create_shared_ring(struct protocol_stack *stack);

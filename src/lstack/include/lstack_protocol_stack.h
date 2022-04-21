@@ -64,6 +64,7 @@ struct protocol_stack_group {
     uint16_t port_id;
     sem_t thread_phase1;
     sem_t ethdev_init;
+    sem_t all_init;
     struct rte_mempool *kni_pktmbuf_pool;
     struct eth_params *eth_params;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
@@ -82,7 +83,6 @@ struct wakeup_poll {
 };
 
 long get_stack_tid(void);
-pthread_mutex_t *get_mem_mutex(void);
 struct protocol_stack *get_protocol_stack(void);
 struct protocol_stack *get_protocol_stack_by_fd(int32_t fd);
 struct protocol_stack *get_minconn_protocol_stack(void);
@@ -91,6 +91,8 @@ struct protocol_stack_group *get_protocol_stack_group(void);
 int32_t init_protocol_stack(void);
 int32_t bind_to_stack_numa(struct protocol_stack *stack);
 int32_t init_dpdk_ethdev(void);
+
+void wait_sem_value(sem_t *sem, int32_t wait_value);
 
 /* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
 void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack);
