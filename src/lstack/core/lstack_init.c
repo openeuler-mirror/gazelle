@@ -155,57 +155,10 @@ __attribute__((destructor)) void gazelle_network_exit(void)
     }
 }
 
-__attribute__((constructor)) void gazelle_network_init(void)
+static void create_control_thread(void)
 {
     int32_t ret;
 
-    /*
-    * Phase 1: Init POSXI API and prelog */
-    lstack_prelog_init("LSTACK");
-    if (posix_api_init() != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
-        LSTACK_EXIT(1, "failed\n");
-    }
-
-    /*
-    * Phase 2: Init LD_PRELOAD */
-    if (preload_info_init() < 0) {
-        return;
-    }
-    if (check_preload_bind_proc() < 0) {
-        return;
-    }
-
-    /*
-    * Phase 3: Read configure from lstack.cfg */
-    if (cfg_init() != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg_init failed\n");
-        LSTACK_EXIT(1, "cfg_init failed\n");
-    }
-    LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
-
-    /*
-    * Phase 4: check conflict */
-    if (check_process_conflict() < 0) {
-        LSTACK_PRE_LOG(LSTACK_INFO, "Have another same primary process. WARNING: Posix API will use kernel mode!\n");
-        return;
-    }
-
-    /*
-    * Phase 5: save initial affinity */
-    if (thread_affinity_default() < 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
-        LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
-    }
-
-    /* to prevent crash , just ignore SIGPIPE when socket is closed */
-    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "signal error, errno:%d.", errno);
-        LSTACK_EXIT(1, "signal SIGPIPE SIG_IGN\n");
-    }
-
-    /*
-    * Phase 6: Init control plane and dpdk init */
     pthread_t tid;
     if (use_ltran()) {
         dpdk_skip_nic_init();
@@ -222,42 +175,99 @@ __attribute__((constructor)) void gazelle_network_init(void)
         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
     }
     if (ret != 0) {
-        LSTACK_EXIT(1, "pthread_create failed errno=%d\n", errno);
+        LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
     }
+
     if (pthread_setname_np(tid, CONTROL_THREAD_NAME) != 0) {
         LSTACK_LOG(ERR, LSTACK, "pthread_setname_np failed errno=%d\n", errno);
     }
     LSTACK_LOG(INFO, LSTACK, "create control_easy_thread success\n");
+}
+
+static void gazelle_signal_init(void)
+{
+    /* to prevent crash , just ignore SIGPIPE when socket is closed */
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "signal error, errno:%d.", errno);
+        LSTACK_EXIT(1, "signal SIGPIPE SIG_IGN\n");
+    }
 
     /*
-    * Phase 7: cancel the core binding from DPDK initialization */
+    * register core sig handler func to dumped stack */
+    lstack_signal_init();
+}
+
+__attribute__((constructor)) void gazelle_network_init(void)
+{
+    /*
+    * Init POSXI API and prelog */
+    lstack_prelog_init("LSTACK");
+    if (posix_api_init() != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+        LSTACK_EXIT(1, "failed\n");
+    }
+
+    /*
+    * Init LD_PRELOAD */
+    if (preload_info_init() < 0) {
+        return;
+    }
+    if (check_preload_bind_proc() < 0) {
+        return;
+    }
+
+    /*
+    * Read configure from lstack.cfg */
+    if (cfg_init() != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg_init failed\n");
+        LSTACK_EXIT(1, "cfg_init failed\n");
+    }
+    LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
+
+    /*
+    * check conflict */
+    if (check_process_conflict() < 0) {
+        LSTACK_PRE_LOG(LSTACK_INFO, "Have another same primary process. WARNING: Posix API will use kernel mode!\n");
+        return;
+    }
+
+    /*
+    * save initial affinity */
+    if (thread_affinity_default() < 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
+        LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
+    }
+
+    gazelle_signal_init();
+
+    /*
+    * Init control plane and dpdk init */
+    create_control_thread();
+
+    /*
+    * cancel the core binding from DPDK initialization */
     if (thread_affinity_default() < 0) {
         LSTACK_EXIT(1, "pthread_setaffinity_np failed\n");
     }
 
     lstack_log_level_init();
+    lstack_prelog_uninit();
 
-    ret = init_protocol_stack();
-    if (ret != 0) {
+    if (init_protocol_stack() != 0) {
         LSTACK_EXIT(1, "init_protocol_stack failed\n");
     }
 
     /*
-    * Phase 8: nic */
+    * nic */
     if (!use_ltran()) {
-        ret = init_dpdk_ethdev();
-        if (ret != 0) {
+        if (init_dpdk_ethdev() != 0) {
             LSTACK_EXIT(1, "init_dpdk_ethdev failed\n");
         }
     }
 
     /*
-    * Phase 9: lwip initialization */
+    * lwip initialization */
     lwip_sock_init();
-
-    /*
-    * Phase 10: register core sig handler func to dumped stack */
-    lstack_signal_init();
 
     /* wait stack thread and kernel_event thread init finish */
     wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
@@ -265,7 +275,6 @@ __attribute__((constructor)) void gazelle_network_init(void)
         LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
     }
 
-    lstack_prelog_uninit();
     posix_api->is_chld = 0;
     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
     rte_smp_mb();
