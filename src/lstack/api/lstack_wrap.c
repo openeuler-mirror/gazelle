@@ -77,6 +77,15 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd)
 
 static inline int32_t do_epoll_create(int32_t size)
 {
+    if (posix_api == NULL) {
+        /* link liblstack.so using LD_PRELOAD mode will read liblstack.so,
+           poisx_api need to be initialized here */
+        if (posix_api_init() != 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+        }
+        return posix_api->epoll_create_fn(size);
+    }
+
     if (unlikely(posix_api->is_chld)) {
         return posix_api->epoll_create_fn(size);
     }
@@ -90,16 +99,22 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
+    struct lwip_sock *sock = get_socket_by_fd(epfd);
+    if (sock == NULL || sock->wakeup == NULL) {
+        return posix_api->epoll_ctl_fn(epfd, op, fd, event);
+    }
+
     return lstack_epoll_ctl(epfd, op, fd, event);
 }
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
-    if (events == NULL || maxevents == 0) {
-        GAZELLE_RETURN(EINVAL);
+    if (unlikely(posix_api->is_chld)) {
+        return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
-    if (unlikely(posix_api->is_chld)) {
+    struct lwip_sock *sock = get_socket_by_fd(epfd);
+    if (sock == NULL || sock->wakeup == NULL) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
