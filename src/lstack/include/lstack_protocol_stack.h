@@ -51,6 +51,7 @@ struct protocol_stack {
     struct list_node send_list;
     struct list_node event_list;
     pthread_spinlock_t event_lock;
+    int32_t epollfd; /* kernel event thread epoll fd */
 
     struct gazelle_stat_pkts stats;
     struct gazelle_stack_latency latency;
@@ -73,13 +74,6 @@ struct protocol_stack_group {
     /* dfx stats */
     bool latency_start;
     uint64_t call_alloc_fail;
-};
-
-struct wakeup_poll {
-    bool init;
-    struct protocol_stack *bind_stack;
-    struct list_node event_list; /* epoll temp use poll */
-    sem_t event_sem;
 };
 
 long get_stack_tid(void);

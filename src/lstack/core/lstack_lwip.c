@@ -29,6 +29,7 @@
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
+#include "posix/lstack_epoll.h"
 #include "lstack_lwip.h"
 
 #define HALF_DIVISOR                    (2)

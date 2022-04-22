@@ -95,8 +95,8 @@ int32_t dpdk_eal_init(void)
     if (ret < 0) {
         if (rte_errno == EALREADY) {
             LSTACK_PRE_LOG(LSTACK_INFO, "rte_eal_init aleady init\n");
-	    /* maybe other program inited, merge init param share init */
-	    ret = 0;
+            /* maybe other program inited, merge init param share init */
+            ret = 0;
         }
         else {
             LSTACK_PRE_LOG(LSTACK_ERR, "rte_eal_init failed init, rte_errno %d\n", rte_errno);

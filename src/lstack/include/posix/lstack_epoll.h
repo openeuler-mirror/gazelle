@@ -18,6 +18,30 @@ extern "C" {
 #endif
 
 #include <poll.h>
+#include <stdbool.h>
+#include <semaphore.h>
+
+#include "lstack_protocol_stack.h"
+
+struct wakeup_poll {
+    bool init;
+    struct protocol_stack *bind_stack;
+    sem_t event_sem;
+
+    int32_t epollfd;
+    bool have_kernel_fd;
+
+    /* poll */
+    struct pollfd *last_fds;
+    nfds_t last_nfds;
+    nfds_t last_max_nfds;
+    struct epoll_event *events;
+
+    /* epoll */
+    int32_t stack_fd_cnt[PROTOCOL_STACK_MAX];
+    struct protocol_stack *max_stack;
+    struct list_node event_list; /* epoll temp use */
+};
 
 int32_t lstack_epoll_create(int32_t size);
 int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event *event);

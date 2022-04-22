@@ -35,6 +35,7 @@
 #define READ_LIST_MAX                   32
 #define SEND_LIST_MAX                   32
 #define HANDLE_RPC_MSG_MAX              32
+#define KERNEL_EPOLL_MAX                256
 
 static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX;
 static struct protocol_stack_group g_stack_group = {0};
@@ -43,9 +44,6 @@ static PER_THREAD long g_stack_tid = 0;
 void set_init_fail(void);
 typedef void *(*stack_thread_func)(void *arg);
 
-#ifdef GAZELLE_USE_EPOLL_EVENT_STACK
-void update_stack_events(struct protocol_stack *stack);
-#endif
 
 int32_t bind_to_stack_numa(struct protocol_stack *stack)
 {
@@ -206,6 +204,10 @@ static void* gazelle_weakup_thread(void *arg)
     LSTACK_LOG(INFO, LSTACK, "weakup_%02d start\n", stack->queue_id);
 
     for (;;) {
+        if (rte_ring_count(stack->wakeup_ring) == 0) {
+            continue;
+        }
+
         sem_t *event_sem;
         if (rte_ring_sc_dequeue(stack->wakeup_ring, (void **)&event_sem)) {
             continue;
@@ -268,6 +270,61 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     return 0;
 }
 
+static void* gazelle_kernel_event(void *arg)
+{
+    uint16_t queue_id = *(uint16_t *)arg;
+
+    int32_t epoll_fd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
+    if (epoll_fd < 0) {
+        LSTACK_LOG(ERR, LSTACK, "queue_id=%d epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
+        /* exit in main thread, avoid create mempool and exit at the same time */
+        set_init_fail();
+        sem_post(&get_protocol_stack_group()->all_init);
+        return NULL;
+    }
+
+    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+    stack->epollfd = epoll_fd;
+
+    sem_post(&get_protocol_stack_group()->all_init);
+    LSTACK_LOG(INFO, LSTACK, "kernel_event_%02d start\n", stack->queue_id);
+
+    struct epoll_event events[KERNEL_EPOLL_MAX];
+    for (;;) {
+        int32_t event_num = posix_api->epoll_wait_fn(epoll_fd, events, KERNEL_EPOLL_MAX, -1);
+        if (event_num <= 0) {
+            continue;
+        }
+
+        for (int32_t i = 0; i < event_num; i++) {
+            if (events[i].data.ptr) {
+                sem_post((sem_t *)events[i].data.ptr);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static int32_t create_companion_thread(struct protocol_stack_group *stack_group, struct protocol_stack *stack)
+{
+    int32_t ret;
+
+    if (stack_group->wakeup_enable) {
+        ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_weakup_thread);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "gazelleweakup ret=%d errno=%d\n", ret, errno);
+            return ret;
+        }
+    }
+
+    ret = create_thread(stack->queue_id, "gazellekernel", gazelle_kernel_event);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "gazellekernelEvent ret=%d errno=%d\n", ret, errno);
+    }
+    return ret;
+}
+
 void wait_sem_value(sem_t *sem, int32_t wait_value)
 {
     int32_t sem_val;
@@ -315,12 +372,9 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
         return NULL;
     }
 
-    if (stack_group->wakeup_enable) {
-        int32_t ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_weakup_thread);
-        if (ret != 0) {
-            free(stack);
-            return NULL;
-        }
+    if (create_companion_thread(stack_group, stack) != 0) {
+        free(stack);
+        return NULL;
     }
 
     return stack;
@@ -338,6 +392,7 @@ static void* gazelle_stack_thread(void *arg)
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%d\n", queue_id);
         return NULL;
     }
+
     sem_post(&get_protocol_stack_group()->all_init);
     LSTACK_LOG(INFO, LSTACK, "stack_%02d init success\n", queue_id);
 
@@ -351,10 +406,6 @@ static void* gazelle_stack_thread(void *arg)
         send_stack_list(stack, SEND_LIST_MAX);
 
         sys_timer_run();
-
-#ifdef GAZELLE_USE_EPOLL_EVENT_STACK
-        update_stack_events(stack);
-#endif
     }
 
     return NULL;
@@ -378,7 +429,13 @@ static int32_t init_protocol_sem(void)
         LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
         return -1;
     }
-    
+
+    ret = sem_init(&stack_group->all_init, 0, 0);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
+        return -1;
+    }
+
     return 0;
 }
 
