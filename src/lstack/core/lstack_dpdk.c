@@ -175,13 +175,13 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
         return -1;
     }
 
-    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, RX_MBUF_CACHE_SZ,
+    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF, RX_MBUF_CACHE_SZ,
         stack->queue_id);
     if (stack->rx_pktmbuf_pool == NULL) {
         return -1;
     }
 
-    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, TX_MBUF_CACHE_SZ,
+    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF, TX_MBUF_CACHE_SZ,
         stack->queue_id);
     if (stack->tx_pktmbuf_pool == NULL) {
         return -1;

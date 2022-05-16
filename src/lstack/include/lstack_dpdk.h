@@ -23,7 +23,7 @@
 #include "dpdk_common.h"
 struct protocol_stack;
 
-#define RX_NB_MBUF          ((5 * MAX_CLIENTS) + (VDEV_RX_QUEUE_SZ * DEFAULT_BACKUP_RING_SIZE_FACTOR))
+#define RX_NB_MBUF          ((5 * (MAX_CLIENTS / 4)) + (VDEV_RX_QUEUE_SZ * DEFAULT_BACKUP_RING_SIZE_FACTOR))
 #define RX_MBUF_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
 #define TX_NB_MBUF          (128 * DEFAULT_RING_SIZE)
 #define TX_MBUF_CACHE_SZ    (DEFAULT_RING_SIZE)
