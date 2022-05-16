@@ -339,11 +339,13 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
 
     struct protocol_stack *stack = malloc(sizeof(*stack));
     if (stack == NULL) {
+        sem_post(&stack_group->thread_phase1);
         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
         return NULL;
     }
 
     if (init_stack_value(stack, queue_id) != 0) {
+        sem_post(&stack_group->thread_phase1);
         free(stack);
         return NULL;
     }
@@ -356,6 +358,7 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
 
     if (use_ltran()) {
         if (client_reg_thrd_ring() != 0) {
+            sem_post(&stack_group->thread_phase1);
             free(stack);
             return NULL;
         }
