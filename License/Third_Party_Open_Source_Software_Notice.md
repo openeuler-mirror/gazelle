@@ -129,7 +129,7 @@ lwIP is freely available under a BSD license.
  *
  */
 
- **Software:** libpcap 1.9.1
+**Software:** libpcap 1.9.1
 
 **Copyright notice:**  
 
@@ -153,9 +153,9 @@ THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
 IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
 WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
- **Software:** libconfig 1.7.2
+**Software:** libconfig 1.7.2
 
- **Copyright notice:**  
+**Copyright notice:**  
 
  GNU LESSER GENERAL PUBLIC LICENSE
                        Version 2.1, February 1999
@@ -681,5 +681,31 @@ Author: Andi Kleen, SUSE Labs
 
 Version 2.0.0 by Cliff Wickman (cpw@sgi.com), Christoph Lameter (clameter@sgi.com) and Lee Schermerhorn (lee.schermerhorn@hp.com).
 
- **Copyright notice:**  
- Please see above.
+**Copyright notice:**  
+Please see above.
+
+**Software:** lockless queue
+
+**License:** 
+Copyright (c) 2010-2011 Dmitry Vyukov. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+   1. Redistributions of source code must retain the above copyright notice, this list of
+
+      conditions and the following disclaimer.
+
+   2. Redistributions in binary form must reproduce the above copyright notice, this list
+
+      of conditions and the following disclaimer in the documentation and/or other materials
+
+      provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY DMITRY VYUKOV "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL DMITRY VYUKOV OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+The views and conclusions contained in the software and documentation are those of the authors and should not be interpreted as representing official policies, either expressed or implied, of Dmitry Vyukov.
+
+If not stated otherwise, all non-source-code text and images on this site are provided under the terms of the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License. Source code is covered by the Simplified BSD License and by Apache License, Version 2.0. The opinions expressed on this site are my own and do not necessarily reflect the views of Google.
+
+**Copyright notice:**  
+Please see above.
