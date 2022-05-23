@@ -1,90 +1,75 @@
-<img src="doc/logo.png" alt="gazelle" style="zoom:20%;" />  
+# 用户态协议栈Gazelle用户指南
 
-# gazelle
+## 简介
 
-## Introduction
-gazelle是高性能的用户态协议栈，通过dpdk在用户态直接读写网卡报文，共享大页内存传递报文，并使用轻量级lwip协议栈。能够大幅提高应用的网络IO吞吐能力.
+Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读写网卡报文，共享大页内存传递报文，使用轻量级LwIP协议栈。能够大幅提高应用的网络I/O吞吐能力。专注于数据库网络性能加速，如MySQL、redis等。
+- 高性能  
+报文零拷贝，无锁，灵活scale-out，自适应调度。
+- 通用性  
+完全兼容POSIX，零修改，适用不同类型的应用。  
 
-## Compile
-- 编译依赖软件包  
-cmake gcc-c++ lwip dpdk-devel(>=21.11-2)
-numactl-devel libpcap-devel libconfig-devel libboundscheck rpm-build
-- 编译
-``` sh
-#创建目录
-mkdir -p ~/rpmbuild/SPECS
-mkdir -p ~/rpmbuild/SOURCES
+单进程且网卡支持多队列时，只需使用liblstack.so有更短的报文路径。其余场景使用ltran进程分发报文到各个线程。
 
-#创建压缩包
-mkdir gazelle-1.0.0
-mv build gazelle-1.0.0
-mv src gazelle-1.0.0
-tar zcvf gazelle-1.0.0.tar.gz gazelle-1.0.0/
-
-#编包
-mv gazelle-1.0.0.tar.gz ~/rpmbuild/SPECS
-cp gazelle.spec ~/rpmbuild/SPECS
-cd ~/rpmbuild/SPECS
-rpmbuild -bb gazelle.spec
-
-#编出的包
-ls ~/rpmbuild/RPMS
-```
-
-## Install
-``` sh 
+## 安装
+配置openEuler的yum源，直接使用yum命令安装
+```sh
 #dpdk >= 21.11-2
 yum install dpdk
 yum install libconfig
-yum install numacttl
+yum install numactl
 yum install libboundscheck
 yum install libpcap
 yum install gazelle
-
 ```
 
-## Use
-### 1. 安装ko模块
+## 使用方法
+配置运行环境，使用Gazelle加速应用程序步骤如下：
+### 1. 使用root权限安装ko
+根据实际情况选择使用ko，提供虚拟网口、绑定网卡到用户态功能。  
+若使用虚拟网口功能，则使用rte_kni.ko
 ``` sh
-modprobe uio
-insmod /usr/lib/modules/5.10.0-54.0.0.27.oe1.x86_64/extra/dpdk/igb_uio.ko
-insmod /usr/lib/modules/5.10.0-54.0.0.27.oe1.x86_64/extra/dpdk/rte_kni.ko carrier="on"
+modprobe rte_kni carrier="on"
 ```
+网卡从内核驱动绑为用户态驱动的ko，根据实际情况选择一种
+``` sh
+#若IOMMU能使用
+modprobe vfio-pci
+
+#若IOMMU不能使用，且VFIO支持noiommu
+modprobe vfio enable_unsafe_noiommu_mode=1
+modprobe vfio-pci
+
+#其它情况
+modprobe igb_uio
+```
+
 
 ### 2. dpdk绑定网卡
-- 对于虚拟网卡或一般物理网卡，绑定到驱动igb_uio
+将网卡绑定到步骤1选择的驱动。为用户态网卡驱动提供网卡资源访问接口。
 ``` sh
+#使用vfio-pci
+dpdk-devbind -b vfio-pci enp3s0 
+
+#使用igb_uio
 dpdk-devbind -b igb_uio enp3s0
 ```
-- 1822网卡绑定到驱动vfio-pci（由kernel提供）
+
+### 3. 大页内存配置
+Gazelle使用大页内存提高效率。使用root权限配置系统预留大页内存，可选用任意页大小。因每页内存都需要一个fd，使用内存较大时，建议使用1G的大页，避免占用过多fd。  
+根据实际情况，选择一种页大小，配置足够的大页内存即可。配置大页操作如下： 
 ``` sh
-modprobe vfio-pci
-dpdk-devbind -b vfio-pci enp3s0 
+#配置2M大页内存：在node0上配置 2M * 1024 = 2G
+echo 1024 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
+
+#配置1G大页内存：在node0上配置1G * 5 = 5G
+echo 5 > /sys/devices/system/node/node0/hugepages/hugepages-1048576kB/nr_hugepages
+
+#查看配置结果
+grep Huge /proc/meminfo
 ```
 
-### 3. 大页内存配置  
-dpdk提供了高效的大页内存管理和共享机制，gazelle的报文数据、无锁队列等都使用了大页内存。大页内存需要root用户配置。2M或1G大页按实际需要配置，推荐使用2M大页内存，该内存是本机上ltran和所有lstack可以使用的总内存，具体方法如下：
-- 2M大页配置  
-  - 配置系统大页数量
-    ``` sh
-    #示例：在node0上配置2M * 2000 = 4000M
-    echo 2000 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
-    echo 0 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages
-    echo 0 > /sys/devices/system/node/node2/hugepages/hugepages-2048kB/nr_hugepages
-    echo 0 > /sys/devices/system/node/node3/hugepages/hugepages-2048kB/nr_hugepages
-    # 查看配置结果
-    grep Huge /proc/meminfo
-    ```
-- 1G大页配置  
-1G大页配置方法与2M类似
-  - 配置系统大页数量
-    ``` sh
-    #示例：在node0上配置1G * 5 = 5G
-    echo 5 > /sys/devices/system/node/node0/hugepages/hugepages-1048576kB/nr_hugepages
-    ```
-
 ### 4. 挂载大页内存  
-创建两个目录，分别给lstack的进程、ltran进程使用。操作步骤如下：  
+创建两个目录，分别给lstack的进程、ltran进程访问大页内存使用。操作步骤如下：  
 ``` sh
 mkdir -p /mnt/hugepages
 mkdir -p /mnt/hugepages-2M
@@ -94,34 +79,35 @@ mount -t hugetlbfs nodev /mnt/hugepages
 mount -t hugetlbfs nodev /mnt/hugepages-2M
 ```
 
-### 5. 应用程序从内核协议栈切换至用户态协议栈  
-+ 一种方式：重新编译程序
-修改应用的makefile文件，使其链接liblstack.so。示例如下：
-``` makefile
-#在makefile中添加
-ifdef USE_GAZELLE
-    -include /etc/gazelle/lstack.Makefile
-endif
-gcc test.c -o test $(LSTACK_LIBS)
+### 5. 应用程序使用Gazelle
+有两种使能Gazelle方法，根据需要选择其一  
+- 重新编译应用程序，链接Gazelle的库  
+修改应用makefile文件链接liblstack.so，示例如下：
+```
+#makefile中添加Gazelle的Makefile
+-include /etc/gazelle/lstack.Makefile
+
+#编译添加LSTACK_LIBS变量
+gcc test.c -o test ${LSTACK_LIBS}
 ```
 
-+ 另一个方式：使用LD_PRELOAD
+- 使用LD_PRELOAD加载Gazelle的库  
+GAZELLE_BIND_PROCNAME环境变量指定进程名，LD_PRELOAD指定Gazelle库路径
 ```
-GAZELLE_BIND_PROCNAME=test(具体进程名) LD_PRELOAD=/usr/lib64/liblstack.so ./test
+GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 ```
 
 ### 6. 配置文件  
-- lstack.conf用于指定lstack的启动参数，Gazelle发布件会包括ltran.conf供用户参考，路径为/etc/gazelle/lstack.conf, 配置文件参数如下  
+- lstack.conf用于指定lstack的启动参数，默认路径为/etc/gazelle/lstack.conf, 配置文件参数如下  
 
 |选项|参数格式|说明|
 |:---|:---|:---|
 |dpdk_args|--socket-mem（必需）<br>--huge-dir（必需）<br>--proc-type（必需）<br>--legacy-mem<br>--map-perfect<br>等|dpdk初始化参数，参考dpdk说明|
 |use_ltran| 0/1 | 是否使用ltran |
-|num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量),仅在use_ltran=0时生效,如果机器不支持网卡多队列，lstack线程数量应该为1|
-|num_weakup|"1,3,5 ..."|weakup线程绑定的cpu编号，编号的数量为weakup线程个数，与lstack线程的数量保持一致|
-|numa_bind|0/1|是否支持将用户线程绑定到与某lstack线程相同numa内|
+|num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量)。可按NUMA选择cpu|
+|num_wakeup|"1,3,5 ..."|wakeup线程绑定的cpu编号，编号的数量为wakeup线程个数，与lstack线程的数量保持一致。与numcpus选择对应NUMA的cpu。不配置则为不使用唤醒线程|
 |low_power_mode|0/1|是否开启低功耗模式，暂不支持|
-|kni_swith|0/1|rte_kni开关，默认为0|
+|kni_swith|0/1|rte_kni开关，默认为0。只有不使用ltran时才能开启|
 |host_addr|"192.168.xx.xx"|协议栈的IP地址，必须和redis-server配置<br>文件里的“bind”字段保存一致。|
 |mask_addr|"255.255.xx.xx"|掩码地址|
 |gateway_addr|"192.168.xx.1"|网关地址|
@@ -137,10 +123,8 @@ kni_switch=0
 
 low_power_mode=0
 
-num_cpus="2"
-num_weakup="3"
-
-numa_bind=1
+num_cpus="2,22"
+num_wakeup="3,23"
 
 host_addr="192.168.1.10"
 mask_addr="255.255.255.0"
@@ -148,7 +132,7 @@ gateway_addr="192.168.1.1"
 devices="aa:bb:cc:dd:ee:ff"
 ```
 
-- ltran.conf用于指定ltran启动的参数，Gazelle发布件会包括ltran.conf供用户参考，路径为/etc/gazelle/ltran.conf，仅在lstack.conf内配置use_ltran=1时生效,配置文件格式如下  
+- ltran.conf用于指定ltran启动的参数，默认路径为/etc/gazelle/ltran.conf。使用ltran时，lstack.conf内配置use_ltran=1,配置参数如下：  
 
 |功能分类|选项|参数格式|说明|
 |:---|:---|:---|:---|
@@ -182,24 +166,26 @@ bond_macs="aa:bb:cc:dd:ee:ff"
 bond_ports="0x1"
 
 tcp_conn_scan_interval=10
-```  
-### 7. 启动  
-- 不使用ltran模式(use_ltran=0)时，不需要启动ltran
-- 启动ltran，如果不指定--config-file，则使用默认路径/etc/gazelle/ltran.conf
+```
+### 7. 启动应用程序
+- 启动ltran进程  
+单进程且网卡支持多队列，则直接使用网卡多队列分发报文到各线程，不启动ltran进程，lstack.conf的use_ltran配置为0.  
+启动ltran时不使用-config-file指定配置文件，则使用默认路径/etc/gazelle/ltran.conf
 ``` sh
 ltran --config-file ./ltran.conf
 ```
-- 启动redis，如果不指定环境变量LSTACK_CONF_PATH，则使用默认路径/etc/gazelle/lstack.conf
+- 启动应用程序  
+启动应用程序前不使用环境变量LSTACK_CONF_PATH指定配置文件，则使用默认路径/etc/gazelle/lstack.conf
 ``` sh
 export LSTACK_CONF_PATH=./lstack.conf
-redis-server redis.conf
+LD_PRELOAD=/usr/lib64/liblstack.so  GAZELLE_BIND_PROCNAME=redis-server redis-server redis.conf
 ```
 
 ### 8. API
-liblstack.so编译进应用程序后wrap网络编程标准接口，应用程序无需修改代码。
+Gazelle wrap应用程序POSIX接口，应用程序无需修改代码。
 
-### 9. gazellectl
-- 不使用ltran模式时不支持gazellectl ltran xxx命令，以及-r, rate命令
+### 9. 调测命令
+- 不使用ltran模式时不支持gazellectl ltran xxx命令，以及lstack -r命令
 ```
 Usage: gazellectl [-h | help]
   or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time]
@@ -228,56 +214,50 @@ Usage: gazellectl [-h | help]
 #### 1. dpdk配置文件的位置
 如果是root用户，dpdk启动后的配置文件将会放到/var/run/dpdk目录下;
 如果是非root用户，dpdk配置文件的路径将由环境变量XDG_RUNTIME_DIR决定；
-+ 如果XDG_RUNTIME_DIR为空，dpdk配置文件放到/tmp/dpdk目录下；
-+ 如果XDG_RUNTIME_DIR不为空，dpdk配置文件放到变量XDG_RUNTIME_DIR下；
-+ 注意有些机器会默认设置XDG_RUNTIME_DIR
+- 如果XDG_RUNTIME_DIR为空，dpdk配置文件放到/tmp/dpdk目录下；
+- 如果XDG_RUNTIME_DIR不为空，dpdk配置文件放到变量XDG_RUNTIME_DIR下；
+- 注意有些机器会默认设置XDG_RUNTIME_DIR
 
-## Constraints
-- 提供的命令行、配置文件以及配置大页内存需要root权限执行或修改。非root用户使用，需先提权以及修改文件权限。
-- 若要把用户态网卡绑回内核驱动，必须先将Gazelle退出。
+## 约束限制
+
+使用 Gazelle 存在一些约束限制：
+#### 功能约束
 - 不支持accept阻塞模式或者connect阻塞模式。
-- 最多只支持1500个连接。
-- 协议栈当前只支持tcp、icmp、arp、ipv4。
-- 大页内存不支持在挂载点里创建子目录重新挂载。
-- 在对端ping时，要求指定报文长度小于等于14000。
+- 最多支持1500个TCP连接。
+- 当前仅支持TCP、ICMP、ARP、IPv4 协议。
+- 在对端ping Gazelle时，要求指定报文长度小于等于14000B。
 - 不支持使用透明大页。
-- 需要保证ltran的可用大页内存 >=1G
-- 需要保证应用实例协议栈线程的可用大页内存 >=800M
-- 不支持32位系统使用。
 - ltran不支持使用多种类型的网卡混合组bond。
 - ltran的bond1主备模式，只支持链路层故障主备切换（例如网线断开），不支持物理层故障主备切换（例如网卡下电、拔网卡）。
-- 构建X86版本使用-march=native选项，基于构建环境的CPU（Intel® Xeon® Gold 5118 CPU @ 2.30GHz）指令集进行优化。要求运行环境CPU支持SSE4.2、AVX、AVX2、AVX-512指令集。
-- 最大IP分片数为10（ping最大包长14790），TCP协议不使用IP分片。
-- sysctl配置网卡rp_filter参数为1，否则可能使用内核协议栈
-- 虚拟机网卡不支持多队列。
-- 不使用ltran模式，kni网口只支持本地通讯使用，且需要启动前配置NetworkManager不管理kni网卡
-- 虚拟kni网口的ip及mac地址，需要与lstack配置文件保持一致
-- gazelle运行过程中，不允许删除运行文件，如果删除，需要重启gazelle
-- lstack配置的ip需要与应用程序的ip保持一致
+- 虚拟机网卡不支持多队列。  
+#### 操作约束
+- 提供的命令行、配置文件默认root权限。非root用户使用，需先提权以及修改文件所有者。
+- 将用户态网卡绑回到内核驱动，必须先退出Gazelle。
+- 大页内存不支持在挂载点里创建子目录重新挂载。
+- ltran需要最低大页内存为1GB。
+- 每个应用实例协议栈线程最低大页内存为800MB 。
+- 仅支持64位系统。
+- 构建x86版本的Gazelle使用了-march=native选项，基于构建环境的CPU（Intel® Xeon® Gold 5118 CPU @ 2.30GHz指令集进行优化。要求运行环境CPU支持 SSE4.2、AVX、AVX2、AVX-512 指令集。
+- 最大IP分片数为10（ping 最大包长14790B），TCP协议不使用IP分片。
+- sysctl配置网卡rp_filter参数为1，否则可能不按预期使用Gazelle协议栈，而是依然使用内核协议栈。
+- 不使用ltran模式，KNI网口不可配置只支持本地通讯使用，且需要启动前配置NetworkManager不管理KNI网卡。
+- 虚拟KNI网口的IP及mac地址，需要与lstack.conf配置文件保持一致 。
 
-## Security risk note
-gazelle有如下安全风险，用户需要评估使用场景风险  
-1. 共享内存  
+## 风险提示
+Gazelle可能存在如下安全风险，用户需要根据使用场景评估风险。
+  
+**共享内存**  
 - 现状  
-大页内存mount至/mnt/hugepages-2M目录，链接liblstack.so的进程初始化时在/mnt/hugepages-2M目录下创建文件，每个文件对应2M大页内存，并mmap这些文件。ltran在收到lstask的注册信息后，根据大页内存配置信息也mmap目录下文件，实现大页内存共享。
-ltran在/mnt/hugepages目录的大页内存同理。
-- 当前消减措施  
-大页文件权限600，只有OWNER用户才能访问文件，默认root用户，支持配置成其它用户；  
-大页文件有dpdk文件锁，不能直接写或者mmap。
-- 风险点  
-属于同一用户的恶意进程模仿DPDK实现逻辑，通过大页文件共享大页内存，写破坏大页内存，导致gazelle程序crash。建议用户下的进程属于同一信任域。
-2. 流量限制  
-- 风险点  
-gazelle没有做流量限制，用户有能力发送最大网卡线速流量的报文到网络。
-3. 进程仿冒  
-- 风险点  
-合法注册到ltran的两个lstack进程，进程A可仿冒进程B发送仿冒消息给ltran，修改ltran的转发控制信息，造成进程B通讯异常，进程B报文转发给进程A等问题。建议lstack进程都为可信任进程。
+  大页内存 mount 至 /mnt/hugepages-2M 目录，链接 liblstack.so 的进程初始化时在 /mnt/hugepages-2M 目录下创建文件，每个文件对应 2M 大页内存，并 mmap 这些文件。ltran 在收到 lstask 的注册信息后，根据大页内存配置信息也 mmap 目录下文件，实现大页内存共享。
+  ltran 在 /mnt/hugepages 目录的大页内存同理。
+- 当前消减措施
+  大页文件权限 600，只有 OWNER 用户才能访问文件，默认 root 用户，支持配置成其它用户； 
+  大页文件有 DPDK 文件锁，不能直接写或者映射。
+- 风险点 
+  属于同一用户的恶意进程模仿DPDK实现逻辑，通过大页文件共享大页内存，写破坏大页内存，导致Gazelle程序crash。建议用户下的进程属于同一信任域。
 
-## How to Contribute
-We are happy to provide guidance for the new contributors.  
-Please sign the CLA before contributing.
+**流量限制**
+Gazelle没有做流量限制，用户有能力发送最大网卡线速流量的报文到网络，可能导致网络流量拥塞。
 
-## Licensing
-gazelle is licensed under the Mulan PSL v2.
-
-
+**进程仿冒**
+合法注册到ltran的两个lstack进程，进程A可仿冒进程B发送仿冒消息给ltran，修改ltran的转发控制信息，造成进程B通讯异常，进程B报文转发给进程A信息泄露等问题。建议lstack进程都为可信任进程。
