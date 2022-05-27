@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       8
+Release:       9
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -53,6 +53,7 @@ Patch9035:     0035-add-check-for-stack-params.patch
 Patch9036:     0036-the-sending-of-sock-last-data-is-triggered-by-lstack.patch
 Patch9037:     0037-add-gazellectl-lstack-constraint.patch
 Patch9038:     0038-refactor-event.patch
+Patch9039:     0039-update-license-lockless-queue.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -93,6 +94,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri May 27 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-9
+- update license lockless queue
+
 * Fri May 20 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-8
 - update README.md
 
