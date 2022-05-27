@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       7
+Release:       8
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -93,6 +93,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri May 20 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-8
+- update README.md
+
 * Thu Mar 31 2022 jiangheng <jiangheng12@huawei.com> - 1.0.1-7
 - Type:bugfix
 - CVE:
