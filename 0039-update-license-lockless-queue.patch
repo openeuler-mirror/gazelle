@@ -1,0 +1,91 @@
+From 5c3c268268e30ca494c6ceb154dbc67b3df2dce5 Mon Sep 17 00:00:00 2001
+From: colordev <colordev@hotmail.com>
+Date: Thu, 19 May 2022 12:30:12 +0800
+Subject: [PATCH] update license lockless queue
+
+---
+ ...Third_Party_Open_Source_Software_Notice.md | 36 ++++++++++++++++---
+ src/lstack/include/lstack_lockless_queue.h    | 10 +-----
+ 2 files changed, 32 insertions(+), 14 deletions(-)
+
+diff --git a/License/Third_Party_Open_Source_Software_Notice.md b/License/Third_Party_Open_Source_Software_Notice.md
+index 8812524..325cdbe 100644
+--- a/License/Third_Party_Open_Source_Software_Notice.md
++++ b/License/Third_Party_Open_Source_Software_Notice.md
+@@ -129,7 +129,7 @@ lwIP is freely available under a BSD license.
+  *
+  */
+ 
+- **Software:** libpcap 1.9.1
++**Software:** libpcap 1.9.1
+ 
+ **Copyright notice:**  
+ 
+@@ -153,9 +153,9 @@ THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
+ IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ 
+- **Software:** libconfig 1.7.2
++**Software:** libconfig 1.7.2
+ 
+- **Copyright notice:**  
++**Copyright notice:**  
+ 
+  GNU LESSER GENERAL PUBLIC LICENSE
+                        Version 2.1, February 1999
+@@ -681,5 +681,31 @@ Author: Andi Kleen, SUSE Labs
+ 
+ Version 2.0.0 by Cliff Wickman (cpw@sgi.com), Christoph Lameter (clameter@sgi.com) and Lee Schermerhorn (lee.schermerhorn@hp.com).
+ 
+- **Copyright notice:**  
+- Please see above.
++**Copyright notice:**  
++Please see above.
++
++**Software:** lockless queue
++
++**License:** 
++Copyright (c) 2010-2011 Dmitry Vyukov. All rights reserved.
++
++Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
++
++   1. Redistributions of source code must retain the above copyright notice, this list of
++
++      conditions and the following disclaimer.
++
++   2. Redistributions in binary form must reproduce the above copyright notice, this list
++
++      of conditions and the following disclaimer in the documentation and/or other materials
++
++      provided with the distribution.
++
++THIS SOFTWARE IS PROVIDED BY DMITRY VYUKOV "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL DMITRY VYUKOV OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++The views and conclusions contained in the software and documentation are those of the authors and should not be interpreted as representing official policies, either expressed or implied, of Dmitry Vyukov.
++
++If not stated otherwise, all non-source-code text and images on this site are provided under the terms of the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License. Source code is covered by the Simplified BSD License and by Apache License, Version 2.0. The opinions expressed on this site are my own and do not necessarily reflect the views of Google.
++
++**Copyright notice:**  
++Please see above.
+diff --git a/src/lstack/include/lstack_lockless_queue.h b/src/lstack/include/lstack_lockless_queue.h
+index c70b56a..c00d3a2 100644
+--- a/src/lstack/include/lstack_lockless_queue.h
++++ b/src/lstack/include/lstack_lockless_queue.h
+@@ -1,13 +1,5 @@
+ /*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
++* Copyright (c) 2010-2011 Dmitry Vyukov. All rights reserved.
+ */
+ 
+ #ifndef __GAZELLE_LOCKLESS_QUEUE_H__
+-- 
+2.27.0
+
