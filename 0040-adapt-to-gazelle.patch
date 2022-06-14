@@ -1,0 +1,274 @@
+From fd7a843ec8afcd44233488cca0f1fd3bb6fe6112 Mon Sep 17 00:00:00 2001
+From: root <root@localhost.localdomain>
+Date: Mon, 18 Apr 2022 20:08:14 +0800
+Subject: [PATCH] adpter 20.03
+
+---
+ build/build.sh                             |  0
+ src/common/dpdk_common.c                   |  3 +-
+ src/lstack/Makefile                        | 54 +++++++++++-----------
+ src/lstack/api/lstack_wrap.c               |  7 ++-
+ src/lstack/core/lstack_dpdk.c              | 38 +++++++++++++--
+ src/lstack/include/lstack_ethdev.h         |  2 +-
+ src/lstack/include/lstack_protocol_stack.h |  2 +-
+ src/lstack/include/lstack_vdev.h           |  4 +-
+ src/lstack/netif/lstack_vdev.c             |  6 +--
+ src/ltran/CMakeLists.txt                   | 47 ++++++++++---------
+ tool/gazelle_common.sh                     |  0
+ tool/gazelle_crontab.sh                    |  0
+ tool/gazelle_exit.sh                       |  0
+ tool/gazelle_setup.sh                      |  0
+ 14 files changed, 101 insertions(+), 62 deletions(-)
+ mode change 100755 => 100644 build/build.sh
+ mode change 100755 => 100644 tool/gazelle_common.sh
+ mode change 100755 => 100644 tool/gazelle_crontab.sh
+ mode change 100755 => 100644 tool/gazelle_exit.sh
+ mode change 100755 => 100644 tool/gazelle_setup.sh
+
+diff --git a/build/build.sh b/build/build.sh
+old mode 100755
+new mode 100644
+diff --git a/src/common/dpdk_common.c b/src/common/dpdk_common.c
+index 63dcfc1..af03f2c 100644
+--- a/src/common/dpdk_common.c
++++ b/src/common/dpdk_common.c
+@@ -16,6 +16,7 @@
+ #include <rte_bus_pci.h>
+ #include <rte_mbuf.h>
+ #include <securec.h>
++#include <stdbool.h>
+ 
+ #include "dpdk_common.h"
+ 
+@@ -167,4 +168,4 @@ void kni_process_rx(uint16_t port)
+             pkts_burst[i] = NULL;
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 8fc2435..0abed9e 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -14,18 +14,22 @@ ROOT_DIR := $(dir $(abspath $(LSTACK_DIR)))
+ LWIP_INCLUDE_FILE ?= /usr/include/lwip
+ LIB_PATH ?= /usr/lib64
+ 
++DPDK_INCLUDE_FILE ?= /usr/include/dpdk
++DPDK_LIB_PATH ?= /usr/lib64
++
+ AR = ar
+ ARFLAGS = crDP
+ CC = gcc
+ OPTIMIZATION = -O2 -g
+ RM = rm -f
+-LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
++LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lsecurec
+ 
+ SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC
+ 
+ INC = -I$(LSTACK_DIR)/include   \
+       -I$(LSTACK_DIR)/../common \
+-      -I$(LWIP_INCLUDE_FILE)
++      -I$(LWIP_INCLUDE_FILE)    \
++      -I$(DPDK_INCLUDE_FILE)
+ 
+ CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC)
+ 
+@@ -53,32 +57,26 @@ include $(patsubst %, %/dir.mk, $(DIRS))
+ OBJS = $(subst .c,.o,$(SRCS))
+ 
+ LWIP_LIB = $(LIB_PATH)/liblwip.a
+-LIBRTE_LIB = $(LIB_PATH)/librte_bus_pci.a \
+-             $(LIB_PATH)/librte_pci.a \
+-             $(LIB_PATH)/librte_cmdline.a \
+-             $(LIB_PATH)/librte_hash.a \
+-             $(LIB_PATH)/librte_mempool.a \
+-             $(LIB_PATH)/librte_mempool_ring.a \
+-             $(LIB_PATH)/librte_timer.a \
+-             $(LIB_PATH)/librte_eal.a \
+-             $(LIB_PATH)/librte_ring.a \
+-             $(LIB_PATH)/librte_mbuf.a \
+-             $(LIB_PATH)/librte_telemetry.a \
+-             $(LIB_PATH)/librte_kni.a \
+-             $(LIB_PATH)/librte_net_ixgbe.a \
+-             $(LIB_PATH)/librte_kvargs.a \
+-             $(LIB_PATH)/librte_net_hinic.a \
+-             $(LIB_PATH)/librte_net_i40e.a \
+-             $(LIB_PATH)/librte_net_virtio.a \
+-             $(LIB_PATH)/librte_bus_vdev.a \
+-             $(LIB_PATH)/librte_net.a \
+-             $(LIB_PATH)/librte_rcu.a \
+-             $(LIB_PATH)/librte_ethdev.a \
+-             $(LIB_PATH)/librte_pdump.a \
+-             $(LIB_PATH)/librte_bpf.a \
+-             $(LIB_PATH)/librte_pcapng.a \
+-             $(LIB_PATH)/librte_security.a \
+-             $(LIB_PATH)/librte_cryptodev.a
++LIBRTE_LIB = $(DPDK_LIB_PATH)/librte_pci.a \
++             $(DPDK_LIB_PATH)/librte_bus_pci.a \
++             $(DPDK_LIB_PATH)/librte_cmdline.a \
++             $(DPDK_LIB_PATH)/librte_hash.a \
++             $(DPDK_LIB_PATH)/librte_mempool.a \
++             $(DPDK_LIB_PATH)/librte_mempool_ring.a \
++             $(DPDK_LIB_PATH)/librte_timer.a \
++             $(DPDK_LIB_PATH)/librte_eal.a \
++             $(DPDK_LIB_PATH)/librte_ring.a \
++             $(DPDK_LIB_PATH)/librte_mbuf.a \
++             $(DPDK_LIB_PATH)/librte_kni.a \
++             $(DPDK_LIB_PATH)/librte_pmd_ixgbe.a \
++             $(DPDK_LIB_PATH)/librte_kvargs.a \
++             $(DPDK_LIB_PATH)/librte_pmd_hinic.a \
++             $(DPDK_LIB_PATH)/librte_pmd_i40e.a \
++             $(DPDK_LIB_PATH)/librte_pmd_virtio.a \
++             $(DPDK_LIB_PATH)/librte_bus_vdev.a \
++             $(DPDK_LIB_PATH)/librte_net.a \
++             $(DPDK_LIB_PATH)/librte_ethdev.a \
++             $(DPDK_LIB_PATH)/librte_pdump.a 
+ 
+ 
+ DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index 573a413..e76f72d 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -24,7 +24,7 @@
+ 
+ #define DPDK_PKT_BURST_SIZE 512
+ 
+-struct eth_dev_ops {
++struct lstack_eth_dev_ops {
+     uint32_t (*rx_poll)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf);
+     uint32_t (*tx_xmit)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts);
+ };
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 9753385..5a1e0a0 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -44,7 +44,7 @@ struct protocol_stack {
+     struct netif netif;
+     uint32_t rx_ring_used;
+     uint32_t tx_ring_used;
+-    struct eth_dev_ops *dev_ops;
++    struct lstack_eth_dev_ops *dev_ops;
+ 
+     struct list_node recv_list;
+     struct list_node listen_list;
+diff --git a/src/lstack/include/lstack_vdev.h b/src/lstack/include/lstack_vdev.h
+index 31a997d..4a6253e 100644
+--- a/src/lstack/include/lstack_vdev.h
++++ b/src/lstack/include/lstack_vdev.h
+@@ -29,8 +29,8 @@
+ #define VDEV_TX_QUEUE_SZ     (DEFAULT_RING_SIZE)
+ #define FREE_RX_QUEUE_SZ     (DPDK_PKT_BURST_SIZE)
+ 
+-struct eth_dev_ops;
+-void vdev_dev_ops_init(struct eth_dev_ops **dev_ops);
++struct lstack_eth_dev_ops;
++void vdev_dev_ops_init(struct lstack_eth_dev_ops **dev_ops);
+ int vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple);
+ 
+ #endif /* _GAZELLE_VDEV_H_ */
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index 5a4e86a..cb0e6e9 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -153,17 +153,17 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+     return (int32_t)sent_pkts;
+ }
+ 
+-static struct eth_dev_ops g_eth_dev_ops = {
++static struct lstack_eth_dev_ops g_eth_dev_ops = {
+     .rx_poll = vdev_rx_poll,
+     .tx_xmit = vdev_tx_xmit,
+ };
+ 
+-static struct eth_dev_ops g_ltran_eth_dev_ops = {
++static struct lstack_eth_dev_ops g_ltran_eth_dev_ops = {
+     .rx_poll = ltran_rx_poll,
+     .tx_xmit = ltran_tx_xmit,
+ };
+ 
+-void vdev_dev_ops_init(struct eth_dev_ops **dev_ops)
++void vdev_dev_ops_init(struct lstack_eth_dev_ops **dev_ops)
+ {
+     if (use_ltran()) {
+         *dev_ops = &g_ltran_eth_dev_ops;
+diff --git a/src/ltran/CMakeLists.txt b/src/ltran/CMakeLists.txt
+index c21d88a..37ec14a 100644
+--- a/src/ltran/CMakeLists.txt
++++ b/src/ltran/CMakeLists.txt
+@@ -12,6 +12,7 @@ cmake_minimum_required(VERSION 3.12.1)
+ project(ltran)
+ 
+ set(COMMON_DIR ${PROJECT_SOURCE_DIR}/../common)
++set(DPDK_DIR /usr/include/dpdk)
+ 
+ set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread")
+ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D LTRAN_COMPILE")
+@@ -26,7 +27,7 @@ add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_st
+ 				ltran_forward.c ltran_timer.c ${COMMON_DIR}/gazelle_dfx_msg.c ${COMMON_DIR}/dpdk_common.c
+                 ${COMMON_DIR}/gazelle_parse_config.c)
+ 
+-target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR})
++	target_include_directories(ltran PRIVATE ${DPDK_DIR} ${COMMON_DIR} ${PROJECT_SOURCE_DIR})
+ target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_FEATURE_CRC32=1 -DRTE_MACHINE_CPUFLAG_NEON
+                -DRTE_MACHINE_CPUFLAG_CRC32 -DRTE_MACHINE_CPUFLAG_PMULL -DRTE_MACHINE_CPUFLAG_AES
+                -DRTE_MACHINE_CPUFLAG_SHA1 -DRTE_MACHINE_CPUFLAG_SHA2 -include rte_config.h
+@@ -34,27 +35,31 @@ target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_
+                -Wpointer-arith -Wcast-align -Wcast-qual -Wnested-externs -Wformat-nonliteral -Wformat-security -Wundef
+                -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2)
+ 
+-target_link_libraries(ltran PRIVATE config boundscheck rte_pdump -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines)
++target_link_libraries(ltran PRIVATE config securec rte_pdump -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines)
+ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--whole-archive -Wl,-lrte_pipeline \
+-    -Wl,--no-whole-archive -Wl,-lrte_table -Wl,--whole-archive -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_port -Wl,--no-whole-archive \
+-    -Wl,-lrte_distributor -Wl,-lrte_meter -Wl,-lrte_ip_frag -Wl,-lrte_lpm -Wl,--whole-archive -Wl,-lrte_acl -Wl,--no-whole-archive \
+-    -Wl,-lrte_jobstats -Wl,-lrte_bitratestats -Wl,-lrte_metrics -Wl,-lrte_latencystats -Wl,-lrte_power -Wl,-lrte_efd -Wl,-lrte_bpf \
+-    -Wl,--whole-archive -Wl,-lrte_gro -Wl,-lrte_cfgfile -Wl,-lrte_gso -Wl,-lrte_hash -Wl,-lrte_member -Wl,-lrte_vhost -Wl,-lrte_kvargs \
+-    -Wl,-lrte_mbuf -Wl,-lrte_ethdev -Wl,-lrte_net -Wl,-lrte_bbdev -Wl,-lrte_cryptodev -Wl,-lrte_security -Wl,-lrte_compressdev -Wl,-lrte_eventdev \
++    -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_table -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_port -Wl,--no-whole-archive \
++    -Wl,-lrte_distributor -Wl,-lrte_ip_frag -Wl,-lrte_meter -Wl,-lrte_lpm -Wl,--whole-archive -Wl,-lrte_acl -Wl,--no-whole-archive \
++    -Wl,-lrte_jobstats -Wl,-lrte_metrics -Wl,-lrte_bitratestats -Wl,-lrte_latencystats -Wl,-lrte_power -Wl,-lrte_efd -Wl,-lrte_bpf \
++    -Wl,--whole-archive -Wl,-lrte_cfgfile -Wl,-lrte_gro -Wl,-lrte_gso -Wl,-lrte_hash -Wl,-lrte_member -Wl,-lrte_vhost -Wl,-lrte_kvargs \
++    -Wl,-lrte_mbuf -Wl,-lrte_net -Wl,-lrte_ethdev -Wl,-lrte_bbdev -Wl,-lrte_cryptodev -Wl,-lrte_security -Wl,-lrte_compressdev -Wl,-lrte_eventdev \
+     -Wl,-lrte_rawdev -Wl,-lrte_timer -Wl,-lrte_mempool -Wl,-lrte_mempool_ring -Wl,-lrte_ring -Wl,-lrte_pci \
+-    -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic -Wl,-lrte_cmdline \
+-    -Wl,-lrte_sched -Wl,-lrte_reorder -Wl,-lrte_kni -Wl,-lrte_common_cpt -Wl,-lrte_common_octeontx -Wl,-lrte_common_dpaax -Wl,-lrte_bus_pci \
+-    -Wl,-lrte_bus_dpaa -Wl,-lrte_bus_vdev -Wl,-lrte_bus_fslmc -Wl,-lrte_mempool_bucket -Wl,-lrte_mempool_stack -Wl,-lrte_mempool_dpaa \
+-    -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_net_af_packet -Wl,-lrte_net_ark -Wl,-lrte_net_atlantic -Wl,-lrte_net_axgbe \
+-    -Wl,-lrte_net_bnxt -Wl,-lrte_net_bond -Wl,-lrte_net_cxgbe -Wl,-lrte_net_dpaa -Wl,-lrte_net_dpaa2 -Wl,-lrte_net_e1000 -Wl,-lrte_net_ena \
+-    -Wl,-lrte_net_enetc -Wl,-lrte_net_enic -Wl,-lrte_net_failsafe -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe -Wl,-lrte_net_kni \
+-    -Wl,-lrte_net_nfp -Wl,-lrte_net_null -Wl,-lpcap -Wl,-lrte_net_qede -Wl,-lrte_net_ring -Wl,-lrte_net_softnic \
+-    -Wl,-lrte_net_tap -Wl,-lrte_net_vdev_netvsc -Wl,-lrte_net_virtio -Wl,-lrte_net_vhost \
+-    -Wl,-lrte_bus_vmbus -Wl,-lrte_net_netvsc -Wl,-lrte_mempool_octeontx -Wl,-lrte_net_octeontx \
+-    -Wl,-lrte_bus_ifpga -Wl,-lrte_stack -Wl,-lrte_telemetry\
+-    -Wl,--no-whole-archive -Wl,-lm -Wl,-lrt -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic -Wl,-export-dynamic \
+-    -Wl,--as-needed -Wl,-export-dynamic -Wl,-Map=ltran.map -Wl,--cref")
++    -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic \
++    -Wl,-lrte_cmdline \
++    -Wl,-lrte_reorder -Wl,-lrte_sched -Wl,-lrte_kni -Wl,-lrte_common_cpt -Wl,-lrte_common_octeontx -Wl,-lrte_common_dpaax -Wl,-lrte_bus_pci \
++    -Wl,-lrte_bus_vdev -Wl,-lrte_bus_dpaa -Wl,-lrte_bus_fslmc -Wl,-lrte_mempool_bucket -Wl,-lrte_mempool_stack -Wl,-lrte_mempool_dpaa \
++    -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_pmd_af_packet -Wl,-lrte_pmd_ark -Wl,-lrte_pmd_atlantic -Wl,-lrte_pmd_axgbe \
++    -Wl,-lrte_pmd_bnxt -Wl,-lrte_pmd_bond -Wl,-lrte_pmd_cxgbe -Wl,-lrte_pmd_dpaa -Wl,-lrte_pmd_dpaa2 -Wl,-lrte_pmd_e1000 -Wl,-lrte_pmd_ena \
++    -Wl,-lrte_pmd_enetc -Wl,-lrte_pmd_enic -Wl,-lrte_pmd_failsafe -Wl,-lrte_pmd_i40e -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe -Wl,-lrte_pmd_kni \
++    -Wl,-lrte_pmd_lio -Wl,-lrte_pmd_nfp -Wl,-lrte_pmd_null -Wl,-lpcap -Wl,-lrte_pmd_qede -Wl,-lrte_pmd_ring -Wl,-lrte_pmd_softnic \
++    -Wl,-lrte_pmd_tap -Wl,-lrte_pmd_thunderx_nicvf -Wl,-lrte_pmd_vdev_netvsc -Wl,-lrte_pmd_virtio -Wl,-lrte_pmd_vhost -Wl,-lrte_pmd_ifc \
++    -Wl,-lrte_pmd_vmxnet3_uio -Wl,-lrte_bus_vmbus -Wl,-lrte_pmd_netvsc -Wl,-lrte_pmd_bbdev_null -Wl,-lrte_pmd_null_crypto -Wl,-lrte_pmd_octeontx_crypto \
++    -Wl,-lrte_pmd_crypto_scheduler -Wl,-lrte_pmd_dpaa2_sec -Wl,-lrte_pmd_dpaa_sec -Wl,-lrte_pmd_caam_jr -Wl,-lrte_pmd_virtio_crypto \
++    -Wl,-lrte_pmd_octeontx_zip -Wl,-lrte_pmd_qat -Wl,-lrte_pmd_skeleton_event -Wl,-lrte_pmd_sw_event -Wl,-lrte_pmd_dsw_event \
++    -Wl,-lrte_pmd_octeontx_ssovf -Wl,-lrte_pmd_dpaa_event -Wl,-lrte_pmd_dpaa2_event -Wl,-lrte_mempool_octeontx -Wl,-lrte_pmd_octeontx \
++    -Wl,-lrte_pmd_opdl_event -Wl,-lrte_bus_ifpga -Wl,-lrte_stack \
++    -Wl,--no-whole-archive -Wl,-lrt -Wl,-lm -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic -Wl,-export-dynamic \
++    -Wl,-export-dynamic -Wl,--as-needed -Wl,-Map=ltran.map -Wl,--cref")
+ 
+ add_executable(gazellectl ltran_dfx.c ${COMMON_DIR}/gazelle_dfx_msg.c)
+-target_include_directories(gazellectl PRIVATE $ENV{DPDK_INCLUDE_FILE} ${COMMON_DIR})
+-target_link_libraries(gazellectl PRIVATE boundscheck)
++target_include_directories(gazellectl PRIVATE $ENV{DPDK_INCLUDE_FILE} ${DPDK_DIR} ${COMMON_DIR})
++target_link_libraries(gazellectl PRIVATE securec)
+
+-- 
+2.27.0
+
