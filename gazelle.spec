@@ -2,17 +2,17 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       9
+Release:       10
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
 Source0:       %{name}-%{version}.tar.gz
 
 BuildRequires: cmake gcc-c++ lwip
-BuildRequires: dpdk-devel >= 21.11-5
+BuildRequires: dpdk-devel >= 19.11-15
 BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck
 
-Requires:      dpdk >= 21.11-5
+Requires:      dpdk >= 19.11-15
 Requires:      numactl libpcap libconfig libboundscheck
 
 Patch9001:     0001-fix-compile-error-unuse-result.patch
@@ -54,6 +54,8 @@ Patch9036:     0036-the-sending-of-sock-last-data-is-triggered-by-lstack.patch
 Patch9037:     0037-add-gazellectl-lstack-constraint.patch
 Patch9038:     0038-refactor-event.patch
 Patch9039:     0039-update-license-lockless-queue.patch
+Patch9040:     0040-adapt-to-gazelle.patch
+Patch9041:     0041-modify-securec-to-boundscheck.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -94,6 +96,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue Jun 14 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-10
+- adapt to gazelle
+
 * Fri May 27 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-9
 - update license lockless queue
 

@@ -1,0 +1,45 @@
+From feb53c7996a677577d9d60664697a1f5bd2afe21 Mon Sep 17 00:00:00 2001
+From: xiusailong <xiusailong@huawei.com>
+Date: Tue, 14 Jun 2022 17:36:52 +0800
+Subject: [PATCH] modify securec to boundscheck
+
+---
+ src/lstack/Makefile      | 2 +-
+ src/ltran/CMakeLists.txt | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 0abed9e..1aaed16 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -22,7 +22,7 @@ ARFLAGS = crDP
+ CC = gcc
+ OPTIMIZATION = -O2 -g
+ RM = rm -f
+-LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lsecurec
++LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
+ 
+ SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC
+ 
+diff --git a/src/ltran/CMakeLists.txt b/src/ltran/CMakeLists.txt
+index 37ec14a..5279d24 100644
+--- a/src/ltran/CMakeLists.txt
++++ b/src/ltran/CMakeLists.txt
+@@ -35,7 +35,7 @@ target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_
+                -Wpointer-arith -Wcast-align -Wcast-qual -Wnested-externs -Wformat-nonliteral -Wformat-security -Wundef
+                -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2)
+ 
+-target_link_libraries(ltran PRIVATE config securec rte_pdump -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines)
++target_link_libraries(ltran PRIVATE config boundscheck rte_pdump -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines)
+ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--whole-archive -Wl,-lrte_pipeline \
+     -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_table -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_port -Wl,--no-whole-archive \
+     -Wl,-lrte_distributor -Wl,-lrte_ip_frag -Wl,-lrte_meter -Wl,-lrte_lpm -Wl,--whole-archive -Wl,-lrte_acl -Wl,--no-whole-archive \
+@@ -62,4 +62,4 @@ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--w
+ 
+ add_executable(gazellectl ltran_dfx.c ${COMMON_DIR}/gazelle_dfx_msg.c)
+ target_include_directories(gazellectl PRIVATE $ENV{DPDK_INCLUDE_FILE} ${DPDK_DIR} ${COMMON_DIR})
+-target_link_libraries(gazellectl PRIVATE securec)
++target_link_libraries(gazellectl PRIVATE boundscheck)
+-- 
+2.27.0
+
