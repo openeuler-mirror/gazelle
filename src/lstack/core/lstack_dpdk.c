@@ -428,6 +428,7 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
     int ret;
     struct rte_eth_dev_info dev_info;
     struct rte_eth_rss_reta_entry64 *reta_conf = NULL;
+    size_t reta_conf_size, n;
 
     rte_eth_dev_info_get(port_id, &dev_info);
 
@@ -435,8 +436,11 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
         return ERR_VAL;
     }
 
-    reta_conf = calloc(dev_info.reta_size / RTE_RETA_GROUP_SIZE,
-                       sizeof(struct rte_eth_rss_reta_entry64));
+    reta_conf_size = dev_info.reta_size / RTE_RETA_GROUP_SIZE;
+    if (dev_info.reta_size % RTE_RETA_GROUP_SIZE)
+	    reta_conf_size += 1;
+
+    reta_conf = calloc(reta_conf_size, sizeof(struct rte_eth_rss_reta_entry64));
     if (!reta_conf) {
         return ERR_MEM;
     }
@@ -446,8 +450,8 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
         one_reta_conf->reta[i % RTE_RETA_GROUP_SIZE] = i % nb_queues;
     }
 
-    for (i = 0; i < dev_info.reta_size / RTE_RETA_GROUP_SIZE; i++) {
-        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[i];
+    for (n = 0; n < reta_conf_size; n++) {
+        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[n];
         one_reta_conf->mask = 0xFFFFFFFFFFFFFFFFULL;
     }
 
