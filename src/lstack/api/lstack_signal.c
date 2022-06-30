@@ -78,7 +78,7 @@ int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigacti
 {
     struct sigaction new_action;
 
-    if ((match_hijack_signal(sig_num) != 0) && (action->sa_handler == SIG_DFL)) {
+    if ((match_hijack_signal(sig_num) != 0) && (action && action->sa_handler == SIG_DFL)) {
         new_action = *action;
         new_action.sa_flags |= SA_RESETHAND;
         new_action.sa_handler = lstack_sig_default_handler;
