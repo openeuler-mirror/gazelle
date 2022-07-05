@@ -1,54 +1,52 @@
-[toc]
+# gazelle-用户指南
 
-# 1 简介
+## 1 简介
 
 EulerOS提供了利用Gazelle runtime优化数据库服务性能的完整解决方案，Gazelle
 runtime基于bypass内核的架构设计，能够提供更高性能运行环境，优化服务软件性
 能，可以很好地满足产品的性能需求。
 本文主要介绍Gazelle软件如何安装使用。
 
-# 2 安装软件包，编译应用程序（以redis 为例）
+## 2 安装软件包，编译应用程序（以redis 为例）
 
-1. 在使用之前，需要安装Gazelle软件包。
+在使用之前，需要安装Gazelle软件包。
 
-#### 操作步骤
+### 操作步骤
 
-  Gazelle是高性能用户态协议栈软件包，使用如下命令安装Gazelle软件包：
+Gazelle是高性能用户态协议栈软件包，使用如下命令安装Gazelle软件包：
 
 ```
-  yum install gazelle
+yum install gazelle
 ```
 
-#### 安装正确性验证
+### 安装正确性验证
 
-  1. 安装完成后，使用“rpm -qa | grep -E gazelle”命令确认是否已经正确安装。示例如下：
+1. 安装完成后，使用“rpm -qa | grep -E gazelle”命令确认是否已经正确安装。示例如下：
 
-     如果已正确安装则结果显示如下：
+如果已正确安装则结果显示如下：
 ```
-     gazelle-1.0.0-h1.eulerosv2r10.aarch64
+gazelle-1.0.0-h1.eulerosv2r10.aarch64
 ```
 
   2. 确认以下dpdk组件是否存在：
 ```
-
-    /lib/modules/4.19.90-vhulk2007.2.0.h188.eulerosv2r10.aarch64/extra/dpdk/igb_uio.ko
-    /usr/share/dpdk
-    /usr/share/dpdk/usertools/dpdk-devbind.py
+rpm -ql dpdk | grep igb_uio
+/usr/share/dpdk
+/usr/share/dpdk/usertools/dpdk-devbind.py
 ```
 
   3. 确认以下Gazelle组件是否存在：
-    
+
+```
+/usr/bin/gazellectl
+/usr/bin/ltran
+/usr/lib64/liblstack.so
+/etc/gazelle/ltran.conf
+/etc/gazelle/lstack.conf
+/etc/gazelle/lstack.Makefile
 ```
 
-    /usr/bin/gazellectl
-    /usr/bin/ltran
-    /usr/lib64/liblstack.so
-    /etc/gazelle/ltran.conf
-    /etc/gazelle/lstack.conf
-    /etc/gazelle/lstack.Makefile
-```
-
-#### 链接Gazelle编译redis-server
+### 链接Gazelle编译redis-server
 
 1. 获取开源redis代码，更改redis/src/Makefile文件，使其链接lstack，示例如下：
 
@@ -78,10 +76,10 @@ index 4b2a31c..92fa17d 100644
 
 2. 编译redis：
 
-   ```
-   localhost:/euler/zyk/serverless/lredis/src # make distclean
-   localhost:/euler/zyk/serverless/lredis/src # make USE_GAZELLE=1 -j32
-   ```
+  ```
+  localhost:/euler/zyk/serverless/lredis/src # make distclean
+  localhost:/euler/zyk/serverless/lredis/src # make USE_GAZELLE=1 -j32
+  ```
 
 #### 注意
 
@@ -89,7 +87,7 @@ index 4b2a31c..92fa17d 100644
 
  支持LD_PRELOAD方式免编译使用gazelle，可跳过编译应用程序步骤。
 
-#3 设置配置文件（以redis为例）
+## 3 设置配置文件（以redis为例）
 
   安装完软件包后，运行Gazelle服务需要设置必要的配置文件。
 
@@ -168,13 +166,13 @@ tcp_conn_scan_interval=10
 
   redis.conf为redis服务的配置文件，可以参考开源的配置文件，需要注意的是，redis.conf侦听的ip必须和其使用的lstack.conf里面的host_addr值保持一致。
 
-# 4 环境初始化
+## 4 环境初始化
 
 配置文件完成后，需要配置大页、插入igb_uio.ko、绑定dpdk网卡等环境初始化工作才可以运行Gazelle服务。
 
 **说明：igb_uio.ko依赖于uio.ko，需要用户先确保已安装uio.ko模块。**
 
-#### 操作步骤
+### 操作步骤
 
 1. **配置大页内存**
 
@@ -203,68 +201,24 @@ tcp_conn_scan_interval=10
    将需要通信的网卡绑定到dpdk，示例如下：
 
 ```
-   [root@ARM159server usertools]# ./dpdk-devbind.py --bind=igb_uio eth4
+[root@ARM159server usertools]# dpdk-devbind.py --bind=igb_uio eth4
 ```
 
    如果是1822网卡，必须绑定vfio-pci驱动：
-```
-   [root@ARM159server usertools]# ./dpdk-devbind.py --bind=vfio-pci eth4 
-```
-
-4. **一键部署脚本使用**
-
-   提供gazelle_setup脚本，用于快速自动化部署gazelle运行环境。
-
-   一键部署脚本执行示例：
 
 ```
-   gazelle_setup.sh –i/--nic eth0 –n/--numa 1024,1024 –d/--daemon 1/0 –k/--kni 1/0 –l/--lowpower 1/0 --ltrancore 0,1 --lstackcore 2-3
+[root@ARM159server usertools]# dpdk-devbind.py --bind=vfio-pci eth4 
 ```
 
-   参数描述：
+## 5 运行Gazelle
 
-   -i/--nic：设置待绑定网卡，此参数必须配置，且网卡需要有ip、路由和网关等必须参数，否则会读取配置失败，必选。
-
-   -n/--numa：lstack大页内存（不包括ltran的，ltran默认为1024M，setup脚本不对其做修改），根据numa节点配置，并用","(英文的逗号)分离，这里需要根据系统环境内存配置对应的大小，默认为1024， 可选。
-
-   -d/--daemon：是否开启deamon模式，开启为1，关闭为0；默认为1，可选。
-
-   -k/--kni：是否开启kni，开启为1，关闭为0；默认为0，可选。
-
-   -l/--lowpower：是否开启低功耗模式，开启为1，关闭为0；默认为0，可选。
-
-   --ltrancore：ltran的绑核参数，参考dpdk的参数配置，此处不做参数校验；默认为0,1，可选。
-
-   --lstackcore：lstack的绑核参数，同--ltrancore，默认为2，可选。
-
-   **说明**
-
-   1. gazelle_setup.sh支持非root用户启动；（即执行脚本对应的用户及用户组）。
-   2. 默认配置文件的目录为：/etc/gazelle。
-   3. gazelle_setup.sh会按照启动参数生成lstack.conf；对于lstack多进程场景，若多进程要使用不同配置文件，则需要自己拷贝修改每个进程的lstack.conf。
-   4. 部署脚本会启动ltran进程。
-
-   一键退出脚本执行实例：
-
-```
-   gazelle_exit.sh
-```
-
-   **说明**
-
-   若启动了ltran的守护任务（gazelle_setup.sh指定了 -d/--daemon 1），那么在杀死ltran之后，守护任务仍会将ltran拉起，所以此时若要完全退出ltran，需要执行gazelle_exit.sh。
-
-
-
-# 5 运行Gazelle
-
-#### 前提条件
+### 前提条件
 
 - 已完成软件包的安装。
 - 已设置完配置文件。
 - 已初始化环境。
 
-#### 操作步骤
+### 操作步骤
 
 1. **启动ltran**
 
@@ -275,21 +229,22 @@ tcp_conn_scan_interval=10
    **说明：一键部署脚本已启动ltran，若使用一键部署脚本，无需此步骤。**
 
 ```
-   [root@localhost deploy_open_source]# ltran --config-file /usr/share/gazelle/ltran.confEAL: Detected 96 lcore(s)
-   EAL: Detected 4 NUMA nodes
-   EAL: Multi-process socket /var/run/dpdk/(null)/mp_socket
-   EAL: Selected IOVA mode 'PA'
-   EAL: No free hugepages reported in hugepages-2048kB
-   EAL: No free hugepages reported in hugepages-2048kB
-   EAL: No free hugepages reported in hugepages-2048kB
-   EAL: No available hugepages reported in hugepages-1048576kB
-   EAL: Probing VFIO support...
-   EAL: VFIO support initialized
-   EAL: PCI device 0000:03:00.0 on NUMA socket 0......
-   EAL: Finished Process ltran_core_init.
-   EAL: Finished Process ctrl_thread_fn.
-   EAL: Finished Process client_rx_buf_init.
-   EAL: Runing Process forward.
+[root@localhost deploy_open_source]# ltran --config-file /usr/share/gazelle/ltran.conf
+EAL: Detected 96 lcore(s)
+EAL: Detected 4 NUMA nodes
+EAL: Multi-process socket /var/run/dpdk/(null)/mp_socket
+EAL: Selected IOVA mode 'PA'
+EAL: No free hugepages reported in hugepages-2048kB
+EAL: No free hugepages reported in hugepages-2048kB
+EAL: No free hugepages reported in hugepages-2048kB
+EAL: No available hugepages reported in hugepages-1048576kB
+EAL: Probing VFIO support...
+EAL: VFIO support initialized
+EAL: PCI device 0000:03:00.0 on NUMA socket 0......
+EAL: Finished Process ltran_core_init.
+EAL: Finished Process ctrl_thread_fn.
+EAL: Finished Process client_rx_buf_init.
+EAL: Runing Process forward.
 ```
 
 2. **启动redis**
@@ -367,7 +322,7 @@ GAZELLE_BIND_PROCNAME=benchmark_ker GAZELLE_BIND_THREADNAME=disp LD_PRELOAD=/lib
    1. 不支持使用export方式单独声明LD_PRELOAD环境变量。
    2. GAZELLE_BIND_PROCNAME指定lstack绑定的进程名称；GAZELLE_BIND_THREADNAME指定lstack绑定的进程中的具体线程名，且支持字串匹配，如设置disp，表示进程中所有线程名包含disp 字串的线程都会绑定lstack。
 
-# 6 最佳性能配置
+## 6 最佳性能配置
 
 为获得最佳的性能，Gazelle在启动时对cpu和内存配置有一定要求。最佳性能配置如下：
 
@@ -377,7 +332,7 @@ GAZELLE_BIND_PROCNAME=benchmark_ker GAZELLE_BIND_THREADNAME=disp LD_PRELOAD=/lib
 4. 应用进程绑核可提高性能，与网卡同一个numa节点对应的核如果有空闲，应当优先绑定。
 5. Gazelle的网络高性能只有在远程访问的时候才有保证，本机的tcp连接功能也支持，但如果本机有频繁的数据访问，会导致实例整体性能下降，不建议这么部署。
 
-# 7 使用约束
+## 7 使用约束
 
 1. Gazelle提供的命令行及配置文件仅root权限开源执行或修改。配置大页内存需要root用户执行操作。
 2. 在将网卡绑定到igb_uio后，禁止将网卡绑回ixgbe。
@@ -408,7 +363,7 @@ GAZELLE_BIND_PROCNAME=benchmark_ker GAZELLE_BIND_THREADNAME=disp LD_PRELOAD=/lib
 
 
 
-# 8 升级说明
+## 8 升级说明
 
 后续升级需要变更的组件包括ltran、liblstack.so、gazellectl、lstack.Makefile、lstack.conf、ltran.conf、gazelle_setup.sh、gazelle_exit.sh、gazelle_crontab.sh、gazelle_common.sh。
 
@@ -436,9 +391,9 @@ GAZELLE_BIND_PROCNAME=benchmark_ker GAZELLE_BIND_THREADNAME=disp LD_PRELOAD=/lib
 
 
 
-#9 调测工具
+## 9 调测工具
 
-##9.1 获取ltran统计数据说明
+### 9.1 获取ltran统计数据说明
 
 #### 概述
 
@@ -501,7 +456,7 @@ GAZELLE_BIND_PROCNAME=benchmark_ker GAZELLE_BIND_THREADNAME=disp LD_PRELOAD=/lib
 
 
 
-## 9.2 获取Lstack统计数据说明
+### 9.2 获取Lstack统计数据说明
 
 #### 概述
 
