@@ -63,9 +63,9 @@ void gazelle_detect_sock_logout(struct gazelle_tcp_sock_htable *tcp_sock_htable)
                 hlist_del_init(&tcp_sock->tcp_sock_node);
                 tcp_sock_htable->cur_tcp_sock_num--;
                 tcp_sock_htable->array[i].chain_size--;
-                free(tcp_sock);
                 LTRAN_DEBUG("delete the tcp sock htable: tid %u ip %u port %u\n",
                     tcp_sock->tid, tcp_sock->ip, (uint32_t)ntohs(tcp_sock->port));
+                free(tcp_sock);
             }
         }
     }
