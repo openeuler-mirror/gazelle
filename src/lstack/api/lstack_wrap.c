@@ -52,7 +52,7 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd)
         return PATH_KERNEL;
     }
 
-    if (unlikely(posix_api->is_chld)) {
+    if (unlikely(posix_api->ues_posix)) {
         return PATH_KERNEL;
     }
 
@@ -84,7 +84,7 @@ static inline int32_t do_epoll_create(int32_t size)
         return posix_api->epoll_create_fn(size);
     }
 
-    if (unlikely(posix_api->is_chld)) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_create_fn(size);
     }
 
@@ -93,7 +93,7 @@ static inline int32_t do_epoll_create(int32_t size)
 
 static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
 {
-    if (unlikely(posix_api->is_chld)) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -102,7 +102,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
-    if (unlikely(posix_api->is_chld)) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
@@ -203,7 +203,8 @@ static inline int32_t do_listen(int32_t s, int32_t backlog)
         return posix_api->listen_fn(s, backlog);
     }
 
-    int32_t ret = stack_broadcast_listen(s, backlog);
+    int32_t ret = get_global_cfg_params()->listen_shadow ? stack_broadcast_listen(s, backlog) :
+        stack_single_listen(s, backlog);
     if (ret != 0) {
         return ret;
     }
@@ -264,7 +265,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
 static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     if ((domain != AF_INET && domain != AF_UNSPEC)
-        || posix_api->is_chld) {
+        || posix_api->ues_posix) {
         return posix_api->socket_fn(domain, type, protocol);
     }
 
@@ -368,7 +369,7 @@ static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (unlikely(posix_api->is_chld) || nfds == 0) {
+    if (unlikely(posix_api->ues_posix) || nfds == 0) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 

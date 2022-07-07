@@ -25,6 +25,7 @@
 #include "gazelle_dfx_msg.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_stack_stat.h"
+#include "posix/lstack_epoll.h"
 
 #define US_PER_SEC  1000000
 
@@ -87,6 +88,68 @@ static void set_latency_start_flag(bool start)
     }
 }
 
+void register_wakeup(struct wakeup_poll *wakeup)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+
+    pthread_spin_lock(&stack_group->wakeup_list_lock);
+
+    wakeup->next = stack_group->wakeup_list;
+    stack_group->wakeup_list = wakeup;
+
+    pthread_spin_unlock(&stack_group->wakeup_list_lock);
+}
+
+void unregister_wakeup(struct wakeup_poll *wakeup)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+
+    pthread_spin_lock(&stack_group->wakeup_list_lock);
+
+    struct wakeup_poll *node = stack_group->wakeup_list;
+    struct wakeup_poll *pre = NULL;
+
+    while(node && node != wakeup) {
+        pre = node;
+        node = node->next;
+    }
+
+    if (node == NULL) {
+        pthread_spin_unlock(&stack_group->wakeup_list_lock);
+        return;
+    }
+
+    if (pre) {
+        pre->next = node->next;
+    } else {
+        stack_group->wakeup_list = node->next;
+    }
+
+    pthread_spin_unlock(&stack_group->wakeup_list_lock);
+}
+
+static void get_wakeup_stat(struct protocol_stack *stack, struct gazelle_wakeup_stat *stat)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+
+    pthread_spin_lock(&stack_group->wakeup_list_lock);
+
+    struct wakeup_poll *node = stack_group->wakeup_list;
+    while (node) {
+        if (node->bind_stack == stack) {
+            stat->app_events += node->stat.app_events;
+            stat->read_null += node->stat.read_null;
+            stat->app_write_cnt += node->stat.app_write_cnt;
+            stat->app_write_idlefail += node->stat.app_write_idlefail;
+            stat->app_read_cnt += node->stat.app_read_cnt;
+        }
+
+        node = node->next;
+    }
+
+    pthread_spin_unlock(&stack_group->wakeup_list_lock);
+}
+
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info)
 {
     struct cfg_params *cfg = get_global_cfg_params();
@@ -102,21 +165,24 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     dfx->loglevel = rte_log_get_level(RTE_LOGTYPE_LSTACK);
+
     lstack_get_low_power_info(&dfx->low_power_info);
-    memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
+
+    memcpy_s(&dfx->data.pkts.stack_stat, sizeof(struct gazelle_stack_stat), &stack->stats,
+        sizeof(struct gazelle_stack_stat));
+
+    get_wakeup_stat(stack, &dfx->data.pkts.wakeup_stat);
+
     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
 
     int32_t rpc_call_result = rpc_call_msgcnt(stack);
     dfx->data.pkts.call_msg_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
     rpc_call_result = rpc_call_recvlistcnt(stack);
-    dfx->data.pkts.recv_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
-
-    rpc_call_result = rpc_call_eventlistcnt(stack);
-    dfx->data.pkts.event_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
+    dfx->data.pkts.recv_list_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
     rpc_call_result = rpc_call_sendlistcnt(stack);
-    dfx->data.pkts.send_list = (rpc_call_result < 0) ? 0 : rpc_call_result;
+    dfx->data.pkts.send_list_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
     dfx->data.pkts.conn_num = stack->conn_num;
 }
@@ -182,6 +248,8 @@ int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
 
     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
         struct protocol_stack *stack = stack_group->stacks[i];
+
+        memset_s(&dfx, sizeof(dfx), 0, sizeof(dfx));
         get_stack_dfx_data(&dfx, stack, stat_mode);
 
         if (!use_ltran() &&

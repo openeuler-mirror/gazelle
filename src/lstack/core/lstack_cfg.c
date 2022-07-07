@@ -56,6 +56,7 @@ static int32_t parse_devices(void);
 static int32_t parse_dpdk_args(void);
 static int32_t parse_gateway_addr(void);
 static int32_t parse_kni_switch(void);
+static int32_t parse_listen_shadow(void);
 
 struct config_vector_t {
     const char *name;
@@ -73,6 +74,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "num_wakeup",   parse_wakeup_cpu_number },
     { "low_power_mode", parse_low_power_mode },
     { "kni_switch",   parse_kni_switch },
+    { "listen_shadow",  parse_listen_shadow },
     { NULL,           NULL }
 };
 
@@ -666,6 +668,22 @@ static int32_t parse_use_ltran(void)
 
     int32_t val = config_setting_get_int(arg);
     g_config_params.use_ltran = (val == 0) ? false : true;
+
+    return 0;
+}
+
+static int32_t parse_listen_shadow(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "listen_shadow");
+    if (arg == NULL) {
+        g_config_params.listen_shadow = false;
+        return 0;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    g_config_params.listen_shadow = (val == 0) ? false : true;
 
     return 0;
 }

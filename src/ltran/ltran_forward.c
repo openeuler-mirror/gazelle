@@ -92,7 +92,7 @@ static __rte_always_inline void backup_bufs_enque_rx_ring(struct gazelle_stack *
     struct rte_mbuf *free_buf[RING_MAX_SIZE];
 
     flush_cnt = (stack->backup_pkt_cnt < RING_MAX_SIZE) ? stack->backup_pkt_cnt : RING_MAX_SIZE;
-    free_cnt = rte_ring_cn_dequeue_burst(stack->rx_ring, (void **)free_buf, flush_cnt);
+    free_cnt = gazelle_ring_read(stack->rx_ring, (void **)free_buf, flush_cnt);
 
     for (uint32_t j = 0; j < free_cnt; j++) {
         index = (stack->backup_start + j) % backup_size;
@@ -102,7 +102,7 @@ static __rte_always_inline void backup_bufs_enque_rx_ring(struct gazelle_stack *
     stack->stack_stats.rx += free_cnt;
     stack->backup_pkt_cnt -= free_cnt;
     stack->backup_start = (stack->backup_start + free_cnt) % backup_size;
-    rte_ring_cn_enqueue(stack->rx_ring);
+    gazelle_ring_read_over(stack->rx_ring);
 }
 
 static __rte_always_inline void pktbufs_move_to_backup_bufs(struct gazelle_stack *stack, struct rte_mbuf **mbuf,
@@ -135,7 +135,7 @@ static __rte_always_inline uint32_t pkt_bufs_enque_rx_ring(struct gazelle_stack 
     struct rte_mbuf **cl_buffer = stack->pkt_buf;
     struct rte_mbuf *free_buf[GAZELLE_PACKET_READ_SIZE];
 
-    free_cnt = rte_ring_cn_dequeue_burst(stack->rx_ring, (void **)free_buf, stack->pkt_cnt);
+    free_cnt = gazelle_ring_read(stack->rx_ring, (void **)free_buf, stack->pkt_cnt);
     stack->stack_stats.rx += free_cnt;
 
     /* this prefetch and copy code, only 50~60 instruction, but never spend less than 70 cycle.
@@ -187,7 +187,7 @@ static __rte_always_inline uint32_t pkt_bufs_enque_rx_ring(struct gazelle_stack 
     }
 
     if (likely(free_cnt != 0)) {
-        rte_ring_cn_enqueue(stack->rx_ring);
+        gazelle_ring_read_over(stack->rx_ring);
     }
 
     return free_cnt;
@@ -520,14 +520,14 @@ static __rte_always_inline void tcp_hash_table_handle(struct gazelle_stack *stac
         return;
     }
 
-    uint32_t num = rte_ring_cn_dequeue_burst(stack->reg_ring, pkts, PACKET_READ_SIZE);
+    uint32_t num = gazelle_ring_read(stack->reg_ring, pkts, PACKET_READ_SIZE);
 
     for (uint32_t i = 0; i < num; i++) {
         tcp_hash_table_modify(stack, pkts[i]);
         pkts[i] = NULL;
     }
 
-    rte_ring_cn_enqueue(stack->reg_ring);
+    gazelle_ring_read_over(stack->reg_ring);
     if (pthread_mutex_unlock(&sock_htable->mlock) != 0) {
         LTRAN_WARN("write tcp_htable: unlock failed, errno %d\n", errno);
     }
@@ -675,7 +675,7 @@ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *sta
     uint32_t used_cnt;
 
     struct rte_mbuf *used_pkts[GAZELLE_PACKET_READ_SIZE];
-    used_cnt = rte_ring_cn_dequeue_burst(stack->tx_ring, (void **)used_pkts, GAZELLE_PACKET_READ_SIZE);
+    used_cnt = gazelle_ring_read(stack->tx_ring, (void **)used_pkts, GAZELLE_PACKET_READ_SIZE);
     if (used_cnt == 0) {
         return;
     }
@@ -686,7 +686,7 @@ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *sta
     if (ret != 0) {
         /* free pkts that not have be sent. */
         LTRAN_ERR("down alloc error, rx_pkts:%u ret=%d.\n", used_cnt, ret);
-        rte_ring_cn_enqueue(stack->tx_ring);
+        gazelle_ring_read_over(stack->tx_ring);
         stack->stack_stats.tx_drop += used_cnt;
         rte_exit(EXIT_FAILURE, "down alloc error\n");
     }
@@ -696,7 +696,7 @@ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *sta
         tx_bytes += used_pkts[tx_pkts]->data_len;
         stack->stack_stats.tx_bytes += used_pkts[tx_pkts]->data_len;
     }
-    rte_ring_cn_enqueue(stack->tx_ring);
+    gazelle_ring_read_over(stack->tx_ring);
 
     /* send packets anyway. */
     tx_pkts = 0;

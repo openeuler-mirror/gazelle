@@ -42,14 +42,14 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
     uint32_t nr_pkts;
     struct rte_mbuf *free_buf[DPDK_PKT_BURST_SIZE];
 
-    rcvd_pkts = rte_ring_en_dequeue_burst(stack->rx_ring, (void **)pkts, max_mbuf);
+    rcvd_pkts = gazelle_ring_sc_dequeue(stack->rx_ring, (void **)pkts, max_mbuf);
 
     stack->rx_ring_used += rcvd_pkts;
     if (unlikely(stack->rx_ring_used >= USED_RX_PKTS_WATERMARK)) {
-        uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, DPDK_PKT_BURST_SIZE);
+        uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, RING_SIZE(DPDK_PKT_BURST_SIZE));
         int32_t ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, (struct rte_mbuf **)free_buf, free_cnt);
         if (likely(ret == 0)) {
-            nr_pkts = rte_ring_en_enqueue_bulk(stack->rx_ring, (void **)free_buf, free_cnt);
+            nr_pkts = gazelle_ring_sp_enqueue(stack->rx_ring, (void **)free_buf, free_cnt);
             stack->rx_ring_used -= nr_pkts;
         } else {
             stack->stats.rx_allocmbuf_fail++;
@@ -72,14 +72,14 @@ static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pk
 
     do {
         if (unlikely(stack->tx_ring_used >= INUSE_TX_PKTS_WATERMARK)) {
-            uint32_t free_pkts = rte_ring_en_dequeue_burst(stack->tx_ring, (void **)free_buf, stack->tx_ring_used);
+            uint32_t free_pkts = gazelle_ring_sc_dequeue(stack->tx_ring, (void **)free_buf, stack->tx_ring_used);
             for (uint32_t i = 0; i < free_pkts; i++) {
                 rte_pktmbuf_free(free_buf[i]);
             }
             stack->tx_ring_used -= free_pkts;
         }
 
-        sent_pkts += rte_ring_en_enqueue_bulk(stack->tx_ring, (void **)(&pkts[sent_pkts]), nr_pkts - sent_pkts);
+        sent_pkts += gazelle_ring_sp_enqueue(stack->tx_ring, (void **)(&pkts[sent_pkts]), nr_pkts - sent_pkts);
     } while ((sent_pkts < nr_pkts) && (ENQUEUE_RING_RETRY_TIMEOUT > sys_now() - tbegin) && get_register_state());
 
     stack->tx_ring_used += sent_pkts;
@@ -128,7 +128,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
     }
 
     do {
-        (void)rte_ring_en_dequeue_burst(stack->reg_ring, free_buf, VDEV_REG_QUEUE_SZ);
+        (void)gazelle_ring_sc_dequeue(stack->reg_ring, free_buf, VDEV_REG_QUEUE_SZ);
 
         if (get_reg_ring_free_count(stack->reg_ring) == 0) {
             continue;
@@ -144,7 +144,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
         }
 
         free_buf[0] = tmp_buf;
-        sent_pkts = rte_ring_en_enqueue_bulk(stack->reg_ring, free_buf, 1);
+        sent_pkts = gazelle_ring_sp_enqueue(stack->reg_ring, free_buf, 1);
     } while ((sent_pkts < 1) && (ENQUEUE_RING_RETRY_TIMEOUT > sys_now() - tbegin) && get_register_state());
 
     if (sent_pkts == 1) {

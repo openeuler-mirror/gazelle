@@ -20,16 +20,27 @@ extern "C" {
 #include <poll.h>
 #include <stdbool.h>
 #include <semaphore.h>
+#include <pthread.h>
+#include <rte_common.h>
 
 #include "lstack_protocol_stack.h"
 
+enum wakeup_type {
+    WAKEUP_EPOLL = 0,
+    WAKEUP_POLL,
+};
 struct wakeup_poll {
+    /* stack thread read frequently */
+    sem_t event_sem __rte_cache_aligned;
+    enum wakeup_type type __rte_cache_aligned;
+    volatile bool have_kernel_event __rte_cache_aligned;
+    struct gazelle_wakeup_stat stat __rte_cache_aligned;
+    char pad __rte_cache_aligned;
+
     bool init;
     struct protocol_stack *bind_stack;
-    sem_t event_sem;
-
-    int32_t epollfd;
-    bool have_kernel_fd;
+    int32_t epollfd; /* epoll kernel fd, ctl add into gazelle_kernel_event thread */
+    struct wakeup_poll *next;
 
     /* poll */
     struct pollfd *last_fds;
@@ -40,7 +51,8 @@ struct wakeup_poll {
     /* epoll */
     int32_t stack_fd_cnt[PROTOCOL_STACK_MAX];
     struct protocol_stack *max_stack;
-    struct list_node event_list; /* epoll temp use */
+    struct list_node event_list;
+    pthread_spinlock_t event_list_lock;
 };
 
 int32_t lstack_epoll_create(int32_t size);
