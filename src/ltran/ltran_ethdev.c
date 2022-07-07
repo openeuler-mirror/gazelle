@@ -237,19 +237,31 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
     uint16_t rx_queue_num = (uint16_t)get_ltran_config()->bond.rx_queue_num;
     uint16_t tx_queue_num = (uint16_t)get_ltran_config()->bond.tx_queue_num;
     struct rte_eth_dev_info dev_info;
-    struct rte_eth_conf port_conf = {0};
     uint16_t queue_id;
 
-    port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
-
     rte_eth_dev_stop(port_num);
-    int32_t ret = rte_eth_dev_configure(port_num, rx_queue_num, tx_queue_num, &port_conf);
-    if (ret != 0) {
-        LTRAN_ERR("rte_eth_dev_configure failed in slave port initialize. errno: %d, port: %d\n", ret, port_num);
+
+    if (rte_eth_dev_info_get(port_num, &dev_info) != 0) {
+        LTRAN_ERR("Fail rte_eth_dev_info_get\n");
         return GAZELLE_ERR;
     }
 
-    ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_num, &rx_ring_size, &tx_ring_size);
+    struct rte_eth_conf port_conf = {0};
+    port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
+    port_conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
+    eth_params_checksum(&port_conf, &dev_info);
+    port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
+
+    struct ltran_config *ltran_config = get_ltran_config();
+    ltran_config->dpdk.rx_offload = port_conf.rxmode.offloads;
+    ltran_config->dpdk.tx_offload = port_conf.txmode.offloads;
+
+    if (rte_eth_dev_configure(port_num, rx_queue_num, tx_queue_num, &port_conf)) {
+        LTRAN_ERR("rte_eth_dev_configure failed in slave port initialize. errno: %d, port: %hu\n", errno, port_num);
+        return GAZELLE_ERR;
+    }
+
+    int32_t ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_num, &rx_ring_size, &tx_ring_size);
     if (ret != 0) {
         LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed in slave port initialize. errno: %d, port: %d \n", ret,
                   port_num);
@@ -266,7 +278,6 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
         }
     }
 
-    rte_eth_dev_info_get(port_num, &dev_info);
     for (queue_id = 0; queue_id < tx_queue_num; queue_id++) {
         ret = rte_eth_tx_queue_setup(port_num, queue_id, tx_ring_size, (uint32_t)rte_eth_dev_socket_id(port_num),
                                      &dev_info.default_txconf);
@@ -345,10 +356,25 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
     uint16_t rx_queue_num = (uint16_t)ltran_config->bond.rx_queue_num;
     uint16_t tx_queue_num = (uint16_t)ltran_config->bond.tx_queue_num;
 
+    int32_t ret = ltran_eth_bond_slave(port_info, port_num, bond_port_id);
+    if (ret < 0) {
+        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %d, errno: %d \n", port_num, ret);
+        return GAZELLE_ERR;
+    }
+    
+    struct rte_eth_dev_info dev_info;
+    if (rte_eth_dev_info_get(bond_port_id, &dev_info) != 0) {
+        LTRAN_ERR("faile rte_eth_dev_info_get\n");
+	return  GAZELLE_ERR;
+    }
+
     struct rte_eth_conf port_conf = {0};
     port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
+    port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
+    port_conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
+    eth_params_checksum(&port_conf, &dev_info);
 
-    int32_t ret = rte_eth_dev_configure(bond_port_id, rx_queue_num, tx_queue_num, &port_conf);
+    ret = rte_eth_dev_configure(bond_port_id, rx_queue_num, tx_queue_num, &port_conf);
     if (ret != 0) {
         LTRAN_ERR("rte_eth_dev_configure failed with bond port num: %d, errno: %d \n", port_num, ret);
         return GAZELLE_ERR;
@@ -361,12 +387,6 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
     }
     LTRAN_DEBUG("Bond port adujst rx_ring_size: %hu, tx_ring_size: %hu. bond port num: %hu \n",
         rx_ring_size, tx_ring_size, port_num);
-
-    ret = ltran_eth_bond_slave(port_info, port_num, bond_port_id);
-    if (ret < 0) {
-        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %d, errno: %d \n", port_num, ret);
-        return GAZELLE_ERR;
-    }
 
     ret = ltran_eth_rx_queue_setup(bond_port_id, pktmbuf_rxpool, rx_queue_num, rx_ring_size);
     if (ret < 0) {

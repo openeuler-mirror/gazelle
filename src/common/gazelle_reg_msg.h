@@ -94,6 +94,8 @@ struct reg_response_msg {
     struct {
         uintptr_t base_virtaddr;
         uint64_t socket_size;
+        uint64_t rx_offload;
+        uint64_t tx_offload;
     } msg;
 };
 

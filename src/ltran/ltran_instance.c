@@ -450,6 +450,7 @@ int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg)
     struct reg_response_msg send_msg;
     struct client_proc_conf *conf = &recv_msg->msg.proc;
     struct gazelle_instance *instance = NULL;
+    struct ltran_config *ltran_config = get_ltran_config();
 
     (void)memset_s(&send_msg, sizeof(send_msg), 0, sizeof(send_msg));
 
@@ -479,6 +480,8 @@ int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg)
 
     send_msg.msg.socket_size = instance->socket_size;
     send_msg.msg.base_virtaddr = instance->base_virtaddr;
+    send_msg.msg.rx_offload = ltran_config->dpdk.rx_offload;
+    send_msg.msg.tx_offload = ltran_config->dpdk.tx_offload;
     send_msg.type = RSP_OK;
     ret = write_specied_len(fd, (char *)&send_msg, sizeof(send_msg));
     if (ret != 0) {
