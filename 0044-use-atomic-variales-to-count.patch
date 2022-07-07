@@ -1,0 +1,78 @@
+From 900685bd99e25f832c4aeac202dfb7d5f5075833 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng12@huawei.com>
+Date: Tue, 19 Apr 2022 20:01:34 +0800
+Subject: [PATCH 03/18] use atomic variales to count
+
+name_tick and pool_index are shared by mutiple threads.
+atomic variables are required.
+---
+ src/lstack/core/lstack_lwip.c       | 9 +++++----
+ src/lstack/core/lstack_thread_rpc.c | 3 ++-
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 887464d..4143f2f 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -11,6 +11,7 @@
+ */
+ 
+ #include <sys/types.h>
++#include <stdatomic.h>
+ #include <lwip/sockets.h>
+ #include <lwip/tcp.h>
+ #include <lwipsock.h>
+@@ -138,25 +139,25 @@ void gazelle_init_sock(int32_t fd)
+ 
+     reset_sock_data(sock);
+ 
+-    sock->recv_ring = create_ring("sock_recv", SOCK_RECV_RING_SIZE, 0, name_tick++);
++    sock->recv_ring = create_ring("sock_recv", SOCK_RECV_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
+     if (sock->recv_ring == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "sock_recv create failed. errno: %d.\n", rte_errno);
+         return;
+     }
+ 
+-    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, name_tick++);
++    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
+     if (sock->recv_wait_free == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "wait_free create failed. errno: %d.\n", rte_errno);
+         return;
+     }
+ 
+-    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, name_tick++);
++    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
+     if (sock->send_ring == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
+         return;
+     }
+ 
+-    sock->send_idle_ring = create_ring("idle_send", SOCK_SEND_RING_SIZE, 0, name_tick++);
++    sock->send_idle_ring = create_ring("idle_send", SOCK_SEND_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
+     if (sock->send_idle_ring == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "idle_send create failed. errno: %d.\n", rte_errno);
+         return;
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 26725f7..312e192 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -10,6 +10,7 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ #include <sys/types.h>
++#include <stdatomic.h>
+ #include <lwip/sockets.h>
+ #include <lwipsock.h>
+ #include <rte_mempool.h>
+@@ -36,7 +37,7 @@ struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
+ 
+     static uint16_t pool_index = 0;
+     if (rpc_pool == NULL) {
+-        rpc_pool = create_rpc_mempool("rpc_msg", pool_index++);
++        rpc_pool = create_rpc_mempool("rpc_msg", atomic_fetch_add(&pool_index, 1));
+         if (rpc_pool == NULL) {
+             return NULL;
+         }
+-- 
+2.23.0
+
