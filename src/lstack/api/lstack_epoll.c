@@ -16,6 +16,7 @@
 #include <time.h>
 #include <poll.h>
 #include <stdatomic.h>
+#include <pthread.h>
 
 #include <lwip/lwipsock.h>
 #include <lwip/sockets.h>
@@ -39,36 +40,33 @@
 #define SEC_TO_NSEC             1000000000
 #define SEC_TO_MSEC             1000
 #define MSEC_TO_NSEC            1000000
-#define EPOLL_MAX_EVENTS        512
 #define POLL_KERNEL_EVENTS      32
-
-static PER_THREAD struct wakeup_poll g_wakeup_poll = {0};
-static bool g_use_epoll = false; /* FIXME: when no epoll close prepare event for performance testing */
 
 void add_epoll_event(struct netconn *conn, uint32_t event)
 {
     /* conn sock nerver null, because lwip call this func */
-    struct lwip_sock *sock = get_socket(conn->socket);
-
-    if ((event & sock->epoll_events) == 0) {
+    struct lwip_sock *sock = get_socket_by_fd(conn->socket);
+    if (sock->wakeup == NULL || (event & sock->epoll_events) == 0) {
         return;
     }
+    struct wakeup_poll *wakeup = sock->wakeup;
+    struct protocol_stack *stack = sock->stack;
 
-    sock->events |= event & sock->epoll_events;
-
-#ifdef GAZELLE_USE_EPOLL_EVENT_STACK
-    if (g_use_epoll && list_is_empty(&sock->event_list)) {
-        list_add_node(&sock->stack->event_list, &sock->event_list);
-    }
-#endif
-
-    if (sock->wakeup) {
-        sock->stack->stats.wakeup_events++;
-        if (get_protocol_stack_group()->wakeup_enable) {
-            rte_ring_sp_enqueue(sock->stack->wakeup_ring, &sock->wakeup->event_sem);
-        } else {
-            sem_post(&sock->wakeup->event_sem);
+    if (wakeup->type == WAKEUP_EPOLL) {
+        pthread_spin_lock(&wakeup->event_list_lock);
+        sock->events |= (event == EPOLLERR) ? (EPOLLIN | EPOLLERR) : (event & sock->epoll_events);
+        if (list_is_null(&sock->event_list)) {
+            list_add_node(&wakeup->event_list, &sock->event_list);
         }
+        pthread_spin_unlock(&wakeup->event_list_lock);
+    }
+
+    stack->stats.wakeup_events++;
+    sem_t *sem = &wakeup->event_sem;
+    if (get_protocol_stack_group()->wakeup_enable) {
+        gazelle_light_ring_enqueue_busrt(stack->wakeup_ring, (void **)&sem, 1);
+    } else {
+        sem_post(sem);
     }
 }
 
@@ -77,61 +75,34 @@ static inline uint32_t update_events(struct lwip_sock *sock)
     uint32_t event = 0;
 
     if (sock->epoll_events & EPOLLIN) {
-        if (sock->attach_fd > 0 && NETCONN_IS_ACCEPTIN(sock)) {
-            event |= EPOLLIN;
-        }
-
-        if (sock->attach_fd < 0 && NETCONN_IS_DATAIN(sock)) {
+        if (NETCONN_IS_DATAIN(sock) || NETCONN_IS_ACCEPTIN(sock)) {
             event |= EPOLLIN;
         }
     }
 
     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
-        event |= EPOLLOUT;
+        /* lwip_netconn_do_connected set LIBOS FLAGS when connected */
+        if (sock->conn && CONN_TYPE_IS_LIBOS(sock->conn)) {
+            event |= EPOLLOUT;
+        }
     }
 
-    if ((sock->epoll_events & EPOLLERR) && (sock->events & EPOLLERR)) {
+    if (sock->errevent > 0) {
         event |= EPOLLERR | EPOLLIN;
     }
 
     return event;
 }
 
-#ifdef GAZELLE_USE_EPOLL_EVENT_STACK
-void update_stack_events(struct protocol_stack *stack)
+static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *sock)
 {
-    if (!g_use_epoll) {
-        return;
-    }
-
-    struct list_node *node, *temp;
-    list_for_each_safe(node, temp, &stack->event_list) {
-        struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
-
-        sock->events = update_events(sock);
-        if (sock->events != 0) {
-            continue;
+    sock->events = update_events(sock);
+    if (sock->events) {
+        pthread_spin_lock(&wakeup->event_list_lock);
+        if (list_is_null(&sock->event_list)) {
+            list_add_node(&wakeup->event_list, &sock->event_list);
         }
-
-        if (pthread_spin_trylock(&stack->event_lock)) {
-            continue;
-        }
-        list_del_node_init(&sock->event_list);
-        pthread_spin_unlock(&stack->event_lock);
-    }
-}
-#endif
-
-static void raise_pending_events(struct lwip_sock *sock)
-{
-    struct lwip_sock *attach_sock = (sock->attach_fd > 0) ? get_socket_by_fd(sock->attach_fd) : sock;
-    if (attach_sock == NULL) {
-        return;
-    }
-
-    attach_sock->events = update_events(attach_sock);
-    if (attach_sock->events & attach_sock->epoll_events) {
-        rpc_call_addevent(attach_sock->stack, attach_sock);
+        pthread_spin_unlock(&wakeup->event_list_lock);
     }
 }
 
@@ -157,11 +128,15 @@ int32_t lstack_epoll_create(int32_t size)
     memset_s(wakeup, sizeof(struct wakeup_poll), 0, sizeof(struct wakeup_poll));
 
     init_list_node(&wakeup->event_list);
-    wakeup->epollfd = fd;
     sem_init(&wakeup->event_sem, 0, 0);
+    pthread_spin_init(&wakeup->event_list_lock, PTHREAD_PROCESS_PRIVATE);
+
+    wakeup->type = WAKEUP_EPOLL;
+    wakeup->epollfd = fd;
     sock->wakeup = wakeup;
 
-    g_use_epoll = true;
+    register_wakeup(wakeup);
+
     return fd;
 }
 
@@ -176,6 +151,9 @@ int32_t lstack_epoll_close(int32_t fd)
     }
 
     if (sock->wakeup) {
+        unregister_wakeup(sock->wakeup);
+        sem_destroy(&sock->wakeup->event_sem);
+        pthread_spin_destroy(&sock->wakeup->event_list_lock);
         free(sock->wakeup);
     }
     sock->wakeup = NULL;
@@ -236,161 +214,116 @@ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_even
 
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
-        epoll_sock->wakeup->have_kernel_fd = true;
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
     if (CONN_TYPE_HAS_HOST(sock->conn)) {
-        epoll_sock->wakeup->have_kernel_fd = true;
         int32_t ret = posix_api->epoll_ctl_fn(epfd, op, fd, event);
         if (ret < 0) {
-            return ret;
+            LSTACK_LOG(ERR, LSTACK, "fd=%d epfd=%d op=%d\n", fd, epfd, op);
         }
     }
 
+    struct wakeup_poll *wakeup = epoll_sock->wakeup;
     do {
         switch (op) {
             case EPOLL_CTL_ADD:
-                sock->wakeup = epoll_sock->wakeup;
-                if (sock->stack) {
-                    epoll_sock->wakeup->stack_fd_cnt[sock->stack->queue_id]++;
-                }
-                if (list_is_empty(&sock->event_list)) {
-                    list_add_node(&sock->wakeup->event_list, &sock->event_list);
-                }
+                sock->wakeup = wakeup;
+                wakeup->stack_fd_cnt[sock->stack->queue_id]++;
                 /* fall through */
             case EPOLL_CTL_MOD:
                 sock->epoll_events = event->events | EPOLLERR | EPOLLHUP;
                 sock->ep_data = event->data;
-                if (sock->conn && NETCONNTYPE_GROUP(netconn_type(sock->conn)) == NETCONN_TCP) {
-                    raise_pending_events(sock);
-                }
+                raise_pending_events(wakeup, sock);
                 break;
             case EPOLL_CTL_DEL:
-                list_del_node_init(&sock->event_list);
                 sock->epoll_events = 0;
-                if (sock->stack) {
-                    epoll_sock->wakeup->stack_fd_cnt[sock->stack->queue_id]--;
-                }
+                wakeup->stack_fd_cnt[sock->stack->queue_id]--;
+                pthread_spin_lock(&wakeup->event_list_lock);
+                list_del_node_null(&sock->event_list);
+                pthread_spin_unlock(&wakeup->event_list_lock);
                 break;
             default:
                 GAZELLE_RETURN(EINVAL);
         }
-        fd = sock->nextfd;
-        sock = get_socket(fd);
-    } while (fd > 0 && sock != NULL);
+        sock = sock->listen_next;
+    } while (sock != NULL);
 
-    update_epoll_max_stack(epoll_sock->wakeup);
+    update_epoll_max_stack(wakeup);
     return 0;
 }
 
-#ifdef GAZELLE_USE_EPOLL_EVENT_STACK
-static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *events, uint32_t maxevents)
+static void del_node_array(struct epoll_event *events, int32_t event_num, int32_t del_index)
 {
-    int32_t event_num = 0;
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    for (int32_t i = del_index; i + 1 < event_num; i++) {
+        events[i] = events[i + 1];
+    }
+}
 
-    maxevents = LWIP_MIN(EPOLL_MAX_EVENTS, maxevents);
-    for (uint32_t i = 0; i < stack_group->stack_num && event_num < maxevents; i++) {
-        struct protocol_stack *stack = stack_group->stacks[i];
-        int32_t start_event_num = event_num;
-
-        if (pthread_spin_trylock(&stack->event_lock)) {
-            continue;
-        }
-
-        struct list_node *node, *temp;
-        list_for_each_safe(node, temp, &stack->event_list) {
-            struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
-
-            uint32_t event = sock->events & sock->epoll_events;
-            if (event == 0 || sock->wait_close) {
-                continue;
-            }
-
-            events[event_num].events = event;
-            events[event_num].data = sock->ep_data;
-            event_num++;
-
-            if (event_num >= maxevents) {
-                break;
+static int32_t del_duplicate_event(struct epoll_event *events, int32_t event_num)
+{
+    for (int32_t i = 0; i < event_num; i++) {
+        for (int32_t j = i + 1; j < event_num; j++) {
+            if (events[i].data.u64 == events[j].data.u64) {
+                del_node_array(events, event_num, j);
+                event_num--;
             }
         }
-
-        pthread_spin_unlock(&stack->event_lock);
-
-        __sync_fetch_and_add(&stack->stats.app_events, event_num - start_event_num);
     }
 
     return event_num;
 }
-#else
+
 static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *events, uint32_t maxevents)
 {
     int32_t event_num = 0;
     struct list_node *node, *temp;
+    int32_t accept_num = 0;
+
+    pthread_spin_lock(&wakeup->event_list_lock);
+
     list_for_each_safe(node, temp, &wakeup->event_list) {
         struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
-        if (sock->conn == NULL) {
-            list_del_node_init(&sock->event_list);
-            continue;
+        if (sock->conn && sock->conn->acceptmbox) {
+            accept_num++;
         }
 
-        struct lwip_sock *temp_sock = sock;
-        do {
-            struct lwip_sock *attach_sock = (temp_sock->attach_fd > 0) ? get_socket(temp_sock->attach_fd) : temp_sock;
-            if (attach_sock == NULL || temp_sock->wait_close) {
-                temp_sock = (temp_sock->nextfd > 0) ? get_socket(temp_sock->nextfd) : NULL;
-                continue;
-            }
+        events[event_num].events = sock->events;
+        events[event_num].data = sock->ep_data;
+        event_num++;
 
-            uint32_t event = update_events(attach_sock);
-            if (event != 0) {
-                events[event_num].events = event;
-                events[event_num].data = temp_sock->ep_data;
-                event_num++;
-                if (event_num >= maxevents) {
-                    break;
-                }
-            }
-
-            temp_sock = (temp_sock->nextfd > 0) ? get_socket(temp_sock->nextfd) : NULL;
-        } while (temp_sock);
+        if (event_num >= maxevents) {
+            break;
+        }
     }
 
+    pthread_spin_unlock(&wakeup->event_list_lock);
+
+    if (accept_num > 1) {
+        event_num = del_duplicate_event(events, event_num);
+    }
+
+    // atomic_fetch_add(&wakeup->bind_stack->stats.app_events, event_num);  
     return event_num;
 }
-#endif
 
 static int32_t poll_lwip_event(struct pollfd *fds, nfds_t nfds)
 {
     int32_t event_num = 0;
 
     for (uint32_t i = 0; i < nfds; i++) {
-        /* listenfd nextfd pointerto next stack listen, others nextfd=-1 */
+        /* sock->listen_next pointerto next stack listen */
         int32_t fd = fds[i].fd;
-        while (fd > 0) {
-            struct lwip_sock *sock = get_socket(fd);
-            if (sock == NULL) {
-                break;
-            }
-
-            /* attach listen is empty, all event in attached listen. attached listen attach_fd is self */
-            struct lwip_sock *attach_sock = (sock->attach_fd > 0) ? get_socket(sock->attach_fd) : sock;
-            if (attach_sock == NULL || sock->wait_close) {
-                fd = sock->nextfd;
-                continue;
-            }
-
-            uint32_t events = update_events(attach_sock);
+        struct lwip_sock *sock = get_socket_by_fd(fd);
+        while (sock && sock->conn) {
+            uint32_t events = update_events(sock);
             if (events) {
                 fds[i].revents = events;
-                __sync_fetch_and_add(&sock->stack->stats.app_events, 1);
                 event_num++;
                 break;
             }
 
-            fd = sock->nextfd;
+            sock = sock->listen_next;;
         }
     }
 
@@ -417,7 +350,7 @@ static void change_epollfd_kernel_thread(struct wakeup_poll *wakeup, struct prot
 
     /* avoid kernel thread post too much, use EPOLLET */
     struct epoll_event event;
-    event.data.ptr = &wakeup->event_sem;
+    event.data.ptr = wakeup;
     event.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLET;
     if (posix_api->epoll_ctl_fn(new_stack->epollfd, EPOLL_CTL_ADD, wakeup->epollfd, &event) != 0) {
         LSTACK_LOG(ERR, LSTACK, "epoll_ctl_fn errno=%d\n", errno);
@@ -457,15 +390,18 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
 
     do {
         event_num += epoll_lwip_event(sock->wakeup, &events[event_num], maxevents - event_num);
+        sock->wakeup->stat.app_events += event_num;
 
-        if (sock->wakeup->have_kernel_fd) {
+        if (__atomic_load_n(&sock->wakeup->have_kernel_event, __ATOMIC_RELAXED)) {
             event_num += posix_api->epoll_wait_fn(epfd, &events[event_num], maxevents - event_num, 0);
         }
 
         if (event_num > 0) {
+            while (sem_trywait(&sock->wakeup->event_sem) == 0);
             break;
         }
 
+        sock->wakeup->have_kernel_event = false;
         if (timeout < 0) {
             ret = sem_wait(&sock->wakeup->event_sem);
         } else {
@@ -479,6 +415,7 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
 static void init_poll_wakeup_data(struct wakeup_poll *wakeup)
 {
     sem_init(&wakeup->event_sem, 0, 0);
+    wakeup->type = WAKEUP_POLL;
 
     wakeup->last_fds = calloc(POLL_KERNEL_EVENTS, sizeof(struct pollfd));
     if (wakeup->last_fds == NULL) {
@@ -542,11 +479,6 @@ static void update_kernel_poll(struct wakeup_poll *wakeup, uint32_t index, struc
     if (posix_api->epoll_ctl_fn(wakeup->epollfd, EPOLL_CTL_ADD, new_fd->fd, &event) != 0) {
         LSTACK_LOG(ERR, LSTACK, "epoll_ctl_fn errno=%d\n", errno);
     }
-
-    wakeup->last_fds[index].fd = new_fd->fd;
-    wakeup->last_fds[index].events = new_fd->events;
-
-    wakeup->have_kernel_fd = true;
 }
 
 static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfds)
@@ -554,17 +486,17 @@ static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfd
     if (!wakeup->init) {
         wakeup->init = true;
         init_poll_wakeup_data(wakeup);
-    } else {
-        while (sem_trywait(&wakeup->event_sem) == 0) {}
-    }
-
-    if (nfds > wakeup->last_max_nfds) {
-        resize_kernel_poll(wakeup, nfds);
+        register_wakeup(wakeup);
     }
 
     int32_t stack_count[PROTOCOL_STACK_MAX] = {0};
     int32_t poll_change = 0;
 
+    /* poll fds num more, recalloc fds size */
+    if (nfds > wakeup->last_max_nfds) {
+        resize_kernel_poll(wakeup, nfds);
+        poll_change = 1;
+    }
     /* poll fds num less, del old fd */
     for (uint32_t i = nfds; i < wakeup->last_nfds; i++) {
         update_kernel_poll(wakeup, i, NULL);
@@ -572,44 +504,51 @@ static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfd
     }
 
     for (uint32_t i = 0; i < nfds; i++) {
+        int32_t fd = fds[i].fd;
         fds[i].revents = 0;
+        struct lwip_sock *sock = get_socket_by_fd(fd);
 
-        if (fds[i].fd == wakeup->last_fds[i].fd && fds[i].events == wakeup->last_fds[i].events) {
-            continue;
+        if (fd == wakeup->last_fds[i].fd && fds[i].events == wakeup->last_fds[i].events) {
+            /* fd close then socket may get same fd. */
+            if (sock == NULL || sock->wakeup != NULL) {
+                continue;
+            }
         }
+        wakeup->last_fds[i].fd = fd;
+        wakeup->last_fds[i].events = fds[i].events;
         poll_change = 1;
 
-        int32_t fd = fds[i].fd;
-        struct lwip_sock *sock = get_socket(fd);
-        if (sock == NULL || CONN_TYPE_HAS_HOST(sock->conn)) {
+        if (sock == NULL || sock->conn == NULL || CONN_TYPE_HAS_HOST(sock->conn)) {
             update_kernel_poll(wakeup, i, fds + i);
         }
 
-        do {
-            sock = get_socket(fd);
-            if (sock == NULL || sock->conn == NULL) {
-                break;
+        while (sock && sock->conn) {
+            if (sock->epoll_events != (fds[i].events | POLLERR)) {
+                sock->epoll_events = fds[i].events | POLLERR;
             }
-            sock->epoll_events = fds[i].events | POLLERR;
-            sock->wakeup = wakeup;
+            if (sock->wakeup != wakeup) {
+                sock->wakeup = wakeup;
+            }
 
-            /* listenfd list */
-            fd = sock->nextfd;
             stack_count[sock->stack->queue_id]++;
-        } while (fd > 0);
+            /* listenfd list */
+            sock = sock->listen_next;
+        }
     }
 
-    wakeup->last_nfds = nfds;
     if (poll_change == 0) {
         return;
     }
+    wakeup->last_nfds = nfds;
 
     poll_bind_statck(wakeup, stack_count);
 }
 
 int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
-    poll_init(&g_wakeup_poll, fds, nfds);
+    static PER_THREAD struct wakeup_poll wakeup_poll = {0};
+
+    poll_init(&wakeup_poll, fds, nfds);
 
     int32_t event_num = 0;
     int32_t ret;
@@ -624,23 +563,25 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         event_num += poll_lwip_event(fds, nfds);
 
         /* reduce syscall epoll_wait */
-        if (g_wakeup_poll.have_kernel_fd) {
-            int32_t kernel_num = posix_api->epoll_wait_fn(g_wakeup_poll.epollfd, g_wakeup_poll.events, nfds, 0);
+        if (__atomic_load_n(&wakeup_poll.have_kernel_event, __ATOMIC_RELAXED)) {
+            int32_t kernel_num = posix_api->epoll_wait_fn(wakeup_poll.epollfd, wakeup_poll.events, nfds, 0);
             for (int32_t i = 0; i < kernel_num; i++) {
-                uint32_t index = g_wakeup_poll.events[i].data.u32;
-                fds[index].revents = g_wakeup_poll.events[i].events;
+                uint32_t index = wakeup_poll.events[i].data.u32;
+                fds[index].revents = wakeup_poll.events[i].events;
             }
             event_num += kernel_num >= 0 ? kernel_num : 0;
         }
 
         if (event_num > 0) {
+            while (sem_trywait(&wakeup_poll.event_sem) == 0);
             break;
         }
 
+        wakeup_poll.have_kernel_event = false;
         if (timeout < 0) {
-            ret = sem_wait(&g_wakeup_poll.event_sem);
+            ret = sem_wait(&wakeup_poll.event_sem);
         } else {
-            ret = sem_timedwait(&g_wakeup_poll.event_sem, &poll_time);
+            ret = sem_timedwait(&wakeup_poll.event_sem, &poll_time);
         }
     } while (ret == 0);
 

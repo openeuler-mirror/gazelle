@@ -23,34 +23,53 @@
 #include "lstack_dpdk.h"
 #include "lstack_thread_rpc.h"
 
-static PER_THREAD struct rte_mempool *rpc_pool = NULL;
+#define RPC_MSG_MAX            32
+struct rpc_msg_pool {
+    struct rpc_msg msgs[RPC_MSG_MAX];
+    uint32_t prod __rte_cache_aligned;
+    uint32_t cons __rte_cache_aligned;
+};
+
+static PER_THREAD struct rpc_msg_pool *g_rpc_pool = NULL;
+
+static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct rpc_msg_pool *rpc_pool)
+{
+    uint32_t cons = __atomic_load_n(&rpc_pool->cons, __ATOMIC_ACQUIRE);
+    uint32_t prod = rpc_pool->prod + 1;
+
+    if (prod == cons) {
+        return NULL;
+    }
+
+    rpc_pool->prod = prod;
+    return &rpc_pool->msgs[prod];
+}
 
 static inline __attribute__((always_inline))
 struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
 {
-    int32_t ret;
     struct rpc_msg *msg = NULL;
 
     if (stack == NULL) {
         return NULL;
     }
 
-    static uint16_t pool_index = 0;
-    if (rpc_pool == NULL) {
-        rpc_pool = create_rpc_mempool("rpc_msg", atomic_fetch_add(&pool_index, 1));
-        if (rpc_pool == NULL) {
+    if (g_rpc_pool == NULL) {
+        g_rpc_pool = calloc(1, sizeof(struct rpc_msg_pool));
+        if (g_rpc_pool == NULL) {
+            get_protocol_stack_group()->call_alloc_fail++;
             return NULL;
         }
     }
 
-    ret = rte_mempool_get(rpc_pool, (void **)&msg);
-    if (ret < 0) {
+    msg = get_rpc_msg(g_rpc_pool);
+    if (msg == NULL) {
         get_protocol_stack_group()->call_alloc_fail++;
         return NULL;
     }
-    msg->pool = rpc_pool;
+    msg->pool = g_rpc_pool;
 
-    pthread_spin_init(&msg->lock, PTHREAD_PROCESS_SHARED);
+    pthread_spin_init(&msg->lock, PTHREAD_PROCESS_PRIVATE);
     msg->func = func;
     msg->self_release = 1;
 
@@ -64,7 +83,8 @@ void rpc_msg_free(struct rpc_msg *msg)
 
     msg->self_release = 0;
     msg->func = NULL;
-    rte_mempool_put(msg->pool, (void *)msg);
+
+    atomic_fetch_add(&msg->pool->cons, 1);
 }
 
 static inline __attribute__((always_inline))
@@ -108,8 +128,6 @@ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
         } else {
             stack->stats.call_null++;
         }
-
-        rte_mb();
 
         if (msg->self_release) {
             pthread_spin_unlock(&msg->lock);
@@ -192,16 +210,6 @@ int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
-int32_t rpc_call_eventlistcnt(struct protocol_stack *stack)
-{
-    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_eventlist_count);
-    if (msg == NULL) {
-        return -1;
-    }
-
-    return rpc_sync_call(&stack->rpc_queue, msg);
-}
-
 int32_t rpc_call_sendlistcnt(struct protocol_stack *stack)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_sendlist_count);
@@ -222,28 +230,6 @@ int32_t rpc_call_recvlistcnt(struct protocol_stack *stack)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
-void add_epoll_event(struct netconn *conn, uint32_t event);
-static void rpc_add_event(struct rpc_msg *msg)
-{
-    struct lwip_sock *sock = (struct lwip_sock *)msg->args[MSG_ARG_0].p;
-    if (sock->conn) {
-        add_epoll_event(sock->conn, sock->events);
-    }
-}
-
-void rpc_call_addevent(struct protocol_stack *stack, void *sock)
-{
-    struct rpc_msg *msg = rpc_msg_alloc(stack, rpc_add_event);
-    if (msg == NULL) {
-        return;
-    }
-
-    msg->args[MSG_ARG_0].p = sock;
-
-    msg->self_release = 0;
-    rpc_call(&stack->rpc_queue, msg);
-}
-
 int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_arp);
@@ -260,7 +246,7 @@ int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf)
 
 int32_t rpc_call_socket(int32_t domain, int32_t type, int32_t protocol)
 {
-    struct protocol_stack *stack = get_minconn_protocol_stack();
+    struct protocol_stack *stack = get_bind_protocol_stack();
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_socket);
     if (msg == NULL) {
         return -1;
@@ -342,7 +328,12 @@ int32_t rpc_call_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
     msg->args[MSG_ARG_1].cp = addr;
     msg->args[MSG_ARG_2].socklen = addrlen;
 
-    return rpc_sync_call(&stack->rpc_queue, msg);
+    int32_t ret = rpc_sync_call(&stack->rpc_queue, msg);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 int32_t rpc_call_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)

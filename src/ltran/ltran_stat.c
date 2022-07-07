@@ -25,6 +25,7 @@
 #include "gazelle_dfx_msg.h"
 #include "ltran_timer.h"
 #include "ltran_ethdev.h"
+#include "dpdk_common.h"
 #include "ltran_forward.h"
 
 static uint64_t g_start_time_stamp = 0;
@@ -32,23 +33,9 @@ static int32_t g_start_latency = GAZELLE_OFF;
 volatile int32_t g_ltran_stop_flag = GAZELLE_FALSE;
 static struct statistics g_statistics;
 
-static uint32_t get_rx_ring_count(const struct rte_ring *r)
-{
-    return rte_ring_count(r);
-}
-
 uint64_t get_start_time_stamp(void)
 {
     return g_start_time_stamp;
-}
-
-static uint32_t get_tx_ring_count(const struct rte_ring *r)
-{
-    uint32_t prod_tail = r->prod.tail;
-    uint32_t cons_head = r->cons.head;
-
-    uint32_t count = (cons_head - prod_tail) & r->mask;
-    return (count > r->capacity) ? r->capacity : count;
 }
 
 void set_start_latency_flag(int32_t flag)
@@ -203,8 +190,8 @@ static int32_t gazelle_filling_lstack_stat_total(struct gazelle_stat_lstack_tota
     stat->latency_pkts = stack->stack_stats.latency_pkts;
     stat->latency_total = stack->stack_stats.latency_total;
     stat->reg_ring_cnt = rte_ring_cn_count(stack->reg_ring);
-    stat->rx_ring_cnt = get_rx_ring_count(stack->rx_ring);
-    stat->tx_ring_cnt = get_tx_ring_count(stack->tx_ring);
+    stat->rx_ring_cnt = gazelle_ring_readover_count(stack->rx_ring);
+    stat->tx_ring_cnt = gazelle_ring_readable_count(stack->tx_ring);
 
     return GAZELLE_OK;
 }

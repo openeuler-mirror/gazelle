@@ -14,18 +14,16 @@
 #define __GAZELLE_LWIP_H__
 
 #include "lstack_thread_rpc.h"
+#include "dpdk_common.h"
 #include "lwipsock.h"
 
-#define SOCK_RECV_RING_SIZE     (128)
-#define SOCK_SEND_RING_SIZE     (32)
 
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
-#define NETCONN_IS_DATAIN(sock)     ((rte_ring_count((sock)->recv_ring) || (sock)->recv_lastdata))
-#define NETCONN_IS_DATAOUT(sock)    ((rte_ring_count((sock)->send_ring) || (sock)->send_lastdata))
-#define NETCONN_IS_OUTIDLE(sock)    rte_ring_free_count((sock)->send_ring)
+#define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata))
+#define NETCONN_IS_DATAOUT(sock)    gazelle_ring_readover_count((sock)->send_ring)
+#define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 
 void create_shadow_fd(struct rpc_msg *msg);
-void listen_list_add_node(int32_t head_fd, int32_t add_fd);
 void gazelle_init_sock(int32_t fd);
 int32_t gazelle_socket(int domain, int type, int protocol);
 void gazelle_clean_sock(int32_t fd);
@@ -37,7 +35,6 @@ void read_recv_list(struct protocol_stack *stack, uint32_t max_num);
 void send_stack_list(struct protocol_stack *stack, uint32_t send_max);
 void add_recv_list(int32_t fd);
 void stack_sendlist_count(struct rpc_msg *msg);
-void stack_eventlist_count(struct rpc_msg *msg);
 void get_lwip_conntable(struct rpc_msg *msg);
 void get_lwip_connnum(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);

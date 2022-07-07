@@ -37,12 +37,13 @@ union rpc_msg_arg {
     socklen_t socklen;
     size_t size;
 };
+struct rpc_msg_pool;
 struct rpc_msg {
     pthread_spinlock_t lock; /* msg handler unlock notice sender msg process done */
     int32_t self_release; /* 0:msg handler release msg  1:msg sender release msg */
     int64_t result; /* func return val */
     lockless_queue_node queue_node;
-    struct rte_mempool *pool;
+    struct rpc_msg_pool *pool;
 
     rpc_msg_func func; /* msg handle func hook */
     union rpc_msg_arg args[RPM_MSG_ARG_SIZE]; /* resolve by type */
@@ -50,11 +51,9 @@ struct rpc_msg {
 
 struct protocol_stack;
 void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
-void rpc_call_addevent(struct protocol_stack *stack, void *sock);
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t rpc_call_recvlistcnt(struct protocol_stack *stack);
-int32_t rpc_call_eventlistcnt(struct protocol_stack *stack);
 int32_t rpc_call_sendlistcnt(struct protocol_stack *stack);
 int32_t rpc_call_thread_regphase1(struct protocol_stack *stack, void *conn);
 int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn);

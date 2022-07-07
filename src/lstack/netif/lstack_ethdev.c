@@ -39,10 +39,11 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
     struct pbuf_custom *pc = NULL;
     struct protocol_stack *stack = get_protocol_stack();
     struct rte_mbuf *m = mbuf;
-    uint16_t len;
+    uint16_t len, pkt_len;
 
+    pkt_len = (uint16_t)rte_pktmbuf_pkt_len(m);
     while (m != NULL) {
-        len = (uint16_t)rte_pktmbuf_pkt_len(m);
+        len = (uint16_t)rte_pktmbuf_data_len(m);
         payload = rte_pktmbuf_mtod(m, void *);
         pc = mbuf_to_pbuf(m);
         pc->custom_free_function = gazelle_free_pbuf;
@@ -51,6 +52,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
             stack->stats.rx_allocmbuf_fail++;
             break;
         }
+        next->tot_len = pkt_len;
 #if CHECKSUM_CHECK_IP_HW || CHECKSUM_CHECK_TCP_HW
         next->ol_flags = m->ol_flags;
 #endif
@@ -71,7 +73,6 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
         if (ret != ERR_OK) {
             LSTACK_LOG(ERR, LSTACK, "eth_dev_recv: failed to handle rx pbuf ret=%d\n", ret);
             stack->stats.rx_drop++;
-            pbuf_free(head);
         }
     }
 }
@@ -181,7 +182,7 @@ int32_t ethdev_init(struct protocol_stack *stack)
 
     if (use_ltran()) {
         stack->rx_ring_used = 0;
-        int32_t ret = fill_mbuf_to_ring(stack->rx_pktmbuf_pool, stack->rx_ring, VDEV_RX_QUEUE_SZ - 1);
+        int32_t ret = fill_mbuf_to_ring(stack->rx_pktmbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "fill mbuf to rx_ring failed ret=%d\n", ret);
             return ret;

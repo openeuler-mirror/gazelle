@@ -14,6 +14,7 @@
 #define __GAZELLE_DPDK_COMMON_H__
 
 #include <rte_mbuf.h>
+#include <rte_ring.h>
 
 #define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
 
@@ -35,6 +36,7 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf 
         return;
 
     dst->ol_flags = src->ol_flags;
+    dst->tx_offload = src->tx_offload;
     // there is buf_len in rx_descriptor_fields1, copy it is dangerous acturely. 16 : mbuf desc size
     rte_memcpy((uint8_t *)dst->rx_descriptor_fields1, (const uint8_t *)src->rx_descriptor_fields1, 16);
 
@@ -65,4 +67,147 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool);
 int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count);
 void kni_process_rx(uint16_t port);
 
+/*
+    gazelle custom rte ring interface
+    lightweight ring reduce atomic and smp_mb.
+    only surpport single-consumers or the single-consumer.
+ */
+static __rte_always_inline uint32_t gazelle_light_ring_enqueue_busrt(struct rte_ring *r, void **obj_table, uint32_t n)
+{
+    uint32_t cons = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
+    uint32_t prod = r->prod.tail;
+    uint32_t free_entries = r->capacity + cons - prod;
+
+    if (n > free_entries) {
+        return 0;
+    }
+
+    __rte_ring_enqueue_elems(r, prod, obj_table, sizeof(void *), n);
+
+    __atomic_store_n(&r->prod.tail, prod + n, __ATOMIC_RELEASE);
+
+    return n;
+}
+
+static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_ring *r, void **obj_table, uint32_t n)
+{
+    uint32_t prod = __atomic_load_n(&r->prod.tail, __ATOMIC_ACQUIRE);
+    uint32_t cons = r->cons.tail;
+    uint32_t entries = prod - cons;
+
+    if (n > entries) {
+        n = entries;
+    }
+
+    if (n == 0) {
+        return 0;
+    }
+
+    __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
+
+    __atomic_store_n(&r->cons.tail, cons + n, __ATOMIC_RELEASE);
+
+    return n;
+}
+
+/*
+    gazelle custom rte ring interface
+    one thread enqueue and dequeue, other thread read object use and object still in queue.
+    so malloc and free in same thread. only surpport single-consumers or the single-consumer.
+
+    cons.tail            prod.tail                prod.head                 cons.head
+    gazelle_ring_sp_enqueue: cons.head-->> cons.tal,  enqueue object
+    gazelle_ring_sc_dequeue: cons.tal -->> prod.tail, dequeue object
+    gazelle_ring_read:       prod.tail-->> cons.head, read object, prod.head = prod.tail + N
+    gazelle_ring_read_over:  prod.tail  =  prod.head, update prod.tail
+ */
+static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void **obj_table, uint32_t n)
+{
+    uint32_t head = __atomic_load_n(&r->cons.head, __ATOMIC_ACQUIRE);
+    uint32_t tail = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
+
+    uint32_t entries = r->capacity + tail - head;
+    if (n > entries) {
+        return 0;
+    }
+
+
+    __rte_ring_enqueue_elems(r, head, obj_table, sizeof(void *), n);
+
+    __atomic_store_n(&r->cons.head, head + n, __ATOMIC_RELEASE);
+
+    return n;
+}
+
+static __rte_always_inline uint32_t gazelle_ring_sc_dequeue(struct rte_ring *r, void **obj_table, uint32_t n)
+{
+    uint32_t cons = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
+    uint32_t prod = __atomic_load_n(&r->prod.tail, __ATOMIC_ACQUIRE);
+
+    uint32_t entries = prod - cons;
+    if (n > entries) {
+        n = entries;
+    }
+    if (unlikely(n == 0)) {
+        return 0;
+    }
+
+
+    __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
+
+    __atomic_store_n(&r->cons.tail, cons + n, __ATOMIC_RELEASE);
+
+    return n;
+}
+
+static __rte_always_inline uint32_t gazelle_ring_read(struct rte_ring *r, void **obj_table, uint32_t n)
+{
+    uint32_t cons = __atomic_load_n(&r->cons.head, __ATOMIC_ACQUIRE);
+    uint32_t prod = r->prod.head;
+
+    const uint32_t entries = cons - prod;
+    if (n > entries) {
+        n = entries;
+    }
+    if (unlikely(n == 0)) {
+        return 0;
+    }
+
+    __rte_ring_dequeue_elems(r, prod, obj_table, sizeof(void *), n);
+
+    r->prod.head = prod + n;
+
+    return n;
+}
+
+static __rte_always_inline void gazelle_ring_read_n(struct rte_ring *r, uint32_t n)
+{
+    __atomic_store_n(&r->prod.tail, r->prod.tail + n, __ATOMIC_RELEASE);
+}
+
+static __rte_always_inline void gazelle_ring_read_over(struct rte_ring *r)
+{
+    __atomic_store_n(&r->prod.tail, r->prod.head, __ATOMIC_RELEASE);
+}
+
+static __rte_always_inline uint32_t gazelle_ring_readover_count(struct rte_ring *r)
+{
+    rte_smp_rmb();
+    return r->prod.tail - r->cons.tail;
+}
+static __rte_always_inline uint32_t gazelle_ring_readable_count(const struct rte_ring *r)
+{
+    rte_smp_rmb();
+    return r->cons.head - r->prod.tail;
+}
+
+static __rte_always_inline uint32_t gazelle_ring_count(const struct rte_ring *r)
+{
+    rte_smp_rmb();
+    return r->cons.head - r->cons.tail;
+}
+static __rte_always_inline uint32_t gazelle_ring_free_count(const struct rte_ring *r)
+{
+    return r->capacity - gazelle_ring_count(r);
+}
 #endif

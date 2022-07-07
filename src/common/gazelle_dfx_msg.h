@@ -57,34 +57,37 @@ enum GAZELLE_LATENCY_TYPE {
     GAZELLE_LATENCY_READ,
 };
 
-struct gazelle_stat_pkts {
-    uint64_t tx;
-    uint64_t rx;
-    uint64_t tx_drop;
-    uint64_t rx_drop;
-    uint64_t rx_allocmbuf_fail;
-    uint64_t tx_allocmbuf_fail;
-    uint64_t call_msg_cnt;
-    uint16_t conn_num;
-    uint16_t send_idle_ring_cnt;
-    uint64_t event_list;
+struct gazelle_stack_stat {
+    uint64_t wakeup_events;
+    uint64_t write_lwip_cnt;
+    uint64_t send_self_rpc;
     uint64_t read_lwip_drop;
     uint64_t read_lwip_cnt;
-    uint64_t write_lwip_drop;
-    uint64_t write_lwip_cnt;
+    uint64_t rx_allocmbuf_fail;
+    uint64_t tx_allocmbuf_fail;
+    uint64_t call_null;
+    uint64_t rx_drop;
+    uint64_t rx;
+    uint64_t tx_drop;
+    uint64_t tx;
+};
+
+struct gazelle_wakeup_stat {
+    uint64_t app_events;
+    uint64_t app_write_idlefail;
     uint64_t app_write_cnt;
     uint64_t app_read_cnt;
-    uint64_t app_write_idlefail;
-    uint64_t app_write_drop;
-    uint64_t recv_list;
-    uint64_t wakeup_events;
-    uint64_t app_events;
-    uint64_t call_alloc_fail;
     uint64_t read_null;
-    uint64_t call_null;
-    uint64_t arp_copy_fail;
-    uint64_t send_self_rpc;
-    uint64_t send_list;
+};
+
+struct gazelle_stat_pkts {
+    uint64_t call_msg_cnt;
+    uint16_t conn_num;
+    uint64_t recv_list_cnt;
+    uint64_t call_alloc_fail;
+    uint64_t send_list_cnt;
+    struct gazelle_stack_stat stack_stat;
+    struct gazelle_wakeup_stat wakeup_stat;
 };
 
 /* same as define in lwip/stats.h - struct stats_mib2 */
@@ -159,6 +162,7 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t recv_ring_cnt;
     uint32_t tcp_sub_state;
     int32_t sem_cnt;
+    int32_t fd;
 };
 
 struct gazelle_stat_lstack_conn {

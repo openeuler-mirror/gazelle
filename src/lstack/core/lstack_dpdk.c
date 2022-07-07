@@ -129,26 +129,6 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
     return pool;
 }
 
-struct rte_mempool *create_rpc_mempool(const char *name, uint16_t queue_id)
-{
-    char pool_name[PATH_MAX];
-    struct rte_mempool *pool;
-    int32_t ret;
-
-    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
-    if (ret < 0) {
-        return NULL;
-    }
-
-    pool = rte_mempool_create(pool_name, CALL_POOL_SZ, sizeof(struct rpc_msg), 0, 0, NULL, NULL, NULL,
-        NULL, rte_socket_id(), 0);
-    if (pool == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
-    }
-
-    return pool;
-}
-
 static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_id)
 {
     int ret;
@@ -175,13 +155,13 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
         return -1;
     }
 
-    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF, RX_MBUF_CACHE_SZ,
+    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, RX_MBUF_CACHE_SZ,
         stack->queue_id);
     if (stack->rx_pktmbuf_pool == NULL) {
         return -1;
     }
 
-    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF, TX_MBUF_CACHE_SZ,
+    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, TX_MBUF_CACHE_SZ,
         stack->queue_id);
     if (stack->tx_pktmbuf_pool == NULL) {
         return -1;
@@ -220,11 +200,13 @@ int32_t create_shared_ring(struct protocol_stack *stack)
     lockless_queue_init(&stack->rpc_queue);
 
     if (get_protocol_stack_group()->wakeup_enable) {
-        stack->wakeup_ring = create_ring("WAKEUP_RING", VDEV_WAKEUP_QUEUE_SZ, 0, stack->queue_id);
+        stack->wakeup_ring = create_ring("WAKEUP_RING", VDEV_WAKEUP_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ,
+            stack->queue_id);
         if (stack->wakeup_ring == NULL) {
             return -1;
         }
     }
+
 
     if (use_ltran()) {
         stack->rx_ring = create_ring("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
@@ -255,7 +237,7 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
     struct rte_mbuf *free_buf[FREE_RX_QUEUE_SZ];
 
     while (remain > 0) {
-        batch = LWIP_MIN(remain, FREE_RX_QUEUE_SZ);
+        batch = LWIP_MIN(remain, RING_SIZE(FREE_RX_QUEUE_SZ));
 
         ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
         if (ret != 0) {
@@ -263,7 +245,7 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
             return -1;
         }
 
-        ret = rte_ring_en_enqueue_bulk(ring, (void **)free_buf, batch);
+        ret = gazelle_ring_sp_enqueue(ring, (void **)free_buf, batch);
         if (ret == 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot enqueue to ring, count: %d\n", (int32_t)batch);
             return -1;

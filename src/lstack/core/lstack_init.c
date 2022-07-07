@@ -143,7 +143,7 @@ static int32_t check_preload_bind_proc(void)
 
 __attribute__((destructor)) void gazelle_network_exit(void)
 {
-    if (posix_api != NULL && !posix_api->is_chld) {
+    if (posix_api != NULL && !posix_api->ues_posix) {
         lwip_exit();
     }
 
@@ -275,7 +275,6 @@ __attribute__((constructor)) void gazelle_network_init(void)
         LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
     }
 
-    posix_api->is_chld = 0;
+    posix_api->ues_posix = 0;
     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
-    rte_smp_mb();
 }
