@@ -1,0 +1,28 @@
+From 0f37499d7922d59fa46b7961bde36ab0b20eac62 Mon Sep 17 00:00:00 2001
+From: Honggang LI <honggangli@163.com>
+Date: Thu, 23 Jun 2022 13:56:31 +0800
+Subject: [PATCH 5/6] ltran: fix use-after-free issue
+
+Signed-off-by: Honggang LI <honggangli@163.com>
+---
+ src/ltran/ltran_timer.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/ltran/ltran_timer.c b/src/ltran/ltran_timer.c
+index 29b307c..1327203 100644
+--- a/src/ltran/ltran_timer.c
++++ b/src/ltran/ltran_timer.c
+@@ -63,9 +63,9 @@ void gazelle_detect_sock_logout(struct gazelle_tcp_sock_htable *tcp_sock_htable)
+                 hlist_del_init(&tcp_sock->tcp_sock_node);
+                 tcp_sock_htable->cur_tcp_sock_num--;
+                 tcp_sock_htable->array[i].chain_size--;
+-                free(tcp_sock);
+                 LTRAN_DEBUG("delete the tcp sock htable: tid %u ip %u port %u\n",
+                     tcp_sock->tid, tcp_sock->ip, (uint32_t)ntohs(tcp_sock->port));
++                free(tcp_sock);
+             }
+         }
+     }
+-- 
+2.23.0
+
