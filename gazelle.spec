@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       11
+Release:       12
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -57,6 +57,23 @@ Patch9039:     0039-update-license-lockless-queue.patch
 Patch9040:     0040-adapt-to-gazelle.patch
 Patch9041:     0041-modify-securec-to-boundscheck.patch
 
+Patch9042:     0042-fix-sock-invalid-address.patch
+Patch9043:     0043-exit-lstack-process-after-ltran-instance-logout.patch
+Patch9044:     0044-use-atomic-variales-to-count.patch
+Patch9045:     0045-re-arrange-the-program-to-invoke-rte_eth_dev_start-b.patch
+Patch9046:     0046-delete-redundant-file.patch
+Patch9047:     0047-lstack-all-exit-move-to-init.patch
+Patch9048:     0048-clean-code-fix-huge-func.patch
+Patch9049:     0049-add-kernel-path-in-epoll-funcs.patch
+Patch9050:     0050-refactor-kernel-event-poll-epoll.patch
+Patch9051:     0051-post-thread_phase1-sem-to-avoid-block-main-thread-wh.patch
+Patch9052:     0052-adjust-the-number-of-RX-TX-mbufs-of-each-stack-threa.patch
+Patch9053:     0053-modify-README.patch
+Patch9054:     0054-bugfix-https-gitee.com-src-openeuler-gazelle-issues-.patch
+Patch9055:     0055-update-README.md.patch
+Patch9056:     0056-ltran-fix-use-after-free-issue.patch
+Patch9057:     0057-refactor-pkt-read-send-performance.patch
+
 %description
 %{name} is a high performance user-mode stack.
 
@@ -96,7 +113,16 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
-* Tue Jul 7 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-11
+* Thu Jul 7 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-12
+- Type:bugfix
+- CVE:
+- SUG:NA
+- DESC:update readme
+       fix some bugs
+       refactor pkt read send to improve performance
+       refactoe kernle event to improve performanc 
+
+* Thu Jul 7 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-11
 - modify the required dpdk version number
 
 * Tue Jun 14 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-10

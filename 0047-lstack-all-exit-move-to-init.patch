@@ -1,0 +1,297 @@
+From 625c01d808ffd9a21bcd5705b7237d00acd7ee66 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Thu, 21 Apr 2022 15:34:36 +0800
+Subject: [PATCH 06/18] lstack:all exit move to init
+
+---
+ src/lstack/core/lstack_control_plane.c     |  5 +--
+ src/lstack/core/lstack_dpdk.c              | 23 ++++++++------
+ src/lstack/core/lstack_init.c              | 20 +++++++++++-
+ src/lstack/core/lstack_lwip.c              |  4 +--
+ src/lstack/core/lstack_protocol_stack.c    | 37 ++++++++++++----------
+ src/lstack/include/lstack_dpdk.h           |  2 +-
+ src/lstack/include/lstack_protocol_stack.h |  4 ++-
+ 7 files changed, 61 insertions(+), 34 deletions(-)
+
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index 01b2ff0..13a2ed3 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -699,12 +699,13 @@ void control_server_thread(void *arg)
+ {
+     int32_t listenfd = control_init_server();
+     if (listenfd < 0) {
+-        LSTACK_EXIT(1, "control_init_server failed\n");
++        LSTACK_LOG(ERR, LSTACK, "control_init_server failed\n");
++        return;
+     }
+ 
+     int32_t epfd = init_epoll(listenfd);
+     if (epfd < 0) {
+-        LSTACK_EXIT(1, "init_epoll failed\n");
++        LSTACK_LOG(ERR, LSTACK, "control_init_server failed\n");
+         return;
+     }
+ 
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index a5b2ddc..aa91201 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -86,21 +86,26 @@ int32_t thread_affinity_init(int32_t cpu_id)
+     return 0;
+ }
+ 
+-void dpdk_eal_init(void)
++int32_t dpdk_eal_init(void)
+ {
+     int32_t ret;
+     struct cfg_params *global_params = get_global_cfg_params();
+ 
+     ret = rte_eal_init(global_params->dpdk_argc, global_params->dpdk_argv);
+     if (ret < 0) {
+-        if (rte_errno == EALREADY)
++        if (rte_errno == EALREADY) {
+             LSTACK_PRE_LOG(LSTACK_INFO, "rte_eal_init aleady init\n");
+-        else
++	    /* maybe other program inited, merge init param share init */
++	    ret = 0;
++        }
++        else {
+             LSTACK_PRE_LOG(LSTACK_ERR, "rte_eal_init failed init, rte_errno %d\n", rte_errno);
+-
+-        LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
++        }
++    } else {
++        LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
+     }
+-    LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
++
++    return ret;
+ }
+ 
+ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
+@@ -116,13 +121,11 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
+     }
+ 
+     /* time stamp before pbuf_custom as priv_data */
+-    pthread_mutex_lock(get_mem_mutex());
+     pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size,
+         sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE, MBUF_SZ, rte_socket_id());
+     if (pool == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
+     }
+-    pthread_mutex_unlock(get_mem_mutex());
+     return pool;
+ }
+ 
+@@ -136,13 +139,13 @@ struct rte_mempool *create_rpc_mempool(const char *name, uint16_t queue_id)
+     if (ret < 0) {
+         return NULL;
+     }
+-    pthread_mutex_lock(get_mem_mutex());
++
+     pool = rte_mempool_create(pool_name, CALL_POOL_SZ, sizeof(struct rpc_msg), 0, 0, NULL, NULL, NULL,
+         NULL, rte_socket_id(), 0);
+     if (pool == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
+     }
+-    pthread_mutex_unlock(get_mem_mutex());
++
+     return pool;
+ }
+ 
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index 774d0f3..335d834 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -48,6 +48,13 @@
+ #define LSTACK_PRELOAD_NAME_LEN     PATH_MAX
+ #define LSTACK_PRELOAD_ENV_PROC     "GAZELLE_BIND_PROCNAME"
+ 
++static volatile int32_t g_init_fail = 0;
++
++void set_init_fail(void)
++{
++    g_init_fail = 1;
++}
++
+ struct lstack_preload {
+     int32_t preload_switch;
+     char env_procname[LSTACK_PRELOAD_NAME_LEN];
+@@ -207,7 +214,11 @@ __attribute__((constructor)) void gazelle_network_init(void)
+         }
+         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
+     } else {
+-        dpdk_eal_init();
++        ret = dpdk_eal_init();
++        if (ret < 0) {
++            LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
++        }
++
+         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
+     }
+     if (ret != 0) {
+@@ -248,7 +259,14 @@ __attribute__((constructor)) void gazelle_network_init(void)
+     * Phase 10: register core sig handler func to dumped stack */
+     lstack_signal_init();
+ 
++    /* wait stack thread and kernel_event thread init finish */
++    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
++    if (g_init_fail) {
++        LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
++    }
++
+     lstack_prelog_uninit();
+     posix_api->is_chld = 0;
+     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
++    rte_smp_mb();
+ }
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 4143f2f..00a82fb 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -145,13 +145,13 @@ void gazelle_init_sock(int32_t fd)
+         return;
+     }
+ 
+-    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
++    sock->recv_wait_free = create_ring("wait_free", SOCK_RECV_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
+     if (sock->recv_wait_free == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "wait_free create failed. errno: %d.\n", rte_errno);
+         return;
+     }
+ 
+-    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, atomic_fecth_add(&name_tick, 1));
++    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, 0, atomic_fetch_add(&name_tick, 1));
+     if (sock->send_ring == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
+         return;
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index da320e2..8f0b785 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -39,19 +39,14 @@
+ static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX;
+ static struct protocol_stack_group g_stack_group = {0};
+ static PER_THREAD long g_stack_tid = 0;
+-static pthread_mutex_t g_mem_mutex = PTHREAD_MUTEX_INITIALIZER;
+ 
++void set_init_fail(void);
+ typedef void *(*stack_thread_func)(void *arg);
+ 
+ #ifdef GAZELLE_USE_EPOLL_EVENT_STACK
+ void update_stack_events(struct protocol_stack *stack);
+ #endif
+ 
+-pthread_mutex_t *get_mem_mutex(void)
+-{
+-    return &g_mem_mutex;
+-}
+-
+ int32_t bind_to_stack_numa(struct protocol_stack *stack)
+ {
+     int32_t ret;
+@@ -248,6 +243,14 @@ static void init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+     stack_group->stacks[queue_id] = stack;
+ }
+ 
++void wait_sem_value(sem_t *sem, int32_t wait_value)
++{
++    int32_t sem_val;
++    do {
++        sem_getvalue(sem, &sem_val);
++    } while (sem_val < wait_value);
++}
++
+ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
+ {
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+@@ -304,10 +307,10 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
+ 
+     sem_post(&stack_group->thread_phase1);
+ 
+-    int32_t sem_val;
+-    do {
+-        sem_getvalue(&stack_group->ethdev_init, &sem_val);
+-    } while (!sem_val && !use_ltran());
++    if (!use_ltran()) {
++        wait_sem_value(&stack_group->ethdev_init, 1);
++    }
++
+ 
+     ret = ethdev_init(stack);
+     if (ret != 0) {
+@@ -332,10 +335,13 @@ static void* gazelle_stack_thread(void *arg)
+ 
+     struct protocol_stack *stack = stack_thread_init(queue_id);
+     if (stack == NULL) {
+-        pthread_mutex_lock(&g_mem_mutex);
+-        LSTACK_EXIT(1, "stack_thread_init failed\n");
+-        pthread_mutex_unlock(&g_mem_mutex);
++        /* exit in main thread, avoid create mempool and exit at the same time */
++        set_init_fail();
++        sem_post(&get_protocol_stack_group()->all_init);
++        LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%d\n", queue_id);
++        return NULL;
+     }
++    sem_post(&get_protocol_stack_group()->all_init);
+     LSTACK_LOG(INFO, LSTACK, "stack_%02d init success\n", queue_id);
+ 
+     for (;;) {
+@@ -386,10 +392,7 @@ int32_t init_protocol_stack(void)
+         }
+     }
+ 
+-    int32_t thread_inited_num;
+-    do {
+-        sem_getvalue(&stack_group->thread_phase1, &thread_inited_num);
+-    } while (thread_inited_num < stack_group->stack_num);
++    wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
+ 
+     ret = init_stack_numa_cpuset();
+     if (ret < 0) {
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index e8080e1..4295f01 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -58,7 +58,7 @@ int thread_affinity_default(void);
+ int thread_affinity_init(int cpu_id);
+ 
+ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
+-void dpdk_eal_init(void);
++int32_t dpdk_eal_init(void);
+ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
+ struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id);
+ int32_t create_shared_ring(struct protocol_stack *stack);
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 9753385..9852878 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -64,6 +64,7 @@ struct protocol_stack_group {
+     uint16_t port_id;
+     sem_t thread_phase1;
+     sem_t ethdev_init;
++    sem_t all_init;
+     struct rte_mempool *kni_pktmbuf_pool;
+     struct eth_params *eth_params;
+     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
+@@ -82,7 +83,6 @@ struct wakeup_poll {
+ };
+ 
+ long get_stack_tid(void);
+-pthread_mutex_t *get_mem_mutex(void);
+ struct protocol_stack *get_protocol_stack(void);
+ struct protocol_stack *get_protocol_stack_by_fd(int32_t fd);
+ struct protocol_stack *get_minconn_protocol_stack(void);
+@@ -92,6 +92,8 @@ int32_t init_protocol_stack(void);
+ int32_t bind_to_stack_numa(struct protocol_stack *stack);
+ int32_t init_dpdk_ethdev(void);
+ 
++void wait_sem_value(sem_t *sem, int32_t wait_value);
++
+ /* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
+ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack);
+ 
+-- 
+2.23.0
+

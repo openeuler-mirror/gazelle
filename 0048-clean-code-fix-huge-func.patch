@@ -1,0 +1,356 @@
+From 77a8fb02a7c4352fee106d0aa83500d81c20d315 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Thu, 21 Apr 2022 16:42:01 +0800
+Subject: [PATCH 07/18] clean code:fix huge func
+
+---
+ src/lstack/core/lstack_control_plane.c  |   2 +-
+ src/lstack/core/lstack_init.c           | 101 +++++++++++++-----------
+ src/lstack/core/lstack_protocol_stack.c |  89 +++++++++++----------
+ 3 files changed, 105 insertions(+), 87 deletions(-)
+
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index 13a2ed3..26a1b1c 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -705,7 +705,7 @@ void control_server_thread(void *arg)
+ 
+     int32_t epfd = init_epoll(listenfd);
+     if (epfd < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "control_init_server failed\n");
++        LSTACK_LOG(ERR, LSTACK, "init_epoll failed\n");
+         return;
+     }
+ 
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index 335d834..037b8fd 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -155,12 +155,52 @@ __attribute__((destructor)) void gazelle_network_exit(void)
+     }
+ }
+ 
+-__attribute__((constructor)) void gazelle_network_init(void)
++static void create_control_thread(void)
+ {
+     int32_t ret;
+ 
++    pthread_t tid;
++    if (use_ltran()) {
++        dpdk_skip_nic_init();
++        if (control_init_client(false) != 0) {
++            LSTACK_EXIT(1, "control_init_client failed\n");
++        }
++        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
++    } else {
++        ret = dpdk_eal_init();
++        if (ret < 0) {
++            LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
++        }
++
++        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
++    }
++    if (ret != 0) {
++        LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
++    }
++
++    if (pthread_setname_np(tid, CONTROL_THREAD_NAME) != 0) {
++        LSTACK_LOG(ERR, LSTACK, "pthread_setname_np failed errno=%d\n", errno);
++    }
++    LSTACK_LOG(INFO, LSTACK, "create control_easy_thread success\n");
++}
++
++static void gazelle_signal_init(void)
++{
++    /* to prevent crash , just ignore SIGPIPE when socket is closed */
++    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "signal error, errno:%d.", errno);
++        LSTACK_EXIT(1, "signal SIGPIPE SIG_IGN\n");
++    }
++
++    /*
++    * register core sig handler func to dumped stack */
++    lstack_signal_init();
++}
++
++__attribute__((constructor)) void gazelle_network_init(void)
++{
+     /*
+-    * Phase 1: Init POSXI API and prelog */
++    * Init POSXI API and prelog */
+     lstack_prelog_init("LSTACK");
+     if (posix_api_init() != 0) {
+         LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+@@ -168,7 +208,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
+     }
+ 
+     /*
+-    * Phase 2: Init LD_PRELOAD */
++    * Init LD_PRELOAD */
+     if (preload_info_init() < 0) {
+         return;
+     }
+@@ -177,7 +217,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
+     }
+ 
+     /*
+-    * Phase 3: Read configure from lstack.cfg */
++    * Read configure from lstack.cfg */
+     if (cfg_init() != 0) {
+         LSTACK_PRE_LOG(LSTACK_ERR, "cfg_init failed\n");
+         LSTACK_EXIT(1, "cfg_init failed\n");
+@@ -185,87 +225,56 @@ __attribute__((constructor)) void gazelle_network_init(void)
+     LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
+ 
+     /*
+-    * Phase 4: check conflict */
++    * check conflict */
+     if (check_process_conflict() < 0) {
+         LSTACK_PRE_LOG(LSTACK_INFO, "Have another same primary process. WARNING: Posix API will use kernel mode!\n");
+         return;
+     }
+ 
+     /*
+-    * Phase 5: save initial affinity */
++    * save initial affinity */
+     if (thread_affinity_default() < 0) {
+         LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
+         LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
+     }
+ 
+-    /* to prevent crash , just ignore SIGPIPE when socket is closed */
+-    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+-        LSTACK_PRE_LOG(LSTACK_ERR, "signal error, errno:%d.", errno);
+-        LSTACK_EXIT(1, "signal SIGPIPE SIG_IGN\n");
+-    }
++    gazelle_signal_init();
+ 
+     /*
+-    * Phase 6: Init control plane and dpdk init */
+-    pthread_t tid;
+-    if (use_ltran()) {
+-        dpdk_skip_nic_init();
+-        if (control_init_client(false) != 0) {
+-            LSTACK_EXIT(1, "control_init_client failed\n");
+-        }
+-        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
+-    } else {
+-        ret = dpdk_eal_init();
+-        if (ret < 0) {
+-            LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
+-        }
+-
+-        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
+-    }
+-    if (ret != 0) {
+-        LSTACK_EXIT(1, "pthread_create failed errno=%d\n", errno);
+-    }
+-    if (pthread_setname_np(tid, CONTROL_THREAD_NAME) != 0) {
+-        LSTACK_LOG(ERR, LSTACK, "pthread_setname_np failed errno=%d\n", errno);
+-    }
+-    LSTACK_LOG(INFO, LSTACK, "create control_easy_thread success\n");
++    * Init control plane and dpdk init */
++    create_control_thread();
+ 
+     /*
+-    * Phase 7: cancel the core binding from DPDK initialization */
++    * cancel the core binding from DPDK initialization */
+     if (thread_affinity_default() < 0) {
+         LSTACK_EXIT(1, "pthread_setaffinity_np failed\n");
+     }
+ 
+     lstack_log_level_init();
++    lstack_prelog_uninit();
+ 
+-    ret = init_protocol_stack();
+-    if (ret != 0) {
++    if (init_protocol_stack() != 0) {
+         LSTACK_EXIT(1, "init_protocol_stack failed\n");
+     }
+ 
+     /*
+-    * Phase 8: nic */
++    * nic */
+     if (!use_ltran()) {
+-        ret = init_dpdk_ethdev();
+-        if (ret != 0) {
++        if (init_dpdk_ethdev() != 0) {
+             LSTACK_EXIT(1, "init_dpdk_ethdev failed\n");
+         }
+     }
+ 
+     /*
+-    * Phase 9: lwip initialization */
++    * lwip initialization */
+     lwip_sock_init();
+ 
+-    /*
+-    * Phase 10: register core sig handler func to dumped stack */
+-    lstack_signal_init();
+-
+     /* wait stack thread and kernel_event thread init finish */
+     wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
+     if (g_init_fail) {
+         LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
+     }
+ 
+-    lstack_prelog_uninit();
+     posix_api->is_chld = 0;
+     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
+     rte_smp_mb();
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 8f0b785..565d19b 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -217,7 +217,7 @@ static void* gazelle_weakup_thread(void *arg)
+     return NULL;
+ }
+ 
+-static void init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
++static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+ {
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
+@@ -241,6 +241,31 @@ static void init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+     stack_stat_init();
+ 
+     stack_group->stacks[queue_id] = stack;
++
++    cpu_set_t cpuset;
++    CPU_ZERO(&cpuset);
++    CPU_SET(stack->cpu_id, &cpuset);
++    if (rte_thread_set_affinity(&cpuset) != 0) {
++        LSTACK_LOG(ERR, LSTACK, "rte_thread_set_affinity failed\n");
++        return -1;
++    }
++    RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
++
++    stack->socket_id = numa_node_of_cpu(stack->cpu_id);
++    if (stack->socket_id < 0) {
++        LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
++        return -1;
++    }
++
++    if (pktmbuf_pool_init(stack, stack_group->stack_num) != 0) {
++        return -1;
++    }
++
++    if (create_shared_ring(stack) != 0) {
++        return -1;
++    }
++
++    return 0;
+ }
+ 
+ void wait_sem_value(sem_t *sem, int32_t wait_value)
+@@ -260,33 +285,8 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
+         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
+         return NULL;
+     }
+-    init_stack_value(stack, queue_id);
+-
+-    cpu_set_t cpuset;
+-    CPU_ZERO(&cpuset);
+-    CPU_SET(stack->cpu_id, &cpuset);
+-    if (rte_thread_set_affinity(&cpuset) != 0) {
+-        LSTACK_LOG(ERR, LSTACK, "rte_thread_set_affinity failed\n");
+-        free(stack);
+-        return NULL;
+-    }
+-    RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
+-
+-    stack->socket_id = numa_node_of_cpu(stack->cpu_id);
+-    if (stack->socket_id < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
+-        free(stack);
+-        return NULL;
+-    }
+ 
+-    int32_t ret = pktmbuf_pool_init(stack, stack_group->stack_num);
+-    if (ret != 0) {
+-        free(stack);
+-        return NULL;
+-    }
+-
+-    ret = create_shared_ring(stack);
+-    if (ret != 0) {
++    if (init_stack_value(stack, queue_id) != 0) {
+         free(stack);
+         return NULL;
+     }
+@@ -298,8 +298,7 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
+     tcpip_init(NULL, NULL);
+ 
+     if (use_ltran()) {
+-        ret = client_reg_thrd_ring();
+-        if (ret != 0) {
++        if (client_reg_thrd_ring() != 0) {
+             free(stack);
+             return NULL;
+         }
+@@ -311,15 +310,13 @@ static struct protocol_stack * stack_thread_init(uint16_t queue_id)
+         wait_sem_value(&stack_group->ethdev_init, 1);
+     }
+ 
+-
+-    ret = ethdev_init(stack);
+-    if (ret != 0) {
++    if (ethdev_init(stack) != 0) {
+         free(stack);
+         return NULL;
+     }
+ 
+     if (stack_group->wakeup_enable) {
+-        ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_weakup_thread);
++        int32_t ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_weakup_thread);
+         if (ret != 0) {
+             free(stack);
+             return NULL;
+@@ -363,25 +360,37 @@ static void* gazelle_stack_thread(void *arg)
+     return NULL;
+ }
+ 
+-int32_t init_protocol_stack(void)
++static int32_t init_protocol_sem(void)
+ {
+-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+     int32_t ret;
+-
+-    stack_group->stack_num = get_global_cfg_params()->num_cpu;
+-    stack_group->wakeup_enable = (get_global_cfg_params()->num_wakeup > 0) ? true : false;
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
+     if (!use_ltran()) {
+         ret = sem_init(&stack_group->ethdev_init, 0, 0);
+         if (ret < 0) {
+-            LSTACK_LOG(ERR, PORT, "sem_init failed\n");
++            LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
+             return -1;
+         }
+     }
+ 
+     ret = sem_init(&stack_group->thread_phase1, 0, 0);
+     if (ret < 0) {
+-        LSTACK_LOG(ERR, PORT, "sem_init failed\n");
++        LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
++        return -1;
++    }
++    
++    return 0;
++}
++
++int32_t init_protocol_stack(void)
++{
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    int32_t ret;
++
++    stack_group->stack_num = get_global_cfg_params()->num_cpu;
++    stack_group->wakeup_enable = (get_global_cfg_params()->num_wakeup > 0) ? true : false;
++
++    if (init_protocol_sem() != 0) {
+         return -1;
+     }
+ 
+-- 
+2.23.0
+
