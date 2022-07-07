@@ -1,0 +1,40 @@
+From 94a5043e03d3d83b661af64c3723d5f775c10706 Mon Sep 17 00:00:00 2001
+From: zhangqiang <zhangqiang@kylinos.cn>
+Date: Fri, 1 Jul 2022 01:26:09 +0800
+Subject: [PATCH 3/6] =?UTF-8?q?<bugfix><https://gitee.com/src-openeuler/ga?=
+ =?UTF-8?q?zelle/issues/I5643C>=20=E6=8C=89=E7=85=A7POSIX=E6=A0=87?=
+ =?UTF-8?q?=E5=87=86,sigaction=E5=87=BD=E6=95=B0act=3D=3DNULL,=E8=B0=83?=
+ =?UTF-8?q?=E7=94=A8=E8=80=85=E5=8F=AF=E4=BB=A5=E9=80=9A=E8=BF=87oldact?=
+ =?UTF-8?q?=E8=8E=B7=E5=8F=96=E4=B9=8B=E5=89=8D=E7=9A=84=E4=BF=A1=E5=8F=B7?=
+ =?UTF-8?q?action=20=E6=8C=89=E7=85=A7lstack=E7=9A=84=E7=90=86=E8=A7=A3,?=
+ =?UTF-8?q?=E5=AE=83HOOK=20sigaction=E5=87=BD=E6=95=B0,=E6=98=AF=E5=BD=93?=
+ =?UTF-8?q?=E8=B0=83=E7=94=A8=E8=80=85=E8=AE=BE=E7=BD=AE=E6=96=B0=E7=9A=84?=
+ =?UTF-8?q?=E4=BF=A1=E5=8F=B7=E5=87=BD=E6=95=B0=E4=B8=BA=E7=BC=BA=E7=9C=81?=
+ =?UTF-8?q?=E5=A4=84=E7=BD=AE=E8=A1=8C=E4=B8=BA=E6=97=B6,=E5=AF=B9?=
+ =?UTF-8?q?=E6=8C=87=E5=AE=9A=E4=BF=A1=E5=8F=B7=E8=BF=9B=E8=A1=8C=E6=8B=A6?=
+ =?UTF-8?q?=E6=88=AA,=E8=AF=A5=E6=94=B9=E5=8A=A8=E4=B8=8D=E5=BD=B1?=
+ =?UTF-8?q?=E5=93=8D=E5=8E=9F=E5=8A=9F=E8=83=BD?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ src/lstack/api/lstack_signal.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_signal.c b/src/lstack/api/lstack_signal.c
+index 87cbdda..4dba472 100644
+--- a/src/lstack/api/lstack_signal.c
++++ b/src/lstack/api/lstack_signal.c
+@@ -78,7 +78,7 @@ int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigacti
+ {
+     struct sigaction new_action;
+ 
+-    if ((match_hijack_signal(sig_num) != 0) && (action->sa_handler == SIG_DFL)) {
++    if ((match_hijack_signal(sig_num) != 0) && (action && action->sa_handler == SIG_DFL)) {
+         new_action = *action;
+         new_action.sa_flags |= SA_RESETHAND;
+         new_action.sa_handler = lstack_sig_default_handler;
+-- 
+2.23.0
+
