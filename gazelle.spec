@@ -2,17 +2,17 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       10
+Release:       11
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
 Source0:       %{name}-%{version}.tar.gz
 
 BuildRequires: cmake gcc-c++ lwip
-BuildRequires: dpdk-devel >= 19.11-15
+BuildRequires: dpdk-devel >= 19.11
 BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck
 
-Requires:      dpdk >= 19.11-15
+Requires:      dpdk >= 19.11
 Requires:      numactl libpcap libconfig libboundscheck
 
 Patch9001:     0001-fix-compile-error-unuse-result.patch
@@ -96,6 +96,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue Jul 7 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-11
+- modify the required dpdk version number
+
 * Tue Jun 14 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-10
 - adapt to gazelle
 
