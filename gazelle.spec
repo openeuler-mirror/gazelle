@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       9
+Release:       10
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -54,6 +54,22 @@ Patch9036:     0036-the-sending-of-sock-last-data-is-triggered-by-lstack.patch
 Patch9037:     0037-add-gazellectl-lstack-constraint.patch
 Patch9038:     0038-refactor-event.patch
 Patch9039:     0039-update-license-lockless-queue.patch
+Patch9040:     0040-fix-sock-invalid-address.patch
+Patch9041:     0041-exit-lstack-process-after-ltran-instance-logout.patch
+Patch9042:     0042-use-atomic-variales-to-count.patch
+Patch9043:     0043-re-arrange-the-program-to-invoke-rte_eth_dev_start-b.patch
+Patch9044:     0044-delete-redundant-file.patch
+Patch9045:     0045-lstack-all-exit-move-to-init.patch
+Patch9046:     0046-clean-code-fix-huge-func.patch
+Patch9047:     0047-add-kernel-path-in-epoll-funcs.patch
+Patch9048:     0048-refactor-kernel-event-poll-epoll.patch
+Patch9049:     0049-post-thread_phase1-sem-to-avoid-block-main-thread-wh.patch
+Patch9050:     0050-adjust-the-number-of-RX-TX-mbufs-of-each-stack-threa.patch
+Patch9051:     0051-modify-README.patch
+Patch9052:     0052-bugfix-https-gitee.com-src-openeuler-gazelle-issues-.patch
+Patch9053:     0053-update-README.md.patch
+Patch9054:     0054-ltran-fix-use-after-free-issue.patch
+Patch9055:     0055-refactor-pkt-read-send-performance.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -94,6 +110,15 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Thu Jul 7 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-10
+- Type:bugfix
+- CVE:
+- SUG:NA
+- DESC:update readme
+       fix some bugs
+       refactor pkt read send to improve performance
+       refactoe kernle event to improve performanc 
+
 * Fri May 27 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-9
 - update license lockless queue
 
