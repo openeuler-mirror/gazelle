@@ -121,7 +121,7 @@ index 595e85f..4a7bd37 100644
 +    }
 +
 +
-+    __rte_ring_enqueue_elems(r, head, obj_table, sizeof(void *), n);
++    ENQUEUE_PTRS(r, &r[1], head, obj_table, n, void *);
 +
 +    __atomic_store_n(&r->cons.head, head + n, __ATOMIC_RELEASE);
 +
@@ -142,7 +142,7 @@ index 595e85f..4a7bd37 100644
 +    }
 +
 +
-+    __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
++    DEQUEUE_PTRS(r, &r[1], cons, obj_table, n, void *);
 +
 +    __atomic_store_n(&r->cons.tail, cons + n, __ATOMIC_RELEASE);
 +
@@ -162,7 +162,7 @@ index 595e85f..4a7bd37 100644
 +        return 0;
 +    }
 +
-+    __rte_ring_dequeue_elems(r, prod, obj_table, sizeof(void *), n);
++    DEQUEUE_PTRS(r, &r[1], prod, obj_table, n, void *);
 +
 +    r->prod.head = prod + n;
 +
@@ -2765,7 +2765,7 @@ index c1d1d35..8a6aa9d 100644
 +    char pad __rte_cache_aligned;
 +
      struct netif netif;
-+    struct eth_dev_ops *dev_ops;
++    struct lstack_eth_dev_ops *dev_ops;
      uint32_t rx_ring_used;
      uint32_t tx_ring_used;
 -    struct lstack_eth_dev_ops *dev_ops;
