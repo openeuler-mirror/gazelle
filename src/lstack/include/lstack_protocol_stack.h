@@ -70,6 +70,8 @@ struct protocol_stack_group {
     sem_t thread_phase1;
     sem_t ethdev_init;
     sem_t all_init;
+    uint64_t rx_offload;
+    uint64_t tx_offload;
     struct rte_mempool *kni_pktmbuf_pool;
     struct eth_params *eth_params;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];

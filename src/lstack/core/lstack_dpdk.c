@@ -313,68 +313,12 @@ static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
 
 uint64_t get_eth_params_rx_ol(void)
 {
-    return use_ltran() ? 0 : get_protocol_stack_group()->eth_params->conf.rxmode.offloads;
+    return get_protocol_stack_group()->rx_offload;
 }
 
 uint64_t get_eth_params_tx_ol(void)
 {
-    return use_ltran() ? 0 : get_protocol_stack_group()->eth_params->conf.txmode.offloads;
-}
-
-static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
-{
-#if CHECKSUM_OFFLOAD_ALL
-    uint64_t rx_ol = 0;
-    uint64_t tx_ol = 0;
-
-    uint64_t rx_ol_capa = dev_info->rx_offload_capa;
-    uint64_t tx_ol_capa = dev_info->tx_offload_capa;
-
-    // rx ip
-#if CHECKSUM_CHECK_IP_HW
-    if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
-        rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
-        LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_IPV4_CKSUM\n");
-    }
-#endif
-
-    // rx tcp
-#if CHECKSUM_CHECK_TCP_HW
-    if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
-        rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
-        LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_TCP_CKSUM\n");
-    }
-#endif
-
-    // tx ip
-#if CHECKSUM_GEN_IP_HW
-    if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
-        tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
-        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_IPV4_CKSUM\n");
-    }
-#endif
-
-    // tx tcp
-#if CHECKSUM_GEN_TCP_HW
-    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
-        tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
-        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_TCP_CKSUM\n");
-    }
-#endif
-    if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
-        rx_ol = 0;
-    }
-    if (!(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) || !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
-        tx_ol = 0;
-    }
-
-    conf->rxmode.offloads = rx_ol;
-    conf->txmode.offloads = tx_ol;
-
-    LSTACK_LOG(INFO, LSTACK, "set checksum offloads\n");
-#endif /* CHECKSUM_OFFLOAD_ALL */
-
-    return 0;
+    return get_protocol_stack_group()->tx_offload;
 }
 
 static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
@@ -475,8 +419,11 @@ int32_t dpdk_ethdev_init(void)
     }
     eth_params_checksum(&eth_params->conf, &dev_info);
     int32_t rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
-    get_protocol_stack_group()->eth_params = eth_params;
-    get_protocol_stack_group()->port_id = eth_params->port_id;
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    stack_group->eth_params = eth_params;
+    stack_group->port_id = eth_params->port_id;
+    stack_group->rx_offload = eth_params->conf.rxmode.offloads;
+    stack_group->tx_offload = eth_params->conf.txmode.offloads;
 
     ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
     if (ret < 0) {

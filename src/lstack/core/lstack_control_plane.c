@@ -297,6 +297,10 @@ static int32_t client_reg_proc_memory(bool is_reconnect)
         return -1;
     }
 
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    stack_group->rx_offload = recv_msg.msg.rx_offload;
+    stack_group->tx_offload = recv_msg.msg.tx_offload;
+
     if (!is_reconnect) {
         ret = proc_memory_init(&recv_msg);
         if (ret != 0) {

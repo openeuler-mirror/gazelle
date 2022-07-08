@@ -67,6 +67,10 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool);
 int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count);
 void kni_process_rx(uint16_t port);
 
+struct rte_eth_conf;
+struct rte_eth_dev_info;
+void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info);
+
 /*
     gazelle custom rte ring interface
     lightweight ring reduce atomic and smp_mb.

@@ -25,6 +25,8 @@ struct ltran_config {
         char **dpdk_argv;
         int32_t dpdk_argc;
         int32_t kni_switch;
+        uint64_t rx_offload;
+        uint64_t tx_offload;
     } dpdk;
 
     struct {

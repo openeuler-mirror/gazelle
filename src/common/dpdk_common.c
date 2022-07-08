@@ -15,6 +15,7 @@
 #include <rte_ethdev.h>
 #include <rte_bus_pci.h>
 #include <rte_mbuf.h>
+#include <rte_ethdev.h>
 #include <securec.h>
 
 #include "dpdk_common.h"
@@ -85,6 +86,49 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
 
     COMMON_INFO("Configure network interface of %d %s \n", port_id, if_up ? "up" : "down");
     return ret;
+}
+
+void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
+{
+    uint64_t rx_ol = 0;
+    uint64_t tx_ol = 0;
+    uint64_t rx_ol_capa = dev_info->rx_offload_capa;
+    uint64_t tx_ol_capa = dev_info->tx_offload_capa;
+
+    // rx ip
+    if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
+        rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
+        COMMON_INFO("DEV_RX_OFFLOAD_IPV4_CKSUM\n");
+    }
+
+    if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
+        rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
+        COMMON_INFO("DEV_RX_OFFLOAD_TCP_CKSUM\n");
+    }
+
+    // tx ip
+    if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
+        tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
+        COMMON_INFO("DEV_TX_OFFLOAD_IPV4_CKSUM\n");
+    }
+
+    // tx tcp
+    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
+        tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
+        COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
+    }
+
+    if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
+        rx_ol = 0;
+    }
+    if (!(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) || !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
+        tx_ol = 0;
+    }
+
+    conf->rxmode.offloads = rx_ol;
+    conf->txmode.offloads = tx_ol;
+
+    COMMON_INFO("set checksum offloads\n");
 }
 
 int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
