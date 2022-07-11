@@ -11,12 +11,66 @@
 */
 
 
-#ifndef __PARAMETER_H__
-#define __PARAMETER_H__
+#ifndef __EXAMPLES_PARAMETER_H__
+#define __EXAMPLES_PARAMETER_H__
 
 
 #include "utilities.h"
 
+
+#define PARAM_DEFAULT_AS            ("server")              ///< default type
+#define PARAM_DEFAULT_IP            ("127.0.0.1")           ///< default IP
+#define PARAM_DEFAULT_PORT          (5050)                  ///< default port
+#define PARAM_DEFAULT_MODEL         ("mum")                 ///< default model type
+#define PARAM_DEFAULT_CONNECT_NUM   (10)                    ///< default connection number
+#define PARAM_DEFAULT_THREAD_NUM    (8)                     ///< default thread number
+#define PARAM_DEFAULT_API           ("posix")               ///< default API type
+#define PARAM_DEFAULT_PKTLEN        (1024)                  ///< default packet length of message
+#define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
+#define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
+
+enum
+{
+#define PARAM_NAME_AS               ("as")                  ///< name of parameter type
+    PARAM_NUM_AS = 'a',
+#define PARAM_NAME_IP               ("ip")                  ///< name of parameter IP
+    PARAM_NUM_IP = 'i',
+#define PARAM_NAME_PORT             ("port")                ///< name of parameter port
+    PARAM_NUM_PORT = 'p',
+#define PARAM_NAME_MODEL            ("model")               ///< name of parameter model type
+    PARAM_NUM_MODEL = 'm',
+#define PARAM_NAME_CONNECT_NUM      ("connectnum")          ///< name of parameter connection number
+    PARAM_NUM_CONNECT_NUM = 'c',
+#define PARAM_NAME_THREAD_NUM       ("threadnum")           ///< name of parameter thread number
+    PARAM_NUM_THREAD_NUM = 't',
+#define PARAM_NAME_API              ("api")                 ///< name of parameter API type
+    PARAM_NUM_API = 'A',
+#define PARAM_NAME_PKTLEN           ("pktlen")              ///< name of parameter packet length of message
+    PARAM_NUM_PKTLEN = 'P',
+#define PARAM_NAME_VERIFY           ("verify")              ///< name of parameter flag of message verifying
+    PARAM_NUM_VERIFY = 'v',
+#define PARAM_NAME_RINGPMD          ("ringpmd")             ///< name of parameter flag of ring PMD of dpdk
+    PARAM_NUM_RINGPMD = 'r',
+#define PARAM_NAME_HELP             ("help")                ///< name of parameter help
+    PARAM_NUM_HELP = 'h',
+};
+
+#define NO_ARGUMENT             0                           ///< options takes no arguments
+#define REQUIRED_ARGUMETN       1                           ///< options requires arguments
+#define OPTIONAL_ARGUMETN       2                           ///< options arguments are optional
+
+
+/**
+ * @brief program option description
+ * The program option description.
+ */
+struct ProgramOption
+{
+    const char *name;       ///< name of program option
+    int32_t has_arg;        ///< whether program option takes an argument, one of no, required, and optional
+    int32_t *flag;          ///< if not `NULL`, set `*flag` to `val` when option found
+    int32_t val;            ///< the number of this program option
+};
 
 /**
  * @brief porgram parameter
@@ -45,6 +99,12 @@ struct ProgramParams
 void program_params_init(struct ProgramParams *params);
 
 /**
+ * @brief print help information
+ * This function prints help informations.
+ */
+void program_params_help(void);
+
+/**
  * @brief parse the parameters
  * This function parses the parameters of main function. 
  * @param params        the parameters pointer
@@ -52,7 +112,7 @@ void program_params_init(struct ProgramParams *params);
  * @param argv          the value of arguments
  * @return              the result flag
  */
-int32_t program_params_parse(struct ProgramParams *params, int argc, char *argv[]);
+int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *argv[]);
 
 /**
  * @brief print the parameters
@@ -62,4 +122,4 @@ int32_t program_params_parse(struct ProgramParams *params, int argc, char *argv[
 void program_params_print(struct ProgramParams *params);
 
 
-#endif // __PARAMETER_H__
+#endif // __EXAMPLES_PARAMETER_H__
