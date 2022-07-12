@@ -14,23 +14,23 @@
 
 ## 程序接口
 
-* `--as [server | client]`：作为服务端还是客户端。
+* `-a, --as [server | client]`：作为服务端还是客户端。
   * `server`：作为服务端。
   * `client`：作为客户端。
-* `--ip [xxx.xxx.xxx.xxx]`：IP地址。
-* `--port [xxxx]`：端口。
-* `--model [-mum | -mud]` ：采用的网络模型类型。
-  * `-mum (multi thread, unblock, multiplexing IO)`：多线程非阻塞IO复用。
-  * `-mud (multi thread, unblock, dissymmetric)`：多线程非阻塞非对称。
-* `--threadnum`：线程数设置。
-* `--connectnum`：连接数设置。
-* `--api [unix | posix]`：内部实现的接口类型。
-  * `unix` ：基于 unix 接口实现。
-  * `posix` ：基于 posix 接口实现。
-* `--pktlen [xxxx]`：报文长度配置。
-* `--verify [on | off]`：是否校验报文。
-* `--ringpmd [on | off]`：是否基于 dpkg ring PMD 收发环回。
-* `--help [--xxx]`：获得帮助信息。
+* `-i, --ip [xxx.xxx.xxx.xxx]`：IP地址。
+* `-p, --port [xxxx]`：端口。
+* `-m, --model [mum | mud]`：采用的网络模型类型。
+  * `mum (multi thread, unblock, multiplexing IO)`：多线程非阻塞IO复用。
+  * `mud (multi thread, unblock, dissymmetric)`：多线程非阻塞非对称。
+* `-t, --threadnum`：线程数设置。
+* `-c, --connectnum`：连接数设置。
+* `-A, --api [unix | posix]`：内部实现的接口类型。
+  * `unix`：基于 unix 接口实现。
+  * `posix`：基于 posix 接口实现。
+* `-P, --pktlen [xxxx]`：报文长度配置。
+* `-v, --verify`：是否校验报文。
+* `-r, --ringpmd`：是否基于dpdk ring PMD 收发环回。
+* `-h, --help`：获得帮助信息。
 
 ## 使用
 

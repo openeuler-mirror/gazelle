@@ -11,8 +11,8 @@
 */
 
 
-#ifndef __UTILITIES_H__
-#define __UTILITIES_H__
+#ifndef __EXAMPLES_UTILITIES_H__
+#define __EXAMPLES_UTILITIES_H__
 
 
 #include <string.h>
@@ -21,30 +21,35 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <inttypes.h>
-
 #include <unistd.h>
+#include <ctype.h>
+
 #include <pthread.h>
 
 #include <sys/types.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 
-#define PRINT_ERROR(str)                    do \
+#define PRINT_ERROR(format, ...)            do \
                                             { \
                                                 printf("\n[error]: "); \
-                                                printf(str); \
+                                                printf(format, ##__VA_ARGS__); \
                                                 printf("\n"); \
                                             } while(0)
-#define PRINT_WARNNING(str)                 do \
+#define PRINT_WARNNING(format, ...)         do \
                                             { \
                                                 printf("\n[warnning]: "); \
-                                                printf(str); \
+                                                printf(format, ##__VA_ARGS__); \
                                                 printf("\n"); \
                                             } while(0)
 #define LIMIT_VAL_RANGE(val, min, max)      ((val) < (min) ? (min) : ((val) > (max) ? (max) : (val)))
 #define CHECK_VAL_RANGE(val, min, max)      ((val) < (min) ? (false) : ((val) > (max) ? (false) : (true)))
 
 #define PROGRAM_OK                  (0)             ///< program ok flag
-#define PROGRAM_FINISH              (1)             ///< program finish flag
+#define PROGRAM_ABORT               (1)             ///< program abort flag
 #define PROGRAM_FAULT               (-1)            ///< program fault flag
 
 #define UNIX_TCP_PORT_MIN           (1024)          ///< TCP minimum port number in unix
@@ -54,16 +59,5 @@
 #define MESSAGE_PKTLEN_MIN          (1)             ///< minimum length of message (1 byte)
 #define MESSAGE_PKTLEN_MAX          (10485760)      ///< maximum length of message (10 Mb)
 
-#define DEFAULT_PARAM_AS            ("server")      ///< default type
-#define DEFAULT_PARAM_IP            ("127.0.0.1")   ///< default IP
-#define DEFAULT_PARAM_PORT          (5050)          ///< default port
-#define DEFAULT_PARAM_MODEL         ("mum")         ///< default model type
-#define DEFAULT_PARAM_CONNECT_NUM   (10)            ///< default connection number
-#define DEFAULT_PARAM_THREAD_NUM    (8)             ///< default thread number
-#define DEFAULT_PARAM_API           ("posix")       ///< default API type
-#define DEFAULT_PARAM_PKTLEN        (1024)          ///< default packet length of message
-#define DEFAULT_PARAM_VERIFY        (true)          ///< default flag of message verifying
-#define DEFAULT_PARAM_RINGPMD       (false)         ///< default flag of ring PMD
 
-
-#endif // __UTILITIES_H__
+#endif // __EXAMPLES_UTILITIES_H__

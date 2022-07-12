@@ -29,6 +29,7 @@ set(HEADERS
 )
 set(SOURCES
     main.c
+    src/parameter.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
