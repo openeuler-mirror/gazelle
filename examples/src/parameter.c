@@ -53,7 +53,7 @@ int getopt_long(int argc, char * const argv[], const char *optstring, const stru
 // set `as` parameter
 void program_param_prase_as(struct ProgramParams *params, char *arg, const char *name)
 {
-    if (0 == strcmp(arg, "server") || 0 == strcmp(arg, "client")) {
+    if (strcmp(arg, "server") == 0 || strcmp(arg, "client") == 0) {
         params->as = arg;
     }
     else {
@@ -65,7 +65,7 @@ void program_param_prase_as(struct ProgramParams *params, char *arg, const char 
 // set `ip` parameter
 void program_param_prase_ip(struct ProgramParams *params, char *arg, const char *name)
 {
-    if (INADDR_NONE == inet_addr(arg)) {
+    if (inet_addr(arg) != INADDR_NONE) {
         params->ip = arg;
     }
     else {
@@ -78,7 +78,7 @@ void program_param_prase_ip(struct ProgramParams *params, char *arg, const char 
 void program_param_prase_port(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t port_arg = atoi(optarg);
-    if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX)) {
+    if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
         params->port = (uint32_t)port_arg;
     }
     else {
@@ -90,7 +90,7 @@ void program_param_prase_port(struct ProgramParams *params, char *arg, const cha
 // set `model` parameter
 void program_param_prase_model(struct ProgramParams *params, char *arg, const char *name)
 {
-    if (0 == strcmp(optarg, "mum") || 0 == strcmp(optarg, "mud")) {
+    if (strcmp(optarg, "mum") == 0 || strcmp(optarg, "mud") == 0) {
         params->model = optarg;
     }
     else {
@@ -103,7 +103,7 @@ void program_param_prase_model(struct ProgramParams *params, char *arg, const ch
 void program_param_prase_connectnum(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t connectnum_arg = atoi(optarg);
-    if (0 < connectnum_arg) {
+    if (connectnum_arg > 0) {
         params->connect_num = (uint32_t)connectnum_arg;
     }
     else {
@@ -116,7 +116,7 @@ void program_param_prase_connectnum(struct ProgramParams *params, char *arg, con
 void program_param_prase_threadnum(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t threadnum_arg = atoi(optarg);
-    if (CHECK_VAL_RANGE(threadnum_arg, THREAD_NUM_MIN, THREAD_NUM_MAX)) {
+    if (CHECK_VAL_RANGE(threadnum_arg, THREAD_NUM_MIN, THREAD_NUM_MAX) == true) {
         params->thread_num = (uint32_t)threadnum_arg;
     }
     else {
@@ -128,7 +128,7 @@ void program_param_prase_threadnum(struct ProgramParams *params, char *arg, cons
 // set `api` parameter
 void program_param_prase_api(struct ProgramParams *params, char *arg, const char *name)
 {
-    if (0 == strcmp(optarg, "unix") || 0 == strcmp(optarg, "posix")) {
+    if (strcmp(optarg, "unix") == 0 || strcmp(optarg, "posix") == 0) {
         params->api = optarg;
     }
     else {
@@ -141,7 +141,7 @@ void program_param_prase_api(struct ProgramParams *params, char *arg, const char
 void program_param_prase_pktlen(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t pktlen_arg = atoi(optarg);
-    if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX)) {
+    if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX) == true) {
         params->pktlen = (uint32_t)pktlen_arg;
     }
     else {
@@ -157,8 +157,8 @@ void program_params_init(struct ProgramParams *params)
     params->ip = PARAM_DEFAULT_IP;
     params->port = PARAM_DEFAULT_PORT;
     params->model = PARAM_DEFAULT_MODEL;
-    params->thread_num = PARAM_DEFAULT_CONNECT_NUM;
-    params->connect_num = PARAM_DEFAULT_THREAD_NUM;
+    params->thread_num = PARAM_DEFAULT_THREAD_NUM;
+    params->connect_num = PARAM_DEFAULT_CONNECT_NUM;
     params->api = PARAM_DEFAULT_API;
     params->pktlen = PARAM_DEFAULT_PKTLEN;
     params->verify = PARAM_DEFAULT_VERIFY;
@@ -199,7 +199,7 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
 
         c = getopt_long(argc, argv, prog_short_opts, prog_long_opts, &opt_idx);
 
-        if (-1 == c) {
+        if (c == -1) {
             break;
         }
 
