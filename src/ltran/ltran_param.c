@@ -335,10 +335,19 @@ static int32_t parse_bond_ports(const config_t *config, const char *key, struct 
     }
 
     ltran_config->bond.port_num = separate_str_to_array(port_str, ltran_config->bond.portmask, GAZELLE_MAX_BOND_NUM);
-    if (ltran_config->bond.port_num >= GAZELLE_MAX_BOND_NUM) {
+    if (ltran_config->bond.port_num > GAZELLE_MAX_BOND_NUM) {
         free(port_str);
         gazelle_set_errno(GAZELLE_ERANGE);
         return GAZELLE_ERR;
+    }
+
+    for (uint32_t i = 0; i < ltran_config->bond.port_num; i++) {
+        if (ltran_config->bond.portmask[i] < GAZELLE_BOND_PORT_MASK_MIN ||
+            ltran_config->bond.portmask[i] > GAZELLE_BOND_PORT_MASK_MAX) {
+            free(port_str);
+            gazelle_set_errno(GAZELLE_ERANGE);
+            return GAZELLE_ERR;
+        }
     }
 
     free(port_str);
