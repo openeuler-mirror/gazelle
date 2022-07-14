@@ -52,7 +52,7 @@ static int32_t g_ltran_rate_show_flag = GAZELLE_OFF;    // not show when first g
 static struct gazelle_stat_ltran_total g_last_ltran_total;
 static struct gazelle_stat_lstack_total g_last_lstack_total[GAZELLE_MAX_STACK_ARRAY_SIZE];
 
-static bool g_use_ltran;
+static bool g_use_ltran = false;
 
 /* Use the largest data structure. */
 #define GAZELLE_CMD_RESP_BUFFER_SIZE (sizeof(struct gazelle_stack_dfx_data) / sizeof(char))
@@ -104,23 +104,6 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
 
 static int32_t g_wait_reply = 1;
 
-static pid_t ltran_process_exist(void)
-{
-    #define LINE 1024
-    #define BASE_DEC_SCALE 10
-    char line[LINE];
-    FILE *cmd = popen("pidof ltran", "r");
-
-    if (fgets(line, LINE, cmd) == NULL) {
-        return 0;
-    }
-
-    pid_t pid = strtoul(line, NULL, BASE_DEC_SCALE);
-    (void)pclose(cmd);
-
-    return pid;
-}
-
 static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
     struct gazelle_stat_forward_table *table = (struct gazelle_stat_forward_table *)buf;
@@ -160,7 +143,7 @@ static void gazelle_print_ltran_sock(void *buf, const struct gazelle_stat_msg_re
     printf("ltran sock table num: %u\n", table->conn_num);
 }
 
-static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
+static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
 {
     int32_t ret, fd;
     struct sockaddr_un addr;
@@ -177,7 +160,7 @@ static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
     }
 
     addr.sun_family = AF_UNIX;
-    if (g_use_ltran) {
+    if (use_ltran) {
         ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
             strlen(GAZELLE_DFX_SOCK_PATHNAME) + 1);
         if (ret != EOK) {
@@ -193,12 +176,24 @@ static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
 
     ret = connect(fd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_un));
     if (ret == -1) {
-        printf("connect ltran failed. errno: %d ret=%d\n", errno, ret);
+        if (!probe) {
+            printf("connect ltran failed. errno: %d ret=%d\n", errno, ret);
+        }
         close(fd);
         return GAZELLE_ERR;
     }
 
-    ret = write_specied_len(fd, (char *)req_msg, sizeof(*req_msg));
+    return fd;
+}
+
+static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t fd = dfx_connect_ltran(g_use_ltran, false);
+    if (fd < 0) {
+        return fd;
+    }
+
+    int32_t ret = write_specied_len(fd, (char *)req_msg, sizeof(*req_msg));
     if (ret == -1) {
         printf("write request msg failed ret=%d\n", ret);
         close(fd);
@@ -899,8 +894,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
         }
 
         if (i < conn->total_conn_num) {
-            printf("...\n");
-            printf("Total connections: %u, display connections: %u\n", conn->total_conn_num, i);
+            printf("...\nTotal connections: %u, display connections: %u\n", conn->total_conn_num, i);
         }
 
         if (stat->eof != 0) {
@@ -1199,28 +1193,12 @@ static int32_t check_cmd_support(struct gazelle_stat_msg_request *req_msg, int32
     return -1;
 }
 
-int32_t main(int32_t argc, char *argv[])
+int32_t dfx_loop(struct gazelle_stat_msg_request *req_msg, int32_t req_msg_num)
 {
-    struct gazelle_stat_msg_request req_msg[GAZELLE_CMD_MAX] = {0};
-    int32_t req_msg_num, ret;
+    int32_t ret;
     int32_t msg_index = 0;
     struct gazelle_dfx_list *dfx = NULL;
     char recv_buf[GAZELLE_CMD_RESP_BUFFER_SIZE + 1] = {0};
-
-    g_use_ltran = ltran_process_exist() ? true : false;
-    req_msg_num = parse_dfx_cmd_args(argc, argv, req_msg);
-    if (req_msg_num <= 0 || req_msg_num > GAZELLE_CMD_MAX) {
-        show_usage();
-        return 0;
-    }
-
-    if (!g_use_ltran) {
-        g_gazelle_dfx_tbl[GAZELLE_STAT_LSTACK_SHOW].recv_size = sizeof(struct gazelle_stack_dfx_data);
-        ret = check_cmd_support(req_msg, req_msg_num);
-        if (ret < 0) {
-            return -1;
-        }
-    }
 
     for (;;) {
         dfx = find_dfx_node(req_msg[msg_index].stat_mode);
@@ -1259,4 +1237,31 @@ int32_t main(int32_t argc, char *argv[])
     }
 
     return 0;
+}
+
+int32_t main(int32_t argc, char *argv[])
+{
+    struct gazelle_stat_msg_request req_msg[GAZELLE_CMD_MAX] = {0};
+    int32_t req_msg_num, ret;
+
+    int32_t fd = dfx_connect_ltran(true, true);
+    if (fd > 0) {
+        g_use_ltran = true;
+        close(fd);
+    }
+    req_msg_num = parse_dfx_cmd_args(argc, argv, req_msg);
+    if (req_msg_num <= 0 || req_msg_num > GAZELLE_CMD_MAX) {
+        show_usage();
+        return 0;
+    }
+
+    if (!g_use_ltran) {
+        g_gazelle_dfx_tbl[GAZELLE_STAT_LSTACK_SHOW].recv_size = sizeof(struct gazelle_stack_dfx_data);
+        ret = check_cmd_support(req_msg, req_msg_num);
+        if (ret < 0) {
+            return -1;
+        }
+    }
+
+    return dfx_loop(req_msg, req_msg_num);
 }
