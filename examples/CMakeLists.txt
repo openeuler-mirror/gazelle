@@ -23,13 +23,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D EXAMPLE_COMPILE")
 
 include_directories(${PROJECT_SOURCE_DIR}/inc)
 
-set(HEADERS
-    inc/utilities.h
-    inc/parameter.h
-)
-set(SOURCES
-    main.c
-    src/parameter.c
-)
+aux_source_directory(${PROJECT_SOURCE_DIR}/src SOURCES)
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} main.c ${SOURCES})

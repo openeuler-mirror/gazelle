@@ -24,10 +24,12 @@
 #include <unistd.h>
 #include <ctype.h>
 
+#include <fcntl.h>
 #include <pthread.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/epoll.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -42,6 +44,18 @@
 #define PRINT_WARNNING(format, ...)         do \
                                             { \
                                                 printf("\n[warnning]: "); \
+                                                printf(format, ##__VA_ARGS__); \
+                                                printf("\n"); \
+                                            } while(0)
+#define PRINT_SERVER(format, ...)           do \
+                                            { \
+                                                printf("<server>: "); \
+                                                printf(format, ##__VA_ARGS__); \
+                                                printf("\n"); \
+                                            } while(0)
+#define PRINT_CLIENT(format, ...)           do \
+                                            { \
+                                                printf("<client>: "); \
                                                 printf(format, ##__VA_ARGS__); \
                                                 printf("\n"); \
                                             } while(0)

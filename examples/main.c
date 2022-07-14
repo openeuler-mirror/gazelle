@@ -13,7 +13,6 @@
 
 #include "utilities.h"
 #include "parameter.h"
-#include "server.h"
 
 
 static struct ProgramParams prog_params;
@@ -25,7 +24,7 @@ int32_t main(int argc, char *argv[])
 
     program_params_init(&prog_params);
     ret = program_params_parse(&prog_params, argc, argv);
-    if (PROGRAM_ABORT == ret) {
+    if (ret == PROGRAM_ABORT) {
         return ret;
     }
     program_params_print(&prog_params);
