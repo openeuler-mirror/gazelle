@@ -19,9 +19,10 @@
 #include <rte_malloc.h>
 
 #include "dpdk_common.h"
-#include "ltran_config.h"
 #include "ltran_log.h"
+#include "ltran_param.h"
 #include "ltran_stat.h"
+#include "ltran_stack.h"
 #include "ltran_ethdev.h"
 #include "ltran_instance.h"
 #include "ltran_monitor.h"
@@ -108,7 +109,13 @@ static int32_t ltran_core_init(int32_t argc, char *argv[])
         return ret;
     }
 
-    set_instance_mgr(gazelle_instance_mgr_create());
+    struct gazelle_instance_mgr *mgr = gazelle_instance_mgr_create();
+    if (mgr == NULL) {
+        syslog(LOG_ERR, "create gazelle_instance_mgr failed\n");
+        closelog();
+        return -1;
+    }
+    set_instance_mgr(mgr);
     gazelle_set_stack_htable(gazelle_stack_htable_create(GAZELLE_MAX_STACK_NUM));
     gazelle_set_tcp_conn_htable(gazelle_tcp_conn_htable_create(GAZELLE_MAX_CONN_NUM));
     gazelle_set_tcp_sock_htable(gazelle_tcp_sock_htable_create(GAZELLE_MAX_TCP_SOCK_NUM));

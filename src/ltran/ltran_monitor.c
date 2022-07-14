@@ -10,8 +10,6 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include "ltran_monitor.h"
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -25,12 +23,15 @@
 #include <sys/prctl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <securec.h>
 
 #include "ltran_base.h"
 #include "ltran_log.h"
 #include "ltran_stat.h"
 #include "ltran_instance.h"
 #include "gazelle_dfx_msg.h"
+#include "gazelle_base_func.h"
+#include "ltran_monitor.h"
 
 #define GAZELLE_LISTEN_BACKLOG          5
 
@@ -103,12 +104,14 @@ static struct sockfd_data *sockfd_data_alloc(enum sockfd_type type, int32_t fd)
 static inline void sockfd_data_free(struct sockfd_data *data)
 {
     close(data->fd);
-    (void)memset_s(data, sizeof(struct sockfd_data), 0, sizeof(*data));
+    if (memset_s(data, sizeof(struct sockfd_data), 0, sizeof(*data)) != 0) {
+        LTRAN_ERR("memset_s fail");
+    }
 }
 
 static int32_t unix_server_create(const char *path, int32_t *server_fd)
 {
-    struct sockaddr_un addr;
+    struct sockaddr_un addr = {0};
     int32_t fd = -1;
     int32_t ret;
 
@@ -123,7 +126,6 @@ static int32_t unix_server_create(const char *path, int32_t *server_fd)
         return GAZELLE_ERR;
     }
 
-    (void)memset_s(&addr, sizeof(struct sockaddr_un), 0, sizeof(struct sockaddr_un));
     addr.sun_family = AF_UNIX;
     ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), path, sizeof(addr.sun_path) - 1);
     if (ret != 0) {

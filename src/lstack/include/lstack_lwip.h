@@ -13,16 +13,15 @@
 #ifndef __GAZELLE_LWIP_H__
 #define __GAZELLE_LWIP_H__
 
-#include "lstack_thread_rpc.h"
-#include "dpdk_common.h"
-#include "lwipsock.h"
-
-
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
 #define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata))
 #define NETCONN_IS_DATAOUT(sock)    gazelle_ring_readover_count((sock)->send_ring)
 #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 
+struct lwip_sock;
+struct rte_mempool;
+struct rpc_msg;
+struct rte_mbuf;
 void create_shadow_fd(struct rpc_msg *msg);
 void gazelle_init_sock(int32_t fd);
 int32_t gazelle_socket(int domain, int type, int protocol);
@@ -30,7 +29,7 @@ void gazelle_clean_sock(int32_t fd);
 struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags);
 ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
 ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
-ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags);
+ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);
 void read_recv_list(struct protocol_stack *stack, uint32_t max_num);
 void send_stack_list(struct protocol_stack *stack, uint32_t send_max);
 void add_recv_list(int32_t fd);

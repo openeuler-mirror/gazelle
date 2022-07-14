@@ -45,8 +45,7 @@ static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct 
     return &rpc_pool->msgs[prod];
 }
 
-static inline __attribute__((always_inline))
-struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
+static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
 {
     struct rpc_msg *msg = NULL;
 
@@ -76,8 +75,7 @@ struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
     return msg;
 }
 
-static inline __attribute__((always_inline))
-void rpc_msg_free(struct rpc_msg *msg)
+static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *msg)
 {
     pthread_spin_destroy(&msg->lock);
 
@@ -87,15 +85,13 @@ void rpc_msg_free(struct rpc_msg *msg)
     atomic_fetch_add(&msg->pool->cons, 1);
 }
 
-static inline __attribute__((always_inline))
-void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
+static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
 {
     pthread_spin_trylock(&msg->lock);
     lockless_queue_mpsc_push(queue, &msg->queue_node);
 }
 
-static inline __attribute__((always_inline))
-int32_t rpc_sync_call(lockless_queue *queue, struct rpc_msg *msg)
+static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queue *queue, struct rpc_msg *msg)
 {
     int32_t ret;
 
@@ -430,12 +426,12 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
-ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
+void rpc_call_send(int fd, const void *buf, size_t len, int flags)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_send);
     if (msg == NULL) {
-        return -1;
+        return;
     }
 
     msg->args[MSG_ARG_0].i = fd;
@@ -444,8 +440,6 @@ ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
 
     msg->self_release = 0;
     rpc_call(&stack->rpc_queue, msg);
-
-    return 0;
 }
 
 int32_t rpc_call_sendmsg(int fd, const struct msghdr *msghdr, int flags)

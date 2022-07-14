@@ -14,9 +14,7 @@
 #define __GAZELLE_LOG_H__
 
 #include <rte_log.h>
-#include <rte_errno.h>
 
-#include "ltran_base.h"
 #define RTE_LOGTYPE_LTRAN   RTE_LOGTYPE_USER1
 
 #define LTRAN_DEBUG(fmt, ...) \

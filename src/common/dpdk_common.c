@@ -56,8 +56,8 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
     int32_t ret = 0;
     static bool g_bond_dev_started = false;
 
-    if (port_id >= rte_eth_dev_count_avail() || port_id >= RTE_MAX_ETHPORTS) {
-        COMMON_ERR("Invalid port id %d \n", port_id);
+    if (port_id >= rte_eth_dev_count_avail() || port_id >= GAZELLE_MAX_ETHPORTS) {
+        COMMON_ERR("Invalid port id %hu \n", port_id);
         return -EINVAL;
     }
 
@@ -67,7 +67,7 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
             ret = rte_eth_dev_start(port_id);
             pthread_mutex_unlock(&g_kni_mutex);
             if (ret < 0) {
-                COMMON_ERR("Failed to start port %d ret=%d\n", port_id, ret);
+                COMMON_ERR("Failed to start port %hu ret=%d\n", port_id, ret);
             }
             g_bond_dev_started = true;
         } else {
@@ -84,7 +84,7 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
         }
     }
 
-    COMMON_INFO("Configure network interface of %d %s \n", port_id, if_up ? "up" : "down");
+    COMMON_INFO("Configure network interface of %hu %s \n", port_id, if_up ? "up" : "down");
     return ret;
 }
 
@@ -134,13 +134,13 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
 int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
 {
     int32_t ret;
-    struct rte_kni_ops ops;
-    struct rte_kni_conf conf;
+    struct rte_kni_ops ops = {0};
+    struct rte_kni_conf conf = {0};
     const struct rte_bus *bus = NULL;
-    struct rte_eth_dev_info dev_info;
+    struct rte_eth_dev_info dev_info = {0};
     const struct rte_pci_device *pci_dev = NULL;
 
-    if (port >= RTE_MAX_ETHPORTS) {
+    if (port >= GAZELLE_MAX_ETHPORTS) {
         COMMON_ERR("Bond port id out of range.\n");
         return -1;
     }
@@ -151,10 +151,6 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
         return -1;
     }
 
-    (void)memset_s(&dev_info, sizeof(dev_info), 0, sizeof(dev_info));
-    (void)memset_s(&conf, sizeof(conf), 0, sizeof(conf));
-    (void)memset_s(&ops, sizeof(ops), 0, sizeof(ops));
-
     ret = snprintf_s(conf.name, RTE_KNI_NAMESIZE, RTE_KNI_NAMESIZE - 1, "%s", GAZELLE_KNI_NAME);
     if (ret < 0) {
         COMMON_ERR("snprintf_s failed. ret=%d\n", ret);
@@ -163,7 +159,11 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
     conf.mbuf_size = GAZELLE_MAX_PKT_SZ;
     conf.group_id = port;
 
-    rte_eth_dev_info_get(port, &dev_info);
+    if (rte_eth_dev_info_get(port, &dev_info) != 0) {
+        COMMON_ERR("Fail rte_eth_dev_info_get\n");
+        return -1;
+    }
+
     if (dev_info.device) {
         bus = rte_bus_find_by_device(dev_info.device);
     }
@@ -178,7 +178,7 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
     ops.port_id = port;
     g_pkni = rte_kni_alloc(pool, &conf, &ops);
     if (g_pkni == NULL) {
-        COMMON_ERR("Fail to create kni for port: %d \n", port);
+        COMMON_ERR("Fail to create kni for port: %hu \n", port);
         return -1;
     }
     return 0;

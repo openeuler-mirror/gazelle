@@ -27,8 +27,10 @@
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"
 #include "gazelle_reg_msg.h"
+#include "gazelle_base_func.h"
 #include "lstack_stack_stat.h"
 #include "lstack_log.h"
+#include "lstack_thread_rpc.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_control_plane.h"
 
@@ -61,7 +63,10 @@ static int control_unix_sock(struct sockaddr_un *address)
         return -1;
     }
 
-    memset_s(address, sizeof(struct sockaddr_un), 0, sizeof(struct sockaddr_un));
+    if (memset_s(address, sizeof(struct sockaddr_un), 0, sizeof(struct sockaddr_un)) != 0) {
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
     address->sun_family = AF_UNIX;
     int ret = strncpy_s(address->sun_path, sizeof(address->sun_path), GAZELLE_REG_SOCK_PATHNAME,
         strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
@@ -115,7 +120,6 @@ static int32_t msg_proc_init(enum request_type rqt_type, struct reg_request_msg 
 {
     int32_t ret;
     struct cfg_params *global_params = get_global_cfg_params();
-    (void)memset_s(rqt_msg, sizeof(struct reg_request_msg), 0, sizeof(struct reg_request_msg));
 
     rqt_msg->type = rqt_type;
     struct client_proc_conf *conf = &rqt_msg->msg.proc;
@@ -129,7 +133,7 @@ static int32_t msg_proc_init(enum request_type rqt_type, struct reg_request_msg 
         return ret;
     }
 
-    ret = memcpy_s(conf->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN, global_params->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN);
+    ret = memcpy_s(conf->mac_addr, ETHER_ADDR_LEN, global_params->mac_addr, ETHER_ADDR_LEN);
     if (ret != EOK) {
         return ret;
     }
@@ -169,8 +173,6 @@ static int32_t msg_thrd_init(enum request_type rqt_type, struct reg_request_msg 
 {
     struct protocol_stack *stack = get_protocol_stack();
 
-    (void)memset_s(rqt_msg, sizeof(struct reg_request_msg), 0, sizeof(struct reg_request_msg));
-
     rqt_msg->type = rqt_type;
     struct client_thrd_conf *conf = &rqt_msg->msg.thrd;
 
@@ -203,7 +205,6 @@ static int32_t reg_communicate(const int32_t sockfd, struct reg_request_msg *sen
 
     char *buf = (char *)recv_msg;
     ssize_t recv_size = (ssize_t)sizeof(*recv_msg);
-    (void)memset_s(recv_msg, sizeof(*recv_msg), 0, sizeof(*recv_msg));
     while (recv_size > 0) {
         size = posix_api->read_fn(sockfd, buf, recv_size);
         if ((size < 0) && (errno != EINTR)  && (errno != EAGAIN)) {
@@ -277,8 +278,8 @@ static int32_t client_reg_proc_memory(bool is_reconnect)
 {
     int32_t ret;
     int32_t sockfd = g_data_fd;
-    struct reg_request_msg send_msg;
-    struct reg_response_msg recv_msg;
+    struct reg_request_msg send_msg = {0};
+    struct reg_response_msg recv_msg = {0};
 
     ret = msg_proc_init(RQT_REG_PROC_MEM, &send_msg);
     if (ret != 0) {
@@ -316,8 +317,8 @@ static int32_t client_reg_proc_attach(__attribute__((__unused__)) bool is_reconn
 {
     int32_t ret;
     int32_t sockfd = g_data_fd;
-    struct reg_request_msg send_msg;
-    struct reg_response_msg recv_msg;
+    struct reg_request_msg send_msg = {0};
+    struct reg_response_msg recv_msg = {0};
 
     ret = msg_proc_init(RQT_REG_PROC_ATT, &send_msg);
     if (ret != 0) {
@@ -416,8 +417,8 @@ int32_t client_reg_thrd_ring(void)
 {
     int32_t ret;
     int32_t sockfd;
-    struct reg_request_msg send_msg;
-    struct reg_response_msg recv_msg;
+    struct reg_request_msg send_msg = {0};
+    struct reg_response_msg recv_msg = {0};
 
     sockfd = connect_to_ltran(CONNECT_TO_LTRAN_INFINITE, CONNECT_TO_LTRAN_RETRY_INTERVAL);
     if (sockfd < 0) {
@@ -454,6 +455,7 @@ void control_fd_close(void)
 {
     if (g_data_fd != 0) {
         close(g_data_fd);
+        g_data_fd = -1;
         /* 200ms: wait ltran instance logout */
         rte_delay_ms(200);
     }
@@ -622,6 +624,7 @@ static int32_t client_reg_proc_reconnect(int32_t epfd)
     ret = thread_register();
     if (ret != 0) {
         posix_api->close_fn(sockfd);
+        g_data_fd = -1;
         return -1;
     }
 
@@ -630,6 +633,7 @@ static int32_t client_reg_proc_reconnect(int32_t epfd)
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "epoll_ctl_fn failed, errno is %d ret=%d\n", errno, ret);
         posix_api->close_fn(sockfd);
+        g_data_fd = -1;
         return -1;
     }
 

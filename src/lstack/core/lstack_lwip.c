@@ -30,6 +30,8 @@
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 #include "posix/lstack_epoll.h"
+#include "lstack_thread_rpc.h"
+#include "dpdk_common.h"
 #include "lstack_lwip.h"
 
 #define HALF_DIVISOR                    (2)
@@ -39,7 +41,7 @@ static int32_t lwip_alloc_pbufs(pbuf_layer layer, uint16_t length, pbuf_type typ
 
 static void free_ring_pbuf(struct rte_ring *ring)
 {
-	void *pbufs[SOCK_RECV_RING_SIZE];
+    void *pbufs[SOCK_RECV_RING_SIZE];
 
     do {
         gazelle_ring_read(ring, pbufs, RING_SIZE(SOCK_RECV_RING_SIZE));
@@ -64,13 +66,11 @@ static void reset_sock_data(struct lwip_sock *sock)
     }
     sock->recv_ring = NULL;
 
-
     if (sock->send_ring) {
         free_ring_pbuf(sock->send_ring);
         rte_ring_free(sock->send_ring);
     }
     sock->send_ring = NULL;
-
 
     sock->stack = NULL;
     sock->wakeup = NULL;
@@ -90,8 +90,8 @@ static void replenish_send_idlembuf(struct rte_ring *ring)
     void *pbuf[SOCK_SEND_RING_SIZE];
 
     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
-    uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
 
+    uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
     if (lwip_alloc_pbufs(PBUF_TRANSPORT, TCP_MSS, PBUF_RAM, (void **)pbuf, alloc_num) != 0) {
         return;
     }
@@ -126,7 +126,7 @@ void gazelle_init_sock(int32_t fd)
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
-	replenish_send_idlembuf(sock->send_ring);
+    replenish_send_idlembuf(sock->send_ring);
 
     sock->stack = stack;
     sock->stack->conn_num++;
@@ -441,15 +441,15 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
     return recv_len;
 }
 
-ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
+static int32_t check_msg_vaild(const struct msghdr *message)
 {
     ssize_t buflen = 0;
-    int32_t i;
 
     if (message == NULL || message->msg_iovlen <= 0 || message->msg_iovlen > IOV_MAX) {
         GAZELLE_RETURN(EINVAL);
     }
-    for (i = 0; i < message->msg_iovlen; i++) {
+
+    for (int32_t i = 0; i < message->msg_iovlen; i++) {
         if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
             ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
             ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
@@ -457,8 +457,19 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
         }
         buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
     }
-    buflen = 0;
-    for (i = 0; i < message->msg_iovlen; i++) {
+
+    return 0;
+}
+
+ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
+{
+    ssize_t buflen = 0;
+
+    if (check_msg_vaild(message)) {
+        GAZELLE_RETURN(EINVAL);
+    }
+
+    for (int32_t i = 0; i < message->msg_iovlen; i++) {
         ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
         if (recvd_local > 0) {
             buflen += recvd_local;
@@ -507,16 +518,8 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
     int32_t i;
     ssize_t buflen = 0;
 
-    if (message == NULL || message->msg_iovlen <= 0 || message->msg_iovlen > IOV_MAX) {
+    if (check_msg_vaild(message)) {
         GAZELLE_RETURN(EINVAL);
-    }
-    for (i = 0; i < message->msg_iovlen; i++) {
-        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
-            ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
-            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
-            GAZELLE_RETURN(EINVAL);
-        }
-        buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
     }
 
     for (i = 0; i < message->msg_iovlen; i++) {
@@ -756,7 +759,7 @@ void create_shadow_fd(struct rpc_msg *msg)
 
     int32_t ret = lwip_bind(clone_fd, addr, addr_len);
     if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "clone bind failed clone_fd=%d errno=%d\n", ret, errno);
+        LSTACK_LOG(ERR, LSTACK, "clone bind failed clone_fd=%d errno=%d\n", clone_fd, errno);
         msg->result = ret;
         return;
     }

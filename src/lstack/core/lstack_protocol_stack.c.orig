@@ -27,8 +27,6 @@
 #include "lstack_thread_rpc.h"
 #include "dpdk_common.h"
 #include "lstack_log.h"
-#include "lstack_dpdk.h"
-#include "lstack_ethdev.h"
 #include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
@@ -45,19 +43,21 @@ static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX;
 static struct protocol_stack_group g_stack_group = {0};
 
 void set_init_fail(void);
-bool get_init_fail(void);
 typedef void *(*stack_thread_func)(void *arg);
 
 
-void bind_to_stack_numa(struct protocol_stack *stack)
+int32_t bind_to_stack_numa(struct protocol_stack *stack)
 {
     int32_t ret;
     pthread_t tid = pthread_self();
 
     ret = pthread_setaffinity_np(tid, sizeof(stack->idle_cpuset), &stack->idle_cpuset);
     if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "thread %d setaffinity to stack %hu failed\n", rte_gettid(), stack->queue_id);
+        LSTACK_LOG(ERR, LSTACK, "thread %d setaffinity to stack %d failed\n", rte_gettid(), stack->queue_id);
+        return -1;
     }
+
+    return 0;
 }
 
 static inline void set_stack_idx(uint16_t idx)
@@ -255,6 +255,8 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
+    memset_s(stack, sizeof(*stack), 0, sizeof(*stack));
+
     set_stack_idx(queue_id);
     stack->tid = rte_gettid();
     stack->queue_id = queue_id;
@@ -299,20 +301,21 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
 static void* gazelle_kernel_event(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
-    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
 
     int32_t epoll_fd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
     if (epoll_fd < 0) {
-        LSTACK_LOG(ERR, LSTACK, "queue_id=%hu epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
+        LSTACK_LOG(ERR, LSTACK, "queue_id=%d epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
         /* exit in main thread, avoid create mempool and exit at the same time */
         set_init_fail();
-        stack->epollfd = -1;
+        sem_post(&get_protocol_stack_group()->all_init);
         return NULL;
     }
 
+    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
     stack->epollfd = epoll_fd;
 
-    LSTACK_LOG(INFO, LSTACK, "kernel_event_%02hu start\n", queue_id);
+    sem_post(&get_protocol_stack_group()->all_init);
+    LSTACK_LOG(INFO, LSTACK, "kernel_event_%02hu start\n", stack->queue_id);
 
     struct epoll_event events[KERNEL_EPOLL_MAX];
     for (;;) {
@@ -337,24 +340,18 @@ static int32_t create_companion_thread(struct protocol_stack_group *stack_group,
 {
     int32_t ret;
 
-    ret = create_thread(stack->queue_id, "gazellekernel", gazelle_kernel_event);
-    if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "gazellekernelEvent ret=%d errno=%d\n", ret, errno);
-        return ret;
-    }
-
-    /* wait gazelle_kernel_event finish use stack.avoid use stack after free when create gazelle_weakup_thread fail */
-    while (stack->epollfd == 0) {
-        usleep(1);
-    }
-
     if (stack_group->wakeup_enable) {
         ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_wakeup_thread);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "gazelleweakup ret=%d errno=%d\n", ret, errno);
+            return ret;
         }
     }
 
+    ret = create_thread(stack->queue_id, "gazellekernel", gazelle_kernel_event);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "gazellekernelEvent ret=%d errno=%d\n", ret, errno);
+    }
     return ret;
 }
 
@@ -366,7 +363,7 @@ void wait_sem_value(sem_t *sem, int32_t wait_value)
     } while (sem_val < wait_value);
 }
 
-static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+static struct protocol_stack * stack_thread_init(uint16_t queue_id)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
@@ -499,10 +496,6 @@ int32_t init_protocol_stack(void)
     }
 
     wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
-
-    if (get_init_fail()) {
-        return -1;
-    }
 
     ret = init_stack_numa_cpuset();
     if (ret < 0) {

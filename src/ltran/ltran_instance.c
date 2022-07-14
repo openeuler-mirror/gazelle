@@ -10,20 +10,26 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include "ltran_instance.h"
-
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <arpa/inet.h>
 #include <securec.h>
+#include <unistd.h>
+
+#include <rte_errno.h>
 
 #include "ltran_stack.h"
 #include "ltran_tcp_sock.h"
 #include "ltran_param.h"
 #include "ltran_stat.h"
 #include "ltran_log.h"
+#include "ltran_base.h"
+#include "gazelle_opt.h"
+#include "ltran_errno.h"
+#include "gazelle_dfx_msg.h"
 #include "gazelle_base_func.h"
+#include "ltran_instance.h"
 
 volatile unsigned long g_tx_loop_count __rte_cache_aligned;
 volatile unsigned long g_rx_loop_count __rte_cache_aligned;
@@ -71,11 +77,10 @@ struct gazelle_instance_mgr *gazelle_instance_mgr_create(void)
 {
     struct gazelle_instance_mgr *mgr;
 
-    mgr = malloc(sizeof(struct gazelle_instance_mgr));
+    mgr = calloc(1, sizeof(struct gazelle_instance_mgr));
     if (mgr == NULL) {
         return NULL;
     }
-    (void)memset_s(mgr, sizeof(struct gazelle_instance_mgr), 0, sizeof(struct gazelle_instance_mgr));
 
     mgr->net_mask = htonl(get_ltran_config()->dispatcher.ipv4_net_mask);
     mgr->subnet_size = (uint32_t)(get_ltran_config()->dispatcher.ipv4_subnet_size);
@@ -134,6 +139,9 @@ struct gazelle_instance *gazelle_instance_map_by_ip(const struct gazelle_instanc
     uint32_t ip_idx = ntohl(ip & mgr->net_mask);
     if (ip_idx < mgr->subnet_size) {
         uint8_t cl_idx = mgr->ipv4_to_client[ip_idx];
+        if (cl_idx == GAZELLE_NULL_CLIENT) {
+            return NULL;
+        }
         return mgr->instances[cl_idx];
     }
     return NULL;
@@ -183,11 +191,10 @@ struct gazelle_instance *gazelle_instance_add_by_pid(struct gazelle_instance_mgr
             continue;
         }
 
-        instance = malloc(sizeof(struct gazelle_instance));
+        instance = calloc(1, sizeof(struct gazelle_instance));
         if (instance == NULL) {
             return NULL;
         }
-        (void)memset_s(instance, sizeof(struct gazelle_instance), 0, sizeof(struct gazelle_instance));
 
         instance->pid = pid;
         mgr->instance_cur_tick[i]++;
@@ -235,9 +242,12 @@ static int32_t instance_info_set(struct gazelle_instance *instance, const struct
         return GAZELLE_ERR;
     }
 
-    memset_s(instance->stack_array, sizeof(instance->stack_array), 0, sizeof(instance->stack_array));
+    ret = memset_s(instance->stack_array, sizeof(instance->stack_array), 0, sizeof(instance->stack_array));
+    if (ret != EOK) {
+        return GAZELLE_ERR;
+    }
 
-    ret = memcpy_s(instance->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN, conf->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN);
+    ret = memcpy_s(instance->mac_addr, ETHER_ADDR_LEN, conf->mac_addr, ETHER_ADDR_LEN);
     if (ret != EOK) {
         return GAZELLE_ERR;
     }
@@ -245,19 +255,19 @@ static int32_t instance_info_set(struct gazelle_instance *instance, const struct
     return GAZELLE_OK;
 }
 
-int32_t instance_match_bond_port(const struct rte_ether_addr *mac)
+int32_t instance_match_bond_port(const uint8_t *mac_addr)
 {
     int32_t bond_index;
 
     for (bond_index = 0; bond_index < GAZELLE_MAX_BOND_NUM; bond_index++) {
-        if (is_same_mac_addr(mac, &(get_ltran_config()->bond.mac[bond_index]))) {
+        if (is_same_mac_addr(mac_addr, get_ltran_config()->bond.mac[bond_index].addr_bytes)) {
             return bond_index;
         }
     }
 
-    LTRAN_ERR("match_bond_port failed: [bond] mac=%02X:%02X:%02X:%02X:%02X:%02X\n",
-        mac->addr_bytes[0], mac->addr_bytes[1], mac->addr_bytes[2], /* 0 1 2 is mac byte */
-        mac->addr_bytes[3], mac->addr_bytes[4], mac->addr_bytes[5]); /* 3 4 5 is mac byte */
+    LTRAN_ERR("match_bond_port failed: [bond] mac=%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx\n",
+        mac_addr[0], mac_addr[1], mac_addr[2], /* 0 1 2 is mac byte */
+        mac_addr[3], mac_addr[4], mac_addr[5]); /* 3 4 5 is mac byte */
     return -1;
 }
 
@@ -300,7 +310,7 @@ static int32_t instance_info_check(const struct client_proc_conf *conf)
         return GAZELLE_ERR;
     }
 
-    if (instance_match_bond_port(&conf->ethdev) < 0) {
+    if (instance_match_bond_port(conf->mac_addr) < 0) {
         return GAZELLE_ERR;
     }
 
@@ -447,12 +457,10 @@ static void remove_virtual_area(uintptr_t addr, size_t size)
 
 int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg)
 {
-    struct reg_response_msg send_msg;
+    struct reg_response_msg send_msg = {0};
     struct client_proc_conf *conf = &recv_msg->msg.proc;
     struct gazelle_instance *instance = NULL;
     struct ltran_config *ltran_config = get_ltran_config();
-
-    (void)memset_s(&send_msg, sizeof(send_msg), 0, sizeof(send_msg));
 
     int32_t ret = instance_info_check(conf);
     if (ret != GAZELLE_OK) {

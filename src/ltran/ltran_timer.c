@@ -10,18 +10,20 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include "ltran_timer.h"
-
 #include <sys/time.h>
 #include <pthread.h>
+
 #include <rte_malloc.h>
 #include <rte_errno.h>
 #include <rte_cycles.h>
+#include <lwip/hlist.h>
 
 #include "ltran_param.h"
 #include "ltran_log.h"
 #include "ltran_tcp_sock.h"
+#include "ltran_tcp_conn.h"
 #include "ltran_instance.h"
+#include "ltran_timer.h"
 
 static uint64_t g_cycles_per_us = 0;
 

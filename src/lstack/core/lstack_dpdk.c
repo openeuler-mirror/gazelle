@@ -29,11 +29,14 @@
 #include <rte_kni.h>
 #include <lwip/posix_api.h>
 #include <lwipopts.h>
+#include <lwip/pbuf.h>
+#include <lwip/reg_sock.h>
 
 #include "lstack_log.h"
 #include "dpdk_common.h"
 #include "lstack_dpdk.h"
 #include "lstack_lockless_queue.h"
+#include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_lwip.h"
 #include "lstack_cfg.h"
@@ -97,8 +100,7 @@ int32_t dpdk_eal_init(void)
             LSTACK_PRE_LOG(LSTACK_INFO, "rte_eal_init aleady init\n");
             /* maybe other program inited, merge init param share init */
             ret = 0;
-        }
-        else {
+        } else {
             LSTACK_PRE_LOG(LSTACK_ERR, "rte_eal_init failed init, rte_errno %d\n", rte_errno);
         }
     } else {
@@ -207,7 +209,6 @@ int32_t create_shared_ring(struct protocol_stack *stack)
         }
     }
 
-
     if (use_ltran()) {
         stack->rx_ring = create_ring("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
         if (stack->rx_ring == NULL) {
@@ -241,13 +242,13 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
 
         ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
         if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %d ret=%d\n", (int32_t)batch, ret);
+            LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %u ret=%d\n", batch, ret);
             return -1;
         }
 
         ret = gazelle_ring_sp_enqueue(ring, (void **)free_buf, batch);
         if (ret == 0) {
-            LSTACK_LOG(ERR, LSTACK, "cannot enqueue to ring, count: %d\n", (int32_t)batch);
+            LSTACK_LOG(ERR, LSTACK, "cannot enqueue to ring, count: %u\n", batch);
             return -1;
         }
 
@@ -276,10 +277,10 @@ static int32_t ethdev_port_id(uint8_t *mac)
 
     for (port_id = 0; port_id < nr_eth_dev; port_id++) {
         rte_eth_macaddr_get(port_id, &mac_addr);
-        if (!memcmp(mac, mac_addr.addr_bytes, RTE_ETHER_ADDR_LEN)) {
+        if (!memcmp(mac, mac_addr.addr_bytes, ETHER_ADDR_LEN)) {
             break;
         }
-        LSTACK_LOG(INFO, LSTACK, "nic mac:%02x:%02x:%02x:%02x:%02x:%02x not match\n",
+        LSTACK_LOG(INFO, LSTACK, "nic mac:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx not match\n",
             mac_addr.addr_bytes[0], mac_addr.addr_bytes[1], mac_addr.addr_bytes[2], // 0 1 2 mac addr
             mac_addr.addr_bytes[3], mac_addr.addr_bytes[4], mac_addr.addr_bytes[5]); // 3 4 5 mac addr
     }
@@ -294,11 +295,10 @@ static int32_t ethdev_port_id(uint8_t *mac)
 
 static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
 {
-    struct eth_params *eth_params = malloc(sizeof(struct eth_params));
+    struct eth_params *eth_params = calloc(1, sizeof(struct eth_params));
     if (eth_params == NULL) {
         return NULL;
     }
-    memset_s(eth_params, sizeof(struct eth_params), 0, sizeof(*eth_params));
 
     eth_params->port_id = port_id;
     eth_params->nb_queues = nb_queues;
@@ -348,27 +348,29 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
     return rss_enable;
 }
 
-static int rss_setup(const int port_id, const uint16_t nb_queues)
+static void rss_setup(const int port_id, const uint16_t nb_queues)
 {
-    int i;
     int ret;
     struct rte_eth_dev_info dev_info;
     struct rte_eth_rss_reta_entry64 *reta_conf = NULL;
-    size_t reta_conf_size, n;
+    uint16_t reta_conf_size, i;
 
-    rte_eth_dev_info_get(port_id, &dev_info);
+    if (rte_eth_dev_info_get(port_id, &dev_info) != 0) {
+        return;
+    }
 
     if (nb_queues == 0) {
-        return ERR_VAL;
+        return;
     }
 
     reta_conf_size = dev_info.reta_size / RTE_RETA_GROUP_SIZE;
-    if (dev_info.reta_size % RTE_RETA_GROUP_SIZE)
-	    reta_conf_size += 1;
+    if (dev_info.reta_size % RTE_RETA_GROUP_SIZE) {
+        reta_conf_size += 1;
+    }
 
     reta_conf = calloc(reta_conf_size, sizeof(struct rte_eth_rss_reta_entry64));
     if (!reta_conf) {
-        return ERR_MEM;
+        return;
     }
     for (i = 0; i < dev_info.reta_size; i++) {
         struct rte_eth_rss_reta_entry64 *one_reta_conf =
@@ -376,8 +378,8 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
         one_reta_conf->reta[i % RTE_RETA_GROUP_SIZE] = i % nb_queues;
     }
 
-    for (n = 0; n < reta_conf_size; n++) {
-        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[n];
+    for (i = 0; i < reta_conf_size; i++) {
+        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[i];
         one_reta_conf->mask = 0xFFFFFFFFFFFFFFFFULL;
     }
 
@@ -388,14 +390,14 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
     }
 
     free(reta_conf);
-    return ERR_OK;
 }
 
 int32_t dpdk_ethdev_init(void)
 {
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    int32_t port_id = ethdev_port_id(get_global_cfg_params()->ethdev.addr_bytes);
+    int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
     if (port_id < 0) {
         return port_id;
     }
@@ -409,7 +411,7 @@ int32_t dpdk_ethdev_init(void)
 
     int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
     if (max_queues < nb_queues) {
-        LSTACK_LOG(ERR, LSTACK, "port_id %u max_queues=%d\n", port_id, max_queues);
+        LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
         return -EINVAL;
     }
 
@@ -419,7 +421,6 @@ int32_t dpdk_ethdev_init(void)
     }
     eth_params_checksum(&eth_params->conf, &dev_info);
     int32_t rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
     stack_group->eth_params = eth_params;
     stack_group->port_id = eth_params->port_id;
     stack_group->rx_offload = eth_params->conf.rxmode.offloads;
@@ -428,12 +429,16 @@ int32_t dpdk_ethdev_init(void)
     ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
+        stack_group->eth_params = NULL;
+        free(eth_params);
         return ret;
     }
 
     ret = dpdk_ethdev_start();
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
+        stack_group->eth_params = NULL;
+        free(eth_params);
         return ret;
     }
 
@@ -451,14 +456,14 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, const stru
     ret = rte_eth_rx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_rx_desc, stack->socket_id,
         &eth_params->rx_conf, stack->rx_pktmbuf_pool);
     if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %d: %s\n", stack->queue_id, rte_strerror(-ret));
+        LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
         return -1;
     }
 
     ret = rte_eth_tx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_tx_desc, stack->socket_id,
         &eth_params->tx_conf);
     if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "cannot setup tx_queue %d: %s\n", stack->queue_id, rte_strerror(-ret));
+        LSTACK_LOG(ERR, LSTACK, "cannot setup tx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
         return -1;
     }
 
@@ -499,9 +504,10 @@ static void set_kni_ip_mac(uint16_t port_id)
 
     sin->sin_family = AF_INET;
     sin->sin_addr.s_addr = cfg->host_addr.addr;
-    strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME);
-    int32_t ret = posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr);
-    if (ret < 0) {
+    if (strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "strcpy_s fail \n");
+    }
+    if (posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr) < 0) {
         LSTACK_LOG(ERR, LSTACK, "set kni ip=%u fail\n", cfg->host_addr.addr);
     }
 

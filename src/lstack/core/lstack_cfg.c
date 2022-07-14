@@ -11,8 +11,6 @@
 */
 
 #define _GNU_SOURCE
-#include "lstack_cfg.h"
-
 #include <stdlib.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -34,7 +32,7 @@
 #include "lstack_log.h"
 #include "gazelle_base_func.h"
 #include "lstack_protocol_stack.h"
-#include "gazelle_parse_config.h"
+#include "lstack_cfg.h"
 
 #define DEFAULT_CONF_FILE "/etc/gazelle/lstack.conf"
 #define LSTACK_CONF_ENV   "LSTACK_CONF_PATH"
@@ -83,21 +81,21 @@ struct cfg_params *get_global_cfg_params(void)
     return &g_config_params;
 }
 
-static int32_t str_to_eth_addr(const char *src, unsigned char *dst, size_t dst_size)
+static int32_t str_to_eth_addr(const char *src, unsigned char *dst)
 {
     if (strlen(src) > DEV_MAC_LEN) {
         return -EINVAL;
     }
 
-    struct rte_ether_addr tmp;
+    uint8_t mac_addr[ETHER_ADDR_LEN];
 
     int32_t ret = sscanf_s(src, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-        &tmp.addr_bytes[0], &tmp.addr_bytes[1], &tmp.addr_bytes[2], /* 0、1、2 mac byte index */
-        &tmp.addr_bytes[3], &tmp.addr_bytes[4], &tmp.addr_bytes[5]); /* 3、4、5 byte index */
-    if (ret != RTE_ETHER_ADDR_LEN) {
+        &mac_addr[0], &mac_addr[1], &mac_addr[2], /* 0、1、2 mac byte index */
+        &mac_addr[3], &mac_addr[4], &mac_addr[5]); /* 3、4、5 byte index */
+    if (ret != ETHER_ADDR_LEN) {
         return -EINVAL;
     }
-    ret = memcpy_s(dst, dst_size, tmp.addr_bytes, dst_size);
+    ret = memcpy_s(dst, ETHER_ADDR_LEN, mac_addr, ETHER_ADDR_LEN);
     if (ret != EOK) {
         return -EINVAL;
     }
@@ -185,7 +183,7 @@ static int32_t parse_devices(void)
     }
 
     /* add dev */
-    ret = str_to_eth_addr(dev, g_config_params.ethdev.addr_bytes, sizeof(g_config_params.ethdev.addr_bytes));
+    ret = str_to_eth_addr(dev, g_config_params.mac_addr);
     if (ret != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", dev, ret);
     }
@@ -648,7 +646,7 @@ static int32_t parse_wakeup_cpu_number(void)
     g_config_params.num_wakeup = cnt;
 
     if (g_config_params.num_wakeup < g_config_params.num_cpu) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "num_wakeup=%d less than num_stack_cpu=%d.\n", g_config_params.num_wakeup,
+        LSTACK_PRE_LOG(LSTACK_ERR, "num_wakeup=%hu less than num_stack_cpu=%hu.\n", g_config_params.num_wakeup,
             g_config_params.num_cpu);
         return -EINVAL;
     }

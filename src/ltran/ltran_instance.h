@@ -14,11 +14,13 @@
 #define __GAZELLE_INSTANCE_H__
 
 #include <lwip/hlist.h>
+#include <netinet/in.h>
+#include <limits.h>
 
-#include "ltran_base.h"
+#include "gazelle_opt.h"
 #include "gazelle_reg_msg.h"
-#include "ltran_stack.h"
 
+struct gazelle_stack;
 struct gazelle_instance {
     // key
     uint32_t pid;
@@ -37,7 +39,7 @@ struct gazelle_instance {
     enum request_type reg_state;
     uintptr_t base_virtaddr;
     uint64_t socket_size;
-    struct rte_ether_addr ethdev;
+    uint8_t mac_addr[ETHER_ADDR_LEN];
     char file_prefix[PATH_MAX];
 };
 
@@ -85,7 +87,7 @@ int32_t gazelle_instance_map_set(struct gazelle_instance_mgr *mgr, const struct 
 struct gazelle_instance *gazelle_instance_add_by_pid(struct gazelle_instance_mgr *mgr, uint32_t pid);
 
 int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg);
-int32_t instance_match_bond_port(const struct rte_ether_addr *mac);
+int32_t instance_match_bond_port(const uint8_t *mac);
 int32_t handle_reg_msg_proc_reconn(int32_t fd, const struct reg_request_msg *recv_msg);
 int32_t handle_reg_msg_proc_att(int32_t fd, struct reg_request_msg *recv_msg);
 void handle_instance_logout(uint32_t pid);

@@ -13,17 +13,8 @@
 #ifndef __GAZELLE_ETHDEV_H__
 #define __GAZELLE_ETHDEV_H__
 
-#include <lwip/ip_addr.h>
-#include <lwip/netif.h>
-
-#include "gazelle_dfx_msg.h"
-#include "lstack_protocol_stack.h"
-
-#define RTE_TEST_TX_DESC_DEFAULT 512
-#define RTE_TEST_RX_DESC_DEFAULT 128
-
-#define DPDK_PKT_BURST_SIZE 512
-
+struct protocol_stack;
+struct rte_mbuf;
 struct eth_dev_ops {
     uint32_t (*rx_poll)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf);
     uint32_t (*tx_xmit)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts);

@@ -16,7 +16,6 @@
 #include <pthread.h>
 #include <arch/sys_arch.h>
 
-#include "lstack_dpdk.h"
 #include "lstack_lockless_queue.h"
 
 #define MSG_ARG_0                      (0)
@@ -50,6 +49,7 @@ struct rpc_msg {
 };
 
 struct protocol_stack;
+struct rte_mbuf;
 void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
@@ -66,7 +66,7 @@ int32_t rpc_call_bind(int32_t fd, const struct sockaddr *addr, socklen_t addrlen
 int32_t rpc_call_listen(int s, int backlog);
 int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t rpc_call_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
-ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags);
+void rpc_call_send(int fd, const void *buf, size_t len, int flags);
 int32_t rpc_call_sendmsg(int fd, const struct msghdr *msg, int flags);
 int32_t rpc_call_recvmsg(int fd, struct msghdr *msg, int flags);
 int32_t rpc_call_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);

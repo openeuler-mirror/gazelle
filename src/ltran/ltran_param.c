@@ -10,8 +10,6 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include "ltran_param.h"
-
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <libconfig.h>
@@ -20,9 +18,13 @@
 #include <errno.h>
 #include <syslog.h>
 #include <stdlib.h>
+#include <securec.h>
 
+#include "ltran_param.h"
+#include "ltran_errno.h"
+#include "ltran_base.h"
 #include "ltran_log.h"
-#include "gazelle_parse_config.h"
+#include "gazelle_dfx_msg.h"
 #include "gazelle_base_func.h"
 
 #define HEX_BASE 16
@@ -47,7 +49,7 @@ struct ltran_config* get_ltran_config(void)
     return &g_ltran_config;
 }
 
-static int32_t parse_str2mac(char *mac_str, struct rte_ether_addr *ether_addr)
+static int32_t parse_str2mac(char *mac_str, uint8_t *ether_addr)
 {
     const char *delim = ":";
     char *token = NULL;
@@ -68,15 +70,15 @@ static int32_t parse_str2mac(char *mac_str, struct rte_ether_addr *ether_addr)
             return GAZELLE_ERR;
         }
 
-        if (i >= RTE_ETHER_ADDR_LEN) {
+        if (i >= ETHER_ADDR_LEN) {
             gazelle_set_errno(GAZELLE_EPARAM);
             return GAZELLE_ERR;
         }
         token = strtok_s(NULL, delim, &tmp);
-        ether_addr->addr_bytes[i++] = (uint8_t)one_bit_mac;
+        ether_addr[i++] = (uint8_t)one_bit_mac;
     }
 
-    if (i != RTE_ETHER_ADDR_LEN) {
+    if (i != ETHER_ADDR_LEN) {
         gazelle_set_errno(GAZELLE_EMAC);
         return GAZELLE_ERR;
     }
@@ -225,7 +227,7 @@ static int32_t parse_dispatch_max_client(const config_t *config, const char *key
         return GAZELLE_ERR;
     }
 
-    if ((max_client < GAZELLE_CLIENT_NUM_MIN) || (max_client > GAZELLE_CLIENT_NUM_MAX)) {
+    if ((max_client < GAZELLE_CLIENT_NUM_MIN) || (max_client > GAZELLE_CLIENT_NUM)) {
         gazelle_set_errno(GAZELLE_ERANGE);
         return GAZELLE_ERR;
     }
@@ -392,8 +394,8 @@ static int32_t check_bond_dup_mac(const struct ltran_config *ltran_config)
     uint32_t i, j;
     for (i = 0; i < ltran_config->bond.mac_num; i++) {
         for (j = i + 1; j < ltran_config->bond.mac_num; j++) {
-            if (is_same_mac_addr(&ltran_config->bond.mac[i], &ltran_config->bond.mac[j])) {
-                syslog(LOG_ERR, "Err: MAC address must be unique, same MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
+            if (is_same_mac_addr(ltran_config->bond.mac[i].addr_bytes, ltran_config->bond.mac[j].addr_bytes)) {
+                syslog(LOG_ERR, "Err:MAC address must be unique, same MAC %02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx\n",
                     ltran_config->bond.mac[i].addr_bytes[0], /* 0 byte index */
                     ltran_config->bond.mac[i].addr_bytes[1], /* 1 byte index */
                     ltran_config->bond.mac[i].addr_bytes[2], /* 2 byte index */
@@ -468,7 +470,7 @@ static int32_t parse_bond_macs(const config_t *config, const char *key, struct l
     parse_bond_macs_separate(bond_macs_str, bond_mac_cache, GAZELLE_MAX_BOND_NUM, &bond_mac_cache_count);
 
     for (int32_t j = 0; j < bond_mac_cache_count; j++) {
-        ret = parse_str2mac(bond_mac_cache[j], &ltran_config->bond.mac[ltran_config->bond.mac_num]);
+        ret = parse_str2mac(bond_mac_cache[j], ltran_config->bond.mac[ltran_config->bond.mac_num].addr_bytes);
         if (ret != GAZELLE_OK) {
             break;
         }
@@ -559,7 +561,12 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
     config_init(&config);
     int32_t ret;
 
-    memset_s(ltran_config, sizeof(struct ltran_config), 0, sizeof(struct ltran_config));
+    ret = memset_s(ltran_config, sizeof(struct ltran_config), 0, sizeof(struct ltran_config));
+    if (ret != 0) {
+        config_destroy(&config);
+        syslog(LOG_ERR, "memset_s failed\n");
+        return ret;
+    }
     ret = config_read_file(&config, conf_file_path);
     if (ret == 0) {
         config_destroy(&config);
@@ -582,10 +589,10 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
     return GAZELLE_OK;
 }
 
-bool is_same_mac_addr(const struct rte_ether_addr *smac, const struct rte_ether_addr *dmac)
+bool is_same_mac_addr(const uint8_t *smac, const uint8_t *dmac)
 {
-    for (int32_t i = 0; i < RTE_ETHER_ADDR_LEN; i++) {
-        if (smac->addr_bytes[i] != dmac->addr_bytes[i]) {
+    for (int32_t i = 0; i < ETHER_ADDR_LEN; i++) {
+        if (smac[i] != dmac[i]) {
             return false;
         }
     }

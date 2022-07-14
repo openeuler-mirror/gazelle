@@ -14,7 +14,6 @@
 #include <unistd.h>
 
 #include <lwip/posix_api.h>
-#include "posix/lstack_fork.h"
 
 pid_t lstack_fork(void)
 {

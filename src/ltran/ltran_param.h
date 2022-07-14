@@ -16,9 +16,7 @@
 #include <netinet/in.h>
 #include <rte_ether.h>
 
-#include "ltran_stat.h"
-#include "ltran_instance.h"
-#include "ltran_base.h"
+#include "gazelle_opt.h"
 
 struct ltran_config {
     struct {
@@ -62,7 +60,8 @@ struct ltran_config {
 
 int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config);
 void param_resource_destroy(struct ltran_config *ltran_config);
-bool is_same_mac_addr(const struct rte_ether_addr *smac, const struct rte_ether_addr *dmac);
+bool is_same_mac_addr(const uint8_t *smac, const uint8_t *dmac);
 struct ltran_config* get_ltran_config(void);
+int32_t ltran_config_init(int32_t argc, char *argv[]);
 
 #endif /* ifndef __GAZELLE_PARAM_H__ */

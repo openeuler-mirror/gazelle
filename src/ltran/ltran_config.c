@@ -17,7 +17,8 @@
 #include <securec.h>
 
 #include "ltran_log.h"
-#include "ltran_config.h"
+#include "ltran_base.h"
+#include "ltran_param.h"
 
 #define NO_ARGS             0
 #define HAS_ARGS            1

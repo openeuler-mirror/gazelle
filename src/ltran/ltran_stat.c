@@ -25,6 +25,8 @@
 #include "gazelle_dfx_msg.h"
 #include "ltran_timer.h"
 #include "ltran_ethdev.h"
+#include "ltran_base.h"
+#include "ltran_stack.h"
 #include "dpdk_common.h"
 #include "ltran_forward.h"
 
@@ -98,8 +100,6 @@ static int32_t gazelle_filling_ltran_stat_total(struct gazelle_stat_ltran_total 
         return GAZELLE_ERR;
     }
 
-    (void)memset_s(stat, sizeof(struct gazelle_stat_ltran_total), 0, sizeof(struct gazelle_stat_ltran_total));
-
     for (uint32_t i = 0; i < port_num; i++) {
         stat->port_list[i].tx = total_stat->port_stats[i].tx;
         stat->port_list[i].rx = total_stat->port_stats[i].rx;
@@ -131,10 +131,8 @@ static int32_t gazelle_filling_ltran_stat_client(struct gazelle_stat_ltran_clien
         return GAZELLE_ERR;
     }
 
-    (void)memset_s(stat, sizeof(struct gazelle_stat_ltran_client), 0, sizeof(struct gazelle_stat_ltran_client));
-
     int32_t bond_index;
-    for (int32_t i = 0; i < GAZELLE_MAX_CLIENT; i++) {
+    for (int32_t i = 0; i < GAZELLE_CLIENT_NUM; i++) {
         instance = total_stat->instances[i];
         if (instance != NULL) {
             stat->client_info[stat->client_num].id = i;
@@ -150,7 +148,7 @@ static int32_t gazelle_filling_ltran_stat_client(struct gazelle_stat_ltran_clien
                     stat->client_info[stat->client_num].state = GAZELLE_CLIENT_STATE_CONNECTING;
                     break;
                 case RQT_REG_THRD_RING:
-                    bond_index = instance_match_bond_port(&instance->ethdev);
+                    bond_index = instance_match_bond_port(instance->mac_addr);
                     stat->client_info[stat->client_num].bond_port = bond_port[bond_index];
                     stat->client_info[stat->client_num].state = GAZELLE_CLIENT_STATE_NORMAL;
                     break;
@@ -171,8 +169,6 @@ static int32_t gazelle_filling_lstack_stat_total(struct gazelle_stat_lstack_tota
         return GAZELLE_ERR;
     }
 
-    (void)memset_s(stat, sizeof(struct gazelle_stat_lstack_total), 0, sizeof(struct gazelle_stat_lstack_total));
-
     stat->tid = stack->tid;
     stat->index = (uint32_t)stack->index;
     stat->rx = stack->stack_stats.rx;
@@ -189,7 +185,7 @@ static int32_t gazelle_filling_lstack_stat_total(struct gazelle_stat_lstack_tota
     stat->backup_mbuf_cnt = stack->backup_pkt_cnt;
     stat->latency_pkts = stack->stack_stats.latency_pkts;
     stat->latency_total = stack->stack_stats.latency_total;
-    stat->reg_ring_cnt = rte_ring_cn_count(stack->reg_ring);
+    stat->reg_ring_cnt = gazelle_ring_readable_count(stack->reg_ring);
     stat->rx_ring_cnt = gazelle_ring_readover_count(stack->rx_ring);
     stat->tx_ring_cnt = gazelle_ring_readable_count(stack->tx_ring);
 
@@ -286,7 +282,7 @@ void handle_resp_ltran_conn(int32_t fd)
 void handle_resp_ltran_client(int32_t fd)
 {
     int32_t ret;
-    struct gazelle_stat_ltran_client stat;
+    struct gazelle_stat_ltran_client stat = {0};
     ret = gazelle_filling_ltran_stat_client(&stat, get_instance_mgr());
     if (ret != GAZELLE_OK) {
         LTRAN_ERR("filling ltran stat total failed. ret=%d\n", ret);
@@ -323,7 +319,7 @@ void set_ltran_log_level(struct gazelle_stat_msg_request *msg)
 
 void handle_resp_ltran_latency(int32_t fd)
 {
-    struct gazelle_stat_lstack_total stat;
+    struct gazelle_stat_lstack_total stat = {0};
     struct gazelle_instance *instance = NULL;
     struct gazelle_instance_mgr *instance_mgr = get_instance_mgr();
     int32_t ret;
@@ -428,7 +424,7 @@ void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg)
 void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t fd)
 {
     int32_t lstack_fd;
-    struct gazelle_stack_dfx_data stat;
+    struct gazelle_stack_dfx_data stat = {0};
     int32_t cmd_fd = fd;
     int32_t ret;
 
@@ -439,7 +435,6 @@ void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int
 
     (void)write_specied_len(lstack_fd, (const char *)msg, sizeof(struct gazelle_stat_msg_request));
 
-    (void)memset_s(&stat, sizeof(struct gazelle_stack_dfx_data), 0, sizeof(stat));
     while (stat.eof == 0) {
         ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
         if (ret != GAZELLE_OK) {

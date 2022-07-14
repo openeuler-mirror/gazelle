@@ -35,11 +35,12 @@
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
 #include "lstack_ethdev.h"
-#include "lstack_signal.h"
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 #include "lstack_log.h"
+#include "dpdk_common.h"
 #include "posix/lstack_epoll.h"
+#include "posix/lstack_unistd.h"
 #include "gazelle_base_func.h"
 #include "lstack_protocol_stack.h"
 
@@ -48,11 +49,16 @@
 #define LSTACK_PRELOAD_NAME_LEN     PATH_MAX
 #define LSTACK_PRELOAD_ENV_PROC     "GAZELLE_BIND_PROCNAME"
 
-static volatile int32_t g_init_fail = 0;
+static volatile bool g_init_fail = false;
 
 void set_init_fail(void)
 {
-    g_init_fail = 1;
+    g_init_fail = true;
+}
+
+bool get_init_fail(void)
+{
+    return g_init_fail;
 }
 
 struct lstack_preload {
@@ -272,11 +278,12 @@ __attribute__((constructor)) void gazelle_network_init(void)
     lwip_sock_init();
 
     /* wait stack thread and kernel_event thread init finish */
-    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num * 2);
+    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
     if (g_init_fail) {
         LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
     }
 
     posix_api->ues_posix = 0;
     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
+    rte_smp_mb();
 }

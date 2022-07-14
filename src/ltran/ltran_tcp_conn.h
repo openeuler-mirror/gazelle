@@ -14,9 +14,10 @@
 #define __GAZELLE_TCP_CONN_H__
 
 #include <lwip/hlist.h>
-#include "gazelle_reg_msg.h"
-#include "ltran_stack.h"
-#include "ltran_tcp_sock.h"
+#include <stdint.h>
+#include <lwip/reg_sock.h>
+
+#include "gazelle_opt.h"
 
 struct gazelle_tcp_conn {
     uint32_t tid;

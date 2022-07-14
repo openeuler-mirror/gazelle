@@ -15,12 +15,7 @@
 
 #include <stdint.h>
 
-#include <lwip/reg_sock.h>
-#include <rte_ether.h>
-
-#define GAZELLE_REG_SOCK_PATHNAME    "/var/run/gazelle/gazelle_client.sock"
-#define GAZELLE_RUN_DIR              "/var/run/gazelle/"
-#define GAZELLE_FILE_PERMISSION      0700
+#include "gazelle_opt.h"
 
 #define NULL_CLIENT_IP          UINT32_MAX
 #define NULL_CLIENT_PORT        UINT16_MAX
@@ -62,7 +57,7 @@ struct client_proc_conf {
     uint64_t socket_size;
     char file_prefix[PATH_MAX];
 
-    struct rte_ether_addr ethdev;
+    uint8_t mac_addr[ETHER_ADDR_LEN];
     uint32_t ipv4;
 
     char argv[GAZELLE_MAX_REG_ARGS][PATH_MAX];

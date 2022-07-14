@@ -13,8 +13,8 @@
 #ifndef __GAZELLE_TIMER_H__
 #define __GAZELLE_TIMER_H__
 
-#include "ltran_tcp_conn.h"
-#include "ltran_tcp_sock.h"
+struct gazelle_tcp_conn_htable;
+struct gazelle_tcp_sock_htable;
 
 unsigned long get_current_time(void);
 void calibrate_time(void);
