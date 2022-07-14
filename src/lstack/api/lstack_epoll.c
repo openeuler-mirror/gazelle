@@ -288,6 +288,10 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
             accept_num++;
         }
 
+        if (sock->epoll_events & EPOLLET) {
+            list_del_node_null(&sock->event_list);
+        }
+
         events[event_num].events = sock->events;
         events[event_num].data = sock->ep_data;
         event_num++;
