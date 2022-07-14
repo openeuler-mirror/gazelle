@@ -21,7 +21,7 @@ OPTIMIZATION = -O2 -g
 RM = rm -f
 LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
 
-SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC
+SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
 
 INC = -I$(LSTACK_DIR)/include   \
       -I$(LSTACK_DIR)/../common \

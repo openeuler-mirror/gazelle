@@ -13,7 +13,8 @@ project(ltran)
 
 set(COMMON_DIR ${PROJECT_SOURCE_DIR}/../common)
 
-set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread")
+set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_C_FLAGS "-g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread -D_FORTIFY_SOURCE=2 -O2 -fPIC")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D LTRAN_COMPILE")
 
 if($ENV{GAZELLE_COVERAGE_ENABLE})
@@ -57,4 +58,4 @@ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--w
 
 add_executable(gazellectl ltran_dfx.c ${COMMON_DIR}/gazelle_dfx_msg.c)
 target_include_directories(gazellectl PRIVATE $ENV{DPDK_INCLUDE_FILE} ${COMMON_DIR})
-target_link_libraries(gazellectl PRIVATE boundscheck)
+target_link_libraries(gazellectl PRIVATE boundscheck -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
