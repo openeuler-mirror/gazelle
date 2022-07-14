@@ -152,6 +152,8 @@ __attribute__((destructor)) void gazelle_network_exit(void)
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "rte_pdump_uninit failed\n");
         }
+
+        dpdk_kni_release();
     }
 }
 
