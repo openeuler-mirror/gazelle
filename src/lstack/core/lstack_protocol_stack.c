@@ -67,10 +67,10 @@ static inline void set_stack_idx(uint16_t idx)
 
 long get_stack_tid(void)
 {
-    static PER_THREAD long g_stack_tid = 0;
+    static PER_THREAD int32_t g_stack_tid = 0;
 
     if (g_stack_tid == 0) {
-        g_stack_tid = syscall(__NR_gettid);
+        g_stack_tid = rte_gettid();
     }
 
     return g_stack_tid;
@@ -245,7 +245,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     memset_s(stack, sizeof(*stack), 0, sizeof(*stack));
 
     set_stack_idx(queue_id);
-    stack->tid = gettid();
+    stack->tid = rte_gettid();
     stack->queue_id = queue_id;
     stack->port_id = stack_group->port_id;
     stack->cpu_id = get_global_cfg_params()->cpus[queue_id];
