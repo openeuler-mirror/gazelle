@@ -10,21 +10,23 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#include <securec.h>
 #include <lwip/memp.h>
 #include <lwip/lwipopts.h>
 #include <lwip/sys.h>
-
+#include <lwip/reg_sock.h>
 #include <rte_ring.h>
 #include <rte_malloc.h>
 #include <rte_ethdev.h>
-
-#include <securec.h>
 
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"
 #include "lstack_ethdev.h"
 #include "lstack_control_plane.h"
 #include "lstack_log.h"
+#include "dpdk_common.h"
+#include "lstack_protocol_stack.h"
+#include "gazelle_reg_msg.h"
 #include "lstack_lwip.h"
 #include "lstack_vdev.h"
 

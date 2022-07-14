@@ -28,11 +28,12 @@
 #include "ltran_tcp_conn.h"
 #include "ltran_tcp_sock.h"
 #include "ltran_stat.h"
+#include "ltran_stack.h"
+#include "ltran_base.h"
 #include "ltran_log.h"
 #include "ltran_param.h"
 #include "ltran_ethdev.h"
 #include "ltran_timer.h"
-
 #include "ltran_forward.h"
 
 #define POINTER_PER_CACHELINE     (RTE_CACHE_LINE_SIZE / sizeof(void *))
@@ -60,7 +61,7 @@ static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rt
 
     // time stamp must > start time
     if (*priv < get_start_time_stamp()) {
-        memset_s(priv, GAZELLE_MBUFF_PRIV_SIZE, 0, GAZELLE_MBUFF_PRIV_SIZE);
+        *priv = 0;
         return;
     }
 
@@ -82,7 +83,6 @@ static __rte_always_inline void flush_rx_mbuf(struct gazelle_stack *stack, struc
         calculate_ltran_latency(stack, src);
     }
     rte_pktmbuf_free(src);
-    src = NULL;
 }
 
 static __rte_always_inline void backup_bufs_enque_rx_ring(struct gazelle_stack *stack)
@@ -334,7 +334,7 @@ static __rte_always_inline int32_t ipv4_handle(struct rte_mbuf *m, struct rte_ip
     return ret;
 }
 
-static __rte_always_inline int32_t arp_handle(struct rte_mbuf *m)
+static __rte_always_inline void arp_handle(struct rte_mbuf *m)
 {
     uint32_t i;
     struct gazelle_stack** stack_array = NULL;
@@ -354,7 +354,7 @@ static __rte_always_inline int32_t arp_handle(struct rte_mbuf *m)
     instance = gazelle_instance_map_by_ip(get_instance_mgr(), arph->arp_data.arp_tip);
 
     if (instance == NULL) {
-        return GAZELLE_ERR;
+        return;
     }
 
     stack_array = instance->stack_array;
@@ -363,15 +363,13 @@ static __rte_always_inline int32_t arp_handle(struct rte_mbuf *m)
             m_copy = rte_pktmbuf_alloc(m->pool);
             if (m_copy == NULL) {
                 LTRAN_ERR("copy mbuf failed in arp_handle. \n");
-                return GAZELLE_ERR;
+                return;
             }
             copy_mbuf(m_copy, m);
             // send and free m_copy in enqueue_rx_packet
             enqueue_rx_packet(stack_array[i], m_copy);
         }
     }
-
-    return GAZELLE_OK;
 }
 
 static __rte_always_inline void upstream_forward_one(struct rte_mbuf *m)
@@ -512,7 +510,7 @@ static __rte_always_inline void tcp_hash_table_handle(struct gazelle_stack *stac
     void *pkts[PACKET_READ_SIZE];
     struct gazelle_tcp_sock_htable *sock_htable = gazelle_get_tcp_sock_htable();
 
-    if (rte_ring_cn_count(stack->reg_ring) == 0) {
+    if (gazelle_ring_readable_count(stack->reg_ring) == 0) {
         return;
     }
 
@@ -567,7 +565,6 @@ static __rte_always_inline void upstream_forward_loop(uint32_t port_id, uint32_t
     uint64_t time_stamp = 0;
 
     struct rte_mbuf *buf[GAZELLE_PACKET_READ_SIZE] __rte_cache_aligned;
-    memset_s(buf, sizeof(buf), 0, sizeof(buf));
     for (loop_cnt = 0; loop_cnt < UPSTREAM_LOOP_TIMES; loop_cnt++) {
         if (get_start_latency_flag() == GAZELLE_ON) {
             time_stamp = get_current_time();

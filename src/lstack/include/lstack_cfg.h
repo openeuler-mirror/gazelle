@@ -14,9 +14,9 @@
 #define _GAZELLE_NET_CFG_H_
 #include <stdbool.h>
 
-#include <rte_ether.h>
-
 #include <lwip/ip_addr.h>
+
+#include "gazelle_opt.h"
 
 #define BASE_BIN_SCALE  2
 #define BASE_OCT_SCALE  8
@@ -61,7 +61,7 @@ struct cfg_params {
     ip4_addr_t host_addr;
     ip4_addr_t netmask;
     ip4_addr_t gateway_addr;
-    struct rte_ether_addr ethdev;
+    uint8_t mac_addr[ETHER_ADDR_LEN];
     uint16_t num_cpu;
     uint32_t cpus[CFG_MAX_CPUS];
     uint16_t num_wakeup;

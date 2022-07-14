@@ -28,6 +28,9 @@
 #include "dpdk_common.h"
 #include "ltran_param.h"
 #include "ltran_log.h"
+#include "ltran_base.h"
+#include "gazelle_opt.h"
+#include "ltran_errno.h"
 #include "gazelle_reg_msg.h"
 
 uint32_t g_bond_num = 0;
@@ -134,8 +137,7 @@ static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index, u
 {
     uint32_t num_mbufs = GAZELLE_MBUFS_RX_COUNT * scale;
 
-    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH];
-    (void)memset_s(mbuf_pool_name, sizeof(mbuf_pool_name), 0, sizeof(mbuf_pool_name));
+    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH] = {0};
 
     int32_t ret = snprintf_s(mbuf_pool_name, sizeof(mbuf_pool_name), sizeof(mbuf_pool_name) - 1,
                      GAZELLE_PKT_MBUF_RX_POOL_NAME_FMT, bond_port_index);
@@ -153,8 +155,7 @@ static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index, u
 {
     const uint32_t num_mbufs = GAZELLE_MBUFS_TX_COUNT * scale;
 
-    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH];
-    (void)memset_s(mbuf_pool_name, sizeof(mbuf_pool_name), 0, sizeof(mbuf_pool_name));
+    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH] = {0};
 
     int32_t ret = snprintf_s(mbuf_pool_name, sizeof(mbuf_pool_name), sizeof(mbuf_pool_name) - 1,
                      GAZELLE_PKT_MBUF_TX_POOL_NAME_FMT, bond_port_index);
@@ -263,7 +264,7 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
 
     int32_t ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_num, &rx_ring_size, &tx_ring_size);
     if (ret != 0) {
-        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed in slave port initialize. errno: %d, port: %d \n", ret,
+        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed in slave port initialize. errno: %d, port: %hu \n", ret,
                   port_num);
         return GAZELLE_ERR;
     }
@@ -273,7 +274,7 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
         ret = rte_eth_rx_queue_setup(port_num, queue_id, rx_ring_size, (uint32_t)rte_eth_dev_socket_id(port_num), NULL,
                                      pktmbuf_rxpool);
         if (ret < 0) {
-            LTRAN_ERR("rte_eth_rx_queue_setup failed in slave port initialize. errno: %d, port: %d\n", ret, port_num);
+            LTRAN_ERR("rte_eth_rx_queue_setup failed in slave port initialize. errno: %d, port: %hu\n", ret, port_num);
             return GAZELLE_ERR;
         }
     }
@@ -282,7 +283,7 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
         ret = rte_eth_tx_queue_setup(port_num, queue_id, tx_ring_size, (uint32_t)rte_eth_dev_socket_id(port_num),
                                      &dev_info.default_txconf);
         if (ret < 0) {
-            LTRAN_ERR("rte_eth_tx_queue_setup failed in slave port initialize. errno: %d, port: %d\n", ret, port_num);
+            LTRAN_ERR("rte_eth_tx_queue_setup failed in slave port initialize. errno: %d, port: %hu\n", ret, port_num);
             return GAZELLE_ERR;
         }
     }
@@ -358,14 +359,14 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
 
     int32_t ret = ltran_eth_bond_slave(port_info, port_num, bond_port_id);
     if (ret < 0) {
-        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %d, errno: %d \n", port_num, ret);
+        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %hu, errno: %d \n", port_num, ret);
         return GAZELLE_ERR;
     }
     
     struct rte_eth_dev_info dev_info;
     if (rte_eth_dev_info_get(bond_port_id, &dev_info) != 0) {
         LTRAN_ERR("faile rte_eth_dev_info_get\n");
-	return  GAZELLE_ERR;
+        return GAZELLE_ERR;
     }
 
     struct rte_eth_conf port_conf = {0};
@@ -376,13 +377,13 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
 
     ret = rte_eth_dev_configure(bond_port_id, rx_queue_num, tx_queue_num, &port_conf);
     if (ret != 0) {
-        LTRAN_ERR("rte_eth_dev_configure failed with bond port num: %d, errno: %d \n", port_num, ret);
+        LTRAN_ERR("rte_eth_dev_configure failed with bond port num: %hu, errno: %d \n", port_num, ret);
         return GAZELLE_ERR;
     }
 
     ret = rte_eth_dev_adjust_nb_rx_tx_desc(bond_port_id, &rx_ring_size, &tx_ring_size);
     if (ret != 0) {
-        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed with bond port num: %d, errno: %d \n", port_num, ret);
+        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed with bond port num: %hu, errno: %d \n", port_num, ret);
         return GAZELLE_ERR;
     }
     LTRAN_DEBUG("Bond port adujst rx_ring_size: %hu, tx_ring_size: %hu. bond port num: %hu \n",
@@ -390,13 +391,13 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
 
     ret = ltran_eth_rx_queue_setup(bond_port_id, pktmbuf_rxpool, rx_queue_num, rx_ring_size);
     if (ret < 0) {
-        LTRAN_ERR("rte_eth_rx_queue_setup failed in bond port initialize. errno: %d, port: %d \n", ret, port_num);
+        LTRAN_ERR("rte_eth_rx_queue_setup failed in bond port initialize. errno: %d, port: %hu \n", ret, port_num);
         return GAZELLE_ERR;
     }
 
     ret = ltran_eth_tx_queue_setup(port_num, bond_port_id, tx_queue_num, tx_ring_size);
     if (ret < 0) {
-        LTRAN_ERR("rte_eth_tx_queue_setup failed in bond port initialize. errno: %d, port: %d \n", ret, port_num);
+        LTRAN_ERR("rte_eth_tx_queue_setup failed in bond port initialize. errno: %d, port: %hu \n", ret, port_num);
         return GAZELLE_ERR;
     }
     return GAZELLE_OK;
@@ -419,7 +420,7 @@ static int32_t ltran_single_bond_port_init(uint16_t port_num, struct rte_mempool
 
     ret = rte_eth_bond_create(bond_port_name, (uint8_t)ltran_config->bond.mode, (uint8_t)rte_socket_id());
     if (ret < 0) {
-        LTRAN_ERR("rte_eth_bond_create failed with bond port num: %d, errno: %d\n", port_num, ret);
+        LTRAN_ERR("rte_eth_bond_create failed with bond port num: %hu, errno: %d\n", port_num, ret);
         return GAZELLE_ERR;
     }
     bond_port_id = (uint16_t)ret;
@@ -432,20 +433,20 @@ static int32_t ltran_single_bond_port_init(uint16_t port_num, struct rte_mempool
     struct rte_ether_addr addr = ltran_config->bond.mac[port_num];
     ret = rte_eth_bond_mac_address_set(bond_port_id, &addr);
     if (ret < 0) {
-        LTRAN_ERR("rte_eth_bond_mac_address_set failed in bond port initialize. errno: %d, port: %d\n", ret, port_num);
+        LTRAN_ERR("rte_eth_bond_mac_address_set failed in bond port initialize. errno: %d, port: %hu\n", ret, port_num);
         return GAZELLE_ERR;
     }
 
     ret = rte_eth_bond_link_monitoring_set(bond_port_id, (uint32_t)ltran_config->bond.miimon);
     if (ret < 0) {
-        LTRAN_ERR("rte_eth_bond_link_monitoring_set failed in bond port initialize. errno: %d, port: %d\n", ret,
+        LTRAN_ERR("rte_eth_bond_link_monitoring_set failed in bond port initialize. errno: %d, port: %hu\n", ret,
                   port_num);
         return GAZELLE_ERR;
     }
 
     ret = rte_eth_dev_start(bond_port_id);
     if (ret < 0) {
-        LTRAN_ERR("rte_eth_dev_start failed in bond port initialize. errno: %d, port: %d\n", ret, port_num);
+        LTRAN_ERR("rte_eth_dev_start failed in bond port initialize. errno: %d, port: %hu\n", ret, port_num);
         return GAZELLE_ERR;
     }
 

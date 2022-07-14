@@ -10,10 +10,16 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include "ltran_tcp_sock.h"
+#include <stdlib.h>
+
+#include <lwip/hlist.h>
+
 #include "ltran_tcp_conn.h"
 #include "ltran_instance.h"
+#include "ltran_base.h"
+#include "ltran_jhash.h"
 #include "gazelle_base_func.h"
+#include "ltran_tcp_sock.h"
 
 struct gazelle_tcp_sock_htable *g_tcp_sock_htable = NULL;
 struct gazelle_tcp_sock_htable *gazelle_get_tcp_sock_htable(void)
@@ -139,11 +145,10 @@ struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_h
         return NULL;
     }
 
-    tcp_sock = malloc(sizeof(struct gazelle_tcp_sock));
+    tcp_sock = calloc(1, sizeof(struct gazelle_tcp_sock));
     if (tcp_sock == NULL) {
         return NULL;
     }
-    (void)memset_s(tcp_sock, sizeof(struct gazelle_tcp_sock), 0, sizeof(*tcp_sock));
 
     tcp_sock->ip = ip;
     tcp_sock->tid = tid;
@@ -159,7 +164,7 @@ struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_h
     return tcp_sock;
 }
 
-int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
+void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
     uint32_t tid)
 {
     struct gazelle_tcp_sock *tcp_sock = NULL;
@@ -169,7 +174,7 @@ int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_h
 
     tcp_sock_hbucket = gazelle_hbucket_get_by_ipport(tcp_sock_htable, ip, port);
     if (tcp_sock_hbucket == NULL) {
-        return -1;
+        return;
     }
 
     head = &tcp_sock_hbucket->chain;
@@ -180,14 +185,13 @@ int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_h
     }
 
     if (tcp_sock == NULL) {
-        return -1;
+        return;
     }
 
     hlist_del_init(&tcp_sock->tcp_sock_node);
     free(tcp_sock);
     tcp_sock_htable->cur_tcp_sock_num--;
     tcp_sock_hbucket->chain_size--;
-    return 0;
 }
 
 struct gazelle_tcp_sock *gazelle_sock_get_by_min_conn(struct gazelle_tcp_sock_htable *tcp_sock_htable,

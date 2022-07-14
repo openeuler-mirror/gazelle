@@ -13,8 +13,13 @@
 #include <securec.h>
 #include <string.h>
 #include <limits.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#include "gazelle_parse_config.h"
+#include "gazelle_opt.h"
+#include "gazelle_base_func.h"
 
 static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
 {
@@ -61,4 +66,17 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size)
     }
 
     return cnt;
+}
+
+int32_t check_and_set_run_dir(void)
+{
+    int32_t ret;
+
+    if (access(GAZELLE_RUN_DIR, 0) != 0) {
+        ret = mkdir(GAZELLE_RUN_DIR, GAZELLE_FILE_PERMISSION);
+        if (ret != 0) {
+            return -1;
+        }
+    }
+    return 0;
 }

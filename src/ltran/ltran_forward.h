@@ -13,18 +13,7 @@
 #ifndef __GAZELLE_FORWORD_H__
 #define __GAZELLE_FORWORD_H__
 
-#include "ltran_stack.h"
-#include "ltran_base.h"
-
 void upstream_forward(const uint16_t *port);
 int32_t downstream_forward(uint16_t *port);
-
-static __rte_always_inline unsigned rte_ring_cn_count(const struct rte_ring *r)
-{
-    const uint32_t old_head = r->prod.tail;
-    rte_smp_rmb();
-
-    return r->cons.head - old_head;
-}
 
 #endif /* ifndef __GAZELLE_FORWORD_H__ */

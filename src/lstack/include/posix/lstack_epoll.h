@@ -13,22 +13,26 @@
 #ifndef _GAZELLE_EPOLL_H_
 #define _GAZELLE_EPOLL_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <poll.h>
 #include <stdbool.h>
 #include <semaphore.h>
 #include <pthread.h>
-#include <rte_common.h>
 
-#include "lstack_protocol_stack.h"
+#include <lwip/list.h>
+
+#include "gazelle_dfx_msg.h"
+#include "gazelle_opt.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum wakeup_type {
     WAKEUP_EPOLL = 0,
     WAKEUP_POLL,
 };
+
+struct protocol_stack;
 struct wakeup_poll {
     /* stack thread read frequently */
     sem_t event_sem __rte_cache_aligned;
@@ -55,6 +59,8 @@ struct wakeup_poll {
     pthread_spinlock_t event_list_lock;
 };
 
+struct netconn;
+void add_epoll_event(struct netconn *conn, uint32_t event);
 int32_t lstack_epoll_create(int32_t size);
 int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event *event);
 int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event *events, int32_t maxevents, int32_t timeout);

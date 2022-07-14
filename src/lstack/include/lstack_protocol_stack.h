@@ -14,19 +14,23 @@
 #define __GAZELLE_PROTOCOL_STACK_H__
 
 #include <semaphore.h>
+
 #include <lwip/list.h>
 #include <lwip/netif.h>
-#include <rte_common.h>
-#include "dpdk_common.h"
-#include "lstack_thread_rpc.h"
+
 #include "gazelle_dfx_msg.h"
 #include "lstack_lockless_queue.h"
+#include "gazelle_opt.h"
 
 #define SOCK_RECV_RING_SIZE         (128)
 #define SOCK_RECV_FREE_THRES        (32)
 #define SOCK_SEND_RING_SIZE         (32)
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
+
+struct rte_mempool;
+struct rte_ring;
+struct rte_mbuf;
 
 struct protocol_stack {
     uint32_t tid;
@@ -64,7 +68,6 @@ struct protocol_stack {
 };
 
 struct eth_params;
-#define PROTOCOL_STACK_MAX 32
 struct protocol_stack_group {
     uint16_t stack_num;
     uint16_t port_id;
@@ -92,7 +95,7 @@ struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
 int32_t init_protocol_stack(void);
-int32_t bind_to_stack_numa(struct protocol_stack *stack);
+void bind_to_stack_numa(struct protocol_stack *stack);
 int32_t init_dpdk_ethdev(void);
 
 void wait_sem_value(sem_t *sem, int32_t wait_value);

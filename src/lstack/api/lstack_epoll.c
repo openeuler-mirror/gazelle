@@ -26,11 +26,11 @@
 #include <lwip/timeouts.h>
 #include <lwip/posix_api.h>
 
-#include "lstack_compiler.h"
 #include "lstack_ethdev.h"
 #include "lstack_stack_stat.h"
 #include "lstack_cfg.h"
 #include "lstack_log.h"
+#include "dpdk_common.h"
 #include "gazelle_base_func.h"
 #include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
@@ -70,7 +70,7 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
     }
 }
 
-static inline uint32_t update_events(struct lwip_sock *sock)
+static uint32_t update_events(struct lwip_sock *sock)
 {
     uint32_t event = 0;
 
@@ -125,7 +125,12 @@ int32_t lstack_epoll_create(int32_t size)
         posix_api->close_fn(fd);
         GAZELLE_RETURN(EINVAL);
     }
-    memset_s(wakeup, sizeof(struct wakeup_poll), 0, sizeof(struct wakeup_poll));
+    if (memset_s(wakeup, sizeof(struct wakeup_poll), 0, sizeof(struct wakeup_poll)) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "memset_s failed\n");
+        free(wakeup);
+        posix_api->close_fn(fd);
+        GAZELLE_RETURN(EINVAL);
+    }
 
     init_list_node(&wakeup->event_list);
     sem_init(&wakeup->event_sem, 0, 0);
@@ -181,7 +186,7 @@ static uint16_t find_max_cnt_stack(int32_t *stack_count, uint16_t stack_num, str
         return last_stack->queue_id;
     }
 
-    /* first bind and all stack same. choice tick as queue_id, avoid all bind to statck_0.*/
+    /* first bind and all stack same. choice tick as queue_id, avoid all bind to statck_0. */
     static uint16_t tick = 0;
     if (all_same_cnt && stack_num) {
         max_index = atomic_fetch_add(&tick, 1) % stack_num;
@@ -262,16 +267,18 @@ static void del_node_array(struct epoll_event *events, int32_t event_num, int32_
 
 static int32_t del_duplicate_event(struct epoll_event *events, int32_t event_num)
 {
-    for (int32_t i = 0; i < event_num; i++) {
-        for (int32_t j = i + 1; j < event_num; j++) {
+    int32_t num = event_num;
+
+    for (int32_t i = 0; i < num; i++) {
+        for (int32_t j = i + 1; j < num; j++) {
             if (events[i].data.u64 == events[j].data.u64) {
-                del_node_array(events, event_num, j);
-                event_num--;
+                del_node_array(events, num, j);
+                num--;
             }
         }
     }
 
-    return event_num;
+    return num;
 }
 
 static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *events, uint32_t maxevents)
@@ -307,7 +314,7 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
         event_num = del_duplicate_event(events, event_num);
     }
 
-    // atomic_fetch_add(&wakeup->bind_stack->stats.app_events, event_num);  
+    wakeup->stat.app_events += event_num;
     return event_num;
 }
 
@@ -327,7 +334,7 @@ static int32_t poll_lwip_event(struct pollfd *fds, nfds_t nfds)
                 break;
             }
 
-            sock = sock->listen_next;;
+            sock = sock->listen_next;
         }
     }
 
@@ -441,25 +448,33 @@ static void init_poll_wakeup_data(struct wakeup_poll *wakeup)
 
 static void resize_kernel_poll(struct wakeup_poll *wakeup, nfds_t nfds)
 {
-    wakeup->last_fds = realloc(wakeup->last_fds, nfds * sizeof(struct pollfd));
+    if (wakeup->last_fds) {
+        free(wakeup->last_fds);
+    }
+    wakeup->last_fds = calloc(nfds, sizeof(struct pollfd));
     if (wakeup->last_fds == NULL) {
         LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
     }
 
-    wakeup->events = realloc(wakeup->events, nfds * sizeof(struct epoll_event));
+    if (wakeup->events) {
+        free(wakeup->events);
+    }
+    wakeup->events = calloc(nfds, sizeof(struct epoll_event));
     if (wakeup->events == NULL) {
         LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
     }
 
     wakeup->last_max_nfds = nfds;
-    memset_s(wakeup->last_fds, nfds * sizeof(struct pollfd), 0, nfds * sizeof(struct pollfd));
+    if (memset_s(wakeup->last_fds, nfds * sizeof(struct pollfd), 0, nfds * sizeof(struct pollfd)) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "memset_s faile\n");
+    }
 }
 
 static void poll_bind_statck(struct wakeup_poll *wakeup, int32_t *stack_count)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
 
+    uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
     if (wakeup->bind_stack && wakeup->bind_stack->queue_id == bind_id) {
         return;
     }

@@ -25,6 +25,7 @@
 #include <rte_log.h>
 
 #include "ltran_stat.h"
+#include "ltran_base.h"
 #include "gazelle_dfx_msg.h"
 
 /* seeing show_usage() */
@@ -39,13 +40,15 @@
 #define GAZELLE_LTRAN_PARAM_NUM  3
 #define GAZELLE_LSTACK_PARAM_NUM 4
 
-#define GAZELLE_LTRAN_SET_MINNUM     5
-#define GAZELLE_LSTACK_SET_MINNUM    6
+#define GAZELLE_LTRAN_SET_MINNUM 5
+#define GAZELLE_LSTACK_SET_MINNUM 6
 
 #define GAZELLE_CMD_MAX          5
 
-#define GAZELLE_RESULT_LEN   8291
+#define GAZELLE_RESULT_LEN       8291
 #define GAZELLE_MAX_LATENCY_TIME 1800    // max latency time 30mins
+
+#define GAZELLE_DECIMAL          10
 
 static int32_t g_unix_fd = -1;
 static int32_t g_ltran_rate_show_flag = GAZELLE_OFF;    // not show when first get total statistics
@@ -431,8 +434,6 @@ static void gazelle_print_ltran_stat_latency(void *buf, const struct gazelle_sta
     } else {
         printf("                          total:      0\n");
     }
-
-    return;
 }
 
 static void gazelle_print_ltran_stat_client(void *buf, const struct gazelle_stat_msg_request *req_msg)
@@ -491,7 +492,7 @@ static void gazelle_print_ltran_stat_burst(void *buf, const struct gazelle_stat_
             for (uint32_t j = 1; j <= GAZELLE_PACKET_READ_SIZE; j++) {
                 diff = port_stat->rx_iter_arr[j] - last_port_stat->rx_iter_arr[j];
                 (sum == 0) ? (percent = 0) : (percent = diff * percent_sign / sum);
-                printf("Burst Packets[%2d]: %-15"PRIu64" Percent: %3"PRIu64"%%\n", j, diff, percent);
+                printf("Burst Packets[%2u]: %-15"PRIu64" Percent: %3"PRIu64"%%\n", j, diff, percent);
             }
         }
     } else {
@@ -535,7 +536,6 @@ static void gazelle_print_lstack_stat_brief(struct gazelle_stat_lstack_total *st
             break;
         }
     } while (true);
-    return;
 }
 
 static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
@@ -555,7 +555,7 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("app_get_idlefail: %-11"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.app_write_idlefail);
     printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list_cnt);
     printf("send_list: %-18"PRIu64" ", lstack_stat->data.pkts.send_list_cnt);
-    printf("conn_num: %-19"PRIu16" \n", lstack_stat->data.pkts.conn_num);
+    printf("conn_num: %-19hu \n", lstack_stat->data.pkts.conn_num);
     printf("wakeup_events: %-14"PRIu64" ", lstack_stat->data.pkts.stack_stat.wakeup_events);
     printf("app_events: %-17"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_events);
     printf("read_null: %-18"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.read_null);
@@ -598,7 +598,6 @@ static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lsta
             break;
         }
     } while (true);
-    return;
 }
 
 static void gazelle_print_lstack_stat_total(void *buf, const struct gazelle_stat_msg_request *req_msg)
@@ -610,7 +609,6 @@ static void gazelle_print_lstack_stat_total(void *buf, const struct gazelle_stat
     }
 
     gazelle_print_lstack_stat_detail((struct gazelle_stack_dfx_data *)buf, req_msg);
-    return;
 }
 
 static void parse_thread_latency_result(const struct stack_latency *latency, char *result, size_t max_len,
@@ -718,7 +716,6 @@ static void gazelle_print_lstack_stat_lpm(void *buf, const struct gazelle_stat_m
         (uint32_t)dfx_data->low_power_info.lpm_rx_pkts,
         dfx_data->low_power_info.lpm_detect_ms,
         dfx_data->low_power_info.lpm_pkts_in_detect);
-    return;
 }
 
 static void gazelle_print_lstack_stat_rate(void *buf, const struct gazelle_stat_msg_request *req_msg)
@@ -776,7 +773,6 @@ static void gazelle_print_lstack_stat_rate(void *buf, const struct gazelle_stat_
             return;
         }
     } while (true);
-    return;
 }
 
 static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_data *stat,
@@ -848,7 +844,6 @@ static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_
             return;
         }
     } while (true);
-    return;
 }
 
 static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
@@ -874,13 +869,13 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
             rip.s_addr = conn_info->rip;
             lip.s_addr = conn_info->lip;
             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
-                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%-7d%s:%hu\t   %s:%hu\t  %s\n", i, conn_info->recv_cnt,
+                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%s:%hu\t   %s:%hu\t  %s\n", i, conn_info->recv_cnt,
                     conn_info->recv_ring_cnt, conn_info->in_send, conn_info->send_ring_cnt, conn_info->sem_cnt,
-                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
+                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
                     tcp_state_to_str(conn_info->tcp_sub_state));
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
-                printf("%-6utcp    %-57u%s:%hu\t   0.0.0.0:*\t\t  LISTEN\n", i, conn_info->recv_cnt,
+                printf("%-6utcp    %-50u%s:%hu\t   0.0.0.0:*\t\t  LISTEN\n", i, conn_info->recv_cnt,
                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
             } else {
                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
@@ -905,7 +900,6 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
             return;
         }
     } while (true);
-    return;
 }
 
 static void show_usage(void)
@@ -967,7 +961,7 @@ static int32_t parse_dfx_ltran_set_args(int32_t argc, char *argv[], struct gazel
 static int32_t parse_dfx_ltran_show_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
 {
     int32_t cmd_index = 0;
-    int32_t delay = 1;
+    long int delay = 1;
 
     if (argc == GAZELLE_LTRAN_PARAM_NUM) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW;
@@ -1003,8 +997,9 @@ static int32_t parse_dfx_ltran_show_args(int32_t argc, char *argv[], struct gaze
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_STOP_LATENCY;
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW_LATENCY;
         if (argc > GAZELLE_LSTACK_PARAM_NUM) {
-            delay = atoi(argv[GAZELLE_OPTIONS1_ARG_IDX]);
-            if (delay <= 0) {
+            char *end = NULL;
+            delay = strtol(argv[GAZELLE_OPTIONS1_ARG_IDX], &end, GAZELLE_DECIMAL);
+            if (delay <= 0 || (end == NULL) || (*end != '\0')) {
                 return -1;
             }
             if (delay > GAZELLE_MAX_LATENCY_TIME) {
@@ -1066,8 +1061,10 @@ static int32_t parse_dfx_lstack_set_args(int32_t argc, char *argv[], struct gaze
     }
 
     if (strcmp(param, "lowpower") == 0) {
-        req_msg[cmd_index].data.low_power_mod = (uint16_t)atoi(argv[GAZELLE_OPT_LPM_ARG_IDX1]);
-        if (req_msg[cmd_index].data.low_power_mod > 1) {
+        char *end = NULL;
+        req_msg[cmd_index].data.low_power_mod =
+            (uint16_t)strtol(argv[GAZELLE_OPT_LPM_ARG_IDX1], &end, GAZELLE_DECIMAL);
+        if (req_msg[cmd_index].data.low_power_mod > 1 || (end == NULL) || (*end != '\0')) {
             printf("low_power_mod input invaild\n");
             return cmd_index;
         }
@@ -1080,7 +1077,7 @@ static int32_t parse_dfx_lstack_set_args(int32_t argc, char *argv[], struct gaze
 static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
 {
     int32_t cmd_index = 0;
-    int32_t delay = 1;
+    long int delay = 1;
 
     if (argc == GAZELLE_LSTACK_PARAM_NUM) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW;
@@ -1107,8 +1104,9 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
         }
 
         if (argc > GAZELLE_OPTIONS2_ARG_IDX) {
-            delay = atoi(argv[GAZELLE_OPTIONS2_ARG_IDX]);
-            if (delay <= 0) {
+            char *end = NULL;
+            delay = strtol(argv[GAZELLE_OPTIONS2_ARG_IDX], &end, GAZELLE_DECIMAL);
+            if (delay <= 0 || (end == NULL) || (*end != '\0')) {
                 return -1;
             }
             if (delay > GAZELLE_MAX_LATENCY_TIME) {
@@ -1189,8 +1187,6 @@ static int32_t check_cmd_support(struct gazelle_stat_msg_request *req_msg, int32
             printf("connect ltran failed. errno: 111 ret=-1\n");
             return -1;
     }
-
-    return -1;
 }
 
 int32_t dfx_loop(struct gazelle_stat_msg_request *req_msg, int32_t req_msg_num)

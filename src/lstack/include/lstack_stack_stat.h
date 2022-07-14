@@ -13,10 +13,12 @@
 #ifndef GAZELLE_STACK_STAT_H
 #define GAZELLE_STACK_STAT_H
 
-#include <semaphore.h>
-#include <lwip/pbuf.h>
-#include <semaphore.h>
-#include "gazelle_dfx_msg.h"
+struct gazelle_stack_latency;
+struct pbuf;
+struct gazelle_stat_low_power_info;
+struct wakeup_poll;
+enum GAZELLE_LATENCY_TYPE;
+enum GAZELLE_STAT_MODE;
 
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
     enum GAZELLE_LATENCY_TYPE type);

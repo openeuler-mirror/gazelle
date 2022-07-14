@@ -16,11 +16,25 @@
 #include <rte_mbuf.h>
 #include <rte_ring.h>
 
+#include "gazelle_opt.h"
+
 #define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
 
 /* time_stamp time_stamp_vaid_check . align 8 */
-#define GAZELLE_MBUFF_PRIV_SIZE  (sizeof(uint64_t) * 2)
 #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
+
+/* Layout:
+ * | rte_mbuf | pbuf | custom_free_function | payload |
+ **/
+struct pbuf;
+static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
+{
+    return ((struct rte_mbuf *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
+}
+static inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
+{
+    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf) + GAZELLE_MBUFF_PRIV_SIZE));
+}
 
 /* NOTE!!! magic code, even the order.
 *  I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,

@@ -13,61 +13,29 @@
 #ifndef __GAZELLE_BASE_H__
 #define __GAZELLE_BASE_H__
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
-
-#include <unistd.h>
 #include <limits.h>
-#include <securec.h>
 
-#include "ltran_opt.h"
-#include "ltran_errno.h"
-#include "gazelle_dfx_msg.h"
+#include "gazelle_opt.h"
 
-#define GAZELLE_OK       0
-#define GAZELLE_ERR      (-1)
-#define GAZELLE_QUIT     1
-
-#define GAZELLE_ON       1
-#define GAZELLE_OFF      0
-
-#define GAZELLE_TRUE     1
-#define GAZELLE_FALSE    0
-
-
-#define GAZELLE_CMD_BUFFER_SIZE _POSIX_ARG_MAX
-#define GAZELLE_PATH_BUFFER_SIZE PATH_MAX
+#define GAZELLE_CMD_BUFFER_SIZE          _POSIX_ARG_MAX
+#define GAZELLE_PATH_BUFFER_SIZE         PATH_MAX
 #define GAZELLE_PARAM_BUFFER_SIZE        32
 
 #define GAZELLE_MAX_DPDK_ARGS_NUM        32
 #define GAZELLE_MAX_ADDR_NUM             1024
-#define GAZELLE_MAX_BOND_NUM             2
 #define GAZELLE_MAX_ETHERPORTS           32
 #define GAZELLE_MAX_NAME_LEN             256
 #define GAZELLE_MAX_RING_NAME_LEN        64
 #define GAZELLE_MAX_CMD_NUM              1024
-#define GAZELLE_MAX_PORT_NUM             16
 
 #define GAZELLE_CLIENT_INFO_CHECKSUM_NUM 137
 
 #define GAZELLE_MAX_INSTANCE_HTABLE_SIZE 256
-#define GAZELLE_MAX_INSTANCE_ARRAY_SIZE  32
-#define GAZELLE_MAX_INSTANCE_NUM         32
-
-#define GAZELLE_MAX_STACK_ARRAY_SIZE     GAZELLE_CLIENT_NUM_MAX
-#define GAZELLE_MAX_STACK_HTABLE_SIZE    32
-#define GAZELLE_MAX_STACK_NUM            128
+#define GAZELLE_MAX_INSTANCE_ARRAY_SIZE  GAZELLE_NULL_CLIENT
 
 #define GAZELLE_MAX_TCP_SOCK_ARRAY_SIZE  256
-#define GAZELLE_MAX_TCP_SOCK_HTABLE_SIZE 256
-#define GAZELLE_MAX_TCP_SOCK_NUM         (GAZELLE_MAX_STACK_NUM * 32)
 
-#define GAZELLE_STACK_MAX_TCP_CON_NUM    (1024*1024*1024)
-#define GAZELLE_MAX_CONN_HTABLE_SIZE     2048
-/* same as define (MAX_CLIENTS + RESERVED_CLIENTS) in lwip/lwipopts.h */
-#define GAZELLE_MAX_CONN_NUM             (GAZELLE_MAX_STACK_NUM * (20000 + 2000))
+#define GAZELLE_STACK_MAX_TCP_CON_NUM    (1024 * 1024 * 1024)
 
 #define GAZELLE_SUBNET_CHECK_OFFSET      20
 #define GAZELLE_SUBNET_LENGTH_MIN        1
@@ -83,6 +51,42 @@
 #define GAZELLE_BOND_PORT_MASK_MAX       0xff
 #define GAZELLE_BOND_PORT_DEFAULT        0xffff
 
+#define PROGRAM_NAME                    "ltran"
+#define VER_FMT                         "gazelle version: %s\n"
+#define VER_NAME                        "1.0.0"
+
+#define DEFAULT_LTRAN_CONF_PATH         "/etc/gazelle/ltran.conf"
+
+#define GAZELLE_MBUFS_RX_COUNT          (300 * 1024)
+#define GAZELLE_MBUFS_TX_COUNT          (30 * 1024)
+#define GAZELLE_MBUFS_CACHE_SIZE        512
+
+#define GAZELLE_RX_QUEUES               1
+#define GAZELLE_TX_QUEUES               1
+#define GAZELLE_RX_DESC_DEFAULT         512
+#define GAZELLE_TX_DESC_DEFAULT         512
+
+#define GAZELLE_KNI_MAX_PACKET_SIZE             2048
+#define GAZELLE_KNI_ETHERNET_HEADER_SIZE        14
+#define GAZELLE_KNI_ETHERNET_FCS_SIZE           4
+
+#define GAZELLE_PKT_MBUF_RX_POOL_NAME_FMT       "rx_pool%u"
+#define GAZELLE_PKT_MBUF_TX_POOL_NAME_FMT       "tx_pool%u"
+#define GAZELLE_PKT_MBUF_POOL_NAME_LENGTH       64
+
+#define GAZELLE_BOND_NAME_LENGTH                64
+#define GAZELLE_BOND_DEV_NAME_FMT               "net_bonding%hu"
+#define GAZELLE_BOND_QUEUE_MIN                  1
+#define GAZELLE_BOND_QUEUE_MAX                  64
+
+#define GAZELLE_CLIENT_RING_NAME_FMT            "MProc_Client_%u_mbuf_queue"
+#define GAZELLE_CLIENT_DROP_RING_SIZE           20000
+
+#define GAZELLE_LTRAN_LOG_FILE                  "/var/run/gazelle/ltran.log"
+
+// CONFIG OF DFX
+#define GAZELLE_DFX_REQ_INTERVAL_S              1
+
 #define SEC_TO_USEC                                   1000000
 
 #define GAZELLE_CONN_TIMEOUT                           5
@@ -92,8 +96,8 @@
 #define GAZELLE_TCP_CONN_SCAN_INTERVAL_MIN_S           0
 #define GAZELLE_TCP_CONN_SCAN_INTERVAL_MAX_S           86400     // 1 day 24*60*60 = 86400
 
-#define GAZELLE_INET_ADDRSTRLEN          16
+#define GAZELLE_INET_ADDRSTRLEN                         16
 
-#define GAZELLE_DFX_SOCK_PATHNAME        "/var/run/gazelle/gazelle_cmd.sock"
+#define GAZELLE_DFX_SOCK_PATHNAME                       "/var/run/gazelle/gazelle_cmd.sock"
 
 #endif /* ifndef __GAZELLE_BASE_H__ */

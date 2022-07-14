@@ -15,8 +15,10 @@
 
 #include <lwip/hlist.h>
 
-#include "ltran_jhash.h"
 #include "ltran_stat.h"
+
+struct rte_ring;
+struct rte_mbuf;
 
 struct gazelle_stack {
     // key

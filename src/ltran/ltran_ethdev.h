@@ -13,21 +13,23 @@
 #ifndef __GAZELLE_ETHDEV_H__
 #define __GAZELLE_ETHDEV_H__
 
-#include <rte_mempool.h>
+#include <stdint.h>
 
-#include "ltran_base.h"
+#include "gazelle_opt.h"
 
 struct port_info {
     uint16_t num_ports;
-    uint16_t id[RTE_MAX_ETHPORTS];
+    uint16_t id[GAZELLE_MAX_ETHPORTS];
 };
 
+struct rte_kni;
 uint32_t get_bond_num(void);
 struct rte_kni* get_gazelle_kni(void);
 void set_bond_num(const uint32_t bond_num);
 struct port_info* get_port_info(void);
 uint16_t* get_bond_port(void);
 
+struct rte_mempool;
 struct rte_mempool** get_pktmbuf_txpool(void);
 struct rte_mempool** get_pktmbuf_rxpool(void);
 

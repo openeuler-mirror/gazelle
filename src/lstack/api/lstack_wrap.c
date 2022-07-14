@@ -27,12 +27,12 @@
 #include <lwip/lwipsock.h>
 
 #include "posix/lstack_epoll.h"
-#include "posix/lstack_fcntl.h"
-#include "posix/lstack_socket.h"
 #include "posix/lstack_unistd.h"
+#include "posix/lstack_socket.h"
 #include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
+#include "lstack_protocol_stack.h"
 #include "gazelle_base_func.h"
 #include "lstack_thread_rpc.h"
 
@@ -42,7 +42,7 @@ enum KERNEL_LWIP_PATH {
     PATH_UNKNOW,
 };
 
-static inline enum KERNEL_LWIP_PATH select_path(int fd)
+static enum KERNEL_LWIP_PATH select_path(int fd)
 {
     if (posix_api == NULL) {
         /* posix api maybe call before gazelle init */
@@ -131,7 +131,7 @@ static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *add
     return posix_api->accept_fn(s, addr, addrlen);
 }
 
-static inline int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, int32_t flags)
+static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, int32_t flags)
 {
     if (addr == NULL || addrlen == NULL) {
         GAZELLE_RETURN(EINVAL);
@@ -153,7 +153,7 @@ static inline int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *ad
     return posix_api->accept4_fn(s, addr, addrlen, flags);
 }
 
-static inline int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen)
+static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen)
 {
     if (name == NULL) {
         GAZELLE_RETURN(EINVAL);
@@ -174,7 +174,7 @@ static inline int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t 
     return rpc_call_bind(s, name, namelen);
 }
 
-static inline int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
+static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
 {
     if (name == NULL) {
         GAZELLE_RETURN(EINVAL);

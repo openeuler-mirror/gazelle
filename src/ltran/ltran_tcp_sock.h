@@ -15,8 +15,11 @@
 
 #include <lwip/hlist.h>
 #include <pthread.h>
-#include "ltran_stack.h"
+#include <stdint.h>
 
+#include "gazelle_opt.h"
+
+struct gazelle_stack;
 struct gazelle_tcp_sock {
     // key
     uint32_t ip;
@@ -54,7 +57,7 @@ void gazelle_tcp_sock_htable_destroy(void);
 struct gazelle_tcp_sock_htable *gazelle_tcp_sock_htable_create(uint32_t max_tcp_sock_num);
 struct gazelle_tcp_sock *gazelle_sock_get_by_min_conn(struct gazelle_tcp_sock_htable *tcp_sock_htable,
     uint32_t ip, uint16_t port);
-int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
+void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
     uint32_t tid);
 struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip,
     uint16_t port, uint32_t tid);

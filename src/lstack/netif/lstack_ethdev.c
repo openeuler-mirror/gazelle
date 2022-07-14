@@ -25,6 +25,8 @@
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_lwip.h"
+#include "dpdk_common.h"
+#include "lstack_protocol_stack.h"
 #include "lstack_ethdev.h"
 
 #define PKTMBUF_MALLOC_FLAG     NULL
@@ -153,13 +155,13 @@ static err_t eth_dev_init(struct netif *netif)
     netif->linkoutput = eth_dev_output;
 
     int32_t ret;
-    ret = memcpy_s(netif->hwaddr, sizeof(netif->hwaddr), cfg->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN);
+    ret = memcpy_s(netif->hwaddr, sizeof(netif->hwaddr), cfg->mac_addr, ETHER_ADDR_LEN);
     if (ret != EOK) {
         LSTACK_LOG(ERR, LSTACK, "memcpy_s fail ret=%d\n", ret);
         return ERR_MEM;
     }
 
-    netif->hwaddr_len = RTE_ETHER_ADDR_LEN;
+    netif->hwaddr_len = ETHER_ADDR_LEN;
 
     return ERR_OK;
 }

@@ -24,6 +24,7 @@
 #include "dpdk_common.h"
 #include "gazelle_dfx_msg.h"
 #include "lstack_thread_rpc.h"
+#include "lstack_protocol_stack.h"
 #include "lstack_stack_stat.h"
 #include "posix/lstack_epoll.h"
 
@@ -81,7 +82,10 @@ static void set_latency_start_flag(bool start)
 
     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
         struct protocol_stack *stack = stack_group->stacks[i];
-        memset_s(&stack->latency, sizeof(struct gazelle_stack_latency), 0, sizeof(stack->latency));
+        int32_t ret = memset_s(&stack->latency, sizeof(struct gazelle_stack_latency), 0, sizeof(stack->latency));
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "memset_s faile\n");
+        }
         stack->latency.start_time = get_current_time();
         stack->latency.lwip_latency.latency_min = ~((uint64_t)0);
         stack->latency.read_latency.latency_min = ~((uint64_t)0);
@@ -109,7 +113,7 @@ void unregister_wakeup(struct wakeup_poll *wakeup)
     struct wakeup_poll *node = stack_group->wakeup_list;
     struct wakeup_poll *pre = NULL;
 
-    while(node && node != wakeup) {
+    while (node && node != wakeup) {
         pre = node;
         node = node->next;
     }
@@ -168,9 +172,12 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
 
     lstack_get_low_power_info(&dfx->low_power_info);
 
-    memcpy_s(&dfx->data.pkts.stack_stat, sizeof(struct gazelle_stack_stat), &stack->stats,
-        sizeof(struct gazelle_stack_stat));
-
+    int32_t ret = memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
+    if (ret != EOK) {
+        LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+        return;
+    }
+    
     get_wakeup_stat(stack, &dfx->data.pkts.wakeup_stat);
 
     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
@@ -191,6 +198,7 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
     enum GAZELLE_STAT_MODE stat_mode)
 {
     int32_t rpc_call_result;
+    int32_t ret;
 
     switch (stat_mode) {
         case GAZELLE_STAT_LSTACK_SHOW:
@@ -198,8 +206,11 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             get_stack_stats(dfx, stack);
             break;
         case GAZELLE_STAT_LSTACK_SHOW_SNMP:
-            memcpy_s(&dfx->data.snmp, sizeof(dfx->data.snmp), &stack->lwip_stats->mib2,
+            ret = memcpy_s(&dfx->data.snmp, sizeof(dfx->data.snmp), &stack->lwip_stats->mib2,
                 sizeof(stack->lwip_stats->mib2));
+            if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+            }
             break;
         case GAZELLE_STAT_LSTACK_SHOW_CONN:
             rpc_call_result = rpc_call_conntable(stack, dfx->data.conn.conn_list, GAZELLE_LSTACK_MAX_CONN);
@@ -208,7 +219,10 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             dfx->data.conn.total_conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
             break;
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
-            memcpy_s(&dfx->data.latency, sizeof(dfx->data.latency), &stack->latency, sizeof(stack->latency));
+            ret = memcpy_s(&dfx->data.latency, sizeof(dfx->data.latency), &stack->latency, sizeof(stack->latency));
+            if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+            }
             break;
         case GAZELLE_STAT_LTRAN_START_LATENCY:
             set_latency_start_flag(true);
@@ -248,8 +262,6 @@ int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
 
     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
         struct protocol_stack *stack = stack_group->stacks[i];
-
-        memset_s(&dfx, sizeof(dfx), 0, sizeof(dfx));
         get_stack_dfx_data(&dfx, stack, stat_mode);
 
         if (!use_ltran() &&

@@ -13,8 +13,6 @@
 #ifndef _GAZELLE_CONTROL_PLANE_H_
 #define _GAZELLE_CONTROL_PLANE_H_
 
-#include "lstack_thread_rpc.h"
-
 #define CONTROL_THREAD_NAME "control_thread"
 
 enum vdev_request {
@@ -25,6 +23,7 @@ enum vdev_request {
     VDEV_NONE,
 };
 
+struct rpc_msg;
 int client_reg_thrd_ring(void);
 int32_t control_init_client(bool is_reconnect);
 void control_client_thread(void *arg);

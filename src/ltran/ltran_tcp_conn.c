@@ -10,7 +10,11 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#include <securec.h>
+
 #include <rte_malloc.h>
+
+#include "ltran_jhash.h"
 #include "ltran_instance.h"
 #include "ltran_tcp_conn.h"
 

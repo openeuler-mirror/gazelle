@@ -13,15 +13,7 @@
 #ifndef _GAZELLE_DPDK_H_
 #define _GAZELLE_DPDK_H_
 
-#include <rte_mbuf.h>
-#include <rte_mempool.h>
-
-#include <lwip/pbuf.h>
-#include "lstack_lockless_queue.h"
-#include "lstack_vdev.h"
-#include "gazelle_reg_msg.h"
-#include "dpdk_common.h"
-struct protocol_stack;
+#include "gazelle_opt.h"
 
 #define RX_NB_MBUF          ((5 * MAX_CLIENTS) + (VDEV_RX_QUEUE_SZ * DEFAULT_BACKUP_RING_SIZE_FACTOR))
 #define RX_MBUF_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
@@ -42,21 +34,12 @@ struct protocol_stack;
 #define CALL_MSG_RING_SIZE      (unsigned long long)32
 #define CALL_CACHE_SZ           0
 
-/* Layout:
- * | rte_mbuf | pbuf | custom_free_function | payload |
- **/
-static inline struct rte_mbuf *pbuf_to_mbuf(const struct pbuf *p)
-{
-    return ((struct rte_mbuf *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
-}
-static inline struct pbuf_custom *mbuf_to_pbuf(const struct rte_mbuf *m)
-{
-    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf) + GAZELLE_MBUFF_PRIV_SIZE));
-}
-
 int thread_affinity_default(void);
 int thread_affinity_init(int cpu_id);
 
+struct protocol_stack;
+struct rte_mempool;
+struct rte_ring;
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
 int32_t dpdk_eal_init(void);
 int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);

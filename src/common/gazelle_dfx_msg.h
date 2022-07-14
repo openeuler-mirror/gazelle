@@ -17,13 +17,8 @@
 #include <stdint.h>
 #include <sys/stat.h>
 
-#include "gazelle_reg_msg.h"
-
 #define GAZELLE_CLIENT_NUM_MIN           1
 #define GAZELLE_LOG_LEVEL_MAX            10
-#define GAZELLE_CLIENT_NUM_MAX           32
-#define GAZELLE_NULL_CLIENT              (GAZELLE_CLIENT_NUM_MAX - 1)
-#define GAZELLE_MAX_CLIENT               GAZELLE_CLIENT_NUM_MAX
 
 /* maybe it should be consistent with MEMP_NUM_TCP_PCB */
 #define GAZELLE_LSTACK_MAX_CONN          (20000 + 2000) // same as MAX_CLIENTS + RESERVED_CLIENTS in lwipopts.h
@@ -239,16 +234,4 @@ struct gazelle_stat_msg_request {
 int write_specied_len(int fd, const char *buf, size_t target_size);
 int read_specied_len(int fd, char *buf, size_t target_size);
 
-static inline int32_t check_and_set_run_dir(void)
-{
-    int32_t ret;
-
-    if (access(GAZELLE_RUN_DIR, 0) != 0) {
-        ret = mkdir(GAZELLE_RUN_DIR, GAZELLE_FILE_PERMISSION);
-        if (ret != 0) {
-            return -1;
-        }
-    }
-    return 0;
-}
 #endif

@@ -10,10 +10,13 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include "ltran_stack.h"
+#include <rte_mbuf.h>
+
 #include "ltran_instance.h"
 #include "ltran_log.h"
+#include "ltran_jhash.h"
 #include "gazelle_base_func.h"
+#include "ltran_stack.h"
 
 struct gazelle_stack_htable *g_stack_htable = NULL;
 struct gazelle_stack_htable *gazelle_get_stack_htable(void)
@@ -120,12 +123,11 @@ struct gazelle_stack *gazelle_stack_add_by_tid(struct gazelle_stack_htable *stac
         return NULL;
     }
 
-    stack = malloc(sizeof(struct gazelle_stack));
+    stack = calloc(1, sizeof(struct gazelle_stack));
     if (stack == NULL) {
         LTRAN_ERR("malloc fail.\n");
         return NULL;
     }
-    (void)memset_s(stack, sizeof(struct gazelle_stack), 0, sizeof(*stack));
 
     stack->index = -1;
     stack->tid = tid;

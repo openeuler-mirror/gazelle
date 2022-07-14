@@ -13,10 +13,11 @@
 #ifndef __GAZELLE_STAT_H__
 #define __GAZELLE_STAT_H__
 
-#include <rte_ether.h>
 #include <netinet/in.h>
 
-#include "ltran_base.h"
+#include <rte_common.h>
+
+#include "gazelle_opt.h"
 
 /*
  * When doing reads from the NIC or the client queues,
@@ -105,7 +106,7 @@ struct gazelle_stat_lstack_total {
 
 /* forward statistics structure */
 struct statistics {
-    struct gazelle_stat_ltran_port port_stats[RTE_MAX_ETHPORTS];
+    struct gazelle_stat_ltran_port port_stats[GAZELLE_MAX_ETHPORTS];
 };
 
 /* ltran statistics structure */
@@ -116,7 +117,7 @@ struct gazelle_stat_ltran_total {
 
 struct gazelle_stat_ltran_ip {
     uint32_t ip_num;
-    struct in_addr ip_list[GAZELLE_MAX_CLIENT];
+    struct in_addr ip_list[GAZELLE_CLIENT_NUM_ALL];
 };
 
 struct gazelle_stat_client_info {
@@ -131,7 +132,7 @@ struct gazelle_stat_client_info {
 
 struct gazelle_stat_ltran_client {
     uint32_t client_num;
-    struct gazelle_stat_client_info client_info[GAZELLE_MAX_CLIENT];
+    struct gazelle_stat_client_info client_info[GAZELLE_CLIENT_NUM_ALL];
 };
 
 int32_t get_start_latency_flag(void);
@@ -142,6 +143,7 @@ void set_ltran_stop_flag(int32_t flag);
 int32_t get_ltran_stop_flag(void);
 struct statistics *get_statistics(void);
 
+struct gazelle_stat_msg_request;
 void handle_resp_ltran_latency(int32_t fd);
 void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg);
 void handle_resp_ltran_sock(int32_t fd);
