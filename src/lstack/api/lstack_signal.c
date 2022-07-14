@@ -18,6 +18,8 @@
 #include <lwip/lwipsock.h>
 #include <lwip/posix_api.h>
 
+#include "lstack_cfg.h"
+#include "dpdk_common.h"
 #include "lstack_log.h"
 #include "lstack_control_plane.h"
 
@@ -55,9 +57,12 @@ static inline bool match_hijack_signal(int sig)
 static void lstack_sig_default_handler(int sig)
 {
     LSTACK_LOG(ERR, LSTACK, "lstack dumped，caught signal：%d\n", sig);
-    control_fd_close();
     dump_stack();
     lwip_exit();
+    if (!use_ltran()) {
+        dpdk_kni_release();
+    }
+    control_fd_close();
     (void)kill(getpid(), sig);
 }
 

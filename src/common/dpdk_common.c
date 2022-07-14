@@ -184,6 +184,15 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
     return 0;
 }
 
+void dpdk_kni_release(void)
+{
+    if (g_pkni) {
+        rte_kni_release(g_pkni);
+    }
+
+    g_pkni = NULL;
+}
+
 int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count)
 {
     uint32_t i = rte_kni_tx_burst(g_pkni, pkts_burst, count);

@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <rte_malloc.h>
 
+#include "dpdk_common.h"
 #include "ltran_config.h"
 #include "ltran_log.h"
 #include "ltran_stat.h"
@@ -55,6 +56,7 @@ static void sig_default_handler(int32_t sig)
 {
     LTRAN_ERR("ltran dumped，caught signal：%d.\n", sig);
     print_stack();
+    dpdk_kni_release();
     kill(getpid(), sig);
 }
 
@@ -125,8 +127,7 @@ static void ltran_core_destroy(void)
     gazelle_stack_htable_destroy();
     gazelle_tcp_conn_htable_destroy();
     gazelle_tcp_sock_htable_destroy();
-
-    return;
+    dpdk_kni_release();
 }
 
 static void wait_thread_finish(pthread_t ctrl_thread, uint32_t next_core)
