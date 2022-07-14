@@ -10,10 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-
 #include "utilities.h"
 #include "parameter.h"
-
 
 static struct ProgramParams prog_params;
 
