@@ -40,13 +40,13 @@
                                                 printf("\n[error]: "); \
                                                 printf(format, ##__VA_ARGS__); \
                                                 printf("\n"); \
-                                            } while(0)
+                                            } while (0)
 #define PRINT_WARNNING(format, ...)         do \
                                             { \
                                                 printf("\n[warnning]: "); \
                                                 printf(format, ##__VA_ARGS__); \
                                                 printf("\n"); \
-                                            } while(0)
+                                            } while (0)
 #define PRINT_SERVER(format, ...)           do \
                                             { \
                                                 printf("<server>: "); \

@@ -29,8 +29,7 @@
 #define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
 #define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
 
-enum
-{
+enum {
 #define PARAM_NAME_AS               ("as")                  ///< name of parameter type
     PARAM_NUM_AS = 'a',
 #define PARAM_NAME_IP               ("ip")                  ///< name of parameter IP
@@ -64,8 +63,7 @@ enum
  * @brief program option description
  * The program option description.
  */
-struct ProgramOption
-{
+struct ProgramOption {
     const char *name;       ///< name of program option
     int32_t has_arg;        ///< whether program option takes an argument, one of no, required, and optional
     int32_t *flag;          ///< if not `NULL`, set `*flag` to `val` when option found
@@ -76,8 +74,7 @@ struct ProgramOption
  * @brief porgram parameter
  * The porgram's parameters.
  */
-struct ProgramParams
-{
+struct ProgramParams {
     char*               as;                 ///< as server or client
     char*               ip;                 ///< IP address
     uint32_t            port;               ///< port
@@ -93,7 +90,7 @@ struct ProgramParams
 
 /**
  * @brief initialize the parameters
- * This function initializes the parameters of main function. 
+ * This function initializes the parameters of main function.
  * @param params        the parameters pointer
  */
 void program_params_init(struct ProgramParams *params);
@@ -106,7 +103,7 @@ void program_params_help(void);
 
 /**
  * @brief parse the parameters
- * This function parses the parameters of main function. 
+ * This function parses the parameters of main function.
  * @param params        the parameters pointer
  * @param argc          the count of arguments
  * @param argv          the value of arguments
@@ -116,7 +113,7 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
 
 /**
  * @brief print the parameters
- * This function prints the parameters of main function. 
+ * This function prints the parameters of main function.
  * @param params        the parameters pointer
  */
 void program_params_print(struct ProgramParams *params);

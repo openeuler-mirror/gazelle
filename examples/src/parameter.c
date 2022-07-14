@@ -30,8 +30,7 @@ const char prog_short_opts[] = \
     ;
 
 // program long options
-const struct ProgramOption prog_long_opts[] = \
-{
+const struct ProgramOption prog_long_opts[] = { \
     {PARAM_NAME_AS, REQUIRED_ARGUMETN, NULL, PARAM_NUM_AS},
     {PARAM_NAME_IP, REQUIRED_ARGUMETN, NULL, PARAM_NUM_IP},
     {PARAM_NAME_PORT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_PORT},
@@ -47,35 +46,40 @@ const struct ProgramOption prog_long_opts[] = \
 
 
 // get long options
-int getopt_long(int argc, char * const argv[], const char *optstring, const struct ProgramOption *long_opts, int *long_idx);
+int getopt_long(int argc, char * const argv[], const char *optstring, const struct ProgramOption *long_opts,
+    int *long_idx);
 
 
 // set `as` parameter
-void program_param_prase_as(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_as(struct ProgramParams *params, char *arg, const char *name)
 {
     if (strcmp(arg, "server") == 0 || strcmp(arg, "client") == 0) {
         params->as = arg;
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // set `ip` parameter
-void program_param_prase_ip(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_ip(struct ProgramParams *params, char *arg, const char *name)
 {
     if (inet_addr(arg) != INADDR_NONE) {
         params->ip = arg;
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // set `port` parameter
-void program_param_prase_port(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_port(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t port_arg = atoi(optarg);
     if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
@@ -83,24 +87,28 @@ void program_param_prase_port(struct ProgramParams *params, char *arg, const cha
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // set `model` parameter
-void program_param_prase_model(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_model(struct ProgramParams *params, char *arg, const char *name)
 {
     if (strcmp(optarg, "mum") == 0 || strcmp(optarg, "mud") == 0) {
         params->model = optarg;
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // set `connect_num` parameter
-void program_param_prase_connectnum(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_connectnum(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t connectnum_arg = atoi(optarg);
     if (connectnum_arg > 0) {
@@ -108,12 +116,14 @@ void program_param_prase_connectnum(struct ProgramParams *params, char *arg, con
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // set `thread_num` parameter
-void program_param_prase_threadnum(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_threadnum(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t threadnum_arg = atoi(optarg);
     if (CHECK_VAL_RANGE(threadnum_arg, THREAD_NUM_MIN, THREAD_NUM_MAX) == true) {
@@ -121,24 +131,28 @@ void program_param_prase_threadnum(struct ProgramParams *params, char *arg, cons
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // set `api` parameter
-void program_param_prase_api(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_api(struct ProgramParams *params, char *arg, const char *name)
 {
     if (strcmp(optarg, "unix") == 0 || strcmp(optarg, "posix") == 0) {
         params->api = optarg;
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // set `pktlen` parameter
-void program_param_prase_pktlen(struct ProgramParams *params, char *arg, const char *name)
+int32_t program_param_prase_pktlen(struct ProgramParams *params, char *arg, const char *name)
 {
     int32_t pktlen_arg = atoi(optarg);
     if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX) == true) {
@@ -146,8 +160,10 @@ void program_param_prase_pktlen(struct ProgramParams *params, char *arg, const c
     }
     else {
         PRINT_ERROR("illigal argument -- %s \n", name);
-        exit(PROGRAM_ABORT);
+        return PROGRAM_ABORT;
     }
+
+    return PROGRAM_OK;
 }
 
 // initialize the parameters
@@ -192,41 +208,40 @@ void program_params_help(void)
 // parse the parameters
 int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *argv[])
 {
-    int32_t c;
+    int32_t ret = PROGRAM_OK;
 
-    while (true) {
+    while (ret == PROGRAM_OK) {
         int32_t opt_idx = 0;
 
-        c = getopt_long(argc, argv, prog_short_opts, prog_long_opts, &opt_idx);
-
+        int32_t c = getopt_long(argc, argv, prog_short_opts, prog_long_opts, &opt_idx);
         if (c == -1) {
             break;
         }
 
         switch (c) {
             case (PARAM_NUM_AS):
-                program_param_prase_as(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_as(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_IP):
-                program_param_prase_ip(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_ip(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_PORT):
-                program_param_prase_port(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_port(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_MODEL):
-                program_param_prase_model(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_model(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_CONNECT_NUM):
-                program_param_prase_connectnum(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_connectnum(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_THREAD_NUM):
-                program_param_prase_threadnum(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_threadnum(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_API):
-                program_param_prase_api(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_api(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_PKTLEN):
-                program_param_prase_pktlen(params, optarg, prog_long_opts[opt_idx].name);
+                ret = program_param_prase_pktlen(params, optarg, prog_long_opts[opt_idx].name);
                 break;
             case (PARAM_NUM_VERIFY):
                 params->verify = true;
@@ -245,7 +260,7 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
         }
     }
 
-    return PROGRAM_OK;
+    return ret;
 }
 
 // print the parameters
