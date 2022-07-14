@@ -111,16 +111,6 @@ int32_t eth_dev_poll(void)
     return nr_pkts;
 }
 
-uint32_t eth_get_flow_cnt(void)
-{
-    if (use_ltran()) {
-        return rte_ring_count(get_protocol_stack()->rx_ring) + rte_ring_count(get_protocol_stack()->tx_ring);
-    } else {
-        /* can't get flow cnt, lstack_low_power_idling don't use this params */
-        return LSTACK_LPM_RX_PKTS + 1;
-    }
-}
-
 static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 {
     struct protocol_stack *stack = get_protocol_stack();
