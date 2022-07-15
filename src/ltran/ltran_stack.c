@@ -88,7 +88,7 @@ const struct gazelle_stack *gazelle_stack_get_by_tid(const struct gazelle_stack_
     uint32_t index;
     const struct gazelle_stack *stack = NULL;
     const struct gazelle_stack_hbucket *stack_hbucket = NULL;
-    const struct hlist_node *node = NULL;
+    struct hlist_node *node = NULL;
     const struct hlist_head *head = NULL;
 
     index = tid_hash_fn(tid) % GAZELLE_MAX_STACK_HTABLE_SIZE;

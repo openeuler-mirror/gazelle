@@ -14,7 +14,11 @@ project(ltran)
 set(COMMON_DIR ${PROJECT_SOURCE_DIR}/../common)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_C_FLAGS "-g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread -D_FORTIFY_SOURCE=2 -O2 -fPIC")
+if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
+	set(CMAKE_C_FLAGS "-g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread -D_FORTIFY_SOURCE=2 -O2 -fPIC")
+elseif (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+	set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -fPIE -pthread")
+endif()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D LTRAN_COMPILE")
 
 if($ENV{GAZELLE_COVERAGE_ENABLE})
