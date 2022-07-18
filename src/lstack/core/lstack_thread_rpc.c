@@ -82,7 +82,7 @@ static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *m
     msg->self_release = 0;
     msg->func = NULL;
 
-    atomic_fetch_add(&msg->pool->cons, 1);
+    atomic_fetch_add((_Atomic uint32_t *)&msg->pool->cons, 1);
 }
 
 static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)

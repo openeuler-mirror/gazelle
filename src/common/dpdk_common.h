@@ -29,7 +29,7 @@
 struct pbuf;
 static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
 {
-    return ((struct rte_mbuf *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
+    return ((struct rte_mbuf *)(void *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
 }
 static inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
 {

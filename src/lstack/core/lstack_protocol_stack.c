@@ -113,7 +113,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
 
     /* close listen shadow, per app communication thread select only one stack */
     if (get_global_cfg_params()->listen_shadow == false) {
-        static uint16_t stack_index = 0;
+        static _Atomic uint16_t stack_index = 0;
         index = atomic_fetch_add(&stack_index, 1);
         if (index >= stack_group->stack_num) {
             LSTACK_LOG(ERR, LSTACK, "thread =%hu larger than stack num = %hu\n", index, stack_group->stack_num);

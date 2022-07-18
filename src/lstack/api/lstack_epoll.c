@@ -187,7 +187,7 @@ static uint16_t find_max_cnt_stack(int32_t *stack_count, uint16_t stack_num, str
     }
 
     /* first bind and all stack same. choice tick as queue_id, avoid all bind to statck_0. */
-    static uint16_t tick = 0;
+    static _Atomic uint16_t tick = 0;
     if (all_same_cnt && stack_num) {
         max_index = atomic_fetch_add(&tick, 1) % stack_num;
     }

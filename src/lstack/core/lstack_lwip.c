@@ -104,7 +104,7 @@ static void replenish_send_idlembuf(struct rte_ring *ring)
 
 void gazelle_init_sock(int32_t fd)
 {
-    static uint32_t name_tick = 0;
+    static _Atomic uint32_t name_tick = 0;
     struct protocol_stack *stack = get_protocol_stack();
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
