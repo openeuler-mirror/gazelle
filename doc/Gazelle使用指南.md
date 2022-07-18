@@ -17,10 +17,11 @@ yum install gazelle
 ### 1. 使用root权限安装ko
 根据实际情况选择使用ko，提供虚拟网口、绑定网卡到用户态功能。  
 若使用虚拟网口功能，则使用rte_kni.ko
+
 ``` sh
 modprobe rte_kni carrier="on"
 ```
-网卡从内核驱动绑为用户态驱动的ko，根据实际情况选择一种
+网卡从内核驱动绑为用户态驱动的ko，根据实际情况选择一种。mlx4和mlx5网卡不需要绑定vfio或uio驱动。
 ``` sh
 #若IOMMU能使用
 modprobe vfio-pci
@@ -65,6 +66,7 @@ mkdir -p /mnt/hugepages
 mkdir -p /mnt/hugepages-2M
 chmod -R 700 /mnt/hugepages
 chmod -R 700 /mnt/hugepages-2M
+# 注: /mnt/hugepages 和 /mnt/hugepages-2M 必须挂载同样pagesize的大页内存。
 mount -t hugetlbfs nodev /mnt/hugepages -o pagesize=2M
 mount -t hugetlbfs nodev /mnt/hugepages-2M -o pagesize=2M
 ```
@@ -92,7 +94,7 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 
 |选项|参数格式|说明|
 |:---|:---|:---|
-|dpdk_args|--socket-mem（必需）<br>--huge-dir（必需）<br>--proc-type（必需）<br>--legacy-mem<br>--map-perfect<br>等|dpdk初始化参数，参考dpdk说明|
+|dpdk_args|--socket-mem（必需）<br>--huge-dir（必需）<br>--proc-type（必需）<br>--legacy-mem<br>--map-perfect<br>-d<br>等|dpdk初始化参数，参考dpdk说明<br>对于没有链接到liblstack.so的PMD，必须使用 -d 加载，比如librte_net_mlx5.so。<br>|
 |use_ltran| 0/1 | 是否使用ltran |
 |listen_shadow| 0/1 | 是否使用影子fd监听，单个listen线程多个协议栈线程时使用 |
 |num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量)。可按NUMA选择cpu|
@@ -128,7 +130,7 @@ devices="aa:bb:cc:dd:ee:ff"
 |功能分类|选项|参数格式|说明|
 |:---|:---|:---|:---|
 |kit|forward_kit|"dpdk"|指定网卡收发模块。<br>保留字段，目前未使用。|
-||forward_kit_args|-l<br>--socket-mem(必需)<br>--huge-dir(必需)<br>--proc-TYPE(必需)<br>--legacy-mem(必需)<br>--map-perfect(必需)<br>等|dpdk初始化参数，参考dpdk说明。<br>注：--map-perfect为扩展特性，用于防止dpdk占用多余的地址空间，保证ltran有额外的地址空间分配给lstack。|
+||forward_kit_args|-l<br>--socket-mem(必需)<br>--huge-dir(必需)<br>--proc-TYPE(必需)<br>--legacy-mem(必需)<br>--map-perfect(必需)<br>-d<br>等|dpdk初始化参数，参考dpdk说明。<br>注：--map-perfect为扩展特性，用于防止dpdk占用多余的地址空间，保证ltran有额外的地址空间分配给lstack。<br>对于没有链接到ltran的PMD，必须使用 -d 加载，比如librte_net_mlx5.so。<br>-l绑定的CPU核不要和lstack绑定的CPU重复，否则性能可能会急剧下降。<br>|
 |kni|kni_switch|0/1|rte_kni开关，默认为0|
 |dispatcher|dispatch_max_clients|n|ltran支持的最大client数。<br>1、多进程单线程场景，支持的lstack实例数不大于32，每lstack实例有1个网络线程<br>2、单进程多线程场景，支持的1个lstack实例，lstack实例的网络线程数不大于32|
 ||dispatch_subnet|192.168.xx.xx|子网掩码，表示ltran能识别的IP所在子网网段。参数为样例，子网按实际值配置。|
@@ -236,7 +238,7 @@ Usage: gazellectl [-h | help]
 
 ## 风险提示
 Gazelle可能存在如下安全风险，用户需要根据使用场景评估风险。
-  
+
 **共享内存**  
 - 现状  
   大页内存 mount 至 /mnt/hugepages-2M 目录，链接 liblstack.so 的进程初始化时在 /mnt/hugepages-2M 目录下创建文件，每个文件对应 2M 大页内存，并 mmap 这些文件。ltran 在收到 lstask 的注册信息后，根据大页内存配置信息也 mmap 目录下文件，实现大页内存共享。
