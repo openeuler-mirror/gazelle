@@ -57,32 +57,32 @@ include $(patsubst %, %/dir.mk, $(DIRS))
 OBJS = $(subst .c,.o,$(SRCS))
 
 LWIP_LIB = $(LIB_PATH)/liblwip.a
-LIBRTE_LIB = $(LIB_PATH)/librte_bus_pci.a \
-             $(LIB_PATH)/librte_pci.a \
-             $(LIB_PATH)/librte_cmdline.a \
-             $(LIB_PATH)/librte_hash.a \
-             $(LIB_PATH)/librte_mempool.a \
-             $(LIB_PATH)/librte_mempool_ring.a \
-             $(LIB_PATH)/librte_timer.a \
-             $(LIB_PATH)/librte_eal.a \
-             $(LIB_PATH)/librte_ring.a \
-             $(LIB_PATH)/librte_mbuf.a \
-             $(LIB_PATH)/librte_telemetry.a \
-             $(LIB_PATH)/librte_kni.a \
-             $(LIB_PATH)/librte_net_ixgbe.a \
-             $(LIB_PATH)/librte_kvargs.a \
-             $(LIB_PATH)/librte_net_hinic.a \
-             $(LIB_PATH)/librte_net_i40e.a \
-             $(LIB_PATH)/librte_net_virtio.a \
-             $(LIB_PATH)/librte_bus_vdev.a \
-             $(LIB_PATH)/librte_net.a \
-             $(LIB_PATH)/librte_rcu.a \
-             $(LIB_PATH)/librte_ethdev.a \
-             $(LIB_PATH)/librte_pdump.a \
-             $(LIB_PATH)/librte_bpf.a \
-             $(LIB_PATH)/librte_pcapng.a \
-             $(LIB_PATH)/librte_security.a \
-             $(LIB_PATH)/librte_cryptodev.a
+LIBRTE_LIB = $(LIB_PATH)/librte_bus_pci.so \
+             $(LIB_PATH)/librte_pci.so \
+             $(LIB_PATH)/librte_cmdline.so \
+             $(LIB_PATH)/librte_hash.so \
+             $(LIB_PATH)/librte_mempool.so \
+             $(LIB_PATH)/librte_mempool_ring.so \
+             $(LIB_PATH)/librte_timer.so \
+             $(LIB_PATH)/librte_eal.so \
+             $(LIB_PATH)/librte_ring.so \
+             $(LIB_PATH)/librte_mbuf.so \
+             $(LIB_PATH)/librte_telemetry.so \
+             $(LIB_PATH)/librte_kni.so \
+             $(LIB_PATH)/librte_net_ixgbe.so \
+             $(LIB_PATH)/librte_kvargs.so \
+             $(LIB_PATH)/librte_net_hinic.so \
+             $(LIB_PATH)/librte_net_i40e.so \
+             $(LIB_PATH)/librte_net_virtio.so \
+             $(LIB_PATH)/librte_bus_vdev.so \
+             $(LIB_PATH)/librte_net.so \
+             $(LIB_PATH)/librte_rcu.so \
+             $(LIB_PATH)/librte_ethdev.so \
+             $(LIB_PATH)/librte_pdump.so \
+             $(LIB_PATH)/librte_bpf.so \
+             $(LIB_PATH)/librte_pcapng.so \
+             $(LIB_PATH)/librte_security.so \
+             $(LIB_PATH)/librte_cryptodev.so
 
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
