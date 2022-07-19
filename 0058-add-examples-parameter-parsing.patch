@@ -1,0 +1,550 @@
+From 69be15c6a29d05c6b7f95e8fb778f79f51cf9240 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E6=9D=A8=E6=B4=8B?= <yyangoO@outlook.com>
+Date: Mon, 11 Jul 2022 20:10:25 +0800
+Subject: [PATCH 03/19] add examples parameter parsing
+
+---
+ examples/CMakeLists.txt  |   1 +
+ examples/README.md       |  30 ++---
+ examples/inc/parameter.h |  68 +++++++++-
+ examples/inc/utilities.h |  34 ++---
+ examples/main.c          |  11 ++
+ examples/src/parameter.c | 267 +++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 372 insertions(+), 39 deletions(-)
+ create mode 100644 examples/src/parameter.c
+
+diff --git a/examples/CMakeLists.txt b/examples/CMakeLists.txt
+index 0fd09ab..2e62bd3 100644
+--- a/examples/CMakeLists.txt
++++ b/examples/CMakeLists.txt
+@@ -29,6 +29,7 @@ set(HEADERS
+ )
+ set(SOURCES
+     main.c
++    src/parameter.c
+ )
+ 
+ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+diff --git a/examples/README.md b/examples/README.md
+index f5dc76f..6f82bb2 100644
+--- a/examples/README.md
++++ b/examples/README.md
+@@ -14,23 +14,23 @@
+ 
+ ## 程序接口
+ 
+-* `--as [server | client]`：作为服务端还是客户端。
++* `-a, --as [server | client]`：作为服务端还是客户端。
+   * `server`：作为服务端。
+   * `client`：作为客户端。
+-* `--ip [xxx.xxx.xxx.xxx]`：IP地址。
+-* `--port [xxxx]`：端口。
+-* `--model [-mum | -mud]` ：采用的网络模型类型。
+-  * `-mum (multi thread, unblock, multiplexing IO)`：多线程非阻塞IO复用。
+-  * `-mud (multi thread, unblock, dissymmetric)`：多线程非阻塞非对称。
+-* `--threadnum`：线程数设置。
+-* `--connectnum`：连接数设置。
+-* `--api [unix | posix]`：内部实现的接口类型。
+-  * `unix` ：基于 unix 接口实现。
+-  * `posix` ：基于 posix 接口实现。
+-* `--pktlen [xxxx]`：报文长度配置。
+-* `--verify [on | off]`：是否校验报文。
+-* `--ringpmd [on | off]`：是否基于 dpkg ring PMD 收发环回。
+-* `--help [--xxx]`：获得帮助信息。
++* `-i, --ip [xxx.xxx.xxx.xxx]`：IP地址。
++* `-p, --port [xxxx]`：端口。
++* `-m, --model [mum | mud]`：采用的网络模型类型。
++  * `mum (multi thread, unblock, multiplexing IO)`：多线程非阻塞IO复用。
++  * `mud (multi thread, unblock, dissymmetric)`：多线程非阻塞非对称。
++* `-t, --threadnum`：线程数设置。
++* `-c, --connectnum`：连接数设置。
++* `-A, --api [unix | posix]`：内部实现的接口类型。
++  * `unix`：基于 unix 接口实现。
++  * `posix`：基于 posix 接口实现。
++* `-P, --pktlen [xxxx]`：报文长度配置。
++* `-v, --verify`：是否校验报文。
++* `-r, --ringpmd`：是否基于dpdk ring PMD 收发环回。
++* `-h, --help`：获得帮助信息。
+ 
+ ## 使用
+ 
+diff --git a/examples/inc/parameter.h b/examples/inc/parameter.h
+index 7912862..fe0dce0 100644
+--- a/examples/inc/parameter.h
++++ b/examples/inc/parameter.h
+@@ -11,13 +11,67 @@
+ */
+ 
+ 
+-#ifndef __PARAMETER_H__
+-#define __PARAMETER_H__
++#ifndef __EXAMPLES_PARAMETER_H__
++#define __EXAMPLES_PARAMETER_H__
+ 
+ 
+ #include "utilities.h"
+ 
+ 
++#define PARAM_DEFAULT_AS            ("server")              ///< default type
++#define PARAM_DEFAULT_IP            ("127.0.0.1")           ///< default IP
++#define PARAM_DEFAULT_PORT          (5050)                  ///< default port
++#define PARAM_DEFAULT_MODEL         ("mum")                 ///< default model type
++#define PARAM_DEFAULT_CONNECT_NUM   (10)                    ///< default connection number
++#define PARAM_DEFAULT_THREAD_NUM    (8)                     ///< default thread number
++#define PARAM_DEFAULT_API           ("posix")               ///< default API type
++#define PARAM_DEFAULT_PKTLEN        (1024)                  ///< default packet length of message
++#define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
++#define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
++
++enum
++{
++#define PARAM_NAME_AS               ("as")                  ///< name of parameter type
++    PARAM_NUM_AS = 'a',
++#define PARAM_NAME_IP               ("ip")                  ///< name of parameter IP
++    PARAM_NUM_IP = 'i',
++#define PARAM_NAME_PORT             ("port")                ///< name of parameter port
++    PARAM_NUM_PORT = 'p',
++#define PARAM_NAME_MODEL            ("model")               ///< name of parameter model type
++    PARAM_NUM_MODEL = 'm',
++#define PARAM_NAME_CONNECT_NUM      ("connectnum")          ///< name of parameter connection number
++    PARAM_NUM_CONNECT_NUM = 'c',
++#define PARAM_NAME_THREAD_NUM       ("threadnum")           ///< name of parameter thread number
++    PARAM_NUM_THREAD_NUM = 't',
++#define PARAM_NAME_API              ("api")                 ///< name of parameter API type
++    PARAM_NUM_API = 'A',
++#define PARAM_NAME_PKTLEN           ("pktlen")              ///< name of parameter packet length of message
++    PARAM_NUM_PKTLEN = 'P',
++#define PARAM_NAME_VERIFY           ("verify")              ///< name of parameter flag of message verifying
++    PARAM_NUM_VERIFY = 'v',
++#define PARAM_NAME_RINGPMD          ("ringpmd")             ///< name of parameter flag of ring PMD of dpdk
++    PARAM_NUM_RINGPMD = 'r',
++#define PARAM_NAME_HELP             ("help")                ///< name of parameter help
++    PARAM_NUM_HELP = 'h',
++};
++
++#define NO_ARGUMENT             0                           ///< options takes no arguments
++#define REQUIRED_ARGUMETN       1                           ///< options requires arguments
++#define OPTIONAL_ARGUMETN       2                           ///< options arguments are optional
++
++
++/**
++ * @brief program option description
++ * The program option description.
++ */
++struct ProgramOption
++{
++    const char *name;       ///< name of program option
++    int32_t has_arg;        ///< whether program option takes an argument, one of no, required, and optional
++    int32_t *flag;          ///< if not `NULL`, set `*flag` to `val` when option found
++    int32_t val;            ///< the number of this program option
++};
++
+ /**
+  * @brief porgram parameter
+  * The porgram's parameters.
+@@ -44,6 +98,12 @@ struct ProgramParams
+  */
+ void program_params_init(struct ProgramParams *params);
+ 
++/**
++ * @brief print help information
++ * This function prints help informations.
++ */
++void program_params_help(void);
++
+ /**
+  * @brief parse the parameters
+  * This function parses the parameters of main function. 
+@@ -52,7 +112,7 @@ void program_params_init(struct ProgramParams *params);
+  * @param argv          the value of arguments
+  * @return              the result flag
+  */
+-int32_t program_params_parse(struct ProgramParams *params, int argc, char *argv[]);
++int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *argv[]);
+ 
+ /**
+  * @brief print the parameters
+@@ -62,4 +122,4 @@ int32_t program_params_parse(struct ProgramParams *params, int argc, char *argv[
+ void program_params_print(struct ProgramParams *params);
+ 
+ 
+-#endif // __PARAMETER_H__
++#endif // __EXAMPLES_PARAMETER_H__
+diff --git a/examples/inc/utilities.h b/examples/inc/utilities.h
+index d800531..bccd523 100644
+--- a/examples/inc/utilities.h
++++ b/examples/inc/utilities.h
+@@ -11,8 +11,8 @@
+ */
+ 
+ 
+-#ifndef __UTILITIES_H__
+-#define __UTILITIES_H__
++#ifndef __EXAMPLES_UTILITIES_H__
++#define __EXAMPLES_UTILITIES_H__
+ 
+ 
+ #include <string.h>
+@@ -21,30 +21,35 @@
+ #include <stdlib.h>
+ #include <stddef.h>
+ #include <inttypes.h>
+-
+ #include <unistd.h>
++#include <ctype.h>
++
+ #include <pthread.h>
+ 
+ #include <sys/types.h>
++#include <sys/socket.h>
+ 
++#include <netinet/in.h>
++#include <arpa/inet.h>
+ 
+-#define PRINT_ERROR(str)                    do \
++
++#define PRINT_ERROR(format, ...)            do \
+                                             { \
+                                                 printf("\n[error]: "); \
+-                                                printf(str); \
++                                                printf(format, ##__VA_ARGS__); \
+                                                 printf("\n"); \
+                                             } while(0)
+-#define PRINT_WARNNING(str)                 do \
++#define PRINT_WARNNING(format, ...)         do \
+                                             { \
+                                                 printf("\n[warnning]: "); \
+-                                                printf(str); \
++                                                printf(format, ##__VA_ARGS__); \
+                                                 printf("\n"); \
+                                             } while(0)
+ #define LIMIT_VAL_RANGE(val, min, max)      ((val) < (min) ? (min) : ((val) > (max) ? (max) : (val)))
+ #define CHECK_VAL_RANGE(val, min, max)      ((val) < (min) ? (false) : ((val) > (max) ? (false) : (true)))
+ 
+ #define PROGRAM_OK                  (0)             ///< program ok flag
+-#define PROGRAM_FINISH              (1)             ///< program finish flag
++#define PROGRAM_ABORT               (1)             ///< program abort flag
+ #define PROGRAM_FAULT               (-1)            ///< program fault flag
+ 
+ #define UNIX_TCP_PORT_MIN           (1024)          ///< TCP minimum port number in unix
+@@ -54,16 +59,5 @@
+ #define MESSAGE_PKTLEN_MIN          (1)             ///< minimum length of message (1 byte)
+ #define MESSAGE_PKTLEN_MAX          (10485760)      ///< maximum length of message (10 Mb)
+ 
+-#define DEFAULT_PARAM_AS            ("server")      ///< default type
+-#define DEFAULT_PARAM_IP            ("127.0.0.1")   ///< default IP
+-#define DEFAULT_PARAM_PORT          (5050)          ///< default port
+-#define DEFAULT_PARAM_MODEL         ("mum")         ///< default model type
+-#define DEFAULT_PARAM_CONNECT_NUM   (10)            ///< default connection number
+-#define DEFAULT_PARAM_THREAD_NUM    (8)             ///< default thread number
+-#define DEFAULT_PARAM_API           ("posix")       ///< default API type
+-#define DEFAULT_PARAM_PKTLEN        (1024)          ///< default packet length of message
+-#define DEFAULT_PARAM_VERIFY        (true)          ///< default flag of message verifying
+-#define DEFAULT_PARAM_RINGPMD       (false)         ///< default flag of ring PMD
+-
+ 
+-#endif // __UTILITIES_H__
++#endif // __EXAMPLES_UTILITIES_H__
+diff --git a/examples/main.c b/examples/main.c
+index 30d04e6..ed3abef 100644
+--- a/examples/main.c
++++ b/examples/main.c
+@@ -13,11 +13,22 @@
+ 
+ #include "utilities.h"
+ #include "parameter.h"
++#include "server.h"
++
++
++static struct ProgramParams prog_params;
+ 
+ 
+ int32_t main(int argc, char *argv[])
+ {
+     int32_t ret = PROGRAM_OK;
+ 
++    program_params_init(&prog_params);
++    ret = program_params_parse(&prog_params, argc, argv);
++    if (PROGRAM_ABORT == ret) {
++        return ret;
++    }
++    program_params_print(&prog_params);
++
+     return ret;
+ }
+diff --git a/examples/src/parameter.c b/examples/src/parameter.c
+new file mode 100644
+index 0000000..8abcc68
+--- /dev/null
++++ b/examples/src/parameter.c
+@@ -0,0 +1,267 @@
++/*
++* Copyright (c) 2022-2023. yyangoO.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++
++
++#include "parameter.h"
++
++
++// program short options
++const char prog_short_opts[] = \
++    "a:"        // as
++    "i:"        // ip
++    "p:"        // port
++    "m:"        // model
++    "t:"        // thread number
++    "c:"        // connect number
++    "A:"        // api
++    "P:"        // pktlen
++    "v"         // verify
++    "r"         // ringpmd
++    "h"         // help
++    ;
++
++// program long options
++const struct ProgramOption prog_long_opts[] = \
++{
++    {PARAM_NAME_AS, REQUIRED_ARGUMETN, NULL, PARAM_NUM_AS},
++    {PARAM_NAME_IP, REQUIRED_ARGUMETN, NULL, PARAM_NUM_IP},
++    {PARAM_NAME_PORT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_PORT},
++    {PARAM_NAME_MODEL, REQUIRED_ARGUMETN, NULL, PARAM_NUM_MODEL},
++    {PARAM_NAME_THREAD_NUM, REQUIRED_ARGUMETN, NULL, PARAM_NUM_THREAD_NUM},
++    {PARAM_NAME_CONNECT_NUM, REQUIRED_ARGUMETN, NULL, PARAM_NUM_CONNECT_NUM},
++    {PARAM_NAME_API, REQUIRED_ARGUMETN, NULL, PARAM_NUM_API},
++    {PARAM_NAME_PKTLEN, REQUIRED_ARGUMETN, NULL, PARAM_NUM_PKTLEN},
++    {PARAM_NAME_VERIFY, NO_ARGUMENT, NULL, PARAM_NUM_VERIFY},
++    {PARAM_NAME_RINGPMD, NO_ARGUMENT, NULL, PARAM_NUM_RINGPMD},
++    {PARAM_NAME_HELP, NO_ARGUMENT, NULL, PARAM_NUM_HELP},
++};
++
++
++// get long options
++int getopt_long(int argc, char * const argv[], const char *optstring, const struct ProgramOption *long_opts, int *long_idx);
++
++
++// set `as` parameter
++void program_param_prase_as(struct ProgramParams *params, char *arg, const char *name)
++{
++    if (0 == strcmp(arg, "server") || 0 == strcmp(arg, "client")) {
++        params->as = arg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `ip` parameter
++void program_param_prase_ip(struct ProgramParams *params, char *arg, const char *name)
++{
++    if (INADDR_NONE == inet_addr(arg)) {
++        params->ip = arg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `port` parameter
++void program_param_prase_port(struct ProgramParams *params, char *arg, const char *name)
++{
++    int32_t port_arg = atoi(optarg);
++    if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX)) {
++        params->port = (uint32_t)port_arg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `model` parameter
++void program_param_prase_model(struct ProgramParams *params, char *arg, const char *name)
++{
++    if (0 == strcmp(optarg, "mum") || 0 == strcmp(optarg, "mud")) {
++        params->model = optarg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `connect_num` parameter
++void program_param_prase_connectnum(struct ProgramParams *params, char *arg, const char *name)
++{
++    int32_t connectnum_arg = atoi(optarg);
++    if (0 < connectnum_arg) {
++        params->connect_num = (uint32_t)connectnum_arg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `thread_num` parameter
++void program_param_prase_threadnum(struct ProgramParams *params, char *arg, const char *name)
++{
++    int32_t threadnum_arg = atoi(optarg);
++    if (CHECK_VAL_RANGE(threadnum_arg, THREAD_NUM_MIN, THREAD_NUM_MAX)) {
++        params->thread_num = (uint32_t)threadnum_arg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `api` parameter
++void program_param_prase_api(struct ProgramParams *params, char *arg, const char *name)
++{
++    if (0 == strcmp(optarg, "unix") || 0 == strcmp(optarg, "posix")) {
++        params->api = optarg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `pktlen` parameter
++void program_param_prase_pktlen(struct ProgramParams *params, char *arg, const char *name)
++{
++    int32_t pktlen_arg = atoi(optarg);
++    if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX)) {
++        params->pktlen = (uint32_t)pktlen_arg;
++    }
++    else {
++        PRINT_ERROR("illigal argument -- %s \n", name);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// initialize the parameters
++void program_params_init(struct ProgramParams *params)
++{
++    params->as = PARAM_DEFAULT_AS;
++    params->ip = PARAM_DEFAULT_IP;
++    params->port = PARAM_DEFAULT_PORT;
++    params->model = PARAM_DEFAULT_MODEL;
++    params->thread_num = PARAM_DEFAULT_CONNECT_NUM;
++    params->connect_num = PARAM_DEFAULT_THREAD_NUM;
++    params->api = PARAM_DEFAULT_API;
++    params->pktlen = PARAM_DEFAULT_PKTLEN;
++    params->verify = PARAM_DEFAULT_VERIFY;
++    params->ringpmd = PARAM_DEFAULT_RINGPMD;
++}
++
++// print program helps
++void program_params_help(void)
++{
++    printf("\n");
++    printf("-a, --as [server | client]: set programas server or client. \n");
++    printf("    server: as server. \n");
++    printf("    client: as client. \n");
++    printf("-i, --ip [xxx.xxx.xxx.xxx]: set ip address. \n");
++    printf("-p, --port [xxxx]: set port number in range of %d - %d. \n", UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX);
++    printf("-m, --model [mum | mud]: set the network model. \n");
++    printf("    mum: multi thread, unblock, multiplexing IO network model. \n");
++    printf("    mud: multi thread, unblock, dissymmetric network model. \n");
++    printf("-t, --threadnum [xxxx]: set thread number in range of %d - %d. \n", THREAD_NUM_MIN, THREAD_NUM_MAX);
++    printf("-c, --connectnum [xxxx]: set thread number of connection. \n");
++    printf("-A, --api [unix | posix]: set api type is server or client. \n");
++    printf("    unix: use unix's api. \n");
++    printf("    posix: use posix api. \n");
++    printf("-P, --pktlen [xxxx]: set packet length in range of %d - %d. \n", MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX);
++    printf("-v, --verify: set to verifying the message packet. \n");
++    printf("-r, --ringpmd: set use ringpmd. \n");
++    printf("-h, --help: see helps. \n");
++    printf("\n");
++}
++
++// parse the parameters
++int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *argv[])
++{
++    int32_t c;
++
++    while (true) {
++        int32_t opt_idx = 0;
++
++        c = getopt_long(argc, argv, prog_short_opts, prog_long_opts, &opt_idx);
++
++        if (-1 == c) {
++            break;
++        }
++
++        switch (c) {
++            case (PARAM_NUM_AS):
++                program_param_prase_as(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_IP):
++                program_param_prase_ip(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_PORT):
++                program_param_prase_port(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_MODEL):
++                program_param_prase_model(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_CONNECT_NUM):
++                program_param_prase_connectnum(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_THREAD_NUM):
++                program_param_prase_threadnum(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_API):
++                program_param_prase_api(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_PKTLEN):
++                program_param_prase_pktlen(params, optarg, prog_long_opts[opt_idx].name);
++                break;
++            case (PARAM_NUM_VERIFY):
++                params->verify = true;
++                break;
++            case (PARAM_NUM_RINGPMD):
++                params->ringpmd = true;
++                break;
++            case (PARAM_NUM_HELP):
++                program_params_help();
++                return PROGRAM_ABORT;
++            case ('?'):
++                return PROGRAM_ABORT;
++            default:
++                program_params_help();
++                return PROGRAM_ABORT;
++        }
++    }
++
++    return PROGRAM_OK;
++}
++
++// print the parameters
++void program_params_print(struct ProgramParams *params)
++{
++    printf("\n");
++    printf("[program parameters]: \n");
++    printf("--> [as]:                       %s \n", params->as);
++    printf("--> [ip]:                       %s \n", params->ip);
++    printf("--> [port]:                     %u \n", params->port);
++    printf("--> [model]:                    %s \n", params->model);
++    printf("--> [thread number]:            %u \n", params->thread_num);
++    printf("--> [connection number]:        %u \n", params->connect_num);
++    printf("--> [api]:                      %s \n", params->api);
++    printf("--> [packet length]:            %u \n", params->pktlen);
++    printf("--> [verify]:                   %s \n", (true == params->verify) ? "on" : "off");
++    printf("--> [ringpmd]:                  %s \n", (true == params->ringpmd) ? "on" : "off");
++    printf("\n");
++}
+-- 
+2.23.0
+

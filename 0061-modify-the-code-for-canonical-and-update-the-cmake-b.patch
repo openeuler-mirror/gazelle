@@ -1,0 +1,190 @@
+From 3ddd9dadcdd3bf5b451f0170f88b9f4957eceb26 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E6=9D=A8=E6=B4=8B?= <yyangoO@outlook.com>
+Date: Tue, 12 Jul 2022 20:55:33 +0800
+Subject: [PATCH 08/19] modify the code for canonical and update the cmake
+ build components
+
+---
+ examples/CMakeLists.txt  | 13 +++----------
+ examples/inc/utilities.h | 14 ++++++++++++++
+ examples/main.c          |  3 +--
+ examples/src/parameter.c | 22 +++++++++++-----------
+ 4 files changed, 29 insertions(+), 23 deletions(-)
+
+diff --git a/examples/CMakeLists.txt b/examples/CMakeLists.txt
+index 2e62bd3..b1c2b07 100644
+--- a/examples/CMakeLists.txt
++++ b/examples/CMakeLists.txt
+@@ -23,13 +23,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D EXAMPLE_COMPILE")
+ 
+ include_directories(${PROJECT_SOURCE_DIR}/inc)
+ 
+-set(HEADERS
+-    inc/utilities.h
+-    inc/parameter.h
+-)
+-set(SOURCES
+-    main.c
+-    src/parameter.c
+-)
+-
+-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
++aux_source_directory(${PROJECT_SOURCE_DIR}/src SOURCES)
++
++add_executable(${PROJECT_NAME} main.c ${SOURCES})
+diff --git a/examples/inc/utilities.h b/examples/inc/utilities.h
+index bccd523..b594469 100644
+--- a/examples/inc/utilities.h
++++ b/examples/inc/utilities.h
+@@ -24,10 +24,12 @@
+ #include <unistd.h>
+ #include <ctype.h>
+ 
++#include <fcntl.h>
+ #include <pthread.h>
+ 
+ #include <sys/types.h>
+ #include <sys/socket.h>
++#include <sys/epoll.h>
+ 
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+@@ -45,6 +47,18 @@
+                                                 printf(format, ##__VA_ARGS__); \
+                                                 printf("\n"); \
+                                             } while(0)
++#define PRINT_SERVER(format, ...)           do \
++                                            { \
++                                                printf("<server>: "); \
++                                                printf(format, ##__VA_ARGS__); \
++                                                printf("\n"); \
++                                            } while(0)
++#define PRINT_CLIENT(format, ...)           do \
++                                            { \
++                                                printf("<client>: "); \
++                                                printf(format, ##__VA_ARGS__); \
++                                                printf("\n"); \
++                                            } while(0)
+ #define LIMIT_VAL_RANGE(val, min, max)      ((val) < (min) ? (min) : ((val) > (max) ? (max) : (val)))
+ #define CHECK_VAL_RANGE(val, min, max)      ((val) < (min) ? (false) : ((val) > (max) ? (false) : (true)))
+ 
+diff --git a/examples/main.c b/examples/main.c
+index ed3abef..a7daded 100644
+--- a/examples/main.c
++++ b/examples/main.c
+@@ -13,7 +13,6 @@
+ 
+ #include "utilities.h"
+ #include "parameter.h"
+-#include "server.h"
+ 
+ 
+ static struct ProgramParams prog_params;
+@@ -25,7 +24,7 @@ int32_t main(int argc, char *argv[])
+ 
+     program_params_init(&prog_params);
+     ret = program_params_parse(&prog_params, argc, argv);
+-    if (PROGRAM_ABORT == ret) {
++    if (ret == PROGRAM_ABORT) {
+         return ret;
+     }
+     program_params_print(&prog_params);
+diff --git a/examples/src/parameter.c b/examples/src/parameter.c
+index 8abcc68..ff3bcbc 100644
+--- a/examples/src/parameter.c
++++ b/examples/src/parameter.c
+@@ -53,7 +53,7 @@ int getopt_long(int argc, char * const argv[], const char *optstring, const stru
+ // set `as` parameter
+ void program_param_prase_as(struct ProgramParams *params, char *arg, const char *name)
+ {
+-    if (0 == strcmp(arg, "server") || 0 == strcmp(arg, "client")) {
++    if (strcmp(arg, "server") == 0 || strcmp(arg, "client") == 0) {
+         params->as = arg;
+     }
+     else {
+@@ -65,7 +65,7 @@ void program_param_prase_as(struct ProgramParams *params, char *arg, const char
+ // set `ip` parameter
+ void program_param_prase_ip(struct ProgramParams *params, char *arg, const char *name)
+ {
+-    if (INADDR_NONE == inet_addr(arg)) {
++    if (inet_addr(arg) != INADDR_NONE) {
+         params->ip = arg;
+     }
+     else {
+@@ -78,7 +78,7 @@ void program_param_prase_ip(struct ProgramParams *params, char *arg, const char
+ void program_param_prase_port(struct ProgramParams *params, char *arg, const char *name)
+ {
+     int32_t port_arg = atoi(optarg);
+-    if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX)) {
++    if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
+         params->port = (uint32_t)port_arg;
+     }
+     else {
+@@ -90,7 +90,7 @@ void program_param_prase_port(struct ProgramParams *params, char *arg, const cha
+ // set `model` parameter
+ void program_param_prase_model(struct ProgramParams *params, char *arg, const char *name)
+ {
+-    if (0 == strcmp(optarg, "mum") || 0 == strcmp(optarg, "mud")) {
++    if (strcmp(optarg, "mum") == 0 || strcmp(optarg, "mud") == 0) {
+         params->model = optarg;
+     }
+     else {
+@@ -103,7 +103,7 @@ void program_param_prase_model(struct ProgramParams *params, char *arg, const ch
+ void program_param_prase_connectnum(struct ProgramParams *params, char *arg, const char *name)
+ {
+     int32_t connectnum_arg = atoi(optarg);
+-    if (0 < connectnum_arg) {
++    if (connectnum_arg > 0) {
+         params->connect_num = (uint32_t)connectnum_arg;
+     }
+     else {
+@@ -116,7 +116,7 @@ void program_param_prase_connectnum(struct ProgramParams *params, char *arg, con
+ void program_param_prase_threadnum(struct ProgramParams *params, char *arg, const char *name)
+ {
+     int32_t threadnum_arg = atoi(optarg);
+-    if (CHECK_VAL_RANGE(threadnum_arg, THREAD_NUM_MIN, THREAD_NUM_MAX)) {
++    if (CHECK_VAL_RANGE(threadnum_arg, THREAD_NUM_MIN, THREAD_NUM_MAX) == true) {
+         params->thread_num = (uint32_t)threadnum_arg;
+     }
+     else {
+@@ -128,7 +128,7 @@ void program_param_prase_threadnum(struct ProgramParams *params, char *arg, cons
+ // set `api` parameter
+ void program_param_prase_api(struct ProgramParams *params, char *arg, const char *name)
+ {
+-    if (0 == strcmp(optarg, "unix") || 0 == strcmp(optarg, "posix")) {
++    if (strcmp(optarg, "unix") == 0 || strcmp(optarg, "posix") == 0) {
+         params->api = optarg;
+     }
+     else {
+@@ -141,7 +141,7 @@ void program_param_prase_api(struct ProgramParams *params, char *arg, const char
+ void program_param_prase_pktlen(struct ProgramParams *params, char *arg, const char *name)
+ {
+     int32_t pktlen_arg = atoi(optarg);
+-    if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX)) {
++    if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX) == true) {
+         params->pktlen = (uint32_t)pktlen_arg;
+     }
+     else {
+@@ -157,8 +157,8 @@ void program_params_init(struct ProgramParams *params)
+     params->ip = PARAM_DEFAULT_IP;
+     params->port = PARAM_DEFAULT_PORT;
+     params->model = PARAM_DEFAULT_MODEL;
+-    params->thread_num = PARAM_DEFAULT_CONNECT_NUM;
+-    params->connect_num = PARAM_DEFAULT_THREAD_NUM;
++    params->thread_num = PARAM_DEFAULT_THREAD_NUM;
++    params->connect_num = PARAM_DEFAULT_CONNECT_NUM;
+     params->api = PARAM_DEFAULT_API;
+     params->pktlen = PARAM_DEFAULT_PKTLEN;
+     params->verify = PARAM_DEFAULT_VERIFY;
+@@ -199,7 +199,7 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
+ 
+         c = getopt_long(argc, argv, prog_short_opts, prog_long_opts, &opt_idx);
+ 
+-        if (-1 == c) {
++        if (c == -1) {
+             break;
+         }
+ 
+-- 
+2.23.0
+

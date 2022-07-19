@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       10
+Release:       11
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -70,6 +70,22 @@ Patch9052:     0052-bugfix-https-gitee.com-src-openeuler-gazelle-issues-.patch
 Patch9053:     0053-update-README.md.patch
 Patch9054:     0054-ltran-fix-use-after-free-issue.patch
 Patch9055:     0055-refactor-pkt-read-send-performance.patch
+Patch9056:     0056-ltran-support-checksum.patch
+Patch9057:     0057-add-examples-readme-compile-components-main-file-and.patch
+Patch9058:     0058-add-examples-parameter-parsing.patch
+Patch9059:     0059-lstack-core-fix-reta_conf-array-size-calculation.patch
+Patch9060:     0060-Replace-gettid-with-rte_gettid.patch
+Patch9061:     0061-modify-the-code-for-canonical-and-update-the-cmake-b.patch
+Patch9062:     0062-enable-secure-compile-and-open-compile-log.patch
+Patch9063:     0063-support-epoll-et-trig-mode.patch
+Patch9064:     0064-lstack-support-low-power.patch
+Patch9065:     0065-add-port-mask-range-check.patch
+Patch9066:     0066-release-kni-device.patch
+Patch9067:     0067-optimize-check-ltran-exist.patch
+Patch9068:     0068-clean-code.patch
+Patch9069:     0069-clean-code.patch
+Patch9070:     0070-Support-build-gazelle-with-clang.patch
+Patch9071:     0071-Allow-dynamic-load-PMDs.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -110,6 +126,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue Jul 19 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-11
+- reconstruct packet sending and receiving to improve performance 
+
 * Thu Jul 7 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-10
 - Type:bugfix
 - CVE:
