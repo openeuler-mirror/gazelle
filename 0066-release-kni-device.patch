@@ -1,0 +1,125 @@
+From 7fac90c4e7bb0faf7c5341452a7b2a02470748d3 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 14 Jul 2022 22:25:44 +0800
+Subject: [PATCH 13/19] release-kni-device
+
+---
+ src/common/dpdk_common.c       | 11 ++++++++++-
+ src/common/dpdk_common.h       |  1 +
+ src/lstack/api/lstack_signal.c |  7 ++++++-
+ src/lstack/core/lstack_init.c  |  2 ++
+ src/ltran/main.c               |  5 +++--
+ 5 files changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/src/common/dpdk_common.c b/src/common/dpdk_common.c
+index 939d135..8d056f9 100644
+--- a/src/common/dpdk_common.c
++++ b/src/common/dpdk_common.c
+@@ -184,6 +184,15 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
+     return 0;
+ }
+ 
++void dpdk_kni_release(void)
++{
++    if (g_pkni) {
++        rte_kni_release(g_pkni);
++    }
++
++    g_pkni = NULL;
++}
++
+ int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count)
+ {
+     uint32_t i = rte_kni_tx_burst(g_pkni, pkts_burst, count);
+@@ -211,4 +220,4 @@ void kni_process_rx(uint16_t port)
+             pkts_burst[i] = NULL;
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 6a6a030..2066159 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -66,6 +66,7 @@ struct rte_kni* get_gazelle_kni(void);
+ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool);
+ int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count);
+ void kni_process_rx(uint16_t port);
++void dpdk_kni_release(void);
+ 
+ struct rte_eth_conf;
+ struct rte_eth_dev_info;
+diff --git a/src/lstack/api/lstack_signal.c b/src/lstack/api/lstack_signal.c
+index 4dba472..e73bc61 100644
+--- a/src/lstack/api/lstack_signal.c
++++ b/src/lstack/api/lstack_signal.c
+@@ -18,6 +18,8 @@
+ #include <lwip/lwipsock.h>
+ #include <lwip/posix_api.h>
+ 
++#include "lstack_cfg.h"
++#include "dpdk_common.h"
+ #include "lstack_log.h"
+ #include "lstack_control_plane.h"
+ 
+@@ -55,9 +57,12 @@ static inline bool match_hijack_signal(int sig)
+ static void lstack_sig_default_handler(int sig)
+ {
+     LSTACK_LOG(ERR, LSTACK, "lstack dumped，caught signal：%d\n", sig);
+-    control_fd_close();
+     dump_stack();
+     lwip_exit();
++    if (!use_ltran()) {
++        dpdk_kni_release();
++    }
++    control_fd_close();
+     (void)kill(getpid(), sig);
+ }
+ 
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index 78040b0..a506b34 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -152,6 +152,8 @@ __attribute__((destructor)) void gazelle_network_exit(void)
+         if (ret < 0) {
+             LSTACK_LOG(ERR, LSTACK, "rte_pdump_uninit failed\n");
+         }
++
++        dpdk_kni_release();
+     }
+ }
+ 
+diff --git a/src/ltran/main.c b/src/ltran/main.c
+index 701df3c..328ca89 100644
+--- a/src/ltran/main.c
++++ b/src/ltran/main.c
+@@ -18,6 +18,7 @@
+ #include <sys/types.h>
+ #include <rte_malloc.h>
+ 
++#include "dpdk_common.h"
+ #include "ltran_config.h"
+ #include "ltran_log.h"
+ #include "ltran_stat.h"
+@@ -55,6 +56,7 @@ static void sig_default_handler(int32_t sig)
+ {
+     LTRAN_ERR("ltran dumped，caught signal：%d.\n", sig);
+     print_stack();
++    dpdk_kni_release();
+     kill(getpid(), sig);
+ }
+ 
+@@ -125,8 +127,7 @@ static void ltran_core_destroy(void)
+     gazelle_stack_htable_destroy();
+     gazelle_tcp_conn_htable_destroy();
+     gazelle_tcp_sock_htable_destroy();
+-
+-    return;
++    dpdk_kni_release();
+ }
+ 
+ static void wait_thread_finish(pthread_t ctrl_thread, uint32_t next_core)
+-- 
+2.23.0
+
