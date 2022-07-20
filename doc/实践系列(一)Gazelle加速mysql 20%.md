@@ -85,13 +85,13 @@
 
 ### 2. Server端部署
 
-#### 2.1 安装依赖包
+#### 2.1 安装mysql依赖包
 
 ```sh
 yum install -y cmake doxygen bison ncurses-devel openssl-devel libtool tar rpcgen libtirpc-devel bison bc unzip git gcc-c++ libaio libaio-devel numactl
 ```
 
-#### 2.2 编译安装
+#### 2.2 编译安装mysql
 
 - 从[官网下载](https://downloads.mysql.com/archives/community/)下载源码包
 
@@ -116,9 +116,9 @@ make -j 64
 make install
 ```
 
-#### 2.3 配置参数
+#### 2.3 配置mysql参数
 
-使用gazelle源码中doc/test/my.cnf-arm配置文件，放到/etc目录
+使用gazelle源码中doc/test/my.cnf-arm配置文件，放到/etc目录重命名为my.cnf
 
 #### 2.4 部署mysql
 
@@ -165,14 +165,14 @@ quit
 /usr/local/mysql-8.0.20/support-files/mysql.server stop
 ```
 
-### 3. client部署
+### 3. client部署benchmarksql工具
 
 - 编译安装
 
 下载 [benchmarksql工具](https://mirrors.huaweicloud.com/kunpeng/archive/kunpeng_solution/database/patch/benchmarksql5.0-for-mysql.zip)
 
 ```sh
-#安装依赖包
+#安装benchmarksql依赖包
 yum install -y java
 
 unzip benchmarksql5.0-for-mysql.zip
@@ -180,7 +180,7 @@ cd benchmarksql5.0-for-mysql/run
 chmod +x *.sh
 ```
 
-- 配置参数
+- 配置benchmarksql参数
 
   benchmarksql5.0-for-mysql/run/props.conf
 
@@ -190,7 +190,7 @@ chmod +x *.sh
   | runMins   | 10   | 压力测试运行时间（单位：分钟） |
   | conn      | ip   | 修改默认IP为服务端IP           |
 
-### 4. 创建测试数据
+### 4. mysql创建测试数据
 
 ```sh
 #启动服务
@@ -205,7 +205,7 @@ chmod +x *.sh
 
 
 
-### 5. 配置环境
+### 5. 配置执行环境
 
 #### 5.1 开启STEAL优化
 
@@ -233,7 +233,7 @@ systemctl stop iptables
 systemctl stop firewalld
 ```
 
-### 6. 内核协议栈测试
+### 6. 内核协议栈测试mysql
 
 ```sh
 #服务端绑中断(根据环境替换网卡名称、绑核cpu核)
@@ -263,7 +263,11 @@ pkill -9 mysqld
 
 <img src="test/mysql_kernel.png">
 
-### 7. Gazelle测试
+### 7. Gazelle测试mysql
+安装软件包
+```sh
+yum -y install gazelle dpdk libconfig numactl libboundscheck libcap 
+```
 
 修改/etc/gazelle/lstack.conf配置文件修改如下
 
@@ -278,9 +282,6 @@ pkill -9 mysqld
 <img src="test/lstack_mysql_conf.png">
 
 ```sh
-#服务端安装依赖包
-yum install dpdk libconfig numactl libboundscheck libcap
-
 #服务端分配大页
 echo 8192 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages #根据实际选择pagesize
 mkdir -p /mnt/hugepages-lstack
@@ -307,6 +308,7 @@ cp -fr /home/tpccdata/* /data/mysql/data/
 #关闭mysql进程
 pkill -9 mysqld
 ```
+Gazelle部署详见[Gazelle使用指南](Gazelle使用指南.md)
 
 测试结果如下:
 
