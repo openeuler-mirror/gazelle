@@ -27,6 +27,7 @@
 #define PARAM_DEFAULT_API           ("posix")               ///< default API type
 #define PARAM_DEFAULT_PKTLEN        (1024)                  ///< default packet length of message
 #define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
+#define PARAM_DEFAULT_DEBUG         (false)                 ///< default flag of debug
 #define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
 
 enum
@@ -51,6 +52,8 @@ enum
     PARAM_NUM_VERIFY = 'v',
 #define PARAM_NAME_RINGPMD          ("ringpmd")             ///< name of parameter flag of ring PMD of dpdk
     PARAM_NUM_RINGPMD = 'r',
+#define PARAM_NAME_DEBUG            ("debug")               ///< name of parameter flag of debug
+    PARAM_NUM_DEBUG = 'd',
 #define PARAM_NAME_HELP             ("help")                ///< name of parameter help
     PARAM_NUM_HELP = 'h',
 };
@@ -87,13 +90,13 @@ struct ProgramParams
     char*               api;                ///< the type of api
     uint32_t            pktlen;             ///< the packet length
     bool                verify;             ///< if we verify the message or not
+    bool                debug;              ///< if we print the debug information or not
     bool                ringpmd;            ///< if we use ring PMD or not
 };
 
-
 /**
  * @brief initialize the parameters
- * This function initializes the parameters of main function. 
+ * This function initializes the parameters of main function.
  * @param params        the parameters pointer
  */
 void program_params_init(struct ProgramParams *params);
@@ -106,7 +109,7 @@ void program_params_help(void);
 
 /**
  * @brief parse the parameters
- * This function parses the parameters of main function. 
+ * This function parses the parameters of main function.
  * @param params        the parameters pointer
  * @param argc          the count of arguments
  * @param argv          the value of arguments
@@ -116,7 +119,7 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
 
 /**
  * @brief print the parameters
- * This function prints the parameters of main function. 
+ * This function prints the parameters of main function.
  * @param params        the parameters pointer
  */
 void program_params_print(struct ProgramParams *params);

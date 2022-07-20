@@ -30,6 +30,7 @@
 * `-P, --pktlen [xxxx]`：报文长度配置。
 * `-v, --verify`：是否校验报文。
 * `-r, --ringpmd`：是否基于dpdk ring PMD 收发环回。
+* `-d, --debug`：是否打印调试信息。
 * `-h, --help`：获得帮助信息。
 
 ## 使用

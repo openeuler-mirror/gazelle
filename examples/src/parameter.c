@@ -26,6 +26,7 @@ const char prog_short_opts[] = \
     "P:"        // pktlen
     "v"         // verify
     "r"         // ringpmd
+    "d"         // debug
     "h"         // help
     ;
 
@@ -42,6 +43,7 @@ const struct ProgramOption prog_long_opts[] = \
     {PARAM_NAME_PKTLEN, REQUIRED_ARGUMETN, NULL, PARAM_NUM_PKTLEN},
     {PARAM_NAME_VERIFY, NO_ARGUMENT, NULL, PARAM_NUM_VERIFY},
     {PARAM_NAME_RINGPMD, NO_ARGUMENT, NULL, PARAM_NUM_RINGPMD},
+    {PARAM_DEFAULT_DEBUG, NO_ARGUMENT, NULL, PARAM_NUM_DEBUG},
     {PARAM_NAME_HELP, NO_ARGUMENT, NULL, PARAM_NUM_HELP},
 };
 
@@ -55,8 +57,7 @@ void program_param_prase_as(struct ProgramParams *params, char *arg, const char 
 {
     if (strcmp(arg, "server") == 0 || strcmp(arg, "client") == 0) {
         params->as = arg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -67,8 +68,7 @@ void program_param_prase_ip(struct ProgramParams *params, char *arg, const char 
 {
     if (inet_addr(arg) != INADDR_NONE) {
         params->ip = arg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -80,8 +80,7 @@ void program_param_prase_port(struct ProgramParams *params, char *arg, const cha
     int32_t port_arg = atoi(optarg);
     if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
         params->port = (uint32_t)port_arg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -92,8 +91,7 @@ void program_param_prase_model(struct ProgramParams *params, char *arg, const ch
 {
     if (strcmp(optarg, "mum") == 0 || strcmp(optarg, "mud") == 0) {
         params->model = optarg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -105,8 +103,7 @@ void program_param_prase_connectnum(struct ProgramParams *params, char *arg, con
     int32_t connectnum_arg = atoi(optarg);
     if (connectnum_arg > 0) {
         params->connect_num = (uint32_t)connectnum_arg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -118,8 +115,7 @@ void program_param_prase_threadnum(struct ProgramParams *params, char *arg, cons
     int32_t threadnum_arg = atoi(optarg);
     if (CHECK_VAL_RANGE(threadnum_arg, THREAD_NUM_MIN, THREAD_NUM_MAX) == true) {
         params->thread_num = (uint32_t)threadnum_arg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -130,8 +126,7 @@ void program_param_prase_api(struct ProgramParams *params, char *arg, const char
 {
     if (strcmp(optarg, "unix") == 0 || strcmp(optarg, "posix") == 0) {
         params->api = optarg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -143,8 +138,7 @@ void program_param_prase_pktlen(struct ProgramParams *params, char *arg, const c
     int32_t pktlen_arg = atoi(optarg);
     if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX) == true) {
         params->pktlen = (uint32_t)pktlen_arg;
-    }
-    else {
+    } else {
         PRINT_ERROR("illigal argument -- %s \n", name);
         exit(PROGRAM_ABORT);
     }
@@ -184,7 +178,8 @@ void program_params_help(void)
     printf("    posix: use posix api. \n");
     printf("-P, --pktlen [xxxx]: set packet length in range of %d - %d. \n", MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX);
     printf("-v, --verify: set to verifying the message packet. \n");
-    printf("-r, --ringpmd: set use ringpmd. \n");
+    printf("-r, --ringpmd: set to use ringpmd. \n");
+    printf("-d, --debug: set to print the debug information. \n");
     printf("-h, --help: see helps. \n");
     printf("\n");
 }
@@ -234,6 +229,9 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
             case (PARAM_NUM_RINGPMD):
                 params->ringpmd = true;
                 break;
+            case (PARAM_NUM_DEBUG):
+                params->debug = true;
+                break;
             case (PARAM_NUM_HELP):
                 program_params_help();
                 return PROGRAM_ABORT;
@@ -261,7 +259,8 @@ void program_params_print(struct ProgramParams *params)
     printf("--> [connection number]:        %u \n", params->connect_num);
     printf("--> [api]:                      %s \n", params->api);
     printf("--> [packet length]:            %u \n", params->pktlen);
-    printf("--> [verify]:                   %s \n", (true == params->verify) ? "on" : "off");
-    printf("--> [ringpmd]:                  %s \n", (true == params->ringpmd) ? "on" : "off");
+    printf("--> [verify]:                   %s \n", (params->verify == true) ? "on" : "off");
+    printf("--> [ringpmd]:                  %s \n", (params->ringpmd == true) ? "on" : "off");
+    printf("--> [debug]:                    %s \n", (params->debug == true) ? "on" : "off");
     printf("\n");
 }
