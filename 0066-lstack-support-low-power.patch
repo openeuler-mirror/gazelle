@@ -1,0 +1,169 @@
+From 314689e509a2ddc491eb1bf6ecd40f1a8e6be3db Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 14 Jul 2022 22:19:54 +0800
+Subject: [PATCH 11/19] lstack support low power
+
+---
+ src/lstack/core/lstack_protocol_stack.c    | 57 ++++++++++++++--------
+ src/lstack/include/lstack_ethdev.h         |  1 -
+ src/lstack/include/lstack_protocol_stack.h |  1 +
+ src/lstack/netif/lstack_ethdev.c           | 10 ----
+ 4 files changed, 38 insertions(+), 31 deletions(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 2acf77a..595b97e 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -132,9 +132,18 @@ struct protocol_stack *get_bind_protocol_stack(void)
+     return stack_group->stacks[index];
+ }
+ 
+-void lstack_low_power_idling(void)
++static uint32_t get_protocol_traffic(struct protocol_stack *stack)
++{
++    if (use_ltran()) {
++        return rte_ring_count(stack->rx_ring) + rte_ring_count(stack->tx_ring);
++    }
++
++    /* only lstack mode, have not appropriate method to get traffic */
++    return LSTACK_LPM_RX_PKTS + 1;
++}
++
++void low_power_idling(struct protocol_stack *stack)
+ {
+-    static PER_THREAD uint32_t wakeup_flag = 0;
+     static PER_THREAD uint32_t last_cycle_ts = 0;
+     static PER_THREAD uint64_t last_cycle_pkts = 0;
+     struct timespec st = {
+@@ -147,14 +156,9 @@ void lstack_low_power_idling(void)
+         set the CPU decentralization flag;
+         2. If the number of received packets exceeds the threshold, the authorization mark will end;
+         3. If the number of rx queue packets is less than the threshold, set the CPU delegation flag; */
+-    if (get_global_cfg_params()->low_power_mod == 0) {
+-        wakeup_flag = 0;
+-        return;
+-    }
+-
+-    if (eth_get_flow_cnt() < LSTACK_LPM_RX_PKTS) {
+-        wakeup_flag = 1;
++    if (get_protocol_traffic(stack) < LSTACK_LPM_RX_PKTS) {
+         nanosleep(&st, &st);
++        stack->low_power = true;
+         return;
+     }
+ 
+@@ -165,18 +169,18 @@ void lstack_low_power_idling(void)
+     uint64_t now_pkts = get_protocol_stack()->stats.rx;
+     uint32_t now_ts = sys_now();
+     if (((now_ts - last_cycle_ts) > LSTACK_LPM_DETECT_MS) ||
+-        (wakeup_flag && ((now_pkts - last_cycle_pkts) >= LSTACK_LPM_PKTS_IN_DETECT))) {
+-        if (!wakeup_flag && ((now_pkts - last_cycle_pkts) < LSTACK_LPM_PKTS_IN_DETECT)) {
+-            wakeup_flag = 1;
+-        } else if (wakeup_flag && ((now_pkts - last_cycle_pkts) >= LSTACK_LPM_PKTS_IN_DETECT)) {
+-            wakeup_flag = 0;
++        ((now_pkts - last_cycle_pkts) >= LSTACK_LPM_PKTS_IN_DETECT)) {
++        if ((now_pkts - last_cycle_pkts) < LSTACK_LPM_PKTS_IN_DETECT) {
++            stack->low_power = true;
++        } else {
++            stack->low_power = false;
+         }
+ 
+         last_cycle_ts = now_ts;
+         last_cycle_pkts = now_pkts;
+     }
+ 
+-    if (wakeup_flag) {
++    if (stack->low_power) {
+         nanosleep(&st, &st);
+     }
+ }
+@@ -221,16 +225,25 @@ static void* gazelle_wakeup_thread(void *arg)
+     uint16_t queue_id = *(uint16_t *)arg;
+     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+ 
+-    int32_t lcore_id = get_global_cfg_params()->wakeup[stack->queue_id];
++    struct cfg_params *cfg = get_global_cfg_params();
++    int32_t lcore_id = cfg->wakeup[stack->queue_id];
+     thread_affinity_init(lcore_id);
+ 
++    struct timespec st = {
++        .tv_sec = 0,
++        .tv_nsec = 1
++    };
++
+     LSTACK_LOG(INFO, LSTACK, "weakup_%02d start\n", stack->queue_id);
+ 
+-    sem_t *event_sem[WAKEUP_MAX_NUM];
+-    int num;
+     for (;;) {
+-        num = gazelle_light_ring_dequeue_burst(stack->wakeup_ring, (void **)event_sem, WAKEUP_MAX_NUM);
+-        for (int i = 0; i < num; i++) {
++        if (cfg->low_power_mod != 0 && stack->low_power) {
++            nanosleep(&st, &st);
++        }
++
++        sem_t *event_sem[WAKEUP_MAX_NUM];
++        uint32_t num = gazelle_light_ring_dequeue_burst(stack->wakeup_ring, (void **)event_sem, WAKEUP_MAX_NUM);
++        for (uint32_t i = 0; i < num; i++) {
+             sem_post(event_sem[i]);
+         }
+     }
+@@ -423,6 +436,10 @@ static void* gazelle_stack_thread(void *arg)
+         send_stack_list(stack, SEND_LIST_MAX);
+ 
+         sys_timer_run();
++
++        if (get_global_cfg_params()->low_power_mod != 0) {
++            low_power_idling(stack);
++        }
+     }
+ 
+     return NULL;
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index 573a413..0e8400f 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -31,7 +31,6 @@ struct eth_dev_ops {
+ 
+ int32_t ethdev_init(struct protocol_stack *stack);
+ int32_t eth_dev_poll(void);
+-uint32_t eth_get_flow_cnt(void);
+ void eth_dev_recv(struct rte_mbuf *mbuf);
+ 
+ #endif /* __GAZELLE_ETHDEV_H__ */
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index e5eedd7..0faeccf 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -45,6 +45,7 @@ struct protocol_stack {
+     struct rte_ring *wakeup_ring;
+     struct reg_ring_msg *reg_buf;
+ 
++    volatile bool low_power;
+     volatile uint16_t conn_num __rte_cache_aligned;
+     lockless_queue rpc_queue __rte_cache_aligned;
+     char pad __rte_cache_aligned;
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 7938520..0f30d76 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -111,16 +111,6 @@ int32_t eth_dev_poll(void)
+     return nr_pkts;
+ }
+ 
+-uint32_t eth_get_flow_cnt(void)
+-{
+-    if (use_ltran()) {
+-        return rte_ring_count(get_protocol_stack()->rx_ring) + rte_ring_count(get_protocol_stack()->tx_ring);
+-    } else {
+-        /* can't get flow cnt, lstack_low_power_idling don't use this params */
+-        return LSTACK_LPM_RX_PKTS + 1;
+-    }
+-}
+-
+ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+ {
+     struct protocol_stack *stack = get_protocol_stack();
+-- 
+2.23.0
+
