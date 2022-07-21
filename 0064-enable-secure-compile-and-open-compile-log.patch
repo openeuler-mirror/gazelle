@@ -1,0 +1,46 @@
+From 573692bf610966f88bbc86468a9b55b9ef5be3e4 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 14 Jul 2022 22:05:57 +0800
+Subject: [PATCH] enable-secure-compile-and-open-compile-log
+
+---
+ src/lstack/Makefile      | 2 +-
+ src/ltran/CMakeLists.txt | 5 +++--
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 1aaed16..df58f89 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -24,7 +24,7 @@ OPTIMIZATION = -O2 -g
+ RM = rm -f
+ LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
+ 
+-SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC
++SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
+ 
+ INC = -I$(LSTACK_DIR)/include   \
+       -I$(LSTACK_DIR)/../common \
+diff --git a/src/ltran/CMakeLists.txt b/src/ltran/CMakeLists.txt
+index 5279d24..b565b4c 100644
+--- a/src/ltran/CMakeLists.txt
++++ b/src/ltran/CMakeLists.txt
+@@ -14,7 +14,8 @@ project(ltran)
+ set(COMMON_DIR ${PROJECT_SOURCE_DIR}/../common)
+ set(DPDK_DIR /usr/include/dpdk)
+ 
+-set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread")
++set(CMAKE_VERBOSE_MAKEFILE ON)
++set(CMAKE_C_FLAGS "-g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread -D_FORTIFY_SOURCE=2 -O2 -fPIC")
+ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D LTRAN_COMPILE")
+ 
+ if($ENV{GAZELLE_COVERAGE_ENABLE})
+@@ -62,4 +63,4 @@ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--w
+ 
+ add_executable(gazellectl ltran_dfx.c ${COMMON_DIR}/gazelle_dfx_msg.c)
+ target_include_directories(gazellectl PRIVATE $ENV{DPDK_INCLUDE_FILE} ${DPDK_DIR} ${COMMON_DIR})
+-target_link_libraries(gazellectl PRIVATE boundscheck)
++target_link_libraries(gazellectl PRIVATE boundscheck -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
+-- 
+2.27.0
+

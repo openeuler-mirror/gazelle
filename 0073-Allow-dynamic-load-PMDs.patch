@@ -1,0 +1,63 @@
+From 9976a38f96d46ffe11c9fe4542e70509de2fad1b Mon Sep 17 00:00:00 2001
+From: xiusailong <xiusailong@huawei.com>
+Date: Fri, 22 Jul 2022 15:31:29 +0800
+Subject: [PATCH] Allow-dynamic-load-PMDs
+
+---
+ src/lstack/Makefile | 40 ++++++++++++++++++++--------------------
+ 1 file changed, 20 insertions(+), 20 deletions(-)
+
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 1debc79..799e7be 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -61,26 +61,26 @@ include $(patsubst %, %/dir.mk, $(DIRS))
+ OBJS = $(subst .c,.o,$(SRCS))
+ 
+ LWIP_LIB = $(LIB_PATH)/liblwip.a
+-LIBRTE_LIB = $(DPDK_LIB_PATH)/librte_pci.a \
+-             $(DPDK_LIB_PATH)/librte_bus_pci.a \
+-             $(DPDK_LIB_PATH)/librte_cmdline.a \
+-             $(DPDK_LIB_PATH)/librte_hash.a \
+-             $(DPDK_LIB_PATH)/librte_mempool.a \
+-             $(DPDK_LIB_PATH)/librte_mempool_ring.a \
+-             $(DPDK_LIB_PATH)/librte_timer.a \
+-             $(DPDK_LIB_PATH)/librte_eal.a \
+-             $(DPDK_LIB_PATH)/librte_ring.a \
+-             $(DPDK_LIB_PATH)/librte_mbuf.a \
+-             $(DPDK_LIB_PATH)/librte_kni.a \
+-             $(DPDK_LIB_PATH)/librte_pmd_ixgbe.a \
+-             $(DPDK_LIB_PATH)/librte_kvargs.a \
+-             $(DPDK_LIB_PATH)/librte_pmd_hinic.a \
+-             $(DPDK_LIB_PATH)/librte_pmd_i40e.a \
+-             $(DPDK_LIB_PATH)/librte_pmd_virtio.a \
+-             $(DPDK_LIB_PATH)/librte_bus_vdev.a \
+-             $(DPDK_LIB_PATH)/librte_net.a \
+-             $(DPDK_LIB_PATH)/librte_ethdev.a \
+-             $(DPDK_LIB_PATH)/librte_pdump.a 
++LIBRTE_LIB = $(DPDK_LIB_PATH)/librte_pci.so \
++             $(DPDK_LIB_PATH)/librte_bus_pci.so \
++             $(DPDK_LIB_PATH)/librte_cmdline.so \
++             $(DPDK_LIB_PATH)/librte_hash.so \
++             $(DPDK_LIB_PATH)/librte_mempool.so \
++             $(DPDK_LIB_PATH)/librte_mempool_ring.so \
++             $(DPDK_LIB_PATH)/librte_timer.so \
++             $(DPDK_LIB_PATH)/librte_eal.so \
++             $(DPDK_LIB_PATH)/librte_ring.so \
++             $(DPDK_LIB_PATH)/librte_mbuf.so \
++             $(DPDK_LIB_PATH)/librte_kni.so \
++             $(DPDK_LIB_PATH)/librte_pmd_ixgbe.so \
++             $(DPDK_LIB_PATH)/librte_kvargs.so \
++             $(DPDK_LIB_PATH)/librte_pmd_hinic.so \
++             $(DPDK_LIB_PATH)/librte_pmd_i40e.so \
++             $(DPDK_LIB_PATH)/librte_pmd_virtio.so \
++             $(DPDK_LIB_PATH)/librte_bus_vdev.so \
++             $(DPDK_LIB_PATH)/librte_net.so \
++             $(DPDK_LIB_PATH)/librte_ethdev.so \
++             $(DPDK_LIB_PATH)/librte_pdump.so 
+ 
+ 
+ DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
+-- 
+2.27.0
+

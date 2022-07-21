@@ -1,0 +1,287 @@
+From f02d373216f17fa6c9ca500e49d7f05f876d22a2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E6=9D=A8=E6=B4=8B?= <yyangoO@outlook.com>
+Date: Wed, 29 Jun 2022 14:33:23 +0800
+Subject: [PATCH 02/19] add examples readme, compile components, main file and
+ utilities header
+
+---
+ examples/CMakeLists.txt  | 34 ++++++++++++++++++++
+ examples/README.md       | 44 +++++++++++++++++++++++++
+ examples/inc/parameter.h | 65 +++++++++++++++++++++++++++++++++++++
+ examples/inc/utilities.h | 69 ++++++++++++++++++++++++++++++++++++++++
+ examples/main.c          | 23 ++++++++++++++
+ 5 files changed, 235 insertions(+)
+ create mode 100644 examples/CMakeLists.txt
+ create mode 100644 examples/README.md
+ create mode 100644 examples/inc/parameter.h
+ create mode 100644 examples/inc/utilities.h
+ create mode 100644 examples/main.c
+
+diff --git a/examples/CMakeLists.txt b/examples/CMakeLists.txt
+new file mode 100644
+index 0000000..0fd09ab
+--- /dev/null
++++ b/examples/CMakeLists.txt
+@@ -0,0 +1,34 @@
++# Copyright (c) 2022-2023. yyangoO.
++# gazelle is licensed under the Mulan PSL v2.
++# You can use this software according to the terms and conditions of the Mulan PSL v2.
++# You may obtain a copy of Mulan PSL v2 at:
++#     http://license.coscl.org.cn/MulanPSL2
++# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++# IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++# PURPOSE.
++# See the Mulan PSL v2 for more details.
++
++
++cmake_minimum_required(VERSION 3.12.1)
++
++set(PROJECT_NAME example)
++
++project(${PROJECT_NAME})
++
++message(STATUS "PROJECT_SOURCE_DIR: " ${PROJECT_SOURCE_DIR})
++message(STATUS "PROJECT_BINARY_DIR: " ${PROJECT_BINARY_DIR})
++
++set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -pthread")
++set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D EXAMPLE_COMPILE")
++
++include_directories(${PROJECT_SOURCE_DIR}/inc)
++
++set(HEADERS
++    inc/utilities.h
++    inc/parameter.h
++)
++set(SOURCES
++    main.c
++)
++
++add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+diff --git a/examples/README.md b/examples/README.md
+new file mode 100644
+index 0000000..f5dc76f
+--- /dev/null
++++ b/examples/README.md
+@@ -0,0 +1,44 @@
++# gazzle 示例程序
++
++* 支持 TCP 、 unix 非阻塞通讯。
++* 支持多线程网络 IO 复用模型，线程之间相互独立。TCP 的 `listen` 、`epoll` 、`read` 、`write` 、`connect` 等接口都在同一线程内。`connect` 连接数可配。
++* 支持多线程网络非对称模型，一个 listen 线程，若干个读写线程。listen 线程和读写线程使用 `poll` / `epoll` 监听事件。
++* 支持 `recvmsg` 、`sendmsg` 、`recv` 、`send` 、`getpeername` 、`getsockopt` 、`epoll_ctl` 等 posix 接口。
++* 网络通讯报文采用问答方式，丢包或者内容错误则报错并停止通讯。报文内容有变化，长度可配。
++
++## 网络模型
++
++* **单线程非阻塞**：采用同步非阻塞 IO 模型，在单线程中采用非阻塞的方式监听并发起 IO 请求，当内核中数据到达后读取数据、执行业务逻辑并发送。
++* **多线程非阻塞IO复用**：基于 `epoll` 实现多线程非阻塞 IO 模型。每个线程之间互不干涉。通过 `epoll` 监控多个当前线程负责的 fd ，当任何一个数据状态准备就绪时，返回并执行读写操作和对应的业务逻辑。
++* **多线程非阻塞非对称**：采用基于 `epoll` 的单线程多路 IO 复用监听连接事件，并采用多线程的方式完成后续读写监听业务。 server 在启动监听之前，开辟一定数量的线程，用线程池管理。主线程创建监听 `fd` 之后，采用多路 IO 复用机制 (`epoll`) 进行 IO 状态监控。当监听到客户端的连接请求时，建立连接并将相关 `fd` 分发给线程池的某个线程进行监听。线程池中的每个线程都采用多路 IO 复用机制 (`epoll`) ，用来监听主线程中建立成功并分发下来的 `socket` 。
++
++## 程序接口
++
++* `--as [server | client]`：作为服务端还是客户端。
++  * `server`：作为服务端。
++  * `client`：作为客户端。
++* `--ip [xxx.xxx.xxx.xxx]`：IP地址。
++* `--port [xxxx]`：端口。
++* `--model [-mum | -mud]` ：采用的网络模型类型。
++  * `-mum (multi thread, unblock, multiplexing IO)`：多线程非阻塞IO复用。
++  * `-mud (multi thread, unblock, dissymmetric)`：多线程非阻塞非对称。
++* `--threadnum`：线程数设置。
++* `--connectnum`：连接数设置。
++* `--api [unix | posix]`：内部实现的接口类型。
++  * `unix` ：基于 unix 接口实现。
++  * `posix` ：基于 posix 接口实现。
++* `--pktlen [xxxx]`：报文长度配置。
++* `--verify [on | off]`：是否校验报文。
++* `--ringpmd [on | off]`：是否基于 dpkg ring PMD 收发环回。
++* `--help [--xxx]`：获得帮助信息。
++
++## 使用
++
++```
++cd build
++mkdir examples
++cd examples
++cmake ../../examples
++make
++./examples --help
++```
+diff --git a/examples/inc/parameter.h b/examples/inc/parameter.h
+new file mode 100644
+index 0000000..7912862
+--- /dev/null
++++ b/examples/inc/parameter.h
+@@ -0,0 +1,65 @@
++/*
++* Copyright (c) 2022-2023. yyangoO.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++
++
++#ifndef __PARAMETER_H__
++#define __PARAMETER_H__
++
++
++#include "utilities.h"
++
++
++/**
++ * @brief porgram parameter
++ * The porgram's parameters.
++ */
++struct ProgramParams
++{
++    char*               as;                 ///< as server or client
++    char*               ip;                 ///< IP address
++    uint32_t            port;               ///< port
++    char*               model;              ///< model type
++    uint32_t            thread_num;         ///< the number of threads
++    uint32_t            connect_num;        ///< the connection number
++    char*               api;                ///< the type of api
++    uint32_t            pktlen;             ///< the packet length
++    bool                verify;             ///< if we verify the message or not
++    bool                ringpmd;            ///< if we use ring PMD or not
++};
++
++
++/**
++ * @brief initialize the parameters
++ * This function initializes the parameters of main function. 
++ * @param params        the parameters pointer
++ */
++void program_params_init(struct ProgramParams *params);
++
++/**
++ * @brief parse the parameters
++ * This function parses the parameters of main function. 
++ * @param params        the parameters pointer
++ * @param argc          the count of arguments
++ * @param argv          the value of arguments
++ * @return              the result flag
++ */
++int32_t program_params_parse(struct ProgramParams *params, int argc, char *argv[]);
++
++/**
++ * @brief print the parameters
++ * This function prints the parameters of main function. 
++ * @param params        the parameters pointer
++ */
++void program_params_print(struct ProgramParams *params);
++
++
++#endif // __PARAMETER_H__
+diff --git a/examples/inc/utilities.h b/examples/inc/utilities.h
+new file mode 100644
+index 0000000..d800531
+--- /dev/null
++++ b/examples/inc/utilities.h
+@@ -0,0 +1,69 @@
++/*
++* Copyright (c) 2022-2023. yyangoO.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++
++
++#ifndef __UTILITIES_H__
++#define __UTILITIES_H__
++
++
++#include <string.h>
++#include <stdio.h>
++#include <stdbool.h>
++#include <stdlib.h>
++#include <stddef.h>
++#include <inttypes.h>
++
++#include <unistd.h>
++#include <pthread.h>
++
++#include <sys/types.h>
++
++
++#define PRINT_ERROR(str)                    do \
++                                            { \
++                                                printf("\n[error]: "); \
++                                                printf(str); \
++                                                printf("\n"); \
++                                            } while(0)
++#define PRINT_WARNNING(str)                 do \
++                                            { \
++                                                printf("\n[warnning]: "); \
++                                                printf(str); \
++                                                printf("\n"); \
++                                            } while(0)
++#define LIMIT_VAL_RANGE(val, min, max)      ((val) < (min) ? (min) : ((val) > (max) ? (max) : (val)))
++#define CHECK_VAL_RANGE(val, min, max)      ((val) < (min) ? (false) : ((val) > (max) ? (false) : (true)))
++
++#define PROGRAM_OK                  (0)             ///< program ok flag
++#define PROGRAM_FINISH              (1)             ///< program finish flag
++#define PROGRAM_FAULT               (-1)            ///< program fault flag
++
++#define UNIX_TCP_PORT_MIN           (1024)          ///< TCP minimum port number in unix
++#define UNIX_TCP_PORT_MAX           (65535)         ///< TCP minimum port number in unix
++#define THREAD_NUM_MIN              (1)             ///< minimum number of thead
++#define THREAD_NUM_MAX              (1000)          ///< maximum number of thead
++#define MESSAGE_PKTLEN_MIN          (1)             ///< minimum length of message (1 byte)
++#define MESSAGE_PKTLEN_MAX          (10485760)      ///< maximum length of message (10 Mb)
++
++#define DEFAULT_PARAM_AS            ("server")      ///< default type
++#define DEFAULT_PARAM_IP            ("127.0.0.1")   ///< default IP
++#define DEFAULT_PARAM_PORT          (5050)          ///< default port
++#define DEFAULT_PARAM_MODEL         ("mum")         ///< default model type
++#define DEFAULT_PARAM_CONNECT_NUM   (10)            ///< default connection number
++#define DEFAULT_PARAM_THREAD_NUM    (8)             ///< default thread number
++#define DEFAULT_PARAM_API           ("posix")       ///< default API type
++#define DEFAULT_PARAM_PKTLEN        (1024)          ///< default packet length of message
++#define DEFAULT_PARAM_VERIFY        (true)          ///< default flag of message verifying
++#define DEFAULT_PARAM_RINGPMD       (false)         ///< default flag of ring PMD
++
++
++#endif // __UTILITIES_H__
+diff --git a/examples/main.c b/examples/main.c
+new file mode 100644
+index 0000000..30d04e6
+--- /dev/null
++++ b/examples/main.c
+@@ -0,0 +1,23 @@
++/*
++* Copyright (c) 2022-2023. yyangoO.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++
++
++#include "utilities.h"
++#include "parameter.h"
++
++
++int32_t main(int argc, char *argv[])
++{
++    int32_t ret = PROGRAM_OK;
++
++    return ret;
++}
+-- 
+2.23.0
+

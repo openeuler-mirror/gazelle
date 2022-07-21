@@ -1,0 +1,64 @@
+From abe38628e7254ffbfd82445204b5d248f67ae648 Mon Sep 17 00:00:00 2001
+From: xiusailong <xiusailong@huawei.com>
+Date: Fri, 22 Jul 2022 16:49:45 +0800
+Subject: [PATCH] adapt-to-20.03
+
+---
+ src/ltran/ltran_dfx.c   | 1 +
+ src/ltran/ltran_param.c | 1 +
+ src/ltran/ltran_param.h | 1 +
+ src/ltran/main.c        | 2 +-
+ 4 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 9da6b7f..d52f2f0 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -12,6 +12,7 @@
+ 
+ #include <stdio.h>
+ #include <stdint.h>
++#include <stdbool.h>
+ 
+ #include <arpa/inet.h>
+ #include <getopt.h>
+diff --git a/src/ltran/ltran_param.c b/src/ltran/ltran_param.c
+index 40ee8d3..9273ee2 100644
+--- a/src/ltran/ltran_param.c
++++ b/src/ltran/ltran_param.c
+@@ -19,6 +19,7 @@
+ #include <syslog.h>
+ #include <stdlib.h>
+ #include <securec.h>
++#include <stdbool.h>
+ 
+ #include "ltran_param.h"
+ #include "ltran_errno.h"
+diff --git a/src/ltran/ltran_param.h b/src/ltran/ltran_param.h
+index 3ec6451..48efb83 100644
+--- a/src/ltran/ltran_param.h
++++ b/src/ltran/ltran_param.h
+@@ -15,6 +15,7 @@
+ 
+ #include <netinet/in.h>
+ #include <rte_ether.h>
++#include <stdbool.h>
+ 
+ #include "gazelle_opt.h"
+ 
+diff --git a/src/ltran/main.c b/src/ltran/main.c
+index 691595e..d1e4030 100644
+--- a/src/ltran/main.c
++++ b/src/ltran/main.c
+@@ -58,7 +58,7 @@ static void sig_default_handler(int32_t sig)
+     LTRAN_ERR("ltran dumped，caught signal：%d.\n", sig);
+     print_stack();
+     dpdk_kni_release();
+-    kill(getpid(), sig);
++    kill(getpt(), sig);
+ }
+ 
+ static void signal_init(void)
+-- 
+2.27.0
+
