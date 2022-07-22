@@ -1,0 +1,4389 @@
+From dfdb9cbf47b047f1b13a6657b481899cdcee481e Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 14 Jul 2022 22:33:28 +0800
+Subject: [PATCH 15/19] clean code
+
+---
+ src/common/dpdk_common.c                     |  28 +-
+ src/common/dpdk_common.h                     |  16 +-
+ src/common/gazelle_base_func.h               |   4 +
+ src/common/gazelle_dfx_msg.h                 |  17 -
+ src/common/gazelle_opt.h                     |  80 ++
+ src/common/gazelle_parse_config.c            |  20 +-
+ src/common/gazelle_parse_config.h            |  20 -
+ src/common/gazelle_reg_msg.h                 |   9 +-
+ src/lstack/api/lstack_epoll.c                |  45 +-
+ src/lstack/api/lstack_fork.c                 |   1 -
+ src/lstack/api/lstack_wrap.c                 |  12 +-
+ src/lstack/core/lstack_cfg.c                 |  20 +-
+ src/lstack/core/lstack_control_plane.c       |  28 +-
+ src/lstack/core/lstack_dpdk.c                |  62 +-
+ src/lstack/core/lstack_init.c                |  15 +-
+ src/lstack/core/lstack_lwip.c                |  43 +-
+ src/lstack/core/lstack_protocol_stack.c      |  53 +-
+ src/lstack/core/lstack_protocol_stack.c.orig | 825 +++++++++++++++++++
+ src/lstack/core/lstack_stack_stat.c          |  30 +-
+ src/lstack/core/lstack_thread_rpc.c          |  18 +-
+ src/lstack/include/lstack_cfg.h              |   6 +-
+ src/lstack/include/lstack_compiler.h         |  46 --
+ src/lstack/include/lstack_control_plane.h    |   3 +-
+ src/lstack/include/lstack_dpdk.h             |  25 +-
+ src/lstack/include/lstack_ethdev.h           |  13 +-
+ src/lstack/include/lstack_lwip.h             |  11 +-
+ src/lstack/include/lstack_protocol_stack.h   |  13 +-
+ src/lstack/include/lstack_signal.h           |  17 -
+ src/lstack/include/lstack_stack_stat.h       |  10 +-
+ src/lstack/include/lstack_thread_rpc.h       |   4 +-
+ src/lstack/include/lstack_vdev.h             |  18 +-
+ src/lstack/include/posix/lstack_epoll.h      |  18 +-
+ src/lstack/include/posix/lstack_fcntl.h      |  28 -
+ src/lstack/include/posix/lstack_fork.h       |  17 -
+ src/lstack/include/posix/lstack_socket.h     |   3 +
+ src/lstack/include/posix/lstack_unistd.h     |   3 +-
+ src/lstack/lstack.conf                       |   1 +
+ src/lstack/netif/lstack_ethdev.c             |   6 +-
+ src/lstack/netif/lstack_vdev.c               |   8 +-
+ src/ltran/ltran_base.h                       |  82 +-
+ src/ltran/ltran_config.c                     |   3 +-
+ src/ltran/ltran_config.h                     |  20 -
+ src/ltran/ltran_dfx.c                        |  50 +-
+ src/ltran/ltran_ethdev.c                     |  35 +-
+ src/ltran/ltran_ethdev.h                     |   8 +-
+ src/ltran/ltran_forward.c                    |  17 +-
+ src/ltran/ltran_forward.h                    |  11 -
+ src/ltran/ltran_instance.c                   |  42 +-
+ src/ltran/ltran_instance.h                   |  10 +-
+ src/ltran/ltran_log.h                        |   2 -
+ src/ltran/ltran_monitor.c                    |  12 +-
+ src/ltran/ltran_opt.h                        |  54 --
+ src/ltran/ltran_param.c                      |  37 +-
+ src/ltran/ltran_param.h                      |   7 +-
+ src/ltran/ltran_stack.c                      |   8 +-
+ src/ltran/ltran_stack.h                      |   4 +-
+ src/ltran/ltran_stat.c                       |  21 +-
+ src/ltran/ltran_stat.h                       |  12 +-
+ src/ltran/ltran_tcp_conn.c                   |   4 +
+ src/ltran/ltran_tcp_conn.h                   |   7 +-
+ src/ltran/ltran_tcp_sock.c                   |  18 +-
+ src/ltran/ltran_tcp_sock.h                   |   7 +-
+ src/ltran/ltran_timer.c                      |   6 +-
+ src/ltran/ltran_timer.h                      |   4 +-
+ src/ltran/main.c                             |  11 +-
+ 65 files changed, 1428 insertions(+), 660 deletions(-)
+ create mode 100644 src/common/gazelle_opt.h
+ delete mode 100644 src/common/gazelle_parse_config.h
+ create mode 100644 src/lstack/core/lstack_protocol_stack.c.orig
+ delete mode 100644 src/lstack/include/lstack_compiler.h
+ delete mode 100644 src/lstack/include/lstack_signal.h
+ delete mode 100644 src/lstack/include/posix/lstack_fcntl.h
+ delete mode 100644 src/lstack/include/posix/lstack_fork.h
+ delete mode 100644 src/ltran/ltran_config.h
+ delete mode 100644 src/ltran/ltran_opt.h
+
+diff --git a/src/common/dpdk_common.c b/src/common/dpdk_common.c
+index 8d056f9..7298d05 100644
+--- a/src/common/dpdk_common.c
++++ b/src/common/dpdk_common.c
+@@ -56,8 +56,8 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
+     int32_t ret = 0;
+     static bool g_bond_dev_started = false;
+ 
+-    if (port_id >= rte_eth_dev_count_avail() || port_id >= RTE_MAX_ETHPORTS) {
+-        COMMON_ERR("Invalid port id %d \n", port_id);
++    if (port_id >= rte_eth_dev_count_avail() || port_id >= GAZELLE_MAX_ETHPORTS) {
++        COMMON_ERR("Invalid port id %hu \n", port_id);
+         return -EINVAL;
+     }
+ 
+@@ -67,7 +67,7 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
+             ret = rte_eth_dev_start(port_id);
+             pthread_mutex_unlock(&g_kni_mutex);
+             if (ret < 0) {
+-                COMMON_ERR("Failed to start port %d ret=%d\n", port_id, ret);
++                COMMON_ERR("Failed to start port %hu ret=%d\n", port_id, ret);
+             }
+             g_bond_dev_started = true;
+         } else {
+@@ -84,7 +84,7 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
+         }
+     }
+ 
+-    COMMON_INFO("Configure network interface of %d %s \n", port_id, if_up ? "up" : "down");
++    COMMON_INFO("Configure network interface of %hu %s \n", port_id, if_up ? "up" : "down");
+     return ret;
+ }
+ 
+@@ -134,13 +134,13 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
+ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
+ {
+     int32_t ret;
+-    struct rte_kni_ops ops;
+-    struct rte_kni_conf conf;
++    struct rte_kni_ops ops = {0};
++    struct rte_kni_conf conf = {0};
+     const struct rte_bus *bus = NULL;
+-    struct rte_eth_dev_info dev_info;
++    struct rte_eth_dev_info dev_info = {0};
+     const struct rte_pci_device *pci_dev = NULL;
+ 
+-    if (port >= RTE_MAX_ETHPORTS) {
++    if (port >= GAZELLE_MAX_ETHPORTS) {
+         COMMON_ERR("Bond port id out of range.\n");
+         return -1;
+     }
+@@ -151,10 +151,6 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
+         return -1;
+     }
+ 
+-    (void)memset_s(&dev_info, sizeof(dev_info), 0, sizeof(dev_info));
+-    (void)memset_s(&conf, sizeof(conf), 0, sizeof(conf));
+-    (void)memset_s(&ops, sizeof(ops), 0, sizeof(ops));
+-
+     ret = snprintf_s(conf.name, RTE_KNI_NAMESIZE, RTE_KNI_NAMESIZE - 1, "%s", GAZELLE_KNI_NAME);
+     if (ret < 0) {
+         COMMON_ERR("snprintf_s failed. ret=%d\n", ret);
+@@ -163,7 +159,11 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
+     conf.mbuf_size = GAZELLE_MAX_PKT_SZ;
+     conf.group_id = port;
+ 
+-    rte_eth_dev_info_get(port, &dev_info);
++    if (rte_eth_dev_info_get(port, &dev_info) != 0) {
++        COMMON_ERR("Fail rte_eth_dev_info_get\n");
++        return -1;
++    }
++
+     if (dev_info.device) {
+         bus = rte_bus_find_by_device(dev_info.device);
+     }
+@@ -178,7 +178,7 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
+     ops.port_id = port;
+     g_pkni = rte_kni_alloc(pool, &conf, &ops);
+     if (g_pkni == NULL) {
+-        COMMON_ERR("Fail to create kni for port: %d \n", port);
++        COMMON_ERR("Fail to create kni for port: %hu \n", port);
+         return -1;
+     }
+     return 0;
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 2066159..493b435 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -16,12 +16,26 @@
+ #include <rte_mbuf.h>
+ #include <rte_ring.h>
+ 
++#include "gazelle_opt.h"
++
+ #define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
+ 
+ /* time_stamp time_stamp_vaid_check . align 8 */
+-#define GAZELLE_MBUFF_PRIV_SIZE  (sizeof(uint64_t) * 2)
+ #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
+ 
++/* Layout:
++ * | rte_mbuf | pbuf | custom_free_function | payload |
++ **/
++struct pbuf;
++static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
++{
++    return ((struct rte_mbuf *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
++}
++static inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
++{
++    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf) + GAZELLE_MBUFF_PRIV_SIZE));
++}
++
+ /* NOTE!!! magic code, even the order.
+ *  I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,
+ *  and if there is no cache miss, it only take less than 20 cycle(store pipe is the bottleneck).
+diff --git a/src/common/gazelle_base_func.h b/src/common/gazelle_base_func.h
+index 57ba632..9d7381e 100644
+--- a/src/common/gazelle_base_func.h
++++ b/src/common/gazelle_base_func.h
+@@ -28,4 +28,8 @@
+ #define NODE_ENTRY(node, type, member) \
+     ((type*)((char*)(node) - (size_t)&((type*)0)->member))
+ 
++int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size);
++
++int32_t check_and_set_run_dir(void);
++
+ #endif /* ifndef __GAZELLE_BASE_FUNC_H__ */
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index cf435cd..68b6364 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -17,13 +17,8 @@
+ #include <stdint.h>
+ #include <sys/stat.h>
+ 
+-#include "gazelle_reg_msg.h"
+-
+ #define GAZELLE_CLIENT_NUM_MIN           1
+ #define GAZELLE_LOG_LEVEL_MAX            10
+-#define GAZELLE_CLIENT_NUM_MAX           32
+-#define GAZELLE_NULL_CLIENT              (GAZELLE_CLIENT_NUM_MAX - 1)
+-#define GAZELLE_MAX_CLIENT               GAZELLE_CLIENT_NUM_MAX
+ 
+ /* maybe it should be consistent with MEMP_NUM_TCP_PCB */
+ #define GAZELLE_LSTACK_MAX_CONN          (20000 + 2000) // same as MAX_CLIENTS + RESERVED_CLIENTS in lwipopts.h
+@@ -239,16 +234,4 @@ struct gazelle_stat_msg_request {
+ int write_specied_len(int fd, const char *buf, size_t target_size);
+ int read_specied_len(int fd, char *buf, size_t target_size);
+ 
+-static inline int32_t check_and_set_run_dir(void)
+-{
+-    int32_t ret;
+-
+-    if (access(GAZELLE_RUN_DIR, 0) != 0) {
+-        ret = mkdir(GAZELLE_RUN_DIR, GAZELLE_FILE_PERMISSION);
+-        if (ret != 0) {
+-            return -1;
+-        }
+-    }
+-    return 0;
+-}
+ #endif
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+new file mode 100644
+index 0000000..f2ec163
+--- /dev/null
++++ b/src/common/gazelle_opt.h
+@@ -0,0 +1,80 @@
++/*
++* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++
++#ifndef _GAZELLE_OPT_H_
++#define _GAZELLE_OPT_H_
++
++#define GAZELLE_OK       0
++#define GAZELLE_ERR      (-1)
++#define GAZELLE_QUIT     1
++
++#define GAZELLE_ON       1
++#define GAZELLE_OFF      0
++
++#define GAZELLE_TRUE     1
++#define GAZELLE_FALSE    0
++
++#define PROTOCOL_STACK_MAX          32
++
++#define ETHER_ADDR_LEN              6
++
++#define GAZELLE_MBUFF_PRIV_SIZE     (sizeof(uint64_t) * 2)
++
++#define DEFAULT_RING_SIZE           (512)
++#define DEFAULT_BACKUP_RING_SIZE_FACTOR   (16)
++
++#define VDEV_RX_QUEUE_SZ            DEFAULT_RING_SIZE
++#define VDEV_EVENT_QUEUE_SZ         DEFAULT_RING_SIZE
++#define VDEV_REG_QUEUE_SZ           DEFAULT_RING_SIZE
++#define VDEV_CALL_QUEUE_SZ          DEFAULT_RING_SIZE
++#define VDEV_WAKEUP_QUEUE_SZ        DEFAULT_RING_SIZE
++#define VDEV_IDLE_QUEUE_SZ          DEFAULT_RING_SIZE
++
++#define VDEV_TX_QUEUE_SZ            DEFAULT_RING_SIZE
++#define FREE_RX_QUEUE_SZ            DPDK_PKT_BURST_SIZE
++
++#define RTE_TEST_TX_DESC_DEFAULT    512
++#define RTE_TEST_RX_DESC_DEFAULT    128
++
++#define DPDK_PKT_BURST_SIZE         512
++
++/* total:33 client, index 32 is invaild client */
++#define GAZELLE_CLIENT_NUM_ALL      33
++#define GAZELLE_NULL_CLIENT         (GAZELLE_CLIENT_NUM_ALL - 1)
++#define GAZELLE_CLIENT_NUM          GAZELLE_NULL_CLIENT
++
++#define GAZELLE_MAX_PORT_NUM        16
++#define GAZELLE_MAX_ETHPORTS        GAZELLE_MAX_PORT_NUM
++
++#define GAZELLE_MAX_INSTANCE_NUM    GAZELLE_CLIENT_NUM
++
++#define GAZELLE_MAX_BOND_NUM        2
++#define GAZELLE_PACKET_READ_SIZE    32
++
++#define GAZELLE_MAX_STACK_NUM       128
++#define GAZELLE_MAX_TCP_SOCK_NUM    (GAZELLE_MAX_STACK_NUM * 32)
++
++/* same as define (MAX_CLIENTS + RESERVED_CLIENTS) in lwip/lwipopts.h */
++#define GAZELLE_MAX_CONN_NUM        (GAZELLE_MAX_STACK_NUM * (20000 + 2000))
++
++#define GAZELLE_MAX_STACK_HTABLE_SIZE       32
++#define GAZELLE_MAX_CONN_HTABLE_SIZE        2048
++#define GAZELLE_MAX_TCP_SOCK_HTABLE_SIZE    256
++
++#define GAZELLE_MAX_STACK_ARRAY_SIZE    GAZELLE_CLIENT_NUM
++
++#define GAZELLE_REG_SOCK_PATHNAME       "/var/run/gazelle/gazelle_client.sock"
++
++#define GAZELLE_RUN_DIR                  "/var/run/gazelle/"
++#define GAZELLE_FILE_PERMISSION          0700
++
++#endif /* _GAZELLE_OPT_H_ */
+diff --git a/src/common/gazelle_parse_config.c b/src/common/gazelle_parse_config.c
+index bbc8362..4e96fcc 100644
+--- a/src/common/gazelle_parse_config.c
++++ b/src/common/gazelle_parse_config.c
+@@ -13,8 +13,13 @@
+ #include <securec.h>
+ #include <string.h>
+ #include <limits.h>
++#include <stdint.h>
++#include <unistd.h>
++#include <sys/stat.h>
++#include <sys/types.h>
+ 
+-#include "gazelle_parse_config.h"
++#include "gazelle_opt.h"
++#include "gazelle_base_func.h"
+ 
+ static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
+ {
+@@ -62,3 +67,16 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size)
+ 
+     return cnt;
+ }
++
++int32_t check_and_set_run_dir(void)
++{
++    int32_t ret;
++
++    if (access(GAZELLE_RUN_DIR, 0) != 0) {
++        ret = mkdir(GAZELLE_RUN_DIR, GAZELLE_FILE_PERMISSION);
++        if (ret != 0) {
++            return -1;
++        }
++    }
++    return 0;
++}
+diff --git a/src/common/gazelle_parse_config.h b/src/common/gazelle_parse_config.h
+deleted file mode 100644
+index 0f86d80..0000000
+--- a/src/common/gazelle_parse_config.h
++++ /dev/null
+@@ -1,20 +0,0 @@
+-/*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
+-*/
+-
+-#ifndef __GAZELLE_PARSE_CONFIG__
+-#define __GAZELLE_PARSE_CONFIG__
+-
+-#include <stdint.h>
+-
+-int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size);
+-
+-#endif
+\ No newline at end of file
+diff --git a/src/common/gazelle_reg_msg.h b/src/common/gazelle_reg_msg.h
+index f5842e7..a944d80 100644
+--- a/src/common/gazelle_reg_msg.h
++++ b/src/common/gazelle_reg_msg.h
+@@ -15,12 +15,7 @@
+ 
+ #include <stdint.h>
+ 
+-#include <lwip/reg_sock.h>
+-#include <rte_ether.h>
+-
+-#define GAZELLE_REG_SOCK_PATHNAME    "/var/run/gazelle/gazelle_client.sock"
+-#define GAZELLE_RUN_DIR              "/var/run/gazelle/"
+-#define GAZELLE_FILE_PERMISSION      0700
++#include "gazelle_opt.h"
+ 
+ #define NULL_CLIENT_IP          UINT32_MAX
+ #define NULL_CLIENT_PORT        UINT16_MAX
+@@ -62,7 +57,7 @@ struct client_proc_conf {
+     uint64_t socket_size;
+     char file_prefix[PATH_MAX];
+ 
+-    struct rte_ether_addr ethdev;
++    uint8_t mac_addr[ETHER_ADDR_LEN];
+     uint32_t ipv4;
+ 
+     char argv[GAZELLE_MAX_REG_ARGS][PATH_MAX];
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 5d7a4b8..06a099d 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -26,11 +26,11 @@
+ #include <lwip/timeouts.h>
+ #include <lwip/posix_api.h>
+ 
+-#include "lstack_compiler.h"
+ #include "lstack_ethdev.h"
+ #include "lstack_stack_stat.h"
+ #include "lstack_cfg.h"
+ #include "lstack_log.h"
++#include "dpdk_common.h"
+ #include "gazelle_base_func.h"
+ #include "lstack_lwip.h"
+ #include "lstack_protocol_stack.h"
+@@ -70,7 +70,7 @@ void add_epoll_event(struct netconn *conn, uint32_t event)
+     }
+ }
+ 
+-static inline uint32_t update_events(struct lwip_sock *sock)
++static uint32_t update_events(struct lwip_sock *sock)
+ {
+     uint32_t event = 0;
+ 
+@@ -125,7 +125,12 @@ int32_t lstack_epoll_create(int32_t size)
+         posix_api->close_fn(fd);
+         GAZELLE_RETURN(EINVAL);
+     }
+-    memset_s(wakeup, sizeof(struct wakeup_poll), 0, sizeof(struct wakeup_poll));
++    if (memset_s(wakeup, sizeof(struct wakeup_poll), 0, sizeof(struct wakeup_poll)) != 0) {
++        LSTACK_LOG(ERR, LSTACK, "memset_s failed\n");
++        free(wakeup);
++        posix_api->close_fn(fd);
++        GAZELLE_RETURN(EINVAL);
++    }
+ 
+     init_list_node(&wakeup->event_list);
+     sem_init(&wakeup->event_sem, 0, 0);
+@@ -181,7 +186,7 @@ static uint16_t find_max_cnt_stack(int32_t *stack_count, uint16_t stack_num, str
+         return last_stack->queue_id;
+     }
+ 
+-    /* first bind and all stack same. choice tick as queue_id, avoid all bind to statck_0.*/
++    /* first bind and all stack same. choice tick as queue_id, avoid all bind to statck_0. */
+     static uint16_t tick = 0;
+     if (all_same_cnt && stack_num) {
+         max_index = atomic_fetch_add(&tick, 1) % stack_num;
+@@ -262,16 +267,18 @@ static void del_node_array(struct epoll_event *events, int32_t event_num, int32_
+ 
+ static int32_t del_duplicate_event(struct epoll_event *events, int32_t event_num)
+ {
+-    for (int32_t i = 0; i < event_num; i++) {
+-        for (int32_t j = i + 1; j < event_num; j++) {
++    int32_t num = event_num;
++
++    for (int32_t i = 0; i < num; i++) {
++        for (int32_t j = i + 1; j < num; j++) {
+             if (events[i].data.u64 == events[j].data.u64) {
+-                del_node_array(events, event_num, j);
+-                event_num--;
++                del_node_array(events, num, j);
++                num--;
+             }
+         }
+     }
+ 
+-    return event_num;
++    return num;
+ }
+ 
+ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *events, uint32_t maxevents)
+@@ -307,7 +314,7 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
+         event_num = del_duplicate_event(events, event_num);
+     }
+ 
+-    // atomic_fetch_add(&wakeup->bind_stack->stats.app_events, event_num);  
++    wakeup->stat.app_events += event_num;
+     return event_num;
+ }
+ 
+@@ -327,7 +334,7 @@ static int32_t poll_lwip_event(struct pollfd *fds, nfds_t nfds)
+                 break;
+             }
+ 
+-            sock = sock->listen_next;;
++            sock = sock->listen_next;
+         }
+     }
+ 
+@@ -441,25 +448,33 @@ static void init_poll_wakeup_data(struct wakeup_poll *wakeup)
+ 
+ static void resize_kernel_poll(struct wakeup_poll *wakeup, nfds_t nfds)
+ {
+-    wakeup->last_fds = realloc(wakeup->last_fds, nfds * sizeof(struct pollfd));
++    if (wakeup->last_fds) {
++        free(wakeup->last_fds);
++    }
++    wakeup->last_fds = calloc(nfds, sizeof(struct pollfd));
+     if (wakeup->last_fds == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
+     }
+ 
+-    wakeup->events = realloc(wakeup->events, nfds * sizeof(struct epoll_event));
++    if (wakeup->events) {
++        free(wakeup->events);
++    }
++    wakeup->events = calloc(nfds, sizeof(struct epoll_event));
+     if (wakeup->events == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
+     }
+ 
+     wakeup->last_max_nfds = nfds;
+-    memset_s(wakeup->last_fds, nfds * sizeof(struct pollfd), 0, nfds * sizeof(struct pollfd));
++    if (memset_s(wakeup->last_fds, nfds * sizeof(struct pollfd), 0, nfds * sizeof(struct pollfd)) != 0) {
++        LSTACK_LOG(ERR, LSTACK, "memset_s faile\n");
++    }
+ }
+ 
+ static void poll_bind_statck(struct wakeup_poll *wakeup, int32_t *stack_count)
+ {
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+-    uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
+ 
++    uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
+     if (wakeup->bind_stack && wakeup->bind_stack->queue_id == bind_id) {
+         return;
+     }
+diff --git a/src/lstack/api/lstack_fork.c b/src/lstack/api/lstack_fork.c
+index 63dde81..43c212b 100644
+--- a/src/lstack/api/lstack_fork.c
++++ b/src/lstack/api/lstack_fork.c
+@@ -14,7 +14,6 @@
+ #include <unistd.h>
+ 
+ #include <lwip/posix_api.h>
+-#include "posix/lstack_fork.h"
+ 
+ pid_t lstack_fork(void)
+ {
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index ec68d62..e402ce1 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -27,12 +27,12 @@
+ #include <lwip/lwipsock.h>
+ 
+ #include "posix/lstack_epoll.h"
+-#include "posix/lstack_fcntl.h"
+-#include "posix/lstack_socket.h"
+ #include "posix/lstack_unistd.h"
++#include "posix/lstack_socket.h"
+ #include "lstack_log.h"
+ #include "lstack_cfg.h"
+ #include "lstack_lwip.h"
++#include "lstack_protocol_stack.h"
+ #include "gazelle_base_func.h"
+ #include "lstack_thread_rpc.h"
+ 
+@@ -42,7 +42,7 @@ enum KERNEL_LWIP_PATH {
+     PATH_UNKNOW,
+ };
+ 
+-static inline enum KERNEL_LWIP_PATH select_path(int fd)
++static enum KERNEL_LWIP_PATH select_path(int fd)
+ {
+     if (posix_api == NULL) {
+         /* posix api maybe call before gazelle init */
+@@ -131,7 +131,7 @@ static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *add
+     return posix_api->accept_fn(s, addr, addrlen);
+ }
+ 
+-static inline int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, int32_t flags)
++static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, int32_t flags)
+ {
+     if (addr == NULL || addrlen == NULL) {
+         GAZELLE_RETURN(EINVAL);
+@@ -153,7 +153,7 @@ static inline int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *ad
+     return posix_api->accept4_fn(s, addr, addrlen, flags);
+ }
+ 
+-static inline int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen)
++static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen)
+ {
+     if (name == NULL) {
+         GAZELLE_RETURN(EINVAL);
+@@ -174,7 +174,7 @@ static inline int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t
+     return rpc_call_bind(s, name, namelen);
+ }
+ 
+-static inline int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
++static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
+ {
+     if (name == NULL) {
+         GAZELLE_RETURN(EINVAL);
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index ca2b979..ee914c5 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -11,8 +11,6 @@
+ */
+ 
+ #define _GNU_SOURCE
+-#include "lstack_cfg.h"
+-
+ #include <stdlib.h>
+ #include <getopt.h>
+ #include <stdio.h>
+@@ -34,7 +32,7 @@
+ #include "lstack_log.h"
+ #include "gazelle_base_func.h"
+ #include "lstack_protocol_stack.h"
+-#include "gazelle_parse_config.h"
++#include "lstack_cfg.h"
+ 
+ #define DEFAULT_CONF_FILE "/etc/gazelle/lstack.conf"
+ #define LSTACK_CONF_ENV   "LSTACK_CONF_PATH"
+@@ -83,21 +81,21 @@ struct cfg_params *get_global_cfg_params(void)
+     return &g_config_params;
+ }
+ 
+-static int32_t str_to_eth_addr(const char *src, unsigned char *dst, size_t dst_size)
++static int32_t str_to_eth_addr(const char *src, unsigned char *dst)
+ {
+     if (strlen(src) > DEV_MAC_LEN) {
+         return -EINVAL;
+     }
+ 
+-    struct rte_ether_addr tmp;
++    uint8_t mac_addr[ETHER_ADDR_LEN];
+ 
+     int32_t ret = sscanf_s(src, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+-        &tmp.addr_bytes[0], &tmp.addr_bytes[1], &tmp.addr_bytes[2], /* 0、1、2 mac byte index */
+-        &tmp.addr_bytes[3], &tmp.addr_bytes[4], &tmp.addr_bytes[5]); /* 3、4、5 byte index */
+-    if (ret != RTE_ETHER_ADDR_LEN) {
++        &mac_addr[0], &mac_addr[1], &mac_addr[2], /* 0、1、2 mac byte index */
++        &mac_addr[3], &mac_addr[4], &mac_addr[5]); /* 3、4、5 byte index */
++    if (ret != ETHER_ADDR_LEN) {
+         return -EINVAL;
+     }
+-    ret = memcpy_s(dst, dst_size, tmp.addr_bytes, dst_size);
++    ret = memcpy_s(dst, ETHER_ADDR_LEN, mac_addr, ETHER_ADDR_LEN);
+     if (ret != EOK) {
+         return -EINVAL;
+     }
+@@ -185,7 +183,7 @@ static int32_t parse_devices(void)
+     }
+ 
+     /* add dev */
+-    ret = str_to_eth_addr(dev, g_config_params.ethdev.addr_bytes, sizeof(g_config_params.ethdev.addr_bytes));
++    ret = str_to_eth_addr(dev, g_config_params.mac_addr);
+     if (ret != 0) {
+         LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", dev, ret);
+     }
+@@ -648,7 +646,7 @@ static int32_t parse_wakeup_cpu_number(void)
+     g_config_params.num_wakeup = cnt;
+ 
+     if (g_config_params.num_wakeup < g_config_params.num_cpu) {
+-        LSTACK_PRE_LOG(LSTACK_ERR, "num_wakeup=%d less than num_stack_cpu=%d.\n", g_config_params.num_wakeup,
++        LSTACK_PRE_LOG(LSTACK_ERR, "num_wakeup=%hu less than num_stack_cpu=%hu.\n", g_config_params.num_wakeup,
+             g_config_params.num_cpu);
+         return -EINVAL;
+     }
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index c86dab1..8012fa6 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -27,8 +27,10 @@
+ #include "lstack_cfg.h"
+ #include "lstack_dpdk.h"
+ #include "gazelle_reg_msg.h"
++#include "gazelle_base_func.h"
+ #include "lstack_stack_stat.h"
+ #include "lstack_log.h"
++#include "lstack_thread_rpc.h"
+ #include "lstack_protocol_stack.h"
+ #include "lstack_control_plane.h"
+ 
+@@ -61,7 +63,10 @@ static int control_unix_sock(struct sockaddr_un *address)
+         return -1;
+     }
+ 
+-    memset_s(address, sizeof(struct sockaddr_un), 0, sizeof(struct sockaddr_un));
++    if (memset_s(address, sizeof(struct sockaddr_un), 0, sizeof(struct sockaddr_un)) != 0) {
++        posix_api->close_fn(sockfd);
++        return -1;
++    }
+     address->sun_family = AF_UNIX;
+     int ret = strncpy_s(address->sun_path, sizeof(address->sun_path), GAZELLE_REG_SOCK_PATHNAME,
+         strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
+@@ -115,7 +120,6 @@ static int32_t msg_proc_init(enum request_type rqt_type, struct reg_request_msg
+ {
+     int32_t ret;
+     struct cfg_params *global_params = get_global_cfg_params();
+-    (void)memset_s(rqt_msg, sizeof(struct reg_request_msg), 0, sizeof(struct reg_request_msg));
+ 
+     rqt_msg->type = rqt_type;
+     struct client_proc_conf *conf = &rqt_msg->msg.proc;
+@@ -129,7 +133,7 @@ static int32_t msg_proc_init(enum request_type rqt_type, struct reg_request_msg
+         return ret;
+     }
+ 
+-    ret = memcpy_s(conf->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN, global_params->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN);
++    ret = memcpy_s(conf->mac_addr, ETHER_ADDR_LEN, global_params->mac_addr, ETHER_ADDR_LEN);
+     if (ret != EOK) {
+         return ret;
+     }
+@@ -169,8 +173,6 @@ static int32_t msg_thrd_init(enum request_type rqt_type, struct reg_request_msg
+ {
+     struct protocol_stack *stack = get_protocol_stack();
+ 
+-    (void)memset_s(rqt_msg, sizeof(struct reg_request_msg), 0, sizeof(struct reg_request_msg));
+-
+     rqt_msg->type = rqt_type;
+     struct client_thrd_conf *conf = &rqt_msg->msg.thrd;
+ 
+@@ -203,7 +205,6 @@ static int32_t reg_communicate(const int32_t sockfd, struct reg_request_msg *sen
+ 
+     char *buf = (char *)recv_msg;
+     ssize_t recv_size = (ssize_t)sizeof(*recv_msg);
+-    (void)memset_s(recv_msg, sizeof(*recv_msg), 0, sizeof(*recv_msg));
+     while (recv_size > 0) {
+         size = posix_api->read_fn(sockfd, buf, recv_size);
+         if ((size < 0) && (errno != EINTR)  && (errno != EAGAIN)) {
+@@ -277,8 +278,8 @@ static int32_t client_reg_proc_memory(bool is_reconnect)
+ {
+     int32_t ret;
+     int32_t sockfd = g_data_fd;
+-    struct reg_request_msg send_msg;
+-    struct reg_response_msg recv_msg;
++    struct reg_request_msg send_msg = {0};
++    struct reg_response_msg recv_msg = {0};
+ 
+     ret = msg_proc_init(RQT_REG_PROC_MEM, &send_msg);
+     if (ret != 0) {
+@@ -316,8 +317,8 @@ static int32_t client_reg_proc_attach(__attribute__((__unused__)) bool is_reconn
+ {
+     int32_t ret;
+     int32_t sockfd = g_data_fd;
+-    struct reg_request_msg send_msg;
+-    struct reg_response_msg recv_msg;
++    struct reg_request_msg send_msg = {0};
++    struct reg_response_msg recv_msg = {0};
+ 
+     ret = msg_proc_init(RQT_REG_PROC_ATT, &send_msg);
+     if (ret != 0) {
+@@ -416,8 +417,8 @@ int32_t client_reg_thrd_ring(void)
+ {
+     int32_t ret;
+     int32_t sockfd;
+-    struct reg_request_msg send_msg;
+-    struct reg_response_msg recv_msg;
++    struct reg_request_msg send_msg = {0};
++    struct reg_response_msg recv_msg = {0};
+ 
+     sockfd = connect_to_ltran(CONNECT_TO_LTRAN_INFINITE, CONNECT_TO_LTRAN_RETRY_INTERVAL);
+     if (sockfd < 0) {
+@@ -454,6 +455,7 @@ void control_fd_close(void)
+ {
+     if (g_data_fd != 0) {
+         close(g_data_fd);
++        g_data_fd = -1;
+         /* 200ms: wait ltran instance logout */
+         rte_delay_ms(200);
+     }
+@@ -622,6 +624,7 @@ static int32_t client_reg_proc_reconnect(int32_t epfd)
+     ret = thread_register();
+     if (ret != 0) {
+         posix_api->close_fn(sockfd);
++        g_data_fd = -1;
+         return -1;
+     }
+ 
+@@ -630,6 +633,7 @@ static int32_t client_reg_proc_reconnect(int32_t epfd)
+     if (ret < 0) {
+         LSTACK_LOG(ERR, LSTACK, "epoll_ctl_fn failed, errno is %d ret=%d\n", errno, ret);
+         posix_api->close_fn(sockfd);
++        g_data_fd = -1;
+         return -1;
+     }
+ 
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 6f4adf1..366655c 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -29,11 +29,14 @@
+ #include <rte_kni.h>
+ #include <lwip/posix_api.h>
+ #include <lwipopts.h>
++#include <lwip/pbuf.h>
++#include <lwip/reg_sock.h>
+ 
+ #include "lstack_log.h"
+ #include "dpdk_common.h"
+ #include "lstack_dpdk.h"
+ #include "lstack_lockless_queue.h"
++#include "lstack_protocol_stack.h"
+ #include "lstack_thread_rpc.h"
+ #include "lstack_lwip.h"
+ #include "lstack_cfg.h"
+@@ -97,8 +100,7 @@ int32_t dpdk_eal_init(void)
+             LSTACK_PRE_LOG(LSTACK_INFO, "rte_eal_init aleady init\n");
+             /* maybe other program inited, merge init param share init */
+             ret = 0;
+-        }
+-        else {
++        } else {
+             LSTACK_PRE_LOG(LSTACK_ERR, "rte_eal_init failed init, rte_errno %d\n", rte_errno);
+         }
+     } else {
+@@ -207,7 +209,6 @@ int32_t create_shared_ring(struct protocol_stack *stack)
+         }
+     }
+ 
+-
+     if (use_ltran()) {
+         stack->rx_ring = create_ring("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
+         if (stack->rx_ring == NULL) {
+@@ -241,13 +242,13 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
+ 
+         ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
+         if (ret != 0) {
+-            LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %d ret=%d\n", (int32_t)batch, ret);
++            LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %u ret=%d\n", batch, ret);
+             return -1;
+         }
+ 
+         ret = gazelle_ring_sp_enqueue(ring, (void **)free_buf, batch);
+         if (ret == 0) {
+-            LSTACK_LOG(ERR, LSTACK, "cannot enqueue to ring, count: %d\n", (int32_t)batch);
++            LSTACK_LOG(ERR, LSTACK, "cannot enqueue to ring, count: %u\n", batch);
+             return -1;
+         }
+ 
+@@ -276,10 +277,10 @@ static int32_t ethdev_port_id(uint8_t *mac)
+ 
+     for (port_id = 0; port_id < nr_eth_dev; port_id++) {
+         rte_eth_macaddr_get(port_id, &mac_addr);
+-        if (!memcmp(mac, mac_addr.addr_bytes, RTE_ETHER_ADDR_LEN)) {
++        if (!memcmp(mac, mac_addr.addr_bytes, ETHER_ADDR_LEN)) {
+             break;
+         }
+-        LSTACK_LOG(INFO, LSTACK, "nic mac:%02x:%02x:%02x:%02x:%02x:%02x not match\n",
++        LSTACK_LOG(INFO, LSTACK, "nic mac:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx not match\n",
+             mac_addr.addr_bytes[0], mac_addr.addr_bytes[1], mac_addr.addr_bytes[2], // 0 1 2 mac addr
+             mac_addr.addr_bytes[3], mac_addr.addr_bytes[4], mac_addr.addr_bytes[5]); // 3 4 5 mac addr
+     }
+@@ -294,11 +295,10 @@ static int32_t ethdev_port_id(uint8_t *mac)
+ 
+ static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
+ {
+-    struct eth_params *eth_params = malloc(sizeof(struct eth_params));
++    struct eth_params *eth_params = calloc(1, sizeof(struct eth_params));
+     if (eth_params == NULL) {
+         return NULL;
+     }
+-    memset_s(eth_params, sizeof(struct eth_params), 0, sizeof(*eth_params));
+ 
+     eth_params->port_id = port_id;
+     eth_params->nb_queues = nb_queues;
+@@ -348,27 +348,29 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
+     return rss_enable;
+ }
+ 
+-static int rss_setup(const int port_id, const uint16_t nb_queues)
++static void rss_setup(const int port_id, const uint16_t nb_queues)
+ {
+-    int i;
+     int ret;
+     struct rte_eth_dev_info dev_info;
+     struct rte_eth_rss_reta_entry64 *reta_conf = NULL;
+-    size_t reta_conf_size, n;
++    uint16_t reta_conf_size, i;
+ 
+-    rte_eth_dev_info_get(port_id, &dev_info);
++    if (rte_eth_dev_info_get(port_id, &dev_info) != 0) {
++        return;
++    }
+ 
+     if (nb_queues == 0) {
+-        return ERR_VAL;
++        return;
+     }
+ 
+     reta_conf_size = dev_info.reta_size / RTE_RETA_GROUP_SIZE;
+-    if (dev_info.reta_size % RTE_RETA_GROUP_SIZE)
+-	    reta_conf_size += 1;
++    if (dev_info.reta_size % RTE_RETA_GROUP_SIZE) {
++        reta_conf_size += 1;
++    }
+ 
+     reta_conf = calloc(reta_conf_size, sizeof(struct rte_eth_rss_reta_entry64));
+     if (!reta_conf) {
+-        return ERR_MEM;
++        return;
+     }
+     for (i = 0; i < dev_info.reta_size; i++) {
+         struct rte_eth_rss_reta_entry64 *one_reta_conf =
+@@ -376,8 +378,8 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
+         one_reta_conf->reta[i % RTE_RETA_GROUP_SIZE] = i % nb_queues;
+     }
+ 
+-    for (n = 0; n < reta_conf_size; n++) {
+-        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[n];
++    for (i = 0; i < reta_conf_size; i++) {
++        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[i];
+         one_reta_conf->mask = 0xFFFFFFFFFFFFFFFFULL;
+     }
+ 
+@@ -388,14 +390,14 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
+     }
+ 
+     free(reta_conf);
+-    return ERR_OK;
+ }
+ 
+ int32_t dpdk_ethdev_init(void)
+ {
+     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
+-    int32_t port_id = ethdev_port_id(get_global_cfg_params()->ethdev.addr_bytes);
++    int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
+     if (port_id < 0) {
+         return port_id;
+     }
+@@ -409,7 +411,7 @@ int32_t dpdk_ethdev_init(void)
+ 
+     int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
+     if (max_queues < nb_queues) {
+-        LSTACK_LOG(ERR, LSTACK, "port_id %u max_queues=%d\n", port_id, max_queues);
++        LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
+         return -EINVAL;
+     }
+ 
+@@ -419,7 +421,6 @@ int32_t dpdk_ethdev_init(void)
+     }
+     eth_params_checksum(&eth_params->conf, &dev_info);
+     int32_t rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
+-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+     stack_group->eth_params = eth_params;
+     stack_group->port_id = eth_params->port_id;
+     stack_group->rx_offload = eth_params->conf.rxmode.offloads;
+@@ -428,12 +429,16 @@ int32_t dpdk_ethdev_init(void)
+     ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
+     if (ret < 0) {
+         LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
++        stack_group->eth_params = NULL;
++        free(eth_params);
+         return ret;
+     }
+ 
+     ret = dpdk_ethdev_start();
+     if (ret < 0) {
+         LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
++        stack_group->eth_params = NULL;
++        free(eth_params);
+         return ret;
+     }
+ 
+@@ -451,14 +456,14 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, const stru
+     ret = rte_eth_rx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_rx_desc, stack->socket_id,
+         &eth_params->rx_conf, stack->rx_pktmbuf_pool);
+     if (ret < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %d: %s\n", stack->queue_id, rte_strerror(-ret));
++        LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
+         return -1;
+     }
+ 
+     ret = rte_eth_tx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_tx_desc, stack->socket_id,
+         &eth_params->tx_conf);
+     if (ret < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "cannot setup tx_queue %d: %s\n", stack->queue_id, rte_strerror(-ret));
++        LSTACK_LOG(ERR, LSTACK, "cannot setup tx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
+         return -1;
+     }
+ 
+@@ -499,9 +504,10 @@ static void set_kni_ip_mac(uint16_t port_id)
+ 
+     sin->sin_family = AF_INET;
+     sin->sin_addr.s_addr = cfg->host_addr.addr;
+-    strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME);
+-    int32_t ret = posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr);
+-    if (ret < 0) {
++    if (strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME) != 0) {
++        LSTACK_LOG(ERR, LSTACK, "strcpy_s fail \n");
++    }
++    if (posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr) < 0) {
+         LSTACK_LOG(ERR, LSTACK, "set kni ip=%u fail\n", cfg->host_addr.addr);
+     }
+ 
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index a506b34..9fafda9 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -35,11 +35,12 @@
+ #include "lstack_cfg.h"
+ #include "lstack_control_plane.h"
+ #include "lstack_ethdev.h"
+-#include "lstack_signal.h"
+ #include "lstack_dpdk.h"
+ #include "lstack_stack_stat.h"
+ #include "lstack_log.h"
++#include "dpdk_common.h"
+ #include "posix/lstack_epoll.h"
++#include "posix/lstack_unistd.h"
+ #include "gazelle_base_func.h"
+ #include "lstack_protocol_stack.h"
+ 
+@@ -48,11 +49,16 @@
+ #define LSTACK_PRELOAD_NAME_LEN     PATH_MAX
+ #define LSTACK_PRELOAD_ENV_PROC     "GAZELLE_BIND_PROCNAME"
+ 
+-static volatile int32_t g_init_fail = 0;
++static volatile bool g_init_fail = false;
+ 
+ void set_init_fail(void)
+ {
+-    g_init_fail = 1;
++    g_init_fail = true;
++}
++
++bool get_init_fail(void)
++{
++    return g_init_fail;
+ }
+ 
+ struct lstack_preload {
+@@ -272,11 +278,12 @@ __attribute__((constructor)) void gazelle_network_init(void)
+     lwip_sock_init();
+ 
+     /* wait stack thread and kernel_event thread init finish */
+-    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num * 2);
++    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
+     if (g_init_fail) {
+         LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
+     }
+ 
+     posix_api->ues_posix = 0;
+     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
++    rte_smp_mb();
+ }
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 156fc1f..9f51ebd 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -30,6 +30,8 @@
+ #include "lstack_dpdk.h"
+ #include "lstack_stack_stat.h"
+ #include "posix/lstack_epoll.h"
++#include "lstack_thread_rpc.h"
++#include "dpdk_common.h"
+ #include "lstack_lwip.h"
+ 
+ #define HALF_DIVISOR                    (2)
+@@ -39,7 +41,7 @@ static int32_t lwip_alloc_pbufs(pbuf_layer layer, uint16_t length, pbuf_type typ
+ 
+ static void free_ring_pbuf(struct rte_ring *ring)
+ {
+-	void *pbufs[SOCK_RECV_RING_SIZE];
++    void *pbufs[SOCK_RECV_RING_SIZE];
+ 
+     do {
+         gazelle_ring_read(ring, pbufs, RING_SIZE(SOCK_RECV_RING_SIZE));
+@@ -64,14 +66,12 @@ static void reset_sock_data(struct lwip_sock *sock)
+     }
+     sock->recv_ring = NULL;
+ 
+-
+     if (sock->send_ring) {
+         free_ring_pbuf(sock->send_ring);
+         rte_ring_free(sock->send_ring);
+     }
+     sock->send_ring = NULL;
+ 
+-
+     sock->stack = NULL;
+     sock->wakeup = NULL;
+     sock->listen_next = NULL;
+@@ -90,8 +90,8 @@ static void replenish_send_idlembuf(struct rte_ring *ring)
+     void *pbuf[SOCK_SEND_RING_SIZE];
+ 
+     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+-    uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
+ 
++    uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
+     if (lwip_alloc_pbufs(PBUF_TRANSPORT, TCP_MSS, PBUF_RAM, (void **)pbuf, alloc_num) != 0) {
+         return;
+     }
+@@ -126,7 +126,7 @@ void gazelle_init_sock(int32_t fd)
+         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
+         return;
+     }
+-	replenish_send_idlembuf(sock->send_ring);
++    replenish_send_idlembuf(sock->send_ring);
+ 
+     sock->stack = stack;
+     sock->stack->conn_num++;
+@@ -441,15 +441,15 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
+     return recv_len;
+ }
+ 
+-ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
++static int32_t check_msg_vaild(const struct msghdr *message)
+ {
+     ssize_t buflen = 0;
+-    int32_t i;
+ 
+     if (message == NULL || message->msg_iovlen <= 0 || message->msg_iovlen > IOV_MAX) {
+         GAZELLE_RETURN(EINVAL);
+     }
+-    for (i = 0; i < message->msg_iovlen; i++) {
++
++    for (int32_t i = 0; i < message->msg_iovlen; i++) {
+         if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
+             ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
+             ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
+@@ -457,8 +457,19 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
+         }
+         buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
+     }
+-    buflen = 0;
+-    for (i = 0; i < message->msg_iovlen; i++) {
++
++    return 0;
++}
++
++ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
++{
++    ssize_t buflen = 0;
++
++    if (check_msg_vaild(message)) {
++        GAZELLE_RETURN(EINVAL);
++    }
++
++    for (int32_t i = 0; i < message->msg_iovlen; i++) {
+         ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
+         if (recvd_local > 0) {
+             buflen += recvd_local;
+@@ -507,17 +518,9 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+     int32_t i;
+     ssize_t buflen = 0;
+ 
+-    if (message == NULL || message->msg_iovlen <= 0 || message->msg_iovlen > IOV_MAX) {
++    if (check_msg_vaild(message)) {
+         GAZELLE_RETURN(EINVAL);
+     }
+-    for (i = 0; i < message->msg_iovlen; i++) {
+-        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
+-            ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
+-            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
+-            GAZELLE_RETURN(EINVAL);
+-        }
+-        buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
+-    }
+ 
+     for (i = 0; i < message->msg_iovlen; i++) {
+         ret = gazelle_send(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
+@@ -756,7 +759,7 @@ void create_shadow_fd(struct rpc_msg *msg)
+ 
+     int32_t ret = lwip_bind(clone_fd, addr, addr_len);
+     if (ret < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "clone bind failed clone_fd=%d errno=%d\n", ret, errno);
++        LSTACK_LOG(ERR, LSTACK, "clone bind failed clone_fd=%d errno=%d\n", clone_fd, errno);
+         msg->result = ret;
+         return;
+     }
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 595b97e..577711a 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -27,6 +27,8 @@
+ #include "lstack_thread_rpc.h"
+ #include "dpdk_common.h"
+ #include "lstack_log.h"
++#include "lstack_dpdk.h"
++#include "lstack_ethdev.h"
+ #include "lstack_lwip.h"
+ #include "lstack_protocol_stack.h"
+ #include "lstack_cfg.h"
+@@ -43,21 +45,19 @@ static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX;
+ static struct protocol_stack_group g_stack_group = {0};
+ 
+ void set_init_fail(void);
++bool get_init_fail(void);
+ typedef void *(*stack_thread_func)(void *arg);
+ 
+ 
+-int32_t bind_to_stack_numa(struct protocol_stack *stack)
++void bind_to_stack_numa(struct protocol_stack *stack)
+ {
+     int32_t ret;
+     pthread_t tid = pthread_self();
+ 
+     ret = pthread_setaffinity_np(tid, sizeof(stack->idle_cpuset), &stack->idle_cpuset);
+     if (ret != 0) {
+-        LSTACK_LOG(ERR, LSTACK, "thread %d setaffinity to stack %d failed\n", rte_gettid(), stack->queue_id);
+-        return -1;
++        LSTACK_LOG(ERR, LSTACK, "thread %d setaffinity to stack %hu failed\n", rte_gettid(), stack->queue_id);
+     }
+-
+-    return 0;
+ }
+ 
+ static inline void set_stack_idx(uint16_t idx)
+@@ -194,12 +194,12 @@ static int32_t create_thread(uint16_t queue_id, char *thread_name, stack_thread_
+     int32_t ret;
+ 
+     if (queue_id >= PROTOCOL_STACK_MAX) {
+-        LSTACK_LOG(ERR, LSTACK, "queue_id is %d exceed max=%d\n", queue_id, PROTOCOL_STACK_MAX);
++        LSTACK_LOG(ERR, LSTACK, "queue_id is %hu exceed max=%d\n", queue_id, PROTOCOL_STACK_MAX);
+         return -1;
+     }
+     queue[queue_id] = queue_id;
+ 
+-    ret = sprintf_s(name, sizeof(name), "%s%02d", thread_name, queue[queue_id]);
++    ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, queue[queue_id]);
+     if (ret < 0) {
+         LSTACK_LOG(ERR, LSTACK, "set name failed\n");
+         return -1;
+@@ -234,7 +234,7 @@ static void* gazelle_wakeup_thread(void *arg)
+         .tv_nsec = 1
+     };
+ 
+-    LSTACK_LOG(INFO, LSTACK, "weakup_%02d start\n", stack->queue_id);
++    LSTACK_LOG(INFO, LSTACK, "weakup_%02hu start\n", stack->queue_id);
+ 
+     for (;;) {
+         if (cfg->low_power_mod != 0 && stack->low_power) {
+@@ -255,8 +255,6 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+ {
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
+-    memset_s(stack, sizeof(*stack), 0, sizeof(*stack));
+-
+     set_stack_idx(queue_id);
+     stack->tid = rte_gettid();
+     stack->queue_id = queue_id;
+@@ -301,21 +299,20 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+ static void* gazelle_kernel_event(void *arg)
+ {
+     uint16_t queue_id = *(uint16_t *)arg;
++    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+ 
+     int32_t epoll_fd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
+     if (epoll_fd < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "queue_id=%d epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
++        LSTACK_LOG(ERR, LSTACK, "queue_id=%hu epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
+         /* exit in main thread, avoid create mempool and exit at the same time */
+         set_init_fail();
+-        sem_post(&get_protocol_stack_group()->all_init);
++        stack->epollfd = -1;
+         return NULL;
+     }
+ 
+-    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+     stack->epollfd = epoll_fd;
+ 
+-    sem_post(&get_protocol_stack_group()->all_init);
+-    LSTACK_LOG(INFO, LSTACK, "kernel_event_%02d start\n", stack->queue_id);
++    LSTACK_LOG(INFO, LSTACK, "kernel_event_%02hu start\n", queue_id);
+ 
+     struct epoll_event events[KERNEL_EPOLL_MAX];
+     for (;;) {
+@@ -340,18 +337,24 @@ static int32_t create_companion_thread(struct protocol_stack_group *stack_group,
+ {
+     int32_t ret;
+ 
++    ret = create_thread(stack->queue_id, "gazellekernel", gazelle_kernel_event);
++    if (ret != 0) {
++        LSTACK_LOG(ERR, LSTACK, "gazellekernelEvent ret=%d errno=%d\n", ret, errno);
++        return ret;
++    }
++
++    /* wait gazelle_kernel_event finish use stack.avoid use stack after free when create gazelle_weakup_thread fail */
++    while (stack->epollfd == 0) {
++        usleep(1);
++    }
++
+     if (stack_group->wakeup_enable) {
+         ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_wakeup_thread);
+         if (ret != 0) {
+             LSTACK_LOG(ERR, LSTACK, "gazelleweakup ret=%d errno=%d\n", ret, errno);
+-            return ret;
+         }
+     }
+ 
+-    ret = create_thread(stack->queue_id, "gazellekernel", gazelle_kernel_event);
+-    if (ret != 0) {
+-        LSTACK_LOG(ERR, LSTACK, "gazellekernelEvent ret=%d errno=%d\n", ret, errno);
+-    }
+     return ret;
+ }
+ 
+@@ -363,7 +366,7 @@ void wait_sem_value(sem_t *sem, int32_t wait_value)
+     } while (sem_val < wait_value);
+ }
+ 
+-static struct protocol_stack * stack_thread_init(uint16_t queue_id)
++static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+ {
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
+@@ -419,12 +422,12 @@ static void* gazelle_stack_thread(void *arg)
+         /* exit in main thread, avoid create mempool and exit at the same time */
+         set_init_fail();
+         sem_post(&get_protocol_stack_group()->all_init);
+-        LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%d\n", queue_id);
++        LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
+         return NULL;
+     }
+ 
+     sem_post(&get_protocol_stack_group()->all_init);
+-    LSTACK_LOG(INFO, LSTACK, "stack_%02d init success\n", queue_id);
++    LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
+ 
+     for (;;) {
+         poll_rpc_msg(stack, HANDLE_RPC_MSG_MAX);
+@@ -497,6 +500,10 @@ int32_t init_protocol_stack(void)
+ 
+     wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
+ 
++    if (get_init_fail()) {
++        return -1;
++    }
++
+     ret = init_stack_numa_cpuset();
+     if (ret < 0) {
+         return -1;
+diff --git a/src/lstack/core/lstack_protocol_stack.c.orig b/src/lstack/core/lstack_protocol_stack.c.orig
+new file mode 100644
+index 0000000..4755b8a
+--- /dev/null
++++ b/src/lstack/core/lstack_protocol_stack.c.orig
+@@ -0,0 +1,825 @@
++/*
++* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
++* gazelle is licensed under the Mulan PSL v2.
++* You can use this software according to the terms and conditions of the Mulan PSL v2.
++* You may obtain a copy of Mulan PSL v2 at:
++*     http://license.coscl.org.cn/MulanPSL2
++* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
++* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
++* PURPOSE.
++* See the Mulan PSL v2 for more details.
++*/
++#define _GNU_SOURCE
++#include <pthread.h>
++#include <stdatomic.h>
++
++#include <lwip/sockets.h>
++#include <lwip/tcpip.h>
++#include <lwip/tcp.h>
++#include <lwip/memp_def.h>
++#include <lwipsock.h>
++#include <lwip/posix_api.h>
++#include <rte_kni.h>
++#include <securec.h>
++#include <numa.h>
++
++#include "gazelle_base_func.h"
++#include "lstack_thread_rpc.h"
++#include "dpdk_common.h"
++#include "lstack_log.h"
++#include "lstack_lwip.h"
++#include "lstack_protocol_stack.h"
++#include "lstack_cfg.h"
++#include "lstack_control_plane.h"
++#include "posix/lstack_epoll.h"
++#include "lstack_stack_stat.h"
++
++#define READ_LIST_MAX                   32
++#define SEND_LIST_MAX                   32
++#define HANDLE_RPC_MSG_MAX              32
++#define KERNEL_EPOLL_MAX                256
++
++static PER_THREAD uint16_t g_stack_idx = PROTOCOL_STACK_MAX;
++static struct protocol_stack_group g_stack_group = {0};
++
++void set_init_fail(void);
++typedef void *(*stack_thread_func)(void *arg);
++
++
++int32_t bind_to_stack_numa(struct protocol_stack *stack)
++{
++    int32_t ret;
++    pthread_t tid = pthread_self();
++
++    ret = pthread_setaffinity_np(tid, sizeof(stack->idle_cpuset), &stack->idle_cpuset);
++    if (ret != 0) {
++        LSTACK_LOG(ERR, LSTACK, "thread %d setaffinity to stack %d failed\n", rte_gettid(), stack->queue_id);
++        return -1;
++    }
++
++    return 0;
++}
++
++static inline void set_stack_idx(uint16_t idx)
++{
++    g_stack_idx = idx;
++}
++
++long get_stack_tid(void)
++{
++    static PER_THREAD int32_t g_stack_tid = 0;
++
++    if (g_stack_tid == 0) {
++        g_stack_tid = rte_gettid();
++    }
++
++    return g_stack_tid;
++}
++
++struct protocol_stack_group *get_protocol_stack_group(void)
++{
++    return &g_stack_group;
++}
++
++struct protocol_stack *get_protocol_stack(void)
++{
++    if (g_stack_idx >= PROTOCOL_STACK_MAX) {
++        return NULL;
++    }
++    return g_stack_group.stacks[g_stack_idx];
++}
++
++struct protocol_stack *get_protocol_stack_by_fd(int32_t fd)
++{
++    struct lwip_sock *sock = get_socket(fd);
++    if (sock == NULL) {
++        return NULL;
++    }
++
++    return sock->stack;
++}
++
++struct protocol_stack *get_bind_protocol_stack(void)
++{
++    static PER_THREAD struct protocol_stack *bind_stack = NULL;
++
++    /* same app communication thread bind same stack */
++    if (bind_stack) {
++        return bind_stack;
++    }
++
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    uint16_t index = 0;
++
++    /* close listen shadow, per app communication thread select only one stack */
++    if (get_global_cfg_params()->listen_shadow == false) {
++        static uint16_t stack_index = 0;
++        index = atomic_fetch_add(&stack_index, 1);
++        if (index >= stack_group->stack_num) {
++            LSTACK_LOG(ERR, LSTACK, "thread =%hu larger than stack num = %hu\n", index, stack_group->stack_num);
++            return NULL;
++        }
++    /* use listen shadow, app communication thread maybe more than stack num, select the least load stack */
++    } else {
++        for (uint16_t i = 1; i < stack_group->stack_num; i++) {
++            if (stack_group->stacks[i]->conn_num < stack_group->stacks[index]->conn_num) {
++                index = i;
++            }
++        }
++    }
++
++    bind_stack = stack_group->stacks[index];
++    return stack_group->stacks[index];
++}
++
++static uint32_t get_protocol_traffic(struct protocol_stack *stack)
++{
++    if (use_ltran()) {
++        return rte_ring_count(stack->rx_ring) + rte_ring_count(stack->tx_ring);
++    }
++
++    /* only lstack mode, have not appropriate method to get traffic */
++    return LSTACK_LPM_RX_PKTS + 1;
++}
++
++void low_power_idling(struct protocol_stack *stack)
++{
++    static PER_THREAD uint32_t last_cycle_ts = 0;
++    static PER_THREAD uint64_t last_cycle_pkts = 0;
++    struct timespec st = {
++        .tv_sec = 0,
++        .tv_nsec = 1
++    };
++
++    /* CPU delegation strategy in idling scenarios:
++        1. In the detection period, if the number of received packets is less than the threshold,
++        set the CPU decentralization flag;
++        2. If the number of received packets exceeds the threshold, the authorization mark will end;
++        3. If the number of rx queue packets is less than the threshold, set the CPU delegation flag; */
++    if (get_protocol_traffic(stack) < LSTACK_LPM_RX_PKTS) {
++        nanosleep(&st, &st);
++        stack->low_power = true;
++        return;
++    }
++
++    if (last_cycle_ts == 0) {
++        last_cycle_ts = sys_now();
++    }
++
++    uint64_t now_pkts = get_protocol_stack()->stats.rx;
++    uint32_t now_ts = sys_now();
++    if (((now_ts - last_cycle_ts) > LSTACK_LPM_DETECT_MS) ||
++        ((now_pkts - last_cycle_pkts) >= LSTACK_LPM_PKTS_IN_DETECT)) {
++        if ((now_pkts - last_cycle_pkts) < LSTACK_LPM_PKTS_IN_DETECT) {
++            stack->low_power = true;
++        } else {
++            stack->low_power = false;
++        }
++
++        last_cycle_ts = now_ts;
++        last_cycle_pkts = now_pkts;
++    }
++
++    if (stack->low_power) {
++        nanosleep(&st, &st);
++    }
++}
++
++static int32_t create_thread(uint16_t queue_id, char *thread_name, stack_thread_func func)
++{
++    /* thread may run slow, if arg is temp var maybe have relese */
++    static uint16_t queue[PROTOCOL_STACK_MAX];
++    char name[PATH_MAX];
++    pthread_t tid;
++    int32_t ret;
++
++    if (queue_id >= PROTOCOL_STACK_MAX) {
++        LSTACK_LOG(ERR, LSTACK, "queue_id is %hu exceed max=%d\n", queue_id, PROTOCOL_STACK_MAX);
++        return -1;
++    }
++    queue[queue_id] = queue_id;
++
++    ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, queue[queue_id]);
++    if (ret < 0) {
++        LSTACK_LOG(ERR, LSTACK, "set name failed\n");
++        return -1;
++    }
++
++    ret = pthread_create(&tid, NULL, func, &queue[queue_id]);
++    if (ret != 0) {
++        LSTACK_LOG(ERR, LSTACK, "pthread_create ret=%d\n", ret);
++        return -1;
++    }
++
++    ret = pthread_setname_np(tid, name);
++    if (ret != 0) {
++        LSTACK_LOG(ERR, LSTACK, "pthread_setname_np name=%s ret=%d errno=%d\n", name, ret, errno);
++        return -1;
++    }
++
++    return 0;
++}
++
++static void* gazelle_wakeup_thread(void *arg)
++{
++    uint16_t queue_id = *(uint16_t *)arg;
++    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
++
++    struct cfg_params *cfg = get_global_cfg_params();
++    int32_t lcore_id = cfg->wakeup[stack->queue_id];
++    thread_affinity_init(lcore_id);
++
++    struct timespec st = {
++        .tv_sec = 0,
++        .tv_nsec = 1
++    };
++
++    LSTACK_LOG(INFO, LSTACK, "weakup_%02hu start\n", stack->queue_id);
++
++    for (;;) {
++        if (cfg->low_power_mod != 0 && stack->low_power) {
++            nanosleep(&st, &st);
++        }
++
++        sem_t *event_sem[WAKEUP_MAX_NUM];
++        uint32_t num = gazelle_light_ring_dequeue_burst(stack->wakeup_ring, (void **)event_sem, WAKEUP_MAX_NUM);
++        for (uint32_t i = 0; i < num; i++) {
++            sem_post(event_sem[i]);
++        }
++    }
++
++    return NULL;
++}
++
++static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
++{
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++
++    memset_s(stack, sizeof(*stack), 0, sizeof(*stack));
++
++    set_stack_idx(queue_id);
++    stack->tid = rte_gettid();
++    stack->queue_id = queue_id;
++    stack->port_id = stack_group->port_id;
++    stack->cpu_id = get_global_cfg_params()->cpus[queue_id];
++    stack->lwip_stats = &lwip_stats;
++
++    init_list_node(&stack->recv_list);
++    init_list_node(&stack->send_list);
++
++    sys_calibrate_tsc();
++    stack_stat_init();
++
++    stack_group->stacks[queue_id] = stack;
++
++    cpu_set_t cpuset;
++    CPU_ZERO(&cpuset);
++    CPU_SET(stack->cpu_id, &cpuset);
++    if (rte_thread_set_affinity(&cpuset) != 0) {
++        LSTACK_LOG(ERR, LSTACK, "rte_thread_set_affinity failed\n");
++        return -1;
++    }
++    RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
++
++    stack->socket_id = numa_node_of_cpu(stack->cpu_id);
++    if (stack->socket_id < 0) {
++        LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
++        return -1;
++    }
++
++    if (pktmbuf_pool_init(stack, stack_group->stack_num) != 0) {
++        return -1;
++    }
++
++    if (create_shared_ring(stack) != 0) {
++        return -1;
++    }
++
++    return 0;
++}
++
++static void* gazelle_kernel_event(void *arg)
++{
++    uint16_t queue_id = *(uint16_t *)arg;
++
++    int32_t epoll_fd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
++    if (epoll_fd < 0) {
++        LSTACK_LOG(ERR, LSTACK, "queue_id=%d epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
++        /* exit in main thread, avoid create mempool and exit at the same time */
++        set_init_fail();
++        sem_post(&get_protocol_stack_group()->all_init);
++        return NULL;
++    }
++
++    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
++    stack->epollfd = epoll_fd;
++
++    sem_post(&get_protocol_stack_group()->all_init);
++    LSTACK_LOG(INFO, LSTACK, "kernel_event_%02hu start\n", stack->queue_id);
++
++    struct epoll_event events[KERNEL_EPOLL_MAX];
++    for (;;) {
++        int32_t event_num = posix_api->epoll_wait_fn(epoll_fd, events, KERNEL_EPOLL_MAX, -1);
++        if (event_num <= 0) {
++            continue;
++        }
++
++        for (int32_t i = 0; i < event_num; i++) {
++            struct wakeup_poll *wakeup = events[i].data.ptr;
++            if (wakeup) {
++                __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
++                sem_post(&wakeup->event_sem);
++            }
++        }
++    }
++
++    return NULL;
++}
++
++static int32_t create_companion_thread(struct protocol_stack_group *stack_group, struct protocol_stack *stack)
++{
++    int32_t ret;
++
++    if (stack_group->wakeup_enable) {
++        ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_wakeup_thread);
++        if (ret != 0) {
++            LSTACK_LOG(ERR, LSTACK, "gazelleweakup ret=%d errno=%d\n", ret, errno);
++            return ret;
++        }
++    }
++
++    ret = create_thread(stack->queue_id, "gazellekernel", gazelle_kernel_event);
++    if (ret != 0) {
++        LSTACK_LOG(ERR, LSTACK, "gazellekernelEvent ret=%d errno=%d\n", ret, errno);
++    }
++    return ret;
++}
++
++void wait_sem_value(sem_t *sem, int32_t wait_value)
++{
++    int32_t sem_val;
++    do {
++        sem_getvalue(sem, &sem_val);
++    } while (sem_val < wait_value);
++}
++
++static struct protocol_stack * stack_thread_init(uint16_t queue_id)
++{
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++
++    struct protocol_stack *stack = malloc(sizeof(*stack));
++    if (stack == NULL) {
++        LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
++        return NULL;
++    }
++
++    if (init_stack_value(stack, queue_id) != 0) {
++        free(stack);
++        return NULL;
++    }
++
++    thread_affinity_init(stack->cpu_id);
++
++    hugepage_init();
++
++    tcpip_init(NULL, NULL);
++
++    if (use_ltran()) {
++        if (client_reg_thrd_ring() != 0) {
++            free(stack);
++            return NULL;
++        }
++    }
++
++    sem_post(&stack_group->thread_phase1);
++
++    if (!use_ltran()) {
++        wait_sem_value(&stack_group->ethdev_init, 1);
++    }
++
++    if (ethdev_init(stack) != 0) {
++        free(stack);
++        return NULL;
++    }
++
++    if (create_companion_thread(stack_group, stack) != 0) {
++        free(stack);
++        return NULL;
++    }
++
++    return stack;
++}
++
++static void* gazelle_stack_thread(void *arg)
++{
++    uint16_t queue_id = *(uint16_t *)arg;
++
++    struct protocol_stack *stack = stack_thread_init(queue_id);
++    if (stack == NULL) {
++        /* exit in main thread, avoid create mempool and exit at the same time */
++        set_init_fail();
++        sem_post(&get_protocol_stack_group()->all_init);
++        LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
++        return NULL;
++    }
++
++    sem_post(&get_protocol_stack_group()->all_init);
++    LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
++
++    for (;;) {
++        poll_rpc_msg(stack, HANDLE_RPC_MSG_MAX);
++
++        eth_dev_poll();
++
++        read_recv_list(stack, READ_LIST_MAX);
++
++        send_stack_list(stack, SEND_LIST_MAX);
++
++        sys_timer_run();
++
++        if (get_global_cfg_params()->low_power_mod != 0) {
++            low_power_idling(stack);
++        }
++    }
++
++    return NULL;
++}
++
++static int32_t init_protocol_sem(void)
++{
++    int32_t ret;
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++
++    pthread_spin_init(&stack_group->wakeup_list_lock, PTHREAD_PROCESS_PRIVATE);
++
++    if (!use_ltran()) {
++        ret = sem_init(&stack_group->ethdev_init, 0, 0);
++        if (ret < 0) {
++            LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
++            return -1;
++        }
++    }
++
++    ret = sem_init(&stack_group->thread_phase1, 0, 0);
++    if (ret < 0) {
++        LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
++        return -1;
++    }
++
++    ret = sem_init(&stack_group->all_init, 0, 0);
++    if (ret < 0) {
++        LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
++        return -1;
++    }
++
++    return 0;
++}
++
++int32_t init_protocol_stack(void)
++{
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    int32_t ret;
++
++    stack_group->stack_num = get_global_cfg_params()->num_cpu;
++    stack_group->wakeup_enable = (get_global_cfg_params()->num_wakeup > 0) ? true : false;
++    stack_group->wakeup_list = NULL;
++
++    if (init_protocol_sem() != 0) {
++        return -1;
++    }
++
++    for (uint32_t i = 0; i < stack_group->stack_num; i++) {
++        ret = create_thread(i, "gazellestack", gazelle_stack_thread);
++        if (ret != 0) {
++            return ret;
++        }
++    }
++
++    wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
++
++    ret = init_stack_numa_cpuset();
++    if (ret < 0) {
++        return -1;
++    }
++
++    return 0;
++}
++
++void stack_arp(struct rpc_msg *msg)
++{
++    struct rte_mbuf *mbuf = (struct rte_mbuf *)msg->args[MSG_ARG_0].p;
++
++    eth_dev_recv(mbuf);
++}
++
++void stack_socket(struct rpc_msg *msg)
++{
++    msg->result = gazelle_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
++    if (msg->result < 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, %ld socket failed\n", get_stack_tid(), msg->result);
++    }
++}
++
++void stack_close(struct rpc_msg *msg)
++{
++    int32_t fd = msg->args[MSG_ARG_0].i;
++
++    msg->result = lwip_close(fd);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++
++    gazelle_clean_sock(fd);
++
++    posix_api->close_fn(fd);
++}
++
++void stack_bind(struct rpc_msg *msg)
++{
++    msg->result = lwip_bind(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].socklen);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_listen(struct rpc_msg *msg)
++{
++    int32_t fd = msg->args[MSG_ARG_0].i;
++    int32_t backlog = msg->args[MSG_ARG_1].i;
++
++    struct lwip_sock *sock = get_socket_by_fd(fd);
++    if (sock == NULL) {
++        msg->result = -1;
++        return;
++    }
++
++    /* new listen add to stack listen list */
++    msg->result = lwip_listen(fd, backlog);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_accept(struct rpc_msg *msg)
++{
++    int32_t fd = msg->args[MSG_ARG_0].i;
++    msg->result = -1;
++
++    int32_t accept_fd = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
++    if (accept_fd < 0) {
++        LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
++        return;
++    }
++
++    struct lwip_sock *sock = get_socket(accept_fd);
++    if (sock == NULL || sock->stack == NULL) {
++        lwip_close(accept_fd);
++        gazelle_clean_sock(accept_fd);
++        posix_api->close_fn(accept_fd);
++        LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
++        return;
++    }
++
++    msg->result = accept_fd;
++    if (rte_ring_count(sock->conn->recvmbox->ring)) {
++        add_recv_list(accept_fd);
++    }
++}
++
++void stack_connect(struct rpc_msg *msg)
++{
++    msg->result = lwip_connect(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].socklen);
++    if (msg->result < 0) {
++        msg->result = -errno;
++    }
++}
++
++void stack_getpeername(struct rpc_msg *msg)
++{
++    msg->result = lwip_getpeername(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_getsockname(struct rpc_msg *msg)
++{
++    msg->result = lwip_getsockname(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_getsockopt(struct rpc_msg *msg)
++{
++    msg->result = lwip_getsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
++        msg->args[MSG_ARG_3].p, msg->args[MSG_ARG_4].p);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_setsockopt(struct rpc_msg *msg)
++{
++    msg->result = lwip_setsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
++        msg->args[MSG_ARG_3].cp, msg->args[MSG_ARG_4].socklen);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_fcntl(struct rpc_msg *msg)
++{
++    msg->result = lwip_fcntl(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].l);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_ioctl(struct rpc_msg *msg)
++{
++    msg->result = lwip_ioctl(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].l, msg->args[MSG_ARG_2].p);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_recv(struct rpc_msg *msg)
++{
++    msg->result = lwip_recv(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].size,
++        msg->args[MSG_ARG_3].i);
++}
++
++void stack_sendmsg(struct rpc_msg *msg)
++{
++    msg->result = lwip_sendmsg(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].i);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++void stack_recvmsg(struct rpc_msg *msg)
++{
++    msg->result = lwip_recvmsg(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].i);
++    if (msg->result != 0) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
++    }
++}
++
++/* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
++void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack)
++{
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    struct rte_mbuf *mbuf_copy = NULL;
++    struct protocol_stack *stack = NULL;
++    int32_t ret;
++
++    for (int32_t i = 0; i < stack_group->stack_num; i++) {
++        stack = stack_group->stacks[i];
++        if (cur_stack == stack) {
++            continue;
++        }
++
++        ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, &mbuf_copy, 1);
++        if (ret != 0) {
++            stack->stats.rx_allocmbuf_fail++;
++            return;
++        }
++        copy_mbuf(mbuf_copy, mbuf);
++
++        ret = rpc_call_arp(stack, mbuf_copy);
++        if (ret != 0) {
++            return;
++        }
++    }
++}
++
++/* when fd is listenfd, listenfd of all protocol stack thread will be closed */
++int32_t stack_broadcast_close(int32_t fd)
++{
++    struct lwip_sock *sock = get_socket(fd);
++    int32_t ret = 0;
++
++    do {
++        sock = sock->listen_next;
++        if (rpc_call_close(fd)) {
++            ret = -1;
++        }
++
++        if (sock == NULL) {
++            break;
++        }
++        fd = sock->conn->socket;
++    } while (sock);
++
++    return ret;
++}
++
++/* choice one stack listen */
++int32_t stack_single_listen(int32_t fd, int32_t backlog)
++{
++    return rpc_call_listen(fd, backlog);
++}
++
++/* listen sync to all protocol stack thread, so that any protocol stack thread can build connect */
++int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
++{
++    struct protocol_stack *cur_stack = get_protocol_stack_by_fd(fd);
++    struct protocol_stack *stack = NULL;
++    struct sockaddr addr;
++    socklen_t addr_len = sizeof(addr);
++    int32_t ret, clone_fd;
++
++    struct lwip_sock *sock = get_socket(fd);
++    if (sock == NULL) {
++        LSTACK_LOG(ERR, LSTACK, "tid %ld, %d get sock null\n", get_stack_tid(), fd);
++        GAZELLE_RETURN(EINVAL);
++    }
++
++    ret = rpc_call_getsockname(fd, &addr, &addr_len);
++    if (ret != 0) {
++        return ret;
++    }
++
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    for (int32_t i = 0; i < stack_group->stack_num; ++i) {
++        stack = stack_group->stacks[i];
++        if (stack != cur_stack) {
++            clone_fd = rpc_call_shadow_fd(stack, fd, &addr, sizeof(addr));
++            if (clone_fd < 0) {
++                stack_broadcast_close(fd);
++                return clone_fd;
++            }
++        } else {
++            clone_fd = fd;
++        }
++
++        ret = rpc_call_listen(clone_fd, backlog);
++        if (ret < 0) {
++            stack_broadcast_close(fd);
++            return ret;
++        }
++    }
++    return 0;
++}
++
++static struct lwip_sock *get_min_accept_sock(int32_t fd)
++{
++    struct lwip_sock *sock = get_socket(fd);
++    struct lwip_sock *min_sock = NULL;
++
++    while (sock) {
++        if (!NETCONN_IS_ACCEPTIN(sock)) {
++            sock = sock->listen_next;
++            continue;
++        }
++
++        if (min_sock == NULL || min_sock->stack->conn_num > sock->stack->conn_num) {
++            min_sock = sock;
++        }
++
++        sock = sock->listen_next;
++    }
++
++    return min_sock;
++}
++
++static void inline del_accept_in_event(struct lwip_sock *sock)
++{
++    pthread_spin_lock(&sock->wakeup->event_list_lock);
++
++    if (!NETCONN_IS_ACCEPTIN(sock)) {
++        sock->events &= ~EPOLLIN;
++        if (sock->events == 0) {
++            list_del_node_null(&sock->event_list);
++        }
++    }
++
++    pthread_spin_unlock(&sock->wakeup->event_list_lock);
++}
++
++/* ergodic the protocol stack thread to find the connection, because all threads are listening */
++int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
++{
++    int32_t ret = -1;
++
++    struct lwip_sock *sock = get_socket(fd);
++    if (sock == NULL) {
++        errno = EINVAL;
++        return -1;
++    }
++
++    struct lwip_sock *min_sock = get_min_accept_sock(fd);
++    if (min_sock && min_sock->conn) {
++        ret = rpc_call_accept(min_sock->conn->socket, addr, addrlen);
++    }
++
++    if (min_sock && min_sock->wakeup && min_sock->wakeup->type == WAKEUP_EPOLL) {
++        del_accept_in_event(min_sock);
++    }
++
++    if (ret < 0) {
++        errno = EAGAIN;
++    }
++    return ret;
++}
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index 06fac5c..ca7ce52 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -24,6 +24,7 @@
+ #include "dpdk_common.h"
+ #include "gazelle_dfx_msg.h"
+ #include "lstack_thread_rpc.h"
++#include "lstack_protocol_stack.h"
+ #include "lstack_stack_stat.h"
+ #include "posix/lstack_epoll.h"
+ 
+@@ -81,7 +82,10 @@ static void set_latency_start_flag(bool start)
+ 
+     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
+         struct protocol_stack *stack = stack_group->stacks[i];
+-        memset_s(&stack->latency, sizeof(struct gazelle_stack_latency), 0, sizeof(stack->latency));
++        int32_t ret = memset_s(&stack->latency, sizeof(struct gazelle_stack_latency), 0, sizeof(stack->latency));
++        if (ret != 0) {
++            LSTACK_LOG(ERR, LSTACK, "memset_s faile\n");
++        }
+         stack->latency.start_time = get_current_time();
+         stack->latency.lwip_latency.latency_min = ~((uint64_t)0);
+         stack->latency.read_latency.latency_min = ~((uint64_t)0);
+@@ -109,7 +113,7 @@ void unregister_wakeup(struct wakeup_poll *wakeup)
+     struct wakeup_poll *node = stack_group->wakeup_list;
+     struct wakeup_poll *pre = NULL;
+ 
+-    while(node && node != wakeup) {
++    while (node && node != wakeup) {
+         pre = node;
+         node = node->next;
+     }
+@@ -168,9 +172,12 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
+ 
+     lstack_get_low_power_info(&dfx->low_power_info);
+ 
+-    memcpy_s(&dfx->data.pkts.stack_stat, sizeof(struct gazelle_stack_stat), &stack->stats,
+-        sizeof(struct gazelle_stack_stat));
+-
++    int32_t ret = memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
++    if (ret != EOK) {
++        LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
++        return;
++    }
++    
+     get_wakeup_stat(stack, &dfx->data.pkts.wakeup_stat);
+ 
+     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
+@@ -191,6 +198,7 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
+     enum GAZELLE_STAT_MODE stat_mode)
+ {
+     int32_t rpc_call_result;
++    int32_t ret;
+ 
+     switch (stat_mode) {
+         case GAZELLE_STAT_LSTACK_SHOW:
+@@ -198,8 +206,11 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
+             get_stack_stats(dfx, stack);
+             break;
+         case GAZELLE_STAT_LSTACK_SHOW_SNMP:
+-            memcpy_s(&dfx->data.snmp, sizeof(dfx->data.snmp), &stack->lwip_stats->mib2,
++            ret = memcpy_s(&dfx->data.snmp, sizeof(dfx->data.snmp), &stack->lwip_stats->mib2,
+                 sizeof(stack->lwip_stats->mib2));
++            if (ret != EOK) {
++                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
++            }
+             break;
+         case GAZELLE_STAT_LSTACK_SHOW_CONN:
+             rpc_call_result = rpc_call_conntable(stack, dfx->data.conn.conn_list, GAZELLE_LSTACK_MAX_CONN);
+@@ -208,7 +219,10 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
+             dfx->data.conn.total_conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
+             break;
+         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
+-            memcpy_s(&dfx->data.latency, sizeof(dfx->data.latency), &stack->latency, sizeof(stack->latency));
++            ret = memcpy_s(&dfx->data.latency, sizeof(dfx->data.latency), &stack->latency, sizeof(stack->latency));
++            if (ret != EOK) {
++                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
++            }
+             break;
+         case GAZELLE_STAT_LTRAN_START_LATENCY:
+             set_latency_start_flag(true);
+@@ -248,8 +262,6 @@ int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
+ 
+     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
+         struct protocol_stack *stack = stack_group->stacks[i];
+-
+-        memset_s(&dfx, sizeof(dfx), 0, sizeof(dfx));
+         get_stack_dfx_data(&dfx, stack, stat_mode);
+ 
+         if (!use_ltran() &&
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 8937920..58c4b05 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -45,8 +45,7 @@ static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct
+     return &rpc_pool->msgs[prod];
+ }
+ 
+-static inline __attribute__((always_inline))
+-struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
++static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
+ {
+     struct rpc_msg *msg = NULL;
+ 
+@@ -76,8 +75,7 @@ struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
+     return msg;
+ }
+ 
+-static inline __attribute__((always_inline))
+-void rpc_msg_free(struct rpc_msg *msg)
++static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *msg)
+ {
+     pthread_spin_destroy(&msg->lock);
+ 
+@@ -87,15 +85,13 @@ void rpc_msg_free(struct rpc_msg *msg)
+     atomic_fetch_add(&msg->pool->cons, 1);
+ }
+ 
+-static inline __attribute__((always_inline))
+-void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
++static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
+ {
+     pthread_spin_trylock(&msg->lock);
+     lockless_queue_mpsc_push(queue, &msg->queue_node);
+ }
+ 
+-static inline __attribute__((always_inline))
+-int32_t rpc_sync_call(lockless_queue *queue, struct rpc_msg *msg)
++static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queue *queue, struct rpc_msg *msg)
+ {
+     int32_t ret;
+ 
+@@ -430,12 +426,12 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
+     return rpc_sync_call(&stack->rpc_queue, msg);
+ }
+ 
+-ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
++void rpc_call_send(int fd, const void *buf, size_t len, int flags)
+ {
+     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
+     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_send);
+     if (msg == NULL) {
+-        return -1;
++        return;
+     }
+ 
+     msg->args[MSG_ARG_0].i = fd;
+@@ -444,8 +440,6 @@ ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
+ 
+     msg->self_release = 0;
+     rpc_call(&stack->rpc_queue, msg);
+-
+-    return 0;
+ }
+ 
+ int32_t rpc_call_sendmsg(int fd, const struct msghdr *msghdr, int flags)
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index aeffbb3..1a6ef39 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -14,10 +14,10 @@
+ #define _GAZELLE_NET_CFG_H_
+ #include <stdbool.h>
+ 
+-#include <rte_ether.h>
+-
+ #include <lwip/ip_addr.h>
+ 
++#include "gazelle_opt.h"
++
+ #define BASE_BIN_SCALE  2
+ #define BASE_OCT_SCALE  8
+ #define BASE_DEC_SCALE  10
+@@ -61,7 +61,7 @@ struct cfg_params {
+     ip4_addr_t host_addr;
+     ip4_addr_t netmask;
+     ip4_addr_t gateway_addr;
+-    struct rte_ether_addr ethdev;
++    uint8_t mac_addr[ETHER_ADDR_LEN];
+     uint16_t num_cpu;
+     uint32_t cpus[CFG_MAX_CPUS];
+     uint16_t num_wakeup;
+diff --git a/src/lstack/include/lstack_compiler.h b/src/lstack/include/lstack_compiler.h
+deleted file mode 100644
+index c4880a5..0000000
+--- a/src/lstack/include/lstack_compiler.h
++++ /dev/null
+@@ -1,46 +0,0 @@
+-/*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
+-*/
+-
+-#ifndef _GAZELLE_COMPILER_H_
+-#define _GAZELLE_COMPILER_H_
+-
+-#ifdef __GNUC__
+-
+-#ifndef likely
+-#define likely(x)    __builtin_expect(!!(x), 1)
+-#endif
+-
+-#ifndef unlikely
+-#define unlikely(x)   __builtin_expect(!!(x), 0)
+-#endif
+-
+-#ifndef __clz__
+-#define __clz__(x)    __builtin_clz(x)
+-#endif
+-
+-#else // __GNUC__
+-
+-#define likely(x)    (x)
+-#define unlikely(x)  (x)
+-
+-#ifndef __clz__
+-#error "You have to provide __clz__ to return the number "\
+-"of leading 0-bits in x, starting at the most signification bit position."
+-#endif
+-
+-#endif // __GNUC__
+-
+-#ifndef ACCESS_ONCE
+-#define ACCESS_ONCE(x)   (*(volatile typeof(x) *)&(x))
+-#endif
+-
+-#endif /* GAZELLE_COMPILER_H */
+diff --git a/src/lstack/include/lstack_control_plane.h b/src/lstack/include/lstack_control_plane.h
+index 1fa84e6..d631ea6 100644
+--- a/src/lstack/include/lstack_control_plane.h
++++ b/src/lstack/include/lstack_control_plane.h
+@@ -13,8 +13,6 @@
+ #ifndef _GAZELLE_CONTROL_PLANE_H_
+ #define _GAZELLE_CONTROL_PLANE_H_
+ 
+-#include "lstack_thread_rpc.h"
+-
+ #define CONTROL_THREAD_NAME "control_thread"
+ 
+ enum vdev_request {
+@@ -25,6 +23,7 @@ enum vdev_request {
+     VDEV_NONE,
+ };
+ 
++struct rpc_msg;
+ int client_reg_thrd_ring(void);
+ int32_t control_init_client(bool is_reconnect);
+ void control_client_thread(void *arg);
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index 6ffcc41..f0bf4a1 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -13,15 +13,7 @@
+ #ifndef _GAZELLE_DPDK_H_
+ #define _GAZELLE_DPDK_H_
+ 
+-#include <rte_mbuf.h>
+-#include <rte_mempool.h>
+-
+-#include <lwip/pbuf.h>
+-#include "lstack_lockless_queue.h"
+-#include "lstack_vdev.h"
+-#include "gazelle_reg_msg.h"
+-#include "dpdk_common.h"
+-struct protocol_stack;
++#include "gazelle_opt.h"
+ 
+ #define RX_NB_MBUF          ((5 * MAX_CLIENTS) + (VDEV_RX_QUEUE_SZ * DEFAULT_BACKUP_RING_SIZE_FACTOR))
+ #define RX_MBUF_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
+@@ -42,21 +34,12 @@ struct protocol_stack;
+ #define CALL_MSG_RING_SIZE      (unsigned long long)32
+ #define CALL_CACHE_SZ           0
+ 
+-/* Layout:
+- * | rte_mbuf | pbuf | custom_free_function | payload |
+- **/
+-static inline struct rte_mbuf *pbuf_to_mbuf(const struct pbuf *p)
+-{
+-    return ((struct rte_mbuf *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
+-}
+-static inline struct pbuf_custom *mbuf_to_pbuf(const struct rte_mbuf *m)
+-{
+-    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf) + GAZELLE_MBUFF_PRIV_SIZE));
+-}
+-
+ int thread_affinity_default(void);
+ int thread_affinity_init(int cpu_id);
+ 
++struct protocol_stack;
++struct rte_mempool;
++struct rte_ring;
+ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
+ int32_t dpdk_eal_init(void);
+ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index 0e8400f..91f5f13 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -13,17 +13,8 @@
+ #ifndef __GAZELLE_ETHDEV_H__
+ #define __GAZELLE_ETHDEV_H__
+ 
+-#include <lwip/ip_addr.h>
+-#include <lwip/netif.h>
+-
+-#include "gazelle_dfx_msg.h"
+-#include "lstack_protocol_stack.h"
+-
+-#define RTE_TEST_TX_DESC_DEFAULT 512
+-#define RTE_TEST_RX_DESC_DEFAULT 128
+-
+-#define DPDK_PKT_BURST_SIZE 512
+-
++struct protocol_stack;
++struct rte_mbuf;
+ struct eth_dev_ops {
+     uint32_t (*rx_poll)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf);
+     uint32_t (*tx_xmit)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts);
+diff --git a/src/lstack/include/lstack_lwip.h b/src/lstack/include/lstack_lwip.h
+index ba57541..c62e99d 100644
+--- a/src/lstack/include/lstack_lwip.h
++++ b/src/lstack/include/lstack_lwip.h
+@@ -13,16 +13,15 @@
+ #ifndef __GAZELLE_LWIP_H__
+ #define __GAZELLE_LWIP_H__
+ 
+-#include "lstack_thread_rpc.h"
+-#include "dpdk_common.h"
+-#include "lwipsock.h"
+-
+-
+ #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
+ #define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata))
+ #define NETCONN_IS_DATAOUT(sock)    gazelle_ring_readover_count((sock)->send_ring)
+ #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
+ 
++struct lwip_sock;
++struct rte_mempool;
++struct rpc_msg;
++struct rte_mbuf;
+ void create_shadow_fd(struct rpc_msg *msg);
+ void gazelle_init_sock(int32_t fd);
+ int32_t gazelle_socket(int domain, int type, int protocol);
+@@ -30,7 +29,7 @@ void gazelle_clean_sock(int32_t fd);
+ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags);
+ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
+ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
+-ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags);
++ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);
+ void read_recv_list(struct protocol_stack *stack, uint32_t max_num);
+ void send_stack_list(struct protocol_stack *stack, uint32_t send_max);
+ void add_recv_list(int32_t fd);
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 0faeccf..39d29d7 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -14,13 +14,13 @@
+ #define __GAZELLE_PROTOCOL_STACK_H__
+ 
+ #include <semaphore.h>
++
+ #include <lwip/list.h>
+ #include <lwip/netif.h>
+-#include <rte_common.h>
+-#include "dpdk_common.h"
+-#include "lstack_thread_rpc.h"
++
+ #include "gazelle_dfx_msg.h"
+ #include "lstack_lockless_queue.h"
++#include "gazelle_opt.h"
+ 
+ #define SOCK_RECV_RING_SIZE         (128)
+ #define SOCK_RECV_FREE_THRES        (32)
+@@ -28,6 +28,10 @@
+ #define SOCK_SEND_REPLENISH_THRES   (16)
+ #define WAKEUP_MAX_NUM              (32)
+ 
++struct rte_mempool;
++struct rte_ring;
++struct rte_mbuf;
++
+ struct protocol_stack {
+     uint32_t tid;
+     uint16_t queue_id;
+@@ -64,7 +68,6 @@ struct protocol_stack {
+ };
+ 
+ struct eth_params;
+-#define PROTOCOL_STACK_MAX 32
+ struct protocol_stack_group {
+     uint16_t stack_num;
+     uint16_t port_id;
+@@ -92,7 +95,7 @@ struct protocol_stack *get_bind_protocol_stack(void);
+ struct protocol_stack_group *get_protocol_stack_group(void);
+ 
+ int32_t init_protocol_stack(void);
+-int32_t bind_to_stack_numa(struct protocol_stack *stack);
++void bind_to_stack_numa(struct protocol_stack *stack);
+ int32_t init_dpdk_ethdev(void);
+ 
+ void wait_sem_value(sem_t *sem, int32_t wait_value);
+diff --git a/src/lstack/include/lstack_signal.h b/src/lstack/include/lstack_signal.h
+deleted file mode 100644
+index 2541a37..0000000
+--- a/src/lstack/include/lstack_signal.h
++++ /dev/null
+@@ -1,17 +0,0 @@
+-/*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
+-*/
+-
+-#ifndef _GAZELLE_SIGNAL_
+-#define _GAZELLE_SIGNAL_
+-
+-void lstack_signal_init(void);
+-#endif // _GAZELLE_SIGNAL_
+diff --git a/src/lstack/include/lstack_stack_stat.h b/src/lstack/include/lstack_stack_stat.h
+index e152fe6..aacade1 100644
+--- a/src/lstack/include/lstack_stack_stat.h
++++ b/src/lstack/include/lstack_stack_stat.h
+@@ -13,10 +13,12 @@
+ #ifndef GAZELLE_STACK_STAT_H
+ #define GAZELLE_STACK_STAT_H
+ 
+-#include <semaphore.h>
+-#include <lwip/pbuf.h>
+-#include <semaphore.h>
+-#include "gazelle_dfx_msg.h"
++struct gazelle_stack_latency;
++struct pbuf;
++struct gazelle_stat_low_power_info;
++struct wakeup_poll;
++enum GAZELLE_LATENCY_TYPE;
++enum GAZELLE_STAT_MODE;
+ 
+ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+     enum GAZELLE_LATENCY_TYPE type);
+diff --git a/src/lstack/include/lstack_thread_rpc.h b/src/lstack/include/lstack_thread_rpc.h
+index 35e6b1e..3732167 100644
+--- a/src/lstack/include/lstack_thread_rpc.h
++++ b/src/lstack/include/lstack_thread_rpc.h
+@@ -16,7 +16,6 @@
+ #include <pthread.h>
+ #include <arch/sys_arch.h>
+ 
+-#include "lstack_dpdk.h"
+ #include "lstack_lockless_queue.h"
+ 
+ #define MSG_ARG_0                      (0)
+@@ -50,6 +49,7 @@ struct rpc_msg {
+ };
+ 
+ struct protocol_stack;
++struct rte_mbuf;
+ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
+ int32_t rpc_call_msgcnt(struct protocol_stack *stack);
+ int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
+@@ -66,7 +66,7 @@ int32_t rpc_call_bind(int32_t fd, const struct sockaddr *addr, socklen_t addrlen
+ int32_t rpc_call_listen(int s, int backlog);
+ int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
+ int32_t rpc_call_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
+-ssize_t rpc_call_send(int fd, const void *buf, size_t len, int flags);
++void rpc_call_send(int fd, const void *buf, size_t len, int flags);
+ int32_t rpc_call_sendmsg(int fd, const struct msghdr *msg, int flags);
+ int32_t rpc_call_recvmsg(int fd, struct msghdr *msg, int flags);
+ int32_t rpc_call_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
+diff --git a/src/lstack/include/lstack_vdev.h b/src/lstack/include/lstack_vdev.h
+index 31a997d..5836257 100644
+--- a/src/lstack/include/lstack_vdev.h
++++ b/src/lstack/include/lstack_vdev.h
+@@ -13,23 +13,9 @@
+ #ifndef _GAZELLE_VDEV_H_
+ #define _GAZELLE_VDEV_H_
+ 
+-#include "lstack_ethdev.h"
+-#include "gazelle_reg_msg.h"
+-
+-#define DEFAULT_RING_SIZE                 (512)
+-#define DEFAULT_BACKUP_RING_SIZE_FACTOR   (16)
+-
+-#define VDEV_RX_QUEUE_SZ     (DEFAULT_RING_SIZE)
+-#define VDEV_EVENT_QUEUE_SZ  (DEFAULT_RING_SIZE)
+-#define VDEV_REG_QUEUE_SZ    (DEFAULT_RING_SIZE)
+-#define VDEV_CALL_QUEUE_SZ   (DEFAULT_RING_SIZE)
+-#define VDEV_WAKEUP_QUEUE_SZ (DEFAULT_RING_SIZE)
+-#define VDEV_IDLE_QUEUE_SZ   (DEFAULT_RING_SIZE)
+-
+-#define VDEV_TX_QUEUE_SZ     (DEFAULT_RING_SIZE)
+-#define FREE_RX_QUEUE_SZ     (DPDK_PKT_BURST_SIZE)
+-
+ struct eth_dev_ops;
++struct gazelle_quintuple;
++enum reg_ring_type;
+ void vdev_dev_ops_init(struct eth_dev_ops **dev_ops);
+ int vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple);
+ 
+diff --git a/src/lstack/include/posix/lstack_epoll.h b/src/lstack/include/posix/lstack_epoll.h
+index e9f9b91..a94b49f 100644
+--- a/src/lstack/include/posix/lstack_epoll.h
++++ b/src/lstack/include/posix/lstack_epoll.h
+@@ -13,22 +13,26 @@
+ #ifndef _GAZELLE_EPOLL_H_
+ #define _GAZELLE_EPOLL_H_
+ 
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+ #include <poll.h>
+ #include <stdbool.h>
+ #include <semaphore.h>
+ #include <pthread.h>
+-#include <rte_common.h>
+ 
+-#include "lstack_protocol_stack.h"
++#include <lwip/list.h>
++
++#include "gazelle_dfx_msg.h"
++#include "gazelle_opt.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
+ 
+ enum wakeup_type {
+     WAKEUP_EPOLL = 0,
+     WAKEUP_POLL,
+ };
++
++struct protocol_stack;
+ struct wakeup_poll {
+     /* stack thread read frequently */
+     sem_t event_sem __rte_cache_aligned;
+@@ -55,6 +59,8 @@ struct wakeup_poll {
+     pthread_spinlock_t event_list_lock;
+ };
+ 
++struct netconn;
++void add_epoll_event(struct netconn *conn, uint32_t event);
+ int32_t lstack_epoll_create(int32_t size);
+ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event *event);
+ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event *events, int32_t maxevents, int32_t timeout);
+diff --git a/src/lstack/include/posix/lstack_fcntl.h b/src/lstack/include/posix/lstack_fcntl.h
+deleted file mode 100644
+index d1087a6..0000000
+--- a/src/lstack/include/posix/lstack_fcntl.h
++++ /dev/null
+@@ -1,28 +0,0 @@
+-/*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
+-*/
+-
+-#ifndef _GAZELLE_FCNTL_H_
+-#define _GAZELLE_FCNTL_H_
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+-int lwip_fcntl(int s, int cmd, int val);
+-int lwip_ioctl(int s, int cmd, ...);
+-
+-#ifdef __cplusplus
+-}
+-#endif
+-
+-#endif /* _GAZELLE_FCNTL_H_ */
+-
+diff --git a/src/lstack/include/posix/lstack_fork.h b/src/lstack/include/posix/lstack_fork.h
+deleted file mode 100644
+index 939534a..0000000
+--- a/src/lstack/include/posix/lstack_fork.h
++++ /dev/null
+@@ -1,17 +0,0 @@
+-/*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
+-*/
+-
+-#ifndef _GAZELLE_FORK_
+-#define _GAZELLE_FORK_
+-
+-pid_t lstack_fork(void);
+-#endif // _GAZELLE_FORK_
+diff --git a/src/lstack/include/posix/lstack_socket.h b/src/lstack/include/posix/lstack_socket.h
+index 776a6ab..a3ce1eb 100644
+--- a/src/lstack/include/posix/lstack_socket.h
++++ b/src/lstack/include/posix/lstack_socket.h
+@@ -36,6 +36,9 @@ ssize_t lwip_read(int s, void *mem, size_t len);
+ ssize_t lwip_recvfrom(int s, void *mem, size_t len, int flags, void *from, void *fromlen);
+ ssize_t lwip_recv(int s, void *mem, size_t len, int flags);
+ 
++int lwip_fcntl(int s, int cmd, int val);
++int lwip_ioctl(int s, int cmd, ...);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/src/lstack/include/posix/lstack_unistd.h b/src/lstack/include/posix/lstack_unistd.h
+index cdd46c9..484a792 100644
+--- a/src/lstack/include/posix/lstack_unistd.h
++++ b/src/lstack/include/posix/lstack_unistd.h
+@@ -13,11 +13,12 @@
+ #ifndef _GAZELLE_UNISTD_H_
+ #define _GAZELLE_UNISTD_H_
+ 
+-#include "lstack_fork.h"
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
++pid_t lstack_fork(void);
++void lstack_signal_init(void);
+ int lstack_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ 
+ #ifdef __cplusplus
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index fdca602..b53068d 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -14,6 +14,7 @@ use_ltran=1
+ kni_switch=0
+ 
+ low_power_mode=0
++listen_shadow=0
+ 
+ num_cpus="2"
+ num_wakeup="3"
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 0f30d76..28bf32d 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -25,6 +25,8 @@
+ #include "lstack_log.h"
+ #include "lstack_dpdk.h"
+ #include "lstack_lwip.h"
++#include "dpdk_common.h"
++#include "lstack_protocol_stack.h"
+ #include "lstack_ethdev.h"
+ 
+ #define PKTMBUF_MALLOC_FLAG     NULL
+@@ -153,13 +155,13 @@ static err_t eth_dev_init(struct netif *netif)
+     netif->linkoutput = eth_dev_output;
+ 
+     int32_t ret;
+-    ret = memcpy_s(netif->hwaddr, sizeof(netif->hwaddr), cfg->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN);
++    ret = memcpy_s(netif->hwaddr, sizeof(netif->hwaddr), cfg->mac_addr, ETHER_ADDR_LEN);
+     if (ret != EOK) {
+         LSTACK_LOG(ERR, LSTACK, "memcpy_s fail ret=%d\n", ret);
+         return ERR_MEM;
+     }
+ 
+-    netif->hwaddr_len = RTE_ETHER_ADDR_LEN;
++    netif->hwaddr_len = ETHER_ADDR_LEN;
+ 
+     return ERR_OK;
+ }
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index 287ac8f..31c1843 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -10,21 +10,23 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
++#include <securec.h>
+ #include <lwip/memp.h>
+ #include <lwip/lwipopts.h>
+ #include <lwip/sys.h>
+-
++#include <lwip/reg_sock.h>
+ #include <rte_ring.h>
+ #include <rte_malloc.h>
+ #include <rte_ethdev.h>
+ 
+-#include <securec.h>
+-
+ #include "lstack_cfg.h"
+ #include "lstack_dpdk.h"
+ #include "lstack_ethdev.h"
+ #include "lstack_control_plane.h"
+ #include "lstack_log.h"
++#include "dpdk_common.h"
++#include "lstack_protocol_stack.h"
++#include "gazelle_reg_msg.h"
+ #include "lstack_lwip.h"
+ #include "lstack_vdev.h"
+ 
+diff --git a/src/ltran/ltran_base.h b/src/ltran/ltran_base.h
+index 4663257..41d4cfb 100644
+--- a/src/ltran/ltran_base.h
++++ b/src/ltran/ltran_base.h
+@@ -13,61 +13,29 @@
+ #ifndef __GAZELLE_BASE_H__
+ #define __GAZELLE_BASE_H__
+ 
+-#include <stdint.h>
+-#include <stdbool.h>
+-#include <stdlib.h>
+-#include <stdio.h>
+-
+-#include <unistd.h>
+ #include <limits.h>
+-#include <securec.h>
+-
+-#include "ltran_opt.h"
+-#include "ltran_errno.h"
+-#include "gazelle_dfx_msg.h"
+-
+-#define GAZELLE_OK       0
+-#define GAZELLE_ERR      (-1)
+-#define GAZELLE_QUIT     1
+-
+-#define GAZELLE_ON       1
+-#define GAZELLE_OFF      0
+ 
+-#define GAZELLE_TRUE     1
+-#define GAZELLE_FALSE    0
++#include "gazelle_opt.h"
+ 
+-
+-#define GAZELLE_CMD_BUFFER_SIZE _POSIX_ARG_MAX
+-#define GAZELLE_PATH_BUFFER_SIZE PATH_MAX
++#define GAZELLE_CMD_BUFFER_SIZE          _POSIX_ARG_MAX
++#define GAZELLE_PATH_BUFFER_SIZE         PATH_MAX
+ #define GAZELLE_PARAM_BUFFER_SIZE        32
+ 
+ #define GAZELLE_MAX_DPDK_ARGS_NUM        32
+ #define GAZELLE_MAX_ADDR_NUM             1024
+-#define GAZELLE_MAX_BOND_NUM             2
+ #define GAZELLE_MAX_ETHERPORTS           32
+ #define GAZELLE_MAX_NAME_LEN             256
+ #define GAZELLE_MAX_RING_NAME_LEN        64
+ #define GAZELLE_MAX_CMD_NUM              1024
+-#define GAZELLE_MAX_PORT_NUM             16
+ 
+ #define GAZELLE_CLIENT_INFO_CHECKSUM_NUM 137
+ 
+ #define GAZELLE_MAX_INSTANCE_HTABLE_SIZE 256
+-#define GAZELLE_MAX_INSTANCE_ARRAY_SIZE  32
+-#define GAZELLE_MAX_INSTANCE_NUM         32
+-
+-#define GAZELLE_MAX_STACK_ARRAY_SIZE     GAZELLE_CLIENT_NUM_MAX
+-#define GAZELLE_MAX_STACK_HTABLE_SIZE    32
+-#define GAZELLE_MAX_STACK_NUM            128
++#define GAZELLE_MAX_INSTANCE_ARRAY_SIZE  GAZELLE_NULL_CLIENT
+ 
+ #define GAZELLE_MAX_TCP_SOCK_ARRAY_SIZE  256
+-#define GAZELLE_MAX_TCP_SOCK_HTABLE_SIZE 256
+-#define GAZELLE_MAX_TCP_SOCK_NUM         (GAZELLE_MAX_STACK_NUM * 32)
+ 
+-#define GAZELLE_STACK_MAX_TCP_CON_NUM    (1024*1024*1024)
+-#define GAZELLE_MAX_CONN_HTABLE_SIZE     2048
+-/* same as define (MAX_CLIENTS + RESERVED_CLIENTS) in lwip/lwipopts.h */
+-#define GAZELLE_MAX_CONN_NUM             (GAZELLE_MAX_STACK_NUM * (20000 + 2000))
++#define GAZELLE_STACK_MAX_TCP_CON_NUM    (1024 * 1024 * 1024)
+ 
+ #define GAZELLE_SUBNET_CHECK_OFFSET      20
+ #define GAZELLE_SUBNET_LENGTH_MIN        1
+@@ -83,6 +51,42 @@
+ #define GAZELLE_BOND_PORT_MASK_MAX       0xff
+ #define GAZELLE_BOND_PORT_DEFAULT        0xffff
+ 
++#define PROGRAM_NAME                    "ltran"
++#define VER_FMT                         "gazelle version: %s\n"
++#define VER_NAME                        "1.0.0"
++
++#define DEFAULT_LTRAN_CONF_PATH         "/etc/gazelle/ltran.conf"
++
++#define GAZELLE_MBUFS_RX_COUNT          (300 * 1024)
++#define GAZELLE_MBUFS_TX_COUNT          (30 * 1024)
++#define GAZELLE_MBUFS_CACHE_SIZE        512
++
++#define GAZELLE_RX_QUEUES               1
++#define GAZELLE_TX_QUEUES               1
++#define GAZELLE_RX_DESC_DEFAULT         512
++#define GAZELLE_TX_DESC_DEFAULT         512
++
++#define GAZELLE_KNI_MAX_PACKET_SIZE             2048
++#define GAZELLE_KNI_ETHERNET_HEADER_SIZE        14
++#define GAZELLE_KNI_ETHERNET_FCS_SIZE           4
++
++#define GAZELLE_PKT_MBUF_RX_POOL_NAME_FMT       "rx_pool%u"
++#define GAZELLE_PKT_MBUF_TX_POOL_NAME_FMT       "tx_pool%u"
++#define GAZELLE_PKT_MBUF_POOL_NAME_LENGTH       64
++
++#define GAZELLE_BOND_NAME_LENGTH                64
++#define GAZELLE_BOND_DEV_NAME_FMT               "net_bonding%hu"
++#define GAZELLE_BOND_QUEUE_MIN                  1
++#define GAZELLE_BOND_QUEUE_MAX                  64
++
++#define GAZELLE_CLIENT_RING_NAME_FMT            "MProc_Client_%u_mbuf_queue"
++#define GAZELLE_CLIENT_DROP_RING_SIZE           20000
++
++#define GAZELLE_LTRAN_LOG_FILE                  "/var/run/gazelle/ltran.log"
++
++// CONFIG OF DFX
++#define GAZELLE_DFX_REQ_INTERVAL_S              1
++
+ #define SEC_TO_USEC                                   1000000
+ 
+ #define GAZELLE_CONN_TIMEOUT                           5
+@@ -92,8 +96,8 @@
+ #define GAZELLE_TCP_CONN_SCAN_INTERVAL_MIN_S           0
+ #define GAZELLE_TCP_CONN_SCAN_INTERVAL_MAX_S           86400     // 1 day 24*60*60 = 86400
+ 
+-#define GAZELLE_INET_ADDRSTRLEN          16
++#define GAZELLE_INET_ADDRSTRLEN                         16
+ 
+-#define GAZELLE_DFX_SOCK_PATHNAME        "/var/run/gazelle/gazelle_cmd.sock"
++#define GAZELLE_DFX_SOCK_PATHNAME                       "/var/run/gazelle/gazelle_cmd.sock"
+ 
+ #endif /* ifndef __GAZELLE_BASE_H__ */
+diff --git a/src/ltran/ltran_config.c b/src/ltran/ltran_config.c
+index d9c1bd7..e9f06a1 100644
+--- a/src/ltran/ltran_config.c
++++ b/src/ltran/ltran_config.c
+@@ -17,7 +17,8 @@
+ #include <securec.h>
+ 
+ #include "ltran_log.h"
+-#include "ltran_config.h"
++#include "ltran_base.h"
++#include "ltran_param.h"
+ 
+ #define NO_ARGS             0
+ #define HAS_ARGS            1
+diff --git a/src/ltran/ltran_config.h b/src/ltran/ltran_config.h
+deleted file mode 100644
+index 645dc11..0000000
+--- a/src/ltran/ltran_config.h
++++ /dev/null
+@@ -1,20 +0,0 @@
+-/*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
+-*/
+-
+-#ifndef __GAZELLE_CONFIG_H__
+-#define __GAZELLE_CONFIG_H__
+-
+-#include "ltran_param.h"
+-
+-int32_t ltran_config_init(int32_t argc, char *argv[]);
+-
+-#endif /* ifndef __GAZELLE_CONFIG_H__ */
+\ No newline at end of file
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 2b71021..9da6b7f 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -25,6 +25,7 @@
+ #include <rte_log.h>
+ 
+ #include "ltran_stat.h"
++#include "ltran_base.h"
+ #include "gazelle_dfx_msg.h"
+ 
+ /* seeing show_usage() */
+@@ -39,14 +40,16 @@
+ #define GAZELLE_LTRAN_PARAM_NUM  3
+ #define GAZELLE_LSTACK_PARAM_NUM 4
+ 
+-#define GAZELLE_LTRAN_SET_MINNUM     5
+-#define GAZELLE_LSTACK_SET_MINNUM    6
++#define GAZELLE_LTRAN_SET_MINNUM 5
++#define GAZELLE_LSTACK_SET_MINNUM 6
+ 
+ #define GAZELLE_CMD_MAX          5
+ 
+-#define GAZELLE_RESULT_LEN   8291
++#define GAZELLE_RESULT_LEN       8291
+ #define GAZELLE_MAX_LATENCY_TIME 1800    // max latency time 30mins
+ 
++#define GAZELLE_DECIMAL          10
++
+ static int32_t g_unix_fd = -1;
+ static int32_t g_ltran_rate_show_flag = GAZELLE_OFF;    // not show when first get total statistics
+ static struct gazelle_stat_ltran_total g_last_ltran_total;
+@@ -431,8 +434,6 @@ static void gazelle_print_ltran_stat_latency(void *buf, const struct gazelle_sta
+     } else {
+         printf("                          total:      0\n");
+     }
+-
+-    return;
+ }
+ 
+ static void gazelle_print_ltran_stat_client(void *buf, const struct gazelle_stat_msg_request *req_msg)
+@@ -491,7 +492,7 @@ static void gazelle_print_ltran_stat_burst(void *buf, const struct gazelle_stat_
+             for (uint32_t j = 1; j <= GAZELLE_PACKET_READ_SIZE; j++) {
+                 diff = port_stat->rx_iter_arr[j] - last_port_stat->rx_iter_arr[j];
+                 (sum == 0) ? (percent = 0) : (percent = diff * percent_sign / sum);
+-                printf("Burst Packets[%2d]: %-15"PRIu64" Percent: %3"PRIu64"%%\n", j, diff, percent);
++                printf("Burst Packets[%2u]: %-15"PRIu64" Percent: %3"PRIu64"%%\n", j, diff, percent);
+             }
+         }
+     } else {
+@@ -535,7 +536,6 @@ static void gazelle_print_lstack_stat_brief(struct gazelle_stat_lstack_total *st
+             break;
+         }
+     } while (true);
+-    return;
+ }
+ 
+ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
+@@ -555,7 +555,7 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
+     printf("app_get_idlefail: %-11"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.app_write_idlefail);
+     printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list_cnt);
+     printf("send_list: %-18"PRIu64" ", lstack_stat->data.pkts.send_list_cnt);
+-    printf("conn_num: %-19"PRIu16" \n", lstack_stat->data.pkts.conn_num);
++    printf("conn_num: %-19hu \n", lstack_stat->data.pkts.conn_num);
+     printf("wakeup_events: %-14"PRIu64" ", lstack_stat->data.pkts.stack_stat.wakeup_events);
+     printf("app_events: %-17"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_events);
+     printf("read_null: %-18"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.read_null);
+@@ -598,7 +598,6 @@ static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lsta
+             break;
+         }
+     } while (true);
+-    return;
+ }
+ 
+ static void gazelle_print_lstack_stat_total(void *buf, const struct gazelle_stat_msg_request *req_msg)
+@@ -610,7 +609,6 @@ static void gazelle_print_lstack_stat_total(void *buf, const struct gazelle_stat
+     }
+ 
+     gazelle_print_lstack_stat_detail((struct gazelle_stack_dfx_data *)buf, req_msg);
+-    return;
+ }
+ 
+ static void parse_thread_latency_result(const struct stack_latency *latency, char *result, size_t max_len,
+@@ -718,7 +716,6 @@ static void gazelle_print_lstack_stat_lpm(void *buf, const struct gazelle_stat_m
+         (uint32_t)dfx_data->low_power_info.lpm_rx_pkts,
+         dfx_data->low_power_info.lpm_detect_ms,
+         dfx_data->low_power_info.lpm_pkts_in_detect);
+-    return;
+ }
+ 
+ static void gazelle_print_lstack_stat_rate(void *buf, const struct gazelle_stat_msg_request *req_msg)
+@@ -776,7 +773,6 @@ static void gazelle_print_lstack_stat_rate(void *buf, const struct gazelle_stat_
+             return;
+         }
+     } while (true);
+-    return;
+ }
+ 
+ static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_data *stat,
+@@ -848,7 +844,6 @@ static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_
+             return;
+         }
+     } while (true);
+-    return;
+ }
+ 
+ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
+@@ -874,13 +869,13 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
+             rip.s_addr = conn_info->rip;
+             lip.s_addr = conn_info->lip;
+             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
+-                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%-7d%s:%hu\t   %s:%hu\t  %s\n", i, conn_info->recv_cnt,
++                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%s:%hu\t   %s:%hu\t  %s\n", i, conn_info->recv_cnt,
+                     conn_info->recv_ring_cnt, conn_info->in_send, conn_info->send_ring_cnt, conn_info->sem_cnt,
+-                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
++                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
+                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
+                     tcp_state_to_str(conn_info->tcp_sub_state));
+             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
+-                printf("%-6utcp    %-57u%s:%hu\t   0.0.0.0:*\t\t  LISTEN\n", i, conn_info->recv_cnt,
++                printf("%-6utcp    %-50u%s:%hu\t   0.0.0.0:*\t\t  LISTEN\n", i, conn_info->recv_cnt,
+                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
+             } else {
+                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
+@@ -905,7 +900,6 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
+             return;
+         }
+     } while (true);
+-    return;
+ }
+ 
+ static void show_usage(void)
+@@ -967,7 +961,7 @@ static int32_t parse_dfx_ltran_set_args(int32_t argc, char *argv[], struct gazel
+ static int32_t parse_dfx_ltran_show_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+ {
+     int32_t cmd_index = 0;
+-    int32_t delay = 1;
++    long int delay = 1;
+ 
+     if (argc == GAZELLE_LTRAN_PARAM_NUM) {
+         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW;
+@@ -1003,8 +997,9 @@ static int32_t parse_dfx_ltran_show_args(int32_t argc, char *argv[], struct gaze
+         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_STOP_LATENCY;
+         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW_LATENCY;
+         if (argc > GAZELLE_LSTACK_PARAM_NUM) {
+-            delay = atoi(argv[GAZELLE_OPTIONS1_ARG_IDX]);
+-            if (delay <= 0) {
++            char *end = NULL;
++            delay = strtol(argv[GAZELLE_OPTIONS1_ARG_IDX], &end, GAZELLE_DECIMAL);
++            if (delay <= 0 || (end == NULL) || (*end != '\0')) {
+                 return -1;
+             }
+             if (delay > GAZELLE_MAX_LATENCY_TIME) {
+@@ -1066,8 +1061,10 @@ static int32_t parse_dfx_lstack_set_args(int32_t argc, char *argv[], struct gaze
+     }
+ 
+     if (strcmp(param, "lowpower") == 0) {
+-        req_msg[cmd_index].data.low_power_mod = (uint16_t)atoi(argv[GAZELLE_OPT_LPM_ARG_IDX1]);
+-        if (req_msg[cmd_index].data.low_power_mod > 1) {
++        char *end = NULL;
++        req_msg[cmd_index].data.low_power_mod =
++            (uint16_t)strtol(argv[GAZELLE_OPT_LPM_ARG_IDX1], &end, GAZELLE_DECIMAL);
++        if (req_msg[cmd_index].data.low_power_mod > 1 || (end == NULL) || (*end != '\0')) {
+             printf("low_power_mod input invaild\n");
+             return cmd_index;
+         }
+@@ -1080,7 +1077,7 @@ static int32_t parse_dfx_lstack_set_args(int32_t argc, char *argv[], struct gaze
+ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+ {
+     int32_t cmd_index = 0;
+-    int32_t delay = 1;
++    long int delay = 1;
+ 
+     if (argc == GAZELLE_LSTACK_PARAM_NUM) {
+         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW;
+@@ -1107,8 +1104,9 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
+         }
+ 
+         if (argc > GAZELLE_OPTIONS2_ARG_IDX) {
+-            delay = atoi(argv[GAZELLE_OPTIONS2_ARG_IDX]);
+-            if (delay <= 0) {
++            char *end = NULL;
++            delay = strtol(argv[GAZELLE_OPTIONS2_ARG_IDX], &end, GAZELLE_DECIMAL);
++            if (delay <= 0 || (end == NULL) || (*end != '\0')) {
+                 return -1;
+             }
+             if (delay > GAZELLE_MAX_LATENCY_TIME) {
+@@ -1189,8 +1187,6 @@ static int32_t check_cmd_support(struct gazelle_stat_msg_request *req_msg, int32
+             printf("connect ltran failed. errno: 111 ret=-1\n");
+             return -1;
+     }
+-
+-    return -1;
+ }
+ 
+ int32_t dfx_loop(struct gazelle_stat_msg_request *req_msg, int32_t req_msg_num)
+diff --git a/src/ltran/ltran_ethdev.c b/src/ltran/ltran_ethdev.c
+index 03c692d..45bf2ef 100644
+--- a/src/ltran/ltran_ethdev.c
++++ b/src/ltran/ltran_ethdev.c
+@@ -28,6 +28,9 @@
+ #include "dpdk_common.h"
+ #include "ltran_param.h"
+ #include "ltran_log.h"
++#include "ltran_base.h"
++#include "gazelle_opt.h"
++#include "ltran_errno.h"
+ #include "gazelle_reg_msg.h"
+ 
+ uint32_t g_bond_num = 0;
+@@ -134,8 +137,7 @@ static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index, u
+ {
+     uint32_t num_mbufs = GAZELLE_MBUFS_RX_COUNT * scale;
+ 
+-    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH];
+-    (void)memset_s(mbuf_pool_name, sizeof(mbuf_pool_name), 0, sizeof(mbuf_pool_name));
++    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH] = {0};
+ 
+     int32_t ret = snprintf_s(mbuf_pool_name, sizeof(mbuf_pool_name), sizeof(mbuf_pool_name) - 1,
+                      GAZELLE_PKT_MBUF_RX_POOL_NAME_FMT, bond_port_index);
+@@ -153,8 +155,7 @@ static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index, u
+ {
+     const uint32_t num_mbufs = GAZELLE_MBUFS_TX_COUNT * scale;
+ 
+-    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH];
+-    (void)memset_s(mbuf_pool_name, sizeof(mbuf_pool_name), 0, sizeof(mbuf_pool_name));
++    char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH] = {0};
+ 
+     int32_t ret = snprintf_s(mbuf_pool_name, sizeof(mbuf_pool_name), sizeof(mbuf_pool_name) - 1,
+                      GAZELLE_PKT_MBUF_TX_POOL_NAME_FMT, bond_port_index);
+@@ -263,7 +264,7 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
+ 
+     int32_t ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_num, &rx_ring_size, &tx_ring_size);
+     if (ret != 0) {
+-        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed in slave port initialize. errno: %d, port: %d \n", ret,
++        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed in slave port initialize. errno: %d, port: %hu \n", ret,
+                   port_num);
+         return GAZELLE_ERR;
+     }
+@@ -273,7 +274,7 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
+         ret = rte_eth_rx_queue_setup(port_num, queue_id, rx_ring_size, (uint32_t)rte_eth_dev_socket_id(port_num), NULL,
+                                      pktmbuf_rxpool);
+         if (ret < 0) {
+-            LTRAN_ERR("rte_eth_rx_queue_setup failed in slave port initialize. errno: %d, port: %d\n", ret, port_num);
++            LTRAN_ERR("rte_eth_rx_queue_setup failed in slave port initialize. errno: %d, port: %hu\n", ret, port_num);
+             return GAZELLE_ERR;
+         }
+     }
+@@ -282,7 +283,7 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
+         ret = rte_eth_tx_queue_setup(port_num, queue_id, tx_ring_size, (uint32_t)rte_eth_dev_socket_id(port_num),
+                                      &dev_info.default_txconf);
+         if (ret < 0) {
+-            LTRAN_ERR("rte_eth_tx_queue_setup failed in slave port initialize. errno: %d, port: %d\n", ret, port_num);
++            LTRAN_ERR("rte_eth_tx_queue_setup failed in slave port initialize. errno: %d, port: %hu\n", ret, port_num);
+             return GAZELLE_ERR;
+         }
+     }
+@@ -358,14 +359,14 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
+ 
+     int32_t ret = ltran_eth_bond_slave(port_info, port_num, bond_port_id);
+     if (ret < 0) {
+-        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %d, errno: %d \n", port_num, ret);
++        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %hu, errno: %d \n", port_num, ret);
+         return GAZELLE_ERR;
+     }
+     
+     struct rte_eth_dev_info dev_info;
+     if (rte_eth_dev_info_get(bond_port_id, &dev_info) != 0) {
+         LTRAN_ERR("faile rte_eth_dev_info_get\n");
+-	return  GAZELLE_ERR;
++        return GAZELLE_ERR;
+     }
+ 
+     struct rte_eth_conf port_conf = {0};
+@@ -376,13 +377,13 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
+ 
+     ret = rte_eth_dev_configure(bond_port_id, rx_queue_num, tx_queue_num, &port_conf);
+     if (ret != 0) {
+-        LTRAN_ERR("rte_eth_dev_configure failed with bond port num: %d, errno: %d \n", port_num, ret);
++        LTRAN_ERR("rte_eth_dev_configure failed with bond port num: %hu, errno: %d \n", port_num, ret);
+         return GAZELLE_ERR;
+     }
+ 
+     ret = rte_eth_dev_adjust_nb_rx_tx_desc(bond_port_id, &rx_ring_size, &tx_ring_size);
+     if (ret != 0) {
+-        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed with bond port num: %d, errno: %d \n", port_num, ret);
++        LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed with bond port num: %hu, errno: %d \n", port_num, ret);
+         return GAZELLE_ERR;
+     }
+     LTRAN_DEBUG("Bond port adujst rx_ring_size: %hu, tx_ring_size: %hu. bond port num: %hu \n",
+@@ -390,13 +391,13 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
+ 
+     ret = ltran_eth_rx_queue_setup(bond_port_id, pktmbuf_rxpool, rx_queue_num, rx_ring_size);
+     if (ret < 0) {
+-        LTRAN_ERR("rte_eth_rx_queue_setup failed in bond port initialize. errno: %d, port: %d \n", ret, port_num);
++        LTRAN_ERR("rte_eth_rx_queue_setup failed in bond port initialize. errno: %d, port: %hu \n", ret, port_num);
+         return GAZELLE_ERR;
+     }
+ 
+     ret = ltran_eth_tx_queue_setup(port_num, bond_port_id, tx_queue_num, tx_ring_size);
+     if (ret < 0) {
+-        LTRAN_ERR("rte_eth_tx_queue_setup failed in bond port initialize. errno: %d, port: %d \n", ret, port_num);
++        LTRAN_ERR("rte_eth_tx_queue_setup failed in bond port initialize. errno: %d, port: %hu \n", ret, port_num);
+         return GAZELLE_ERR;
+     }
+     return GAZELLE_OK;
+@@ -419,7 +420,7 @@ static int32_t ltran_single_bond_port_init(uint16_t port_num, struct rte_mempool
+ 
+     ret = rte_eth_bond_create(bond_port_name, (uint8_t)ltran_config->bond.mode, (uint8_t)rte_socket_id());
+     if (ret < 0) {
+-        LTRAN_ERR("rte_eth_bond_create failed with bond port num: %d, errno: %d\n", port_num, ret);
++        LTRAN_ERR("rte_eth_bond_create failed with bond port num: %hu, errno: %d\n", port_num, ret);
+         return GAZELLE_ERR;
+     }
+     bond_port_id = (uint16_t)ret;
+@@ -432,20 +433,20 @@ static int32_t ltran_single_bond_port_init(uint16_t port_num, struct rte_mempool
+     struct rte_ether_addr addr = ltran_config->bond.mac[port_num];
+     ret = rte_eth_bond_mac_address_set(bond_port_id, &addr);
+     if (ret < 0) {
+-        LTRAN_ERR("rte_eth_bond_mac_address_set failed in bond port initialize. errno: %d, port: %d\n", ret, port_num);
++        LTRAN_ERR("rte_eth_bond_mac_address_set failed in bond port initialize. errno: %d, port: %hu\n", ret, port_num);
+         return GAZELLE_ERR;
+     }
+ 
+     ret = rte_eth_bond_link_monitoring_set(bond_port_id, (uint32_t)ltran_config->bond.miimon);
+     if (ret < 0) {
+-        LTRAN_ERR("rte_eth_bond_link_monitoring_set failed in bond port initialize. errno: %d, port: %d\n", ret,
++        LTRAN_ERR("rte_eth_bond_link_monitoring_set failed in bond port initialize. errno: %d, port: %hu\n", ret,
+                   port_num);
+         return GAZELLE_ERR;
+     }
+ 
+     ret = rte_eth_dev_start(bond_port_id);
+     if (ret < 0) {
+-        LTRAN_ERR("rte_eth_dev_start failed in bond port initialize. errno: %d, port: %d\n", ret, port_num);
++        LTRAN_ERR("rte_eth_dev_start failed in bond port initialize. errno: %d, port: %hu\n", ret, port_num);
+         return GAZELLE_ERR;
+     }
+ 
+diff --git a/src/ltran/ltran_ethdev.h b/src/ltran/ltran_ethdev.h
+index de7cfbb..f720c55 100644
+--- a/src/ltran/ltran_ethdev.h
++++ b/src/ltran/ltran_ethdev.h
+@@ -13,21 +13,23 @@
+ #ifndef __GAZELLE_ETHDEV_H__
+ #define __GAZELLE_ETHDEV_H__
+ 
+-#include <rte_mempool.h>
++#include <stdint.h>
+ 
+-#include "ltran_base.h"
++#include "gazelle_opt.h"
+ 
+ struct port_info {
+     uint16_t num_ports;
+-    uint16_t id[RTE_MAX_ETHPORTS];
++    uint16_t id[GAZELLE_MAX_ETHPORTS];
+ };
+ 
++struct rte_kni;
+ uint32_t get_bond_num(void);
+ struct rte_kni* get_gazelle_kni(void);
+ void set_bond_num(const uint32_t bond_num);
+ struct port_info* get_port_info(void);
+ uint16_t* get_bond_port(void);
+ 
++struct rte_mempool;
+ struct rte_mempool** get_pktmbuf_txpool(void);
+ struct rte_mempool** get_pktmbuf_rxpool(void);
+ 
+diff --git a/src/ltran/ltran_forward.c b/src/ltran/ltran_forward.c
+index 776692d..fb864b3 100644
+--- a/src/ltran/ltran_forward.c
++++ b/src/ltran/ltran_forward.c
+@@ -28,11 +28,12 @@
+ #include "ltran_tcp_conn.h"
+ #include "ltran_tcp_sock.h"
+ #include "ltran_stat.h"
++#include "ltran_stack.h"
++#include "ltran_base.h"
+ #include "ltran_log.h"
+ #include "ltran_param.h"
+ #include "ltran_ethdev.h"
+ #include "ltran_timer.h"
+-
+ #include "ltran_forward.h"
+ 
+ #define POINTER_PER_CACHELINE     (RTE_CACHE_LINE_SIZE / sizeof(void *))
+@@ -60,7 +61,7 @@ static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rt
+ 
+     // time stamp must > start time
+     if (*priv < get_start_time_stamp()) {
+-        memset_s(priv, GAZELLE_MBUFF_PRIV_SIZE, 0, GAZELLE_MBUFF_PRIV_SIZE);
++        *priv = 0;
+         return;
+     }
+ 
+@@ -82,7 +83,6 @@ static __rte_always_inline void flush_rx_mbuf(struct gazelle_stack *stack, struc
+         calculate_ltran_latency(stack, src);
+     }
+     rte_pktmbuf_free(src);
+-    src = NULL;
+ }
+ 
+ static __rte_always_inline void backup_bufs_enque_rx_ring(struct gazelle_stack *stack)
+@@ -334,7 +334,7 @@ static __rte_always_inline int32_t ipv4_handle(struct rte_mbuf *m, struct rte_ip
+     return ret;
+ }
+ 
+-static __rte_always_inline int32_t arp_handle(struct rte_mbuf *m)
++static __rte_always_inline void arp_handle(struct rte_mbuf *m)
+ {
+     uint32_t i;
+     struct gazelle_stack** stack_array = NULL;
+@@ -354,7 +354,7 @@ static __rte_always_inline int32_t arp_handle(struct rte_mbuf *m)
+     instance = gazelle_instance_map_by_ip(get_instance_mgr(), arph->arp_data.arp_tip);
+ 
+     if (instance == NULL) {
+-        return GAZELLE_ERR;
++        return;
+     }
+ 
+     stack_array = instance->stack_array;
+@@ -363,15 +363,13 @@ static __rte_always_inline int32_t arp_handle(struct rte_mbuf *m)
+             m_copy = rte_pktmbuf_alloc(m->pool);
+             if (m_copy == NULL) {
+                 LTRAN_ERR("copy mbuf failed in arp_handle. \n");
+-                return GAZELLE_ERR;
++                return;
+             }
+             copy_mbuf(m_copy, m);
+             // send and free m_copy in enqueue_rx_packet
+             enqueue_rx_packet(stack_array[i], m_copy);
+         }
+     }
+-
+-    return GAZELLE_OK;
+ }
+ 
+ static __rte_always_inline void upstream_forward_one(struct rte_mbuf *m)
+@@ -512,7 +510,7 @@ static __rte_always_inline void tcp_hash_table_handle(struct gazelle_stack *stac
+     void *pkts[PACKET_READ_SIZE];
+     struct gazelle_tcp_sock_htable *sock_htable = gazelle_get_tcp_sock_htable();
+ 
+-    if (rte_ring_cn_count(stack->reg_ring) == 0) {
++    if (gazelle_ring_readable_count(stack->reg_ring) == 0) {
+         return;
+     }
+ 
+@@ -567,7 +565,6 @@ static __rte_always_inline void upstream_forward_loop(uint32_t port_id, uint32_t
+     uint64_t time_stamp = 0;
+ 
+     struct rte_mbuf *buf[GAZELLE_PACKET_READ_SIZE] __rte_cache_aligned;
+-    memset_s(buf, sizeof(buf), 0, sizeof(buf));
+     for (loop_cnt = 0; loop_cnt < UPSTREAM_LOOP_TIMES; loop_cnt++) {
+         if (get_start_latency_flag() == GAZELLE_ON) {
+             time_stamp = get_current_time();
+diff --git a/src/ltran/ltran_forward.h b/src/ltran/ltran_forward.h
+index c8703a2..0657b69 100644
+--- a/src/ltran/ltran_forward.h
++++ b/src/ltran/ltran_forward.h
+@@ -13,18 +13,7 @@
+ #ifndef __GAZELLE_FORWORD_H__
+ #define __GAZELLE_FORWORD_H__
+ 
+-#include "ltran_stack.h"
+-#include "ltran_base.h"
+-
+ void upstream_forward(const uint16_t *port);
+ int32_t downstream_forward(uint16_t *port);
+ 
+-static __rte_always_inline unsigned rte_ring_cn_count(const struct rte_ring *r)
+-{
+-    const uint32_t old_head = r->prod.tail;
+-    rte_smp_rmb();
+-
+-    return r->cons.head - old_head;
+-}
+-
+ #endif /* ifndef __GAZELLE_FORWORD_H__ */
+diff --git a/src/ltran/ltran_instance.c b/src/ltran/ltran_instance.c
+index 15f4bb4..5560d0c 100644
+--- a/src/ltran/ltran_instance.c
++++ b/src/ltran/ltran_instance.c
+@@ -10,20 +10,26 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#include "ltran_instance.h"
+-
+ #include <netinet/in.h>
+ #include <sys/socket.h>
+ #include <sys/mman.h>
+ #include <arpa/inet.h>
+ #include <securec.h>
++#include <unistd.h>
++
++#include <rte_errno.h>
+ 
+ #include "ltran_stack.h"
+ #include "ltran_tcp_sock.h"
+ #include "ltran_param.h"
+ #include "ltran_stat.h"
+ #include "ltran_log.h"
++#include "ltran_base.h"
++#include "gazelle_opt.h"
++#include "ltran_errno.h"
++#include "gazelle_dfx_msg.h"
+ #include "gazelle_base_func.h"
++#include "ltran_instance.h"
+ 
+ volatile unsigned long g_tx_loop_count __rte_cache_aligned;
+ volatile unsigned long g_rx_loop_count __rte_cache_aligned;
+@@ -71,11 +77,10 @@ struct gazelle_instance_mgr *gazelle_instance_mgr_create(void)
+ {
+     struct gazelle_instance_mgr *mgr;
+ 
+-    mgr = malloc(sizeof(struct gazelle_instance_mgr));
++    mgr = calloc(1, sizeof(struct gazelle_instance_mgr));
+     if (mgr == NULL) {
+         return NULL;
+     }
+-    (void)memset_s(mgr, sizeof(struct gazelle_instance_mgr), 0, sizeof(struct gazelle_instance_mgr));
+ 
+     mgr->net_mask = htonl(get_ltran_config()->dispatcher.ipv4_net_mask);
+     mgr->subnet_size = (uint32_t)(get_ltran_config()->dispatcher.ipv4_subnet_size);
+@@ -134,6 +139,9 @@ struct gazelle_instance *gazelle_instance_map_by_ip(const struct gazelle_instanc
+     uint32_t ip_idx = ntohl(ip & mgr->net_mask);
+     if (ip_idx < mgr->subnet_size) {
+         uint8_t cl_idx = mgr->ipv4_to_client[ip_idx];
++        if (cl_idx == GAZELLE_NULL_CLIENT) {
++            return NULL;
++        }
+         return mgr->instances[cl_idx];
+     }
+     return NULL;
+@@ -183,11 +191,10 @@ struct gazelle_instance *gazelle_instance_add_by_pid(struct gazelle_instance_mgr
+             continue;
+         }
+ 
+-        instance = malloc(sizeof(struct gazelle_instance));
++        instance = calloc(1, sizeof(struct gazelle_instance));
+         if (instance == NULL) {
+             return NULL;
+         }
+-        (void)memset_s(instance, sizeof(struct gazelle_instance), 0, sizeof(struct gazelle_instance));
+ 
+         instance->pid = pid;
+         mgr->instance_cur_tick[i]++;
+@@ -235,9 +242,12 @@ static int32_t instance_info_set(struct gazelle_instance *instance, const struct
+         return GAZELLE_ERR;
+     }
+ 
+-    memset_s(instance->stack_array, sizeof(instance->stack_array), 0, sizeof(instance->stack_array));
++    ret = memset_s(instance->stack_array, sizeof(instance->stack_array), 0, sizeof(instance->stack_array));
++    if (ret != EOK) {
++        return GAZELLE_ERR;
++    }
+ 
+-    ret = memcpy_s(instance->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN, conf->ethdev.addr_bytes, RTE_ETHER_ADDR_LEN);
++    ret = memcpy_s(instance->mac_addr, ETHER_ADDR_LEN, conf->mac_addr, ETHER_ADDR_LEN);
+     if (ret != EOK) {
+         return GAZELLE_ERR;
+     }
+@@ -245,19 +255,19 @@ static int32_t instance_info_set(struct gazelle_instance *instance, const struct
+     return GAZELLE_OK;
+ }
+ 
+-int32_t instance_match_bond_port(const struct rte_ether_addr *mac)
++int32_t instance_match_bond_port(const uint8_t *mac_addr)
+ {
+     int32_t bond_index;
+ 
+     for (bond_index = 0; bond_index < GAZELLE_MAX_BOND_NUM; bond_index++) {
+-        if (is_same_mac_addr(mac, &(get_ltran_config()->bond.mac[bond_index]))) {
++        if (is_same_mac_addr(mac_addr, get_ltran_config()->bond.mac[bond_index].addr_bytes)) {
+             return bond_index;
+         }
+     }
+ 
+-    LTRAN_ERR("match_bond_port failed: [bond] mac=%02X:%02X:%02X:%02X:%02X:%02X\n",
+-        mac->addr_bytes[0], mac->addr_bytes[1], mac->addr_bytes[2], /* 0 1 2 is mac byte */
+-        mac->addr_bytes[3], mac->addr_bytes[4], mac->addr_bytes[5]); /* 3 4 5 is mac byte */
++    LTRAN_ERR("match_bond_port failed: [bond] mac=%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx\n",
++        mac_addr[0], mac_addr[1], mac_addr[2], /* 0 1 2 is mac byte */
++        mac_addr[3], mac_addr[4], mac_addr[5]); /* 3 4 5 is mac byte */
+     return -1;
+ }
+ 
+@@ -300,7 +310,7 @@ static int32_t instance_info_check(const struct client_proc_conf *conf)
+         return GAZELLE_ERR;
+     }
+ 
+-    if (instance_match_bond_port(&conf->ethdev) < 0) {
++    if (instance_match_bond_port(conf->mac_addr) < 0) {
+         return GAZELLE_ERR;
+     }
+ 
+@@ -447,13 +457,11 @@ static void remove_virtual_area(uintptr_t addr, size_t size)
+ 
+ int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg)
+ {
+-    struct reg_response_msg send_msg;
++    struct reg_response_msg send_msg = {0};
+     struct client_proc_conf *conf = &recv_msg->msg.proc;
+     struct gazelle_instance *instance = NULL;
+     struct ltran_config *ltran_config = get_ltran_config();
+ 
+-    (void)memset_s(&send_msg, sizeof(send_msg), 0, sizeof(send_msg));
+-
+     int32_t ret = instance_info_check(conf);
+     if (ret != GAZELLE_OK) {
+         goto END;
+diff --git a/src/ltran/ltran_instance.h b/src/ltran/ltran_instance.h
+index 4caa9b7..a8808df 100644
+--- a/src/ltran/ltran_instance.h
++++ b/src/ltran/ltran_instance.h
+@@ -14,11 +14,13 @@
+ #define __GAZELLE_INSTANCE_H__
+ 
+ #include <lwip/hlist.h>
++#include <netinet/in.h>
++#include <limits.h>
+ 
+-#include "ltran_base.h"
++#include "gazelle_opt.h"
+ #include "gazelle_reg_msg.h"
+-#include "ltran_stack.h"
+ 
++struct gazelle_stack;
+ struct gazelle_instance {
+     // key
+     uint32_t pid;
+@@ -37,7 +39,7 @@ struct gazelle_instance {
+     enum request_type reg_state;
+     uintptr_t base_virtaddr;
+     uint64_t socket_size;
+-    struct rte_ether_addr ethdev;
++    uint8_t mac_addr[ETHER_ADDR_LEN];
+     char file_prefix[PATH_MAX];
+ };
+ 
+@@ -85,7 +87,7 @@ int32_t gazelle_instance_map_set(struct gazelle_instance_mgr *mgr, const struct
+ struct gazelle_instance *gazelle_instance_add_by_pid(struct gazelle_instance_mgr *mgr, uint32_t pid);
+ 
+ int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg);
+-int32_t instance_match_bond_port(const struct rte_ether_addr *mac);
++int32_t instance_match_bond_port(const uint8_t *mac);
+ int32_t handle_reg_msg_proc_reconn(int32_t fd, const struct reg_request_msg *recv_msg);
+ int32_t handle_reg_msg_proc_att(int32_t fd, struct reg_request_msg *recv_msg);
+ void handle_instance_logout(uint32_t pid);
+diff --git a/src/ltran/ltran_log.h b/src/ltran/ltran_log.h
+index 42cd9e5..a641ae0 100644
+--- a/src/ltran/ltran_log.h
++++ b/src/ltran/ltran_log.h
+@@ -14,9 +14,7 @@
+ #define __GAZELLE_LOG_H__
+ 
+ #include <rte_log.h>
+-#include <rte_errno.h>
+ 
+-#include "ltran_base.h"
+ #define RTE_LOGTYPE_LTRAN   RTE_LOGTYPE_USER1
+ 
+ #define LTRAN_DEBUG(fmt, ...) \
+diff --git a/src/ltran/ltran_monitor.c b/src/ltran/ltran_monitor.c
+index 251ca20..0562ce1 100644
+--- a/src/ltran/ltran_monitor.c
++++ b/src/ltran/ltran_monitor.c
+@@ -10,8 +10,6 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#include "ltran_monitor.h"
+-
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <errno.h>
+@@ -25,12 +23,15 @@
+ #include <sys/prctl.h>
+ #include <unistd.h>
+ #include <sys/stat.h>
++#include <securec.h>
+ 
+ #include "ltran_base.h"
+ #include "ltran_log.h"
+ #include "ltran_stat.h"
+ #include "ltran_instance.h"
+ #include "gazelle_dfx_msg.h"
++#include "gazelle_base_func.h"
++#include "ltran_monitor.h"
+ 
+ #define GAZELLE_LISTEN_BACKLOG          5
+ 
+@@ -103,12 +104,14 @@ static struct sockfd_data *sockfd_data_alloc(enum sockfd_type type, int32_t fd)
+ static inline void sockfd_data_free(struct sockfd_data *data)
+ {
+     close(data->fd);
+-    (void)memset_s(data, sizeof(struct sockfd_data), 0, sizeof(*data));
++    if (memset_s(data, sizeof(struct sockfd_data), 0, sizeof(*data)) != 0) {
++        LTRAN_ERR("memset_s fail");
++    }
+ }
+ 
+ static int32_t unix_server_create(const char *path, int32_t *server_fd)
+ {
+-    struct sockaddr_un addr;
++    struct sockaddr_un addr = {0};
+     int32_t fd = -1;
+     int32_t ret;
+ 
+@@ -123,7 +126,6 @@ static int32_t unix_server_create(const char *path, int32_t *server_fd)
+         return GAZELLE_ERR;
+     }
+ 
+-    (void)memset_s(&addr, sizeof(struct sockaddr_un), 0, sizeof(struct sockaddr_un));
+     addr.sun_family = AF_UNIX;
+     ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), path, sizeof(addr.sun_path) - 1);
+     if (ret != 0) {
+diff --git a/src/ltran/ltran_opt.h b/src/ltran/ltran_opt.h
+deleted file mode 100644
+index 1117898..0000000
+--- a/src/ltran/ltran_opt.h
++++ /dev/null
+@@ -1,54 +0,0 @@
+-/*
+-* Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+-* gazelle is licensed under the Mulan PSL v2.
+-* You can use this software according to the terms and conditions of the Mulan PSL v2.
+-* You may obtain a copy of Mulan PSL v2 at:
+-*     http://license.coscl.org.cn/MulanPSL2
+-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+-* IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+-* PURPOSE.
+-* See the Mulan PSL v2 for more details.
+-*/
+-
+-#ifndef __GAZELLE_OPT_H__
+-#define __GAZELLE_OPT_H__
+-
+-#define PROGRAM_NAME    "ltran"
+-#define VER_FMT         "gazelle version: %s\n"
+-#define VER_NAME        "1.0.0"
+-
+-#define DEFAULT_LTRAN_CONF_PATH "/etc/gazelle/ltran.conf"
+-
+-#define GAZELLE_PACKET_READ_SIZE     32
+-
+-#define GAZELLE_MBUFS_RX_COUNT       (300 * 1024)
+-#define GAZELLE_MBUFS_TX_COUNT       (30 * 1024)
+-#define GAZELLE_MBUFS_CACHE_SIZE     512
+-
+-#define GAZELLE_RX_QUEUES            1
+-#define GAZELLE_TX_QUEUES            1
+-#define GAZELLE_RX_DESC_DEFAULT      512
+-#define GAZELLE_TX_DESC_DEFAULT      512
+-
+-#define GAZELLE_KNI_MAX_PACKET_SIZE          2048
+-#define GAZELLE_KNI_ETHERNET_HEADER_SIZE     14
+-#define GAZELLE_KNI_ETHERNET_FCS_SIZE        4
+-
+-#define GAZELLE_PKT_MBUF_RX_POOL_NAME_FMT    "rx_pool%u"
+-#define GAZELLE_PKT_MBUF_TX_POOL_NAME_FMT    "tx_pool%u"
+-#define GAZELLE_PKT_MBUF_POOL_NAME_LENGTH    64
+-
+-#define GAZELLE_BOND_NAME_LENGTH             64
+-#define GAZELLE_BOND_DEV_NAME_FMT            "net_bonding%hu"
+-#define GAZELLE_BOND_QUEUE_MIN                1
+-#define GAZELLE_BOND_QUEUE_MAX                64
+-
+-#define GAZELLE_CLIENT_RING_NAME_FMT         "MProc_Client_%u_mbuf_queue"
+-#define GAZELLE_CLIENT_DROP_RING_SIZE        20000
+-
+-#define GAZELLE_LTRAN_LOG_FILE               "/var/run/gazelle/ltran.log"
+-
+-// CONFIG OF DFX
+-#define GAZELLE_DFX_REQ_INTERVAL_S           1
+-
+-#endif /* ifndef __GAZELLE_OPT_H__ */
+diff --git a/src/ltran/ltran_param.c b/src/ltran/ltran_param.c
+index cd65531..40ee8d3 100644
+--- a/src/ltran/ltran_param.c
++++ b/src/ltran/ltran_param.c
+@@ -10,8 +10,6 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#include "ltran_param.h"
+-
+ #include <netinet/in.h>
+ #include <sys/socket.h>
+ #include <libconfig.h>
+@@ -20,9 +18,13 @@
+ #include <errno.h>
+ #include <syslog.h>
+ #include <stdlib.h>
++#include <securec.h>
+ 
++#include "ltran_param.h"
++#include "ltran_errno.h"
++#include "ltran_base.h"
+ #include "ltran_log.h"
+-#include "gazelle_parse_config.h"
++#include "gazelle_dfx_msg.h"
+ #include "gazelle_base_func.h"
+ 
+ #define HEX_BASE 16
+@@ -47,7 +49,7 @@ struct ltran_config* get_ltran_config(void)
+     return &g_ltran_config;
+ }
+ 
+-static int32_t parse_str2mac(char *mac_str, struct rte_ether_addr *ether_addr)
++static int32_t parse_str2mac(char *mac_str, uint8_t *ether_addr)
+ {
+     const char *delim = ":";
+     char *token = NULL;
+@@ -68,15 +70,15 @@ static int32_t parse_str2mac(char *mac_str, struct rte_ether_addr *ether_addr)
+             return GAZELLE_ERR;
+         }
+ 
+-        if (i >= RTE_ETHER_ADDR_LEN) {
++        if (i >= ETHER_ADDR_LEN) {
+             gazelle_set_errno(GAZELLE_EPARAM);
+             return GAZELLE_ERR;
+         }
+         token = strtok_s(NULL, delim, &tmp);
+-        ether_addr->addr_bytes[i++] = (uint8_t)one_bit_mac;
++        ether_addr[i++] = (uint8_t)one_bit_mac;
+     }
+ 
+-    if (i != RTE_ETHER_ADDR_LEN) {
++    if (i != ETHER_ADDR_LEN) {
+         gazelle_set_errno(GAZELLE_EMAC);
+         return GAZELLE_ERR;
+     }
+@@ -225,7 +227,7 @@ static int32_t parse_dispatch_max_client(const config_t *config, const char *key
+         return GAZELLE_ERR;
+     }
+ 
+-    if ((max_client < GAZELLE_CLIENT_NUM_MIN) || (max_client > GAZELLE_CLIENT_NUM_MAX)) {
++    if ((max_client < GAZELLE_CLIENT_NUM_MIN) || (max_client > GAZELLE_CLIENT_NUM)) {
+         gazelle_set_errno(GAZELLE_ERANGE);
+         return GAZELLE_ERR;
+     }
+@@ -392,8 +394,8 @@ static int32_t check_bond_dup_mac(const struct ltran_config *ltran_config)
+     uint32_t i, j;
+     for (i = 0; i < ltran_config->bond.mac_num; i++) {
+         for (j = i + 1; j < ltran_config->bond.mac_num; j++) {
+-            if (is_same_mac_addr(&ltran_config->bond.mac[i], &ltran_config->bond.mac[j])) {
+-                syslog(LOG_ERR, "Err: MAC address must be unique, same MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
++            if (is_same_mac_addr(ltran_config->bond.mac[i].addr_bytes, ltran_config->bond.mac[j].addr_bytes)) {
++                syslog(LOG_ERR, "Err:MAC address must be unique, same MAC %02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx\n",
+                     ltran_config->bond.mac[i].addr_bytes[0], /* 0 byte index */
+                     ltran_config->bond.mac[i].addr_bytes[1], /* 1 byte index */
+                     ltran_config->bond.mac[i].addr_bytes[2], /* 2 byte index */
+@@ -468,7 +470,7 @@ static int32_t parse_bond_macs(const config_t *config, const char *key, struct l
+     parse_bond_macs_separate(bond_macs_str, bond_mac_cache, GAZELLE_MAX_BOND_NUM, &bond_mac_cache_count);
+ 
+     for (int32_t j = 0; j < bond_mac_cache_count; j++) {
+-        ret = parse_str2mac(bond_mac_cache[j], &ltran_config->bond.mac[ltran_config->bond.mac_num]);
++        ret = parse_str2mac(bond_mac_cache[j], ltran_config->bond.mac[ltran_config->bond.mac_num].addr_bytes);
+         if (ret != GAZELLE_OK) {
+             break;
+         }
+@@ -559,7 +561,12 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
+     config_init(&config);
+     int32_t ret;
+ 
+-    memset_s(ltran_config, sizeof(struct ltran_config), 0, sizeof(struct ltran_config));
++    ret = memset_s(ltran_config, sizeof(struct ltran_config), 0, sizeof(struct ltran_config));
++    if (ret != 0) {
++        config_destroy(&config);
++        syslog(LOG_ERR, "memset_s failed\n");
++        return ret;
++    }
+     ret = config_read_file(&config, conf_file_path);
+     if (ret == 0) {
+         config_destroy(&config);
+@@ -582,10 +589,10 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
+     return GAZELLE_OK;
+ }
+ 
+-bool is_same_mac_addr(const struct rte_ether_addr *smac, const struct rte_ether_addr *dmac)
++bool is_same_mac_addr(const uint8_t *smac, const uint8_t *dmac)
+ {
+-    for (int32_t i = 0; i < RTE_ETHER_ADDR_LEN; i++) {
+-        if (smac->addr_bytes[i] != dmac->addr_bytes[i]) {
++    for (int32_t i = 0; i < ETHER_ADDR_LEN; i++) {
++        if (smac[i] != dmac[i]) {
+             return false;
+         }
+     }
+diff --git a/src/ltran/ltran_param.h b/src/ltran/ltran_param.h
+index 442694c..3ec6451 100644
+--- a/src/ltran/ltran_param.h
++++ b/src/ltran/ltran_param.h
+@@ -16,9 +16,7 @@
+ #include <netinet/in.h>
+ #include <rte_ether.h>
+ 
+-#include "ltran_stat.h"
+-#include "ltran_instance.h"
+-#include "ltran_base.h"
++#include "gazelle_opt.h"
+ 
+ struct ltran_config {
+     struct {
+@@ -62,7 +60,8 @@ struct ltran_config {
+ 
+ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config);
+ void param_resource_destroy(struct ltran_config *ltran_config);
+-bool is_same_mac_addr(const struct rte_ether_addr *smac, const struct rte_ether_addr *dmac);
++bool is_same_mac_addr(const uint8_t *smac, const uint8_t *dmac);
+ struct ltran_config* get_ltran_config(void);
++int32_t ltran_config_init(int32_t argc, char *argv[]);
+ 
+ #endif /* ifndef __GAZELLE_PARAM_H__ */
+diff --git a/src/ltran/ltran_stack.c b/src/ltran/ltran_stack.c
+index 987673e..2049003 100644
+--- a/src/ltran/ltran_stack.c
++++ b/src/ltran/ltran_stack.c
+@@ -10,10 +10,13 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#include "ltran_stack.h"
++#include <rte_mbuf.h>
++
+ #include "ltran_instance.h"
+ #include "ltran_log.h"
++#include "ltran_jhash.h"
+ #include "gazelle_base_func.h"
++#include "ltran_stack.h"
+ 
+ struct gazelle_stack_htable *g_stack_htable = NULL;
+ struct gazelle_stack_htable *gazelle_get_stack_htable(void)
+@@ -120,12 +123,11 @@ struct gazelle_stack *gazelle_stack_add_by_tid(struct gazelle_stack_htable *stac
+         return NULL;
+     }
+ 
+-    stack = malloc(sizeof(struct gazelle_stack));
++    stack = calloc(1, sizeof(struct gazelle_stack));
+     if (stack == NULL) {
+         LTRAN_ERR("malloc fail.\n");
+         return NULL;
+     }
+-    (void)memset_s(stack, sizeof(struct gazelle_stack), 0, sizeof(*stack));
+ 
+     stack->index = -1;
+     stack->tid = tid;
+diff --git a/src/ltran/ltran_stack.h b/src/ltran/ltran_stack.h
+index 211f2b5..693bb33 100644
+--- a/src/ltran/ltran_stack.h
++++ b/src/ltran/ltran_stack.h
+@@ -15,9 +15,11 @@
+ 
+ #include <lwip/hlist.h>
+ 
+-#include "ltran_jhash.h"
+ #include "ltran_stat.h"
+ 
++struct rte_ring;
++struct rte_mbuf;
++
+ struct gazelle_stack {
+     // key
+     int32_t index;
+diff --git a/src/ltran/ltran_stat.c b/src/ltran/ltran_stat.c
+index c6805a6..af79b76 100644
+--- a/src/ltran/ltran_stat.c
++++ b/src/ltran/ltran_stat.c
+@@ -25,6 +25,8 @@
+ #include "gazelle_dfx_msg.h"
+ #include "ltran_timer.h"
+ #include "ltran_ethdev.h"
++#include "ltran_base.h"
++#include "ltran_stack.h"
+ #include "dpdk_common.h"
+ #include "ltran_forward.h"
+ 
+@@ -98,8 +100,6 @@ static int32_t gazelle_filling_ltran_stat_total(struct gazelle_stat_ltran_total
+         return GAZELLE_ERR;
+     }
+ 
+-    (void)memset_s(stat, sizeof(struct gazelle_stat_ltran_total), 0, sizeof(struct gazelle_stat_ltran_total));
+-
+     for (uint32_t i = 0; i < port_num; i++) {
+         stat->port_list[i].tx = total_stat->port_stats[i].tx;
+         stat->port_list[i].rx = total_stat->port_stats[i].rx;
+@@ -131,10 +131,8 @@ static int32_t gazelle_filling_ltran_stat_client(struct gazelle_stat_ltran_clien
+         return GAZELLE_ERR;
+     }
+ 
+-    (void)memset_s(stat, sizeof(struct gazelle_stat_ltran_client), 0, sizeof(struct gazelle_stat_ltran_client));
+-
+     int32_t bond_index;
+-    for (int32_t i = 0; i < GAZELLE_MAX_CLIENT; i++) {
++    for (int32_t i = 0; i < GAZELLE_CLIENT_NUM; i++) {
+         instance = total_stat->instances[i];
+         if (instance != NULL) {
+             stat->client_info[stat->client_num].id = i;
+@@ -150,7 +148,7 @@ static int32_t gazelle_filling_ltran_stat_client(struct gazelle_stat_ltran_clien
+                     stat->client_info[stat->client_num].state = GAZELLE_CLIENT_STATE_CONNECTING;
+                     break;
+                 case RQT_REG_THRD_RING:
+-                    bond_index = instance_match_bond_port(&instance->ethdev);
++                    bond_index = instance_match_bond_port(instance->mac_addr);
+                     stat->client_info[stat->client_num].bond_port = bond_port[bond_index];
+                     stat->client_info[stat->client_num].state = GAZELLE_CLIENT_STATE_NORMAL;
+                     break;
+@@ -171,8 +169,6 @@ static int32_t gazelle_filling_lstack_stat_total(struct gazelle_stat_lstack_tota
+         return GAZELLE_ERR;
+     }
+ 
+-    (void)memset_s(stat, sizeof(struct gazelle_stat_lstack_total), 0, sizeof(struct gazelle_stat_lstack_total));
+-
+     stat->tid = stack->tid;
+     stat->index = (uint32_t)stack->index;
+     stat->rx = stack->stack_stats.rx;
+@@ -189,7 +185,7 @@ static int32_t gazelle_filling_lstack_stat_total(struct gazelle_stat_lstack_tota
+     stat->backup_mbuf_cnt = stack->backup_pkt_cnt;
+     stat->latency_pkts = stack->stack_stats.latency_pkts;
+     stat->latency_total = stack->stack_stats.latency_total;
+-    stat->reg_ring_cnt = rte_ring_cn_count(stack->reg_ring);
++    stat->reg_ring_cnt = gazelle_ring_readable_count(stack->reg_ring);
+     stat->rx_ring_cnt = gazelle_ring_readover_count(stack->rx_ring);
+     stat->tx_ring_cnt = gazelle_ring_readable_count(stack->tx_ring);
+ 
+@@ -286,7 +282,7 @@ void handle_resp_ltran_conn(int32_t fd)
+ void handle_resp_ltran_client(int32_t fd)
+ {
+     int32_t ret;
+-    struct gazelle_stat_ltran_client stat;
++    struct gazelle_stat_ltran_client stat = {0};
+     ret = gazelle_filling_ltran_stat_client(&stat, get_instance_mgr());
+     if (ret != GAZELLE_OK) {
+         LTRAN_ERR("filling ltran stat total failed. ret=%d\n", ret);
+@@ -323,7 +319,7 @@ void set_ltran_log_level(struct gazelle_stat_msg_request *msg)
+ 
+ void handle_resp_ltran_latency(int32_t fd)
+ {
+-    struct gazelle_stat_lstack_total stat;
++    struct gazelle_stat_lstack_total stat = {0};
+     struct gazelle_instance *instance = NULL;
+     struct gazelle_instance_mgr *instance_mgr = get_instance_mgr();
+     int32_t ret;
+@@ -428,7 +424,7 @@ void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg)
+ void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t fd)
+ {
+     int32_t lstack_fd;
+-    struct gazelle_stack_dfx_data stat;
++    struct gazelle_stack_dfx_data stat = {0};
+     int32_t cmd_fd = fd;
+     int32_t ret;
+ 
+@@ -439,7 +435,6 @@ void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int
+ 
+     (void)write_specied_len(lstack_fd, (const char *)msg, sizeof(struct gazelle_stat_msg_request));
+ 
+-    (void)memset_s(&stat, sizeof(struct gazelle_stack_dfx_data), 0, sizeof(stat));
+     while (stat.eof == 0) {
+         ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
+         if (ret != GAZELLE_OK) {
+diff --git a/src/ltran/ltran_stat.h b/src/ltran/ltran_stat.h
+index 3bef714..494c83e 100644
+--- a/src/ltran/ltran_stat.h
++++ b/src/ltran/ltran_stat.h
+@@ -13,10 +13,11 @@
+ #ifndef __GAZELLE_STAT_H__
+ #define __GAZELLE_STAT_H__
+ 
+-#include <rte_ether.h>
+ #include <netinet/in.h>
+ 
+-#include "ltran_base.h"
++#include <rte_common.h>
++
++#include "gazelle_opt.h"
+ 
+ /*
+  * When doing reads from the NIC or the client queues,
+@@ -105,7 +106,7 @@ struct gazelle_stat_lstack_total {
+ 
+ /* forward statistics structure */
+ struct statistics {
+-    struct gazelle_stat_ltran_port port_stats[RTE_MAX_ETHPORTS];
++    struct gazelle_stat_ltran_port port_stats[GAZELLE_MAX_ETHPORTS];
+ };
+ 
+ /* ltran statistics structure */
+@@ -116,7 +117,7 @@ struct gazelle_stat_ltran_total {
+ 
+ struct gazelle_stat_ltran_ip {
+     uint32_t ip_num;
+-    struct in_addr ip_list[GAZELLE_MAX_CLIENT];
++    struct in_addr ip_list[GAZELLE_CLIENT_NUM_ALL];
+ };
+ 
+ struct gazelle_stat_client_info {
+@@ -131,7 +132,7 @@ struct gazelle_stat_client_info {
+ 
+ struct gazelle_stat_ltran_client {
+     uint32_t client_num;
+-    struct gazelle_stat_client_info client_info[GAZELLE_MAX_CLIENT];
++    struct gazelle_stat_client_info client_info[GAZELLE_CLIENT_NUM_ALL];
+ };
+ 
+ int32_t get_start_latency_flag(void);
+@@ -142,6 +143,7 @@ void set_ltran_stop_flag(int32_t flag);
+ int32_t get_ltran_stop_flag(void);
+ struct statistics *get_statistics(void);
+ 
++struct gazelle_stat_msg_request;
+ void handle_resp_ltran_latency(int32_t fd);
+ void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg);
+ void handle_resp_ltran_sock(int32_t fd);
+diff --git a/src/ltran/ltran_tcp_conn.c b/src/ltran/ltran_tcp_conn.c
+index 0bc7589..faa42e1 100644
+--- a/src/ltran/ltran_tcp_conn.c
++++ b/src/ltran/ltran_tcp_conn.c
+@@ -10,7 +10,11 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
++#include <securec.h>
++
+ #include <rte_malloc.h>
++
++#include "ltran_jhash.h"
+ #include "ltran_instance.h"
+ #include "ltran_tcp_conn.h"
+ 
+diff --git a/src/ltran/ltran_tcp_conn.h b/src/ltran/ltran_tcp_conn.h
+index 2e11b07..2b6e6ea 100644
+--- a/src/ltran/ltran_tcp_conn.h
++++ b/src/ltran/ltran_tcp_conn.h
+@@ -14,9 +14,10 @@
+ #define __GAZELLE_TCP_CONN_H__
+ 
+ #include <lwip/hlist.h>
+-#include "gazelle_reg_msg.h"
+-#include "ltran_stack.h"
+-#include "ltran_tcp_sock.h"
++#include <stdint.h>
++#include <lwip/reg_sock.h>
++
++#include "gazelle_opt.h"
+ 
+ struct gazelle_tcp_conn {
+     uint32_t tid;
+diff --git a/src/ltran/ltran_tcp_sock.c b/src/ltran/ltran_tcp_sock.c
+index c107196..e3b696b 100644
+--- a/src/ltran/ltran_tcp_sock.c
++++ b/src/ltran/ltran_tcp_sock.c
+@@ -10,10 +10,16 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#include "ltran_tcp_sock.h"
++#include <stdlib.h>
++
++#include <lwip/hlist.h>
++
+ #include "ltran_tcp_conn.h"
+ #include "ltran_instance.h"
++#include "ltran_base.h"
++#include "ltran_jhash.h"
+ #include "gazelle_base_func.h"
++#include "ltran_tcp_sock.h"
+ 
+ struct gazelle_tcp_sock_htable *g_tcp_sock_htable = NULL;
+ struct gazelle_tcp_sock_htable *gazelle_get_tcp_sock_htable(void)
+@@ -139,11 +145,10 @@ struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_h
+         return NULL;
+     }
+ 
+-    tcp_sock = malloc(sizeof(struct gazelle_tcp_sock));
++    tcp_sock = calloc(1, sizeof(struct gazelle_tcp_sock));
+     if (tcp_sock == NULL) {
+         return NULL;
+     }
+-    (void)memset_s(tcp_sock, sizeof(struct gazelle_tcp_sock), 0, sizeof(*tcp_sock));
+ 
+     tcp_sock->ip = ip;
+     tcp_sock->tid = tid;
+@@ -159,7 +164,7 @@ struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_h
+     return tcp_sock;
+ }
+ 
+-int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
++void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
+     uint32_t tid)
+ {
+     struct gazelle_tcp_sock *tcp_sock = NULL;
+@@ -169,7 +174,7 @@ int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_h
+ 
+     tcp_sock_hbucket = gazelle_hbucket_get_by_ipport(tcp_sock_htable, ip, port);
+     if (tcp_sock_hbucket == NULL) {
+-        return -1;
++        return;
+     }
+ 
+     head = &tcp_sock_hbucket->chain;
+@@ -180,14 +185,13 @@ int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_h
+     }
+ 
+     if (tcp_sock == NULL) {
+-        return -1;
++        return;
+     }
+ 
+     hlist_del_init(&tcp_sock->tcp_sock_node);
+     free(tcp_sock);
+     tcp_sock_htable->cur_tcp_sock_num--;
+     tcp_sock_hbucket->chain_size--;
+-    return 0;
+ }
+ 
+ struct gazelle_tcp_sock *gazelle_sock_get_by_min_conn(struct gazelle_tcp_sock_htable *tcp_sock_htable,
+diff --git a/src/ltran/ltran_tcp_sock.h b/src/ltran/ltran_tcp_sock.h
+index 8172713..a6e9571 100644
+--- a/src/ltran/ltran_tcp_sock.h
++++ b/src/ltran/ltran_tcp_sock.h
+@@ -15,8 +15,11 @@
+ 
+ #include <lwip/hlist.h>
+ #include <pthread.h>
+-#include "ltran_stack.h"
++#include <stdint.h>
+ 
++#include "gazelle_opt.h"
++
++struct gazelle_stack;
+ struct gazelle_tcp_sock {
+     // key
+     uint32_t ip;
+@@ -54,7 +57,7 @@ void gazelle_tcp_sock_htable_destroy(void);
+ struct gazelle_tcp_sock_htable *gazelle_tcp_sock_htable_create(uint32_t max_tcp_sock_num);
+ struct gazelle_tcp_sock *gazelle_sock_get_by_min_conn(struct gazelle_tcp_sock_htable *tcp_sock_htable,
+     uint32_t ip, uint16_t port);
+-int32_t gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
++void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip, uint16_t port,
+     uint32_t tid);
+ struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htable, uint32_t ip,
+     uint16_t port, uint32_t tid);
+diff --git a/src/ltran/ltran_timer.c b/src/ltran/ltran_timer.c
+index 1327203..3ee266c 100644
+--- a/src/ltran/ltran_timer.c
++++ b/src/ltran/ltran_timer.c
+@@ -10,18 +10,20 @@
+ * See the Mulan PSL v2 for more details.
+ */
+ 
+-#include "ltran_timer.h"
+-
+ #include <sys/time.h>
+ #include <pthread.h>
++
+ #include <rte_malloc.h>
+ #include <rte_errno.h>
+ #include <rte_cycles.h>
++#include <lwip/hlist.h>
+ 
+ #include "ltran_param.h"
+ #include "ltran_log.h"
+ #include "ltran_tcp_sock.h"
++#include "ltran_tcp_conn.h"
+ #include "ltran_instance.h"
++#include "ltran_timer.h"
+ 
+ static uint64_t g_cycles_per_us = 0;
+ 
+diff --git a/src/ltran/ltran_timer.h b/src/ltran/ltran_timer.h
+index 2cfc19a..abc08b9 100644
+--- a/src/ltran/ltran_timer.h
++++ b/src/ltran/ltran_timer.h
+@@ -13,8 +13,8 @@
+ #ifndef __GAZELLE_TIMER_H__
+ #define __GAZELLE_TIMER_H__
+ 
+-#include "ltran_tcp_conn.h"
+-#include "ltran_tcp_sock.h"
++struct gazelle_tcp_conn_htable;
++struct gazelle_tcp_sock_htable;
+ 
+ unsigned long get_current_time(void);
+ void calibrate_time(void);
+diff --git a/src/ltran/main.c b/src/ltran/main.c
+index 328ca89..691595e 100644
+--- a/src/ltran/main.c
++++ b/src/ltran/main.c
+@@ -19,9 +19,10 @@
+ #include <rte_malloc.h>
+ 
+ #include "dpdk_common.h"
+-#include "ltran_config.h"
+ #include "ltran_log.h"
++#include "ltran_param.h"
+ #include "ltran_stat.h"
++#include "ltran_stack.h"
+ #include "ltran_ethdev.h"
+ #include "ltran_instance.h"
+ #include "ltran_monitor.h"
+@@ -108,7 +109,13 @@ static int32_t ltran_core_init(int32_t argc, char *argv[])
+         return ret;
+     }
+ 
+-    set_instance_mgr(gazelle_instance_mgr_create());
++    struct gazelle_instance_mgr *mgr = gazelle_instance_mgr_create();
++    if (mgr == NULL) {
++        syslog(LOG_ERR, "create gazelle_instance_mgr failed\n");
++        closelog();
++        return -1;
++    }
++    set_instance_mgr(mgr);
+     gazelle_set_stack_htable(gazelle_stack_htable_create(GAZELLE_MAX_STACK_NUM));
+     gazelle_set_tcp_conn_htable(gazelle_tcp_conn_htable_create(GAZELLE_MAX_CONN_NUM));
+     gazelle_set_tcp_sock_htable(gazelle_tcp_sock_htable_create(GAZELLE_MAX_TCP_SOCK_NUM));
+-- 
+2.23.0
+

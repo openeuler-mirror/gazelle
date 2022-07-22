@@ -1,0 +1,39 @@
+From e1c6c79565a549866fbe7cb770a6f09183676c0b Mon Sep 17 00:00:00 2001
+From: Honggang LI <honggangli@163.com>
+Date: Wed, 13 Jul 2022 09:50:06 +0800
+Subject: [PATCH 07/19] Replace gettid() with rte_gettid()
+
+Signed-off-by: Honggang LI <honggangli@163.com>
+---
+ src/lstack/core/lstack_protocol_stack.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index a1f3790..2acf77a 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -67,10 +67,10 @@ static inline void set_stack_idx(uint16_t idx)
+ 
+ long get_stack_tid(void)
+ {
+-    static PER_THREAD long g_stack_tid = 0;
++    static PER_THREAD int32_t g_stack_tid = 0;
+ 
+     if (g_stack_tid == 0) {
+-        g_stack_tid = syscall(__NR_gettid);
++        g_stack_tid = rte_gettid();
+     }
+ 
+     return g_stack_tid;
+@@ -245,7 +245,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+     memset_s(stack, sizeof(*stack), 0, sizeof(*stack));
+ 
+     set_stack_idx(queue_id);
+-    stack->tid = gettid();
++    stack->tid = rte_gettid();
+     stack->queue_id = queue_id;
+     stack->port_id = stack_group->port_id;
+     stack->cpu_id = get_global_cfg_params()->cpus[queue_id];
+-- 
+2.23.0
+
