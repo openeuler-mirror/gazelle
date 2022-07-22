@@ -1,0 +1,155 @@
+From 6331e41c9b6abf156a8de3c87c09131c6d3d84ba Mon Sep 17 00:00:00 2001
+From: Honggang LI <honggangli@163.com>
+Date: Fri, 15 Jul 2022 12:18:43 +0800
+Subject: [PATCH 17/19] Support build gazelle with clang
+
+Execute following bash command to build gazelle with clang:
+
+$ VERBOSE=1 CC=clang sh build/build.sh
+
+Signed-off-by: Honggang LI <honggangli@163.com>
+---
+ src/common/dpdk_common.h                | 2 +-
+ src/common/gazelle_base_func.h          | 3 +++
+ src/lstack/Makefile                     | 8 ++++++--
+ src/lstack/api/lstack_epoll.c           | 2 +-
+ src/lstack/core/lstack_lwip.c           | 2 +-
+ src/lstack/core/lstack_protocol_stack.c | 2 +-
+ src/lstack/core/lstack_thread_rpc.c     | 2 +-
+ src/ltran/CMakeLists.txt                | 6 +++++-
+ src/ltran/ltran_stack.c                 | 2 +-
+ 9 files changed, 20 insertions(+), 9 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 493b435..01c941d 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -29,7 +29,7 @@
+ struct pbuf;
+ static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
+ {
+-    return ((struct rte_mbuf *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
++    return ((struct rte_mbuf *)(void *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
+ }
+ static inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
+ {
+diff --git a/src/common/gazelle_base_func.h b/src/common/gazelle_base_func.h
+index 9d7381e..fe3411a 100644
+--- a/src/common/gazelle_base_func.h
++++ b/src/common/gazelle_base_func.h
+@@ -32,4 +32,7 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size);
+ 
+ int32_t check_and_set_run_dir(void);
+ 
++#undef container_of
++#define container_of(ptr, type, field) ((type *)(void*)(((char *)(ptr)) - offsetof(type, field)))
++
+ #endif /* ifndef __GAZELLE_BASE_FUNC_H__ */
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 98289d8..0fb4405 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -16,12 +16,16 @@ LIB_PATH ?= /usr/lib64
+ 
+ AR = ar
+ ARFLAGS = crDP
+-CC = gcc
++CC ?= gcc
+ OPTIMIZATION = -O2 -g
+ RM = rm -f
+ LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
+ 
+-SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
++ifeq ($(CC),gcc)
++	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
++else ifeq($(CC),clang)
++	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -fPIC
++endif
+ 
+ INC = -I$(LSTACK_DIR)/include   \
+       -I$(LSTACK_DIR)/../common \
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 06a099d..310a0e7 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -187,7 +187,7 @@ static uint16_t find_max_cnt_stack(int32_t *stack_count, uint16_t stack_num, str
+     }
+ 
+     /* first bind and all stack same. choice tick as queue_id, avoid all bind to statck_0. */
+-    static uint16_t tick = 0;
++    static _Atomic uint16_t tick = 0;
+     if (all_same_cnt && stack_num) {
+         max_index = atomic_fetch_add(&tick, 1) % stack_num;
+     }
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 9f51ebd..4c2f0ea 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -104,7 +104,7 @@ static void replenish_send_idlembuf(struct rte_ring *ring)
+ 
+ void gazelle_init_sock(int32_t fd)
+ {
+-    static uint32_t name_tick = 0;
++    static _Atomic uint32_t name_tick = 0;
+     struct protocol_stack *stack = get_protocol_stack();
+     struct lwip_sock *sock = get_socket(fd);
+     if (sock == NULL) {
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 577711a..a2dd62c 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -113,7 +113,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
+ 
+     /* close listen shadow, per app communication thread select only one stack */
+     if (get_global_cfg_params()->listen_shadow == false) {
+-        static uint16_t stack_index = 0;
++        static _Atomic uint16_t stack_index = 0;
+         index = atomic_fetch_add(&stack_index, 1);
+         if (index >= stack_group->stack_num) {
+             LSTACK_LOG(ERR, LSTACK, "thread =%hu larger than stack num = %hu\n", index, stack_group->stack_num);
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 58c4b05..5a05c82 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -82,7 +82,7 @@ static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *m
+     msg->self_release = 0;
+     msg->func = NULL;
+ 
+-    atomic_fetch_add(&msg->pool->cons, 1);
++    atomic_fetch_add((_Atomic uint32_t *)&msg->pool->cons, 1);
+ }
+ 
+ static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
+diff --git a/src/ltran/CMakeLists.txt b/src/ltran/CMakeLists.txt
+index 970bc1b..9c6751c 100644
+--- a/src/ltran/CMakeLists.txt
++++ b/src/ltran/CMakeLists.txt
+@@ -14,7 +14,11 @@ project(ltran)
+ set(COMMON_DIR ${PROJECT_SOURCE_DIR}/../common)
+ 
+ set(CMAKE_VERBOSE_MAKEFILE ON)
+-set(CMAKE_C_FLAGS "-g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread -D_FORTIFY_SOURCE=2 -O2 -fPIC")
++if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
++	set(CMAKE_C_FLAGS "-g -fstack-protector-strong -Wall -Werror -fPIE -pie -pthread -D_FORTIFY_SOURCE=2 -O2 -fPIC")
++elseif (CMAKE_C_COMPILER_ID STREQUAL "Clang")
++	set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -fPIE -pthread")
++endif()
+ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D LTRAN_COMPILE")
+ 
+ if($ENV{GAZELLE_COVERAGE_ENABLE})
+diff --git a/src/ltran/ltran_stack.c b/src/ltran/ltran_stack.c
+index 2049003..4be7c23 100644
+--- a/src/ltran/ltran_stack.c
++++ b/src/ltran/ltran_stack.c
+@@ -88,7 +88,7 @@ const struct gazelle_stack *gazelle_stack_get_by_tid(const struct gazelle_stack_
+     uint32_t index;
+     const struct gazelle_stack *stack = NULL;
+     const struct gazelle_stack_hbucket *stack_hbucket = NULL;
+-    const struct hlist_node *node = NULL;
++    struct hlist_node *node = NULL;
+     const struct hlist_head *head = NULL;
+ 
+     index = tid_hash_fn(tid) % GAZELLE_MAX_STACK_HTABLE_SIZE;
+-- 
+2.23.0
+
