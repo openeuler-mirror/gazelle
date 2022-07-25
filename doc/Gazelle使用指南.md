@@ -62,13 +62,13 @@ grep Huge /proc/meminfo
 ### 4. 挂载大页内存  
 创建两个目录，分别给lstack的进程、ltran进程访问大页内存使用。操作步骤如下：  
 ``` sh
-mkdir -p /mnt/hugepages
-mkdir -p /mnt/hugepages-2M
-chmod -R 700 /mnt/hugepages
-chmod -R 700 /mnt/hugepages-2M
-# 注: /mnt/hugepages 和 /mnt/hugepages-2M 必须挂载同样pagesize的大页内存。
-mount -t hugetlbfs nodev /mnt/hugepages -o pagesize=2M
-mount -t hugetlbfs nodev /mnt/hugepages-2M -o pagesize=2M
+mkdir -p /mnt/hugepages-ltran
+mkdir -p /mnt/hugepages-lstack
+chmod -R 700 /mnt/hugepages-ltran
+chmod -R 700 /mnt/hugepages-lstack
+# 注: /mnt/hugepages-ltran 和 /mnt/hugepages-lstack 必须挂载同样pagesize的大页内存。
+mount -t hugetlbfs nodev /mnt/hugepages-ltran -o pagesize=2M
+mount -t hugetlbfs nodev /mnt/hugepages-lstack -o pagesize=2M
 ```
 
 ### 5. 应用程序使用Gazelle
@@ -109,7 +109,7 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 
 lstack.conf示例：
 ``` conf
-dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-2M", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
+dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-lstack", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
 
 use_ltran=1
 kni_switch=0
@@ -143,7 +143,7 @@ devices="aa:bb:cc:dd:ee:ff"
 
 ltran.conf示例：
 ``` conf
-forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages --proc-type primary --legacy-mem --map-perfect --syslog daemon"
+forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages-ltran --proc-type primary --legacy-mem --map-perfect --syslog daemon"
 forward_kit="dpdk"
 
 kni_switch=0
@@ -241,8 +241,8 @@ Gazelle可能存在如下安全风险，用户需要根据使用场景评估风�
 
 **共享内存**  
 - 现状  
-  大页内存 mount 至 /mnt/hugepages-2M 目录，链接 liblstack.so 的进程初始化时在 /mnt/hugepages-2M 目录下创建文件，每个文件对应 2M 大页内存，并 mmap 这些文件。ltran 在收到 lstask 的注册信息后，根据大页内存配置信息也 mmap 目录下文件，实现大页内存共享。
-  ltran 在 /mnt/hugepages 目录的大页内存同理。
+  大页内存 mount 至 /mnt/hugepages-lstack 目录，链接 liblstack.so 的进程初始化时在 /mnt/hugepages-lstack 目录下创建文件，每个文件对应 2M 大页内存，并 mmap 这些文件。ltran 在收到 lstask 的注册信息后，根据大页内存配置信息也 mmap 目录下文件，实现大页内存共享。
+  ltran 在 /mnt/hugepages-ltran 目录的大页内存同理。
 - 当前消减措施
   大页文件权限 600，只有 OWNER 用户才能访问文件，默认 root 用户，支持配置成其它用户； 
   大页文件有 DPDK 文件锁，不能直接写或者映射。
