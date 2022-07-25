@@ -1,0 +1,58 @@
+From 11f46783f88912e3c204fc12d4f33034f371881b Mon Sep 17 00:00:00 2001
+From: Honggang LI <honggangli@163.com>
+Date: Thu, 23 Jun 2022 13:36:36 +0800
+Subject: [PATCH 19/40] lstack/core: fix reta_conf array size calculation
+
+When dev_info.reta_size is smaller than RTE_RETA_GROUP_SIZE, the first
+parameter (nmemb) of calloc is zero.
+
+If nmemb is 0, then calloc() returns either NULL, or a unique pointer
+value that can later be successfully passed to free(). When non-NULL
+unique pointer was returned, rss_setup() will failed because of garbage
+value in memory pointed by the unique pointer.
+
+Signed-off-by: Honggang LI <honggangli@163.com>
+---
+ src/lstack/core/lstack_dpdk.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index df0332b..3f0dbb4 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -428,6 +428,7 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
+     int ret;
+     struct rte_eth_dev_info dev_info;
+     struct rte_eth_rss_reta_entry64 *reta_conf = NULL;
++    size_t reta_conf_size, n;
+ 
+     rte_eth_dev_info_get(port_id, &dev_info);
+ 
+@@ -435,8 +436,11 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
+         return ERR_VAL;
+     }
+ 
+-    reta_conf = calloc(dev_info.reta_size / RTE_RETA_GROUP_SIZE,
+-                       sizeof(struct rte_eth_rss_reta_entry64));
++    reta_conf_size = dev_info.reta_size / RTE_RETA_GROUP_SIZE;
++    if (dev_info.reta_size % RTE_RETA_GROUP_SIZE)
++	    reta_conf_size += 1;
++
++    reta_conf = calloc(reta_conf_size, sizeof(struct rte_eth_rss_reta_entry64));
+     if (!reta_conf) {
+         return ERR_MEM;
+     }
+@@ -446,8 +450,8 @@ static int rss_setup(const int port_id, const uint16_t nb_queues)
+         one_reta_conf->reta[i % RTE_RETA_GROUP_SIZE] = i % nb_queues;
+     }
+ 
+-    for (i = 0; i < dev_info.reta_size / RTE_RETA_GROUP_SIZE; i++) {
+-        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[i];
++    for (n = 0; n < reta_conf_size; n++) {
++        struct rte_eth_rss_reta_entry64 *one_reta_conf = &reta_conf[n];
+         one_reta_conf->mask = 0xFFFFFFFFFFFFFFFFULL;
+     }
+ 
+-- 
+2.23.0
+

@@ -1,0 +1,27 @@
+From 6114f85920ac4d24b73d892a1ebe1890efd48a3a Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 14 Jul 2022 22:16:04 +0800
+Subject: [PATCH 10/19] support-epoll-et-trig-mode
+
+---
+ src/lstack/api/lstack_epoll.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 4978f02..5d7a4b8 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -288,6 +288,10 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
+             accept_num++;
+         }
+ 
++        if (sock->epoll_events & EPOLLET) {
++            list_del_node_null(&sock->event_list);
++        }
++
+         events[event_num].events = sock->events;
+         events[event_num].data = sock->ep_data;
+         event_num++;
+-- 
+2.23.0
+
