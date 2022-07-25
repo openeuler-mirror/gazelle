@@ -1,0 +1,344 @@
+From 5c44c739f651e295141c096bf676cc3bc7ce7460 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Thu, 7 Jul 2022 22:21:34 +0800
+Subject: [PATCH 01/19] ltran support checksum
+
+---
+ src/common/dpdk_common.c                   | 43 ++++++++++++++
+ src/common/dpdk_common.h                   |  4 ++
+ src/common/gazelle_reg_msg.h               |  2 +
+ src/lstack/core/lstack_control_plane.c     |  4 ++
+ src/lstack/core/lstack_dpdk.c              | 67 +++-------------------
+ src/lstack/include/lstack_protocol_stack.h |  2 +
+ src/ltran/ltran_ethdev.c                   | 48 +++++++++++-----
+ src/ltran/ltran_instance.c                 |  3 +
+ src/ltran/ltran_param.h                    |  2 +
+ 9 files changed, 102 insertions(+), 74 deletions(-)
+
+diff --git a/src/common/dpdk_common.c b/src/common/dpdk_common.c
+index 63dcfc1..939d135 100644
+--- a/src/common/dpdk_common.c
++++ b/src/common/dpdk_common.c 
+
+@@ -87,6 +88,49 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
+     return ret;
+ }
+ 
++void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
++{
++    uint64_t rx_ol = 0;
++    uint64_t tx_ol = 0;
++    uint64_t rx_ol_capa = dev_info->rx_offload_capa;
++    uint64_t tx_ol_capa = dev_info->tx_offload_capa;
++
++    // rx ip
++    if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
++        rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
++        COMMON_INFO("DEV_RX_OFFLOAD_IPV4_CKSUM\n");
++    }
++
++    if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
++        rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
++        COMMON_INFO("DEV_RX_OFFLOAD_TCP_CKSUM\n");
++    }
++
++    // tx ip
++    if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
++        tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
++        COMMON_INFO("DEV_TX_OFFLOAD_IPV4_CKSUM\n");
++    }
++
++    // tx tcp
++    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
++        tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
++        COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
++    }
++
++    if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
++        rx_ol = 0;
++    }
++    if (!(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) || !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
++        tx_ol = 0;
++    }
++
++    conf->rxmode.offloads = rx_ol;
++    conf->txmode.offloads = tx_ol;
++
++    COMMON_INFO("set checksum offloads\n");
++}
++
+ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
+ {
+     int32_t ret;
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 4a7bd37..6a6a030 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -67,6 +67,10 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool);
+ int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count);
+ void kni_process_rx(uint16_t port);
+ 
++struct rte_eth_conf;
++struct rte_eth_dev_info;
++void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info);
++
+ /*
+     gazelle custom rte ring interface
+     lightweight ring reduce atomic and smp_mb.
+diff --git a/src/common/gazelle_reg_msg.h b/src/common/gazelle_reg_msg.h
+index ff846fd..f5842e7 100644
+--- a/src/common/gazelle_reg_msg.h
++++ b/src/common/gazelle_reg_msg.h
+@@ -94,6 +94,8 @@ struct reg_response_msg {
+     struct {
+         uintptr_t base_virtaddr;
+         uint64_t socket_size;
++        uint64_t rx_offload;
++        uint64_t tx_offload;
+     } msg;
+ };
+ 
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index ef38fb5..c86dab1 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -297,6 +297,10 @@ static int32_t client_reg_proc_memory(bool is_reconnect)
+         return -1;
+     }
+ 
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    stack_group->rx_offload = recv_msg.msg.rx_offload;
++    stack_group->tx_offload = recv_msg.msg.tx_offload;
++
+     if (!is_reconnect) {
+         ret = proc_memory_init(&recv_msg);
+         if (ret != 0) {
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 6675d7b..13df6a3 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -313,68 +313,12 @@ static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
+ 
+ uint64_t get_eth_params_rx_ol(void)
+ {
+-    return use_ltran() ? 0 : get_protocol_stack_group()->eth_params->conf.rxmode.offloads;
++    return get_protocol_stack_group()->rx_offload;
+ }
+ 
+ uint64_t get_eth_params_tx_ol(void)
+ {
+-    return use_ltran() ? 0 : get_protocol_stack_group()->eth_params->conf.txmode.offloads;
+-}
+-
+-static int eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
+-{
+-#if CHECKSUM_OFFLOAD_ALL
+-    uint64_t rx_ol = 0;
+-    uint64_t tx_ol = 0;
+-
+-    uint64_t rx_ol_capa = dev_info->rx_offload_capa;
+-    uint64_t tx_ol_capa = dev_info->tx_offload_capa;
+-
+-    // rx ip
+-#if CHECKSUM_CHECK_IP_HW
+-    if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
+-        rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
+-        LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_IPV4_CKSUM\n");
+-    }
+-#endif
+-
+-    // rx tcp
+-#if CHECKSUM_CHECK_TCP_HW
+-    if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
+-        rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
+-        LSTACK_LOG(INFO, LSTACK, "DEV_RX_OFFLOAD_TCP_CKSUM\n");
+-    }
+-#endif
+-
+-    // tx ip
+-#if CHECKSUM_GEN_IP_HW
+-    if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
+-        tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
+-        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_IPV4_CKSUM\n");
+-    }
+-#endif
+-
+-    // tx tcp
+-#if CHECKSUM_GEN_TCP_HW
+-    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
+-        tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
+-        LSTACK_LOG(INFO, LSTACK, "DEV_TX_OFFLOAD_TCP_CKSUM\n");
+-    }
+-#endif
+-    if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
+-        rx_ol = 0;
+-    }
+-    if (!(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) || !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
+-        tx_ol = 0;
+-    }
+-
+-    conf->rxmode.offloads = rx_ol;
+-    conf->txmode.offloads = tx_ol;
+-
+-    LSTACK_LOG(INFO, LSTACK, "set checksum offloads\n");
+-#endif /* CHECKSUM_OFFLOAD_ALL */
+-
+-    return 0;
++    return get_protocol_stack_group()->tx_offload;
+ }
+ 
+ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
+@@ -471,8 +415,11 @@ int32_t dpdk_ethdev_init(void)
+     }
+     eth_params_checksum(&eth_params->conf, &dev_info);
+     int32_t rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
+-    get_protocol_stack_group()->eth_params = eth_params;
+-    get_protocol_stack_group()->port_id = eth_params->port_id;
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    stack_group->eth_params = eth_params;
++    stack_group->port_id = eth_params->port_id;
++    stack_group->rx_offload = eth_params->conf.rxmode.offloads;
++    stack_group->tx_offload = eth_params->conf.txmode.offloads;
+ 
+     ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
+     if (ret < 0) {
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 8a6aa9d..e5eedd7 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -70,6 +70,8 @@ struct protocol_stack_group {
+     sem_t thread_phase1;
+     sem_t ethdev_init;
+     sem_t all_init;
++    uint64_t rx_offload;
++    uint64_t tx_offload;
+     struct rte_mempool *kni_pktmbuf_pool;
+     struct eth_params *eth_params;
+     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
+diff --git a/src/ltran/ltran_ethdev.c b/src/ltran/ltran_ethdev.c
+index 7d42fcd..03c692d 100644
+--- a/src/ltran/ltran_ethdev.c
++++ b/src/ltran/ltran_ethdev.c
+@@ -237,19 +237,31 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
+     uint16_t rx_queue_num = (uint16_t)get_ltran_config()->bond.rx_queue_num;
+     uint16_t tx_queue_num = (uint16_t)get_ltran_config()->bond.tx_queue_num;
+     struct rte_eth_dev_info dev_info;
+-    struct rte_eth_conf port_conf = {0};
+     uint16_t queue_id;
+ 
++    rte_eth_dev_stop(port_num);
++
++    if (rte_eth_dev_info_get(port_num, &dev_info) != 0) {
++        LTRAN_ERR("Fail rte_eth_dev_info_get\n");
++        return GAZELLE_ERR;
++    }
++
++    struct rte_eth_conf port_conf = {0};
++    port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
++    port_conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
++    eth_params_checksum(&port_conf, &dev_info);
+     port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
+ 
+-    rte_eth_dev_stop(port_num);
+-    int32_t ret = rte_eth_dev_configure(port_num, rx_queue_num, tx_queue_num, &port_conf);
+-    if (ret != 0) {
+-        LTRAN_ERR("rte_eth_dev_configure failed in slave port initialize. errno: %d, port: %d\n", ret, port_num);
++    struct ltran_config *ltran_config = get_ltran_config();
++    ltran_config->dpdk.rx_offload = port_conf.rxmode.offloads;
++    ltran_config->dpdk.tx_offload = port_conf.txmode.offloads;
++
++    if (rte_eth_dev_configure(port_num, rx_queue_num, tx_queue_num, &port_conf)) {
++        LTRAN_ERR("rte_eth_dev_configure failed in slave port initialize. errno: %d, port: %hu\n", errno, port_num);
+         return GAZELLE_ERR;
+     }
+ 
+-    ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_num, &rx_ring_size, &tx_ring_size);
++    int32_t ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_num, &rx_ring_size, &tx_ring_size);
+     if (ret != 0) {
+         LTRAN_ERR("rte_eth_dev_adjust_nb_rx_tx_desc failed in slave port initialize. errno: %d, port: %d \n", ret,
+                   port_num);
+@@ -266,7 +278,6 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
+         }
+     }
+ 
+-    rte_eth_dev_info_get(port_num, &dev_info);
+     for (queue_id = 0; queue_id < tx_queue_num; queue_id++) {
+         ret = rte_eth_tx_queue_setup(port_num, queue_id, tx_ring_size, (uint32_t)rte_eth_dev_socket_id(port_num),
+                                      &dev_info.default_txconf);
+@@ -345,10 +356,25 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
+     uint16_t rx_queue_num = (uint16_t)ltran_config->bond.rx_queue_num;
+     uint16_t tx_queue_num = (uint16_t)ltran_config->bond.tx_queue_num;
+ 
++    int32_t ret = ltran_eth_bond_slave(port_info, port_num, bond_port_id);
++    if (ret < 0) {
++        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %d, errno: %d \n", port_num, ret);
++        return GAZELLE_ERR;
++    }
++    
++    struct rte_eth_dev_info dev_info;
++    if (rte_eth_dev_info_get(bond_port_id, &dev_info) != 0) {
++        LTRAN_ERR("faile rte_eth_dev_info_get\n");
++	return  GAZELLE_ERR;
++    }
++
+     struct rte_eth_conf port_conf = {0};
+     port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
++    port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
++    port_conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
++    eth_params_checksum(&port_conf, &dev_info);
+ 
+-    int32_t ret = rte_eth_dev_configure(bond_port_id, rx_queue_num, tx_queue_num, &port_conf);
++    ret = rte_eth_dev_configure(bond_port_id, rx_queue_num, tx_queue_num, &port_conf);
+     if (ret != 0) {
+         LTRAN_ERR("rte_eth_dev_configure failed with bond port num: %d, errno: %d \n", port_num, ret);
+         return GAZELLE_ERR;
+@@ -362,12 +388,6 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
+     LTRAN_DEBUG("Bond port adujst rx_ring_size: %hu, tx_ring_size: %hu. bond port num: %hu \n",
+         rx_ring_size, tx_ring_size, port_num);
+ 
+-    ret = ltran_eth_bond_slave(port_info, port_num, bond_port_id);
+-    if (ret < 0) {
+-        LTRAN_ERR("rte_eth_bond_slave_add failed with bond port num: %d, errno: %d \n", port_num, ret);
+-        return GAZELLE_ERR;
+-    }
+-
+     ret = ltran_eth_rx_queue_setup(bond_port_id, pktmbuf_rxpool, rx_queue_num, rx_ring_size);
+     if (ret < 0) {
+         LTRAN_ERR("rte_eth_rx_queue_setup failed in bond port initialize. errno: %d, port: %d \n", ret, port_num);
+diff --git a/src/ltran/ltran_instance.c b/src/ltran/ltran_instance.c
+index f8bb43f..15f4bb4 100644
+--- a/src/ltran/ltran_instance.c
++++ b/src/ltran/ltran_instance.c
+@@ -450,6 +450,7 @@ int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg)
+     struct reg_response_msg send_msg;
+     struct client_proc_conf *conf = &recv_msg->msg.proc;
+     struct gazelle_instance *instance = NULL;
++    struct ltran_config *ltran_config = get_ltran_config();
+ 
+     (void)memset_s(&send_msg, sizeof(send_msg), 0, sizeof(send_msg));
+ 
+@@ -479,6 +480,8 @@ int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg)
+ 
+     send_msg.msg.socket_size = instance->socket_size;
+     send_msg.msg.base_virtaddr = instance->base_virtaddr;
++    send_msg.msg.rx_offload = ltran_config->dpdk.rx_offload;
++    send_msg.msg.tx_offload = ltran_config->dpdk.tx_offload;
+     send_msg.type = RSP_OK;
+     ret = write_specied_len(fd, (char *)&send_msg, sizeof(send_msg));
+     if (ret != 0) {
+diff --git a/src/ltran/ltran_param.h b/src/ltran/ltran_param.h
+index d3af24e..442694c 100644
+--- a/src/ltran/ltran_param.h
++++ b/src/ltran/ltran_param.h
+@@ -25,6 +25,8 @@ struct ltran_config {
+         char **dpdk_argv;
+         int32_t dpdk_argc;
+         int32_t kni_switch;
++        uint64_t rx_offload;
++        uint64_t tx_offload;
+     } dpdk;
+ 
+     struct {
+-- 
+2.23.0
+
