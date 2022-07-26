@@ -1,0 +1,56 @@
+From 8870ece28ab3b467c43c1231177d826fd7907801 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 26 Jul 2022 21:03:23 +0800
+Subject: [PATCH] support epoll oneshot
+
+---
+ src/lstack/api/lstack_epoll.c | 13 +++++++++++++
+ src/lstack/core/lstack_lwip.c |  1 -
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 310a0e7..963a696 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -291,6 +291,12 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
+ 
+     list_for_each_safe(node, temp, &wakeup->event_list) {
+         struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
++
++        if (sock->epoll_events == 0) {
++            list_del_node_null(&sock->event_list);
++            continue;
++        }
++
+         if (sock->conn && sock->conn->acceptmbox) {
+             accept_num++;
+         }
+@@ -299,6 +305,13 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
+             list_del_node_null(&sock->event_list);
+         }
+ 
++        /* EPOLLONESHOT: generate event after epoll_ctl add/mod event again
++           epoll_event set 0 avoid generating event util epoll_ctl set epoll_event a valu */
++        if (sock->epoll_events & EPOLLONESHOT) {
++            list_del_node_null(&sock->event_list);
++            sock->epoll_events = 0;
++        }
++
+         events[event_num].events = sock->events;
+         events[event_num].data = sock->ep_data;
+         event_num++;
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 4c2f0ea..80d781f 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -75,7 +75,6 @@ static void reset_sock_data(struct lwip_sock *sock)
+     sock->stack = NULL;
+     sock->wakeup = NULL;
+     sock->listen_next = NULL;
+-    sock->wait_close = false;
+     sock->epoll_events = 0;
+     sock->events = 0;
+ 
+-- 
+2.23.0
+
