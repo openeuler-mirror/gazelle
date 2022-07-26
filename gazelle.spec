@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       14
+Release:       15
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -90,6 +90,7 @@ Patch9071:     0071-clean-code.patch
 Patch9072:     0072-Support-build-gazelle-with-clang.patch
 Patch9073:     0073-Allow-dynamic-load-PMDs.patch
 Patch9074:     0074-resolve-patch-conflicts.patch
+Patch9075:     0075-support-epoll-oneshot.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -130,6 +131,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Thu Jul 26 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-15
+- support epoll oneshot
+
 * Thu Jul 21 2022 xiusailong <xiusailong@huawei.com> - 1.0.1-14
 - backport upstream patches from repository
 
