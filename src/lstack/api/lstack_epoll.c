@@ -384,7 +384,7 @@ static void change_epollfd_kernel_thread(struct wakeup_poll *wakeup, struct prot
 static void epoll_bind_statck(struct wakeup_poll *wakeup)
 {
     /* all fd is kernel, set rand stack */
-    if (wakeup->bind_stack == NULL && wakeup->max_stack== NULL) {
+    if (wakeup->bind_stack == NULL && wakeup->max_stack == NULL) {
         update_epoll_max_stack(wakeup);
     }
 
