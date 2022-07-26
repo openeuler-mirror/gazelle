@@ -75,7 +75,6 @@ static void reset_sock_data(struct lwip_sock *sock)
     sock->stack = NULL;
     sock->wakeup = NULL;
     sock->listen_next = NULL;
-    sock->wait_close = false;
     sock->epoll_events = 0;
     sock->events = 0;
 
