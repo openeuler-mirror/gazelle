@@ -291,12 +291,25 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
 
     list_for_each_safe(node, temp, &wakeup->event_list) {
         struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
+
+        if (sock->epoll_events == 0) {
+            list_del_node_null(&sock->event_list);
+            continue;
+        }
+
         if (sock->conn && sock->conn->acceptmbox) {
             accept_num++;
         }
 
         if (sock->epoll_events & EPOLLET) {
             list_del_node_null(&sock->event_list);
+        }
+
+        /* EPOLLONESHOT: generate event after epoll_ctl add/mod event again
+           epoll_event set 0 avoid generating event util epoll_ctl set epoll_event a valu */
+        if (sock->epoll_events & EPOLLONESHOT) {
+            list_del_node_null(&sock->event_list);
+            sock->epoll_events = 0;
         }
 
         events[event_num].events = sock->events;
