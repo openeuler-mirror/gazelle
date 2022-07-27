@@ -27,6 +27,7 @@
 #define PARAM_DEFAULT_API           ("posix")               ///< default API type
 #define PARAM_DEFAULT_PKTLEN        (1024)                  ///< default packet length of message
 #define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
+#define PARAM_DEFAULT_DEBUG         (false)                 ///< default flag of debug
 #define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
 
 enum {
@@ -50,6 +51,8 @@ enum {
     PARAM_NUM_VERIFY = 'v',
 #define PARAM_NAME_RINGPMD          ("ringpmd")             ///< name of parameter flag of ring PMD of dpdk
     PARAM_NUM_RINGPMD = 'r',
+#define PARAM_NAME_DEBUG            ("debug")               ///< name of parameter flag of debug
+    PARAM_NUM_DEBUG = 'd',
 #define PARAM_NAME_HELP             ("help")                ///< name of parameter help
     PARAM_NUM_HELP = 'h',
 };
@@ -84,9 +87,9 @@ struct ProgramParams {
     char*               api;                ///< the type of api
     uint32_t            pktlen;             ///< the packet length
     bool                verify;             ///< if we verify the message or not
+    bool                debug;              ///< if we print the debug information or not
     bool                ringpmd;            ///< if we use ring PMD or not
 };
-
 
 /**
  * @brief initialize the parameters

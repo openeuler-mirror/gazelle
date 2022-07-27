@@ -12,6 +12,8 @@
 
 #include "utilities.h"
 #include "parameter.h"
+#include "server.h"
+#include "client.h"
 
 static struct ProgramParams prog_params;
 
@@ -26,6 +28,12 @@ int32_t main(int argc, char *argv[])
         return ret;
     }
     program_params_print(&prog_params);
+
+    if (strcmp(prog_params.as, "server") == 0) {
+        server_create(&prog_params);
+    } else {
+        client_create(&prog_params);
+    }
 
     return ret;
 }
