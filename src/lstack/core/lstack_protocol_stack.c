@@ -157,7 +157,7 @@ void low_power_idling(struct protocol_stack *stack)
         2. If the number of received packets exceeds the threshold, the authorization mark will end;
         3. If the number of rx queue packets is less than the threshold, set the CPU delegation flag; */
     if (get_protocol_traffic(stack) < LSTACK_LPM_RX_PKTS) {
-        nanosleep(&st, &st);
+        nanosleep(&st, NULL);
         stack->low_power = true;
         return;
     }
@@ -181,7 +181,7 @@ void low_power_idling(struct protocol_stack *stack)
     }
 
     if (stack->low_power) {
-        nanosleep(&st, &st);
+        nanosleep(&st, NULL);
     }
 }
 
@@ -238,7 +238,7 @@ static void* gazelle_wakeup_thread(void *arg)
 
     for (;;) {
         if (cfg->low_power_mod != 0 && stack->low_power) {
-            nanosleep(&st, &st);
+            nanosleep(&st, NULL);
         }
 
         sem_t *event_sem[WAKEUP_MAX_NUM];
