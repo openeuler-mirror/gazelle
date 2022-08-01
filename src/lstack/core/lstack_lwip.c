@@ -310,10 +310,8 @@ static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
         replenish_send_idlembuf(sock->send_ring);
     }
 
-    if (len  > 0) {
-        if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
-            add_epoll_event(sock->conn, EPOLLOUT);
-        }
+    if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
+        add_epoll_event(sock->conn, EPOLLOUT);
     }
 }
 
@@ -321,6 +319,9 @@ void stack_send(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
     int32_t flags = msg->args[MSG_ARG_2].i;
+
+    struct protocol_stack *stack = get_protocol_stack();
+    __atomic_store_n(&stack->in_send, false, __ATOMIC_RELEASE);
 
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
@@ -337,9 +338,9 @@ void stack_send(struct rpc_msg *msg)
     /* have remain data add sendlist */
     if (NETCONN_IS_DATAOUT(sock)) {
         if (list_is_null(&sock->send_list)) {
-            list_add_node(&sock->stack->send_list, &sock->send_list);
+            list_add_node(&stack->send_list, &sock->send_list);
         }
-        sock->stack->stats.send_self_rpc++;
+        stack->stats.send_self_rpc++;
     }
 }
 

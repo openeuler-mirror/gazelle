@@ -50,7 +50,7 @@ struct protocol_stack {
     struct reg_ring_msg *reg_buf;
 
     volatile bool low_power;
-    volatile uint16_t conn_num __rte_cache_aligned;
+    volatile bool in_send __rte_cache_aligned;
     lockless_queue rpc_queue __rte_cache_aligned;
     char pad __rte_cache_aligned;
 
@@ -62,9 +62,10 @@ struct protocol_stack {
     struct list_node recv_list;
     struct list_node send_list;
 
+    volatile uint16_t conn_num;
     struct stats_ *lwip_stats;
     struct gazelle_stack_latency latency;
-    struct gazelle_stack_stat stats __rte_cache_aligned;
+    struct gazelle_stack_stat stats;
 };
 
 struct eth_params;

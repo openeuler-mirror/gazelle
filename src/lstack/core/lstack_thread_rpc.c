@@ -429,7 +429,12 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
 
 void rpc_call_send(int fd, const void *buf, size_t len, int flags)
 {
+    /* same stack don't repeat send msg */
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
+    if (__atomic_load_n(&stack->in_send, __ATOMIC_ACQUIRE)) {
+        return;
+    }
+
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_send);
     if (msg == NULL) {
         return;
@@ -438,8 +443,9 @@ void rpc_call_send(int fd, const void *buf, size_t len, int flags)
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].size = len;
     msg->args[MSG_ARG_2].i = flags;
-
     msg->self_release = 0;
+
+    stack->in_send = true;
     rpc_call(&stack->rpc_queue, msg);
 }
 
