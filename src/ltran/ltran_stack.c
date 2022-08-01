@@ -27,7 +27,6 @@ struct gazelle_stack_htable *gazelle_get_stack_htable(void)
 void gazelle_set_stack_htable(struct gazelle_stack_htable *htable)
 {
     g_stack_htable = htable;
-    return;
 }
 
 struct gazelle_stack_hbucket *gazelle_stack_hbucket_get_by_tid(struct gazelle_stack_htable *stack_htable, uint32_t tid);
@@ -186,6 +185,5 @@ void gazelle_stack_del_by_tid(struct gazelle_stack_htable *stack_htable, uint32_
     stack_hbucket->chain_size--;
 
     free(stack);
-    return;
 }
 

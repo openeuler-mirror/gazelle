@@ -145,14 +145,13 @@ struct statistics *get_statistics(void);
 
 struct gazelle_stat_msg_request;
 void handle_resp_ltran_latency(int32_t fd);
-void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg);
 void handle_resp_ltran_sock(int32_t fd);
 void handle_resp_ltran_total(int32_t fd);
 void handle_resp_ltran_client(int32_t fd);
 void handle_resp_ltran_conn(int32_t fd);
 void handle_resp_lstack_latency(int32_t fd);
 void set_ltran_log_level(struct gazelle_stat_msg_request *msg);
-void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t fd);
+void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t dfx_fd);
 void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_t fd);
 
 #endif /* ifndef __GAZELLE_STAT_H__ */

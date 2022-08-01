@@ -22,6 +22,5 @@ int32_t gazelle_get_errno(void)
 void gazelle_set_errno(const int32_t value)
 {
     g_gazelle_errno = value;
-    return;
 }
 

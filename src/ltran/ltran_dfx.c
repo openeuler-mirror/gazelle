@@ -860,7 +860,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     do {
         printf("\n------ stack tid: %6u ------\n", stat->tid);
         printf("No.   Proto  recv_cnt  recv_ring  in_send  send_ring  sem_cnt  fd     Local Address  "
-            "      Foreign Address        State\n");
+            "      Foreign Address    State\n");
         uint32_t unread_pkts = 0;
         uint32_t unsend_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
@@ -869,13 +869,13 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
             rip.s_addr = conn_info->rip;
             lip.s_addr = conn_info->lip;
             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
-                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%s:%hu\t   %s:%hu\t  %s\n", i, conn_info->recv_cnt,
+                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%-7d%s:%hu   %s:%hu  %s\n", i, conn_info->recv_cnt,
                     conn_info->recv_ring_cnt, conn_info->in_send, conn_info->send_ring_cnt, conn_info->sem_cnt,
-                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
+                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
                     tcp_state_to_str(conn_info->tcp_sub_state));
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
-                printf("%-6utcp    %-50u%s:%hu\t   0.0.0.0:*\t\t  LISTEN\n", i, conn_info->recv_cnt,
+                printf("%-6utcp    %-57u%s:%hu   0.0.0.0:*          LISTEN\n", i, conn_info->recv_cnt,
                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
             } else {
                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
@@ -1124,14 +1124,24 @@ static int32_t parse_dfx_lstack_args(int32_t argc, char *argv[], struct gazelle_
 {
     int32_t num_cmd = 0;
     struct in_addr ip;
+    uint32_t pid = 0;
 
     if (argc < GAZELLE_LSTACK_PARAM_NUM) {
         return num_cmd;
     }
 
+    /* args3 have ',' is ip or is pid */
     char *param = argv[GAZELLE_OPTIONS_ARG_IDX];
-    if (inet_aton(param, &ip) == 0) {
-        return num_cmd;
+    if (strstr(param, ".")) {
+        if (inet_aton(param, &ip) == 0) {
+            return num_cmd;
+        }
+    } else {
+        char *end = NULL;
+        pid = (uint32_t)strtoul(param, &end, 0);
+        if (end == NULL || *end != '\0') {
+            return num_cmd;
+        }
     }
 
     param = argv[GAZELLE_COMMAND_ARG_IDX];
@@ -1145,6 +1155,7 @@ static int32_t parse_dfx_lstack_args(int32_t argc, char *argv[], struct gazelle_
 
     for (int32_t i = 0; i < num_cmd; i++) {
         req_msg[i].ip.s_addr = ip.s_addr;
+        req_msg[i].pid = pid;
     }
     return num_cmd;
 }

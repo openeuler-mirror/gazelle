@@ -30,7 +30,6 @@ struct gazelle_tcp_sock_htable *gazelle_get_tcp_sock_htable(void)
 void gazelle_set_tcp_sock_htable(struct gazelle_tcp_sock_htable *htable)
 {
     g_tcp_sock_htable = htable;
-    return;
 }
 
 static struct gazelle_tcp_sock_hbucket *gazelle_hbucket_get_by_ipport(struct gazelle_tcp_sock_htable *tcp_sock_htable,
@@ -84,7 +83,6 @@ void gazelle_tcp_sock_htable_destroy(void)
     }
 
     GAZELLE_FREE(g_tcp_sock_htable);
-    return;
 }
 
 static struct gazelle_tcp_sock_hbucket *gazelle_hbucket_get_by_ipport(struct gazelle_tcp_sock_htable *tcp_sock_htable,

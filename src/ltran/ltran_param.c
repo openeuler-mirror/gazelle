@@ -59,7 +59,7 @@ static int32_t parse_str2mac(char *mac_str, uint8_t *ether_addr)
     char *tmp = NULL;
     int32_t i = 0;
     token = strtok_s(mac_str, delim, &tmp);
-    while (token != NULL) {
+    while (token != NULL && *token != '\0') {
         one_bit_mac = strtoul(token, &end, HEX_BASE);
         if ((end == NULL) || (*end != '\0')) {
             gazelle_set_errno(GAZELLE_EMAC);
@@ -419,7 +419,6 @@ static void macs_cache_free(char **bond_mac_cache, int32_t cnt, int32_t max_cnt)
     for (int32_t i = 0; i < cnt; i++) {
         GAZELLE_FREE(bond_mac_cache[i]);
     }
-    return;
 }
 
 static void parse_bond_macs_separate(const char *bond_macs_str, char **bond_mac_cache, int32_t cache_cnt,
@@ -451,7 +450,6 @@ static void parse_bond_macs_separate(const char *bond_macs_str, char **bond_mac_
     }
 
     free(bond_macs);
-    return;
 }
 
 static int32_t parse_bond_macs(const config_t *config, const char *key, struct ltran_config *ltran_config)

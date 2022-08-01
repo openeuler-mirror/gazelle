@@ -41,6 +41,8 @@ struct gazelle_instance {
     uint64_t socket_size;
     uint8_t mac_addr[ETHER_ADDR_LEN];
     char file_prefix[PATH_MAX];
+
+    struct gazelle_instance *next;
 };
 
 struct gazelle_instance_mgr {
@@ -53,11 +55,6 @@ struct gazelle_instance_mgr {
 
     struct gazelle_instance *instances[GAZELLE_MAX_INSTANCE_NUM];
 
-    /* we use ip to decide witch client to deliver
-     * all of the ip address should be in one subnet
-     * ipv4_to_client[ip_int & mask]
-     */
-    uint8_t *ipv4_to_client;
     /* net byte order */
     uint32_t net_mask;
     uint32_t subnet_size;
@@ -82,8 +79,7 @@ void gazelle_instance_mgr_destroy(void);
 struct gazelle_instance_mgr *gazelle_instance_mgr_create(void);
 
 struct gazelle_instance *gazelle_instance_get_by_pid(const struct gazelle_instance_mgr *mgr, uint32_t pid);
-struct gazelle_instance *gazelle_instance_map_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip);
-int32_t gazelle_instance_map_set(struct gazelle_instance_mgr *mgr, const struct gazelle_instance *instance);
+struct gazelle_instance *gazelle_instance_get_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip);
 struct gazelle_instance *gazelle_instance_add_by_pid(struct gazelle_instance_mgr *mgr, uint32_t pid);
 
 int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg);

@@ -27,7 +27,6 @@ struct gazelle_tcp_conn_htable *gazelle_get_tcp_conn_htable(void)
 void gazelle_set_tcp_conn_htable(struct gazelle_tcp_conn_htable *htable)
 {
     g_tcp_conn_htable = htable;
-    return;
 }
 
 struct gazelle_tcp_conn_htable *gazelle_tcp_conn_htable_create(uint32_t max_conn_num)
@@ -73,7 +72,6 @@ void gazelle_tcp_conn_htable_destroy(void)
 
     g_tcp_conn_htable = NULL;
     rte_free(conn_htable);
-    return;
 }
 
 struct gazelle_tcp_conn_hbucket *gazelle_conn_hbucket_get(struct gazelle_tcp_conn_htable *conn_htable,
@@ -181,6 +179,5 @@ void gazelle_conn_del_by_quintuple(struct gazelle_tcp_conn_htable *conn_htable, 
     rte_free(conn);
     conn_htable->cur_conn_num--;
     conn_hbucket->chain_size--;
-    return;
 }
 

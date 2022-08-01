@@ -289,7 +289,7 @@ static struct gazelle_stack* get_icmp_handle_stack(const struct rte_mbuf *m)
     struct gazelle_instance *instance = NULL;
 
     ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), ipv4_hdr->dst_addr);
+    instance = gazelle_instance_get_by_ip(get_instance_mgr(), ipv4_hdr->dst_addr);
     if (instance == NULL) {
         return NULL;
     }
@@ -336,38 +336,30 @@ static __rte_always_inline int32_t ipv4_handle(struct rte_mbuf *m, struct rte_ip
 
 static __rte_always_inline void arp_handle(struct rte_mbuf *m)
 {
-    uint32_t i;
-    struct gazelle_stack** stack_array = NULL;
-    struct gazelle_instance *instance = NULL;
-    struct rte_mbuf *m_copy = NULL;
-    struct rte_arp_hdr *arph = NULL;
+    struct rte_arp_hdr *arph = rte_pktmbuf_mtod_offset(m, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr));
 
     get_statistics()->port_stats[g_port_index].arp_pkt++;
 
-    arph = rte_pktmbuf_mtod_offset(m, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr));
-    /* in arp_handle, we do not check legality of the packet. just forward it to client.
-     * this will not miss any packet to client(except some case discript below).
-     * but maybe client recive more packet. */
-    /* we do NOT handle gratuitous ARP now and do NOT handle the case that recieving other request
-        to update our arp table. It will cause more ARP packet, just this. */
+    /* arp pkt forward to every lwip stack */
+    struct gazelle_instance_mgr *mgr = get_instance_mgr();
+    for (uint32_t i = 0; i < GAZELLE_MAX_INSTANCE_NUM; i++) {
+        struct gazelle_instance *instance = mgr->instances[i];
+        if (instance == NULL || instance->ip_addr.s_addr != arph->arp_data.arp_tip) {
+            continue;
+        }
 
-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), arph->arp_data.arp_tip);
-
-    if (instance == NULL) {
-        return;
-    }
-
-    stack_array = instance->stack_array;
-    for (i = 0; i < instance->stack_cnt; i++) {
-        if (stack_array[i] != NULL && INSTANCE_IS_ON(stack_array[i])) {
-            m_copy = rte_pktmbuf_alloc(m->pool);
-            if (m_copy == NULL) {
-                LTRAN_ERR("copy mbuf failed in arp_handle. \n");
-                return;
+        struct gazelle_stack **stack_array = instance->stack_array;
+        for (uint32_t j = 0; j < instance->stack_cnt; j++) {
+            if (stack_array[j] != NULL && INSTANCE_IS_ON(stack_array[j])) {
+                struct rte_mbuf *m_copy = rte_pktmbuf_alloc(m->pool);
+                if (m_copy == NULL) {
+                    LTRAN_ERR("copy mbuf failed in arp_handle. \n");
+                    return;
+                }
+                copy_mbuf(m_copy, m);
+                // send and free m_copy in enqueue_rx_packet
+                enqueue_rx_packet(stack_array[j], m_copy);
             }
-            copy_mbuf(m_copy, m);
-            // send and free m_copy in enqueue_rx_packet
-            enqueue_rx_packet(stack_array[i], m_copy);
         }
     }
 }
@@ -404,7 +396,6 @@ forward_to_kni:
     if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
         enqueue_rx_packet(get_kni_stack(), m);
     }
-    return;
 }
 
 static __rte_always_inline void msg_to_quintuple(struct gazelle_quintuple *transfer_qtuple,
@@ -501,8 +492,6 @@ static void tcp_hash_table_modify(struct gazelle_stack *stack, const struct reg_
             LTRAN_ERR("unknown REG_RING type\n");
             break;
     }
-
-    return;
 }
 
 static __rte_always_inline void tcp_hash_table_handle(struct gazelle_stack *stack)
@@ -529,7 +518,6 @@ static __rte_always_inline void tcp_hash_table_handle(struct gazelle_stack *stac
     if (pthread_mutex_unlock(&sock_htable->mlock) != 0) {
         LTRAN_WARN("write tcp_htable: unlock failed, errno %d\n", errno);
     }
-    return;
 }
 
 
@@ -620,7 +608,6 @@ static __rte_always_inline void upstream_forward_loop(uint32_t port_id, uint32_t
 
     // After receiving packets from the NIC for 64 times, we sends the packets in the TX queue to each thread.
     flush_all_stack();
-    return;
 }
 
 void upstream_forward(const uint16_t *port)
@@ -660,7 +647,6 @@ void upstream_forward(const uint16_t *port)
     }
 
     LTRAN_DEBUG("ltran rx loop stop.\n");
-    return;
 }
 
 static __rte_always_inline void downstream_forward_one(struct gazelle_stack *stack, uint32_t port_id, uint32_t queue_id)
@@ -714,7 +700,6 @@ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *sta
 
     get_statistics()->port_stats[g_port_index].tx_bytes += tx_bytes;
     get_statistics()->port_stats[g_port_index].tx += tx_pkts;
-    return;
 }
 
 static __rte_always_inline void downstream_forward_loop(uint32_t port_id, uint32_t queue_id)
@@ -736,8 +721,6 @@ static __rte_always_inline void downstream_forward_loop(uint32_t port_id, uint32
             }
         }
     }
-
-    return;
 }
 
 int32_t downstream_forward(uint16_t *port)

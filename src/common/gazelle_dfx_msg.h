@@ -224,6 +224,7 @@ struct gazelle_in_addr {
 struct gazelle_stat_msg_request {
     enum GAZELLE_STAT_MODE stat_mode;
     struct gazelle_in_addr ip;
+    uint32_t pid;
 
     union stat_param {
         char log_level[GAZELLE_LOG_LEVEL_MAX];
