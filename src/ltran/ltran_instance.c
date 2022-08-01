@@ -43,7 +43,6 @@ static int32_t simple_response(int32_t fd, enum response_type type);
 void set_tx_loop_count(void)
 {
     g_tx_loop_count++;
-    return;
 }
 
 unsigned long get_tx_loop_count(void)
@@ -54,7 +53,6 @@ unsigned long get_tx_loop_count(void)
 void set_rx_loop_count(void)
 {
     g_rx_loop_count++;
-    return;
 }
 
 unsigned long get_rx_loop_count(void)
@@ -70,7 +68,6 @@ struct gazelle_instance_mgr *get_instance_mgr(void)
 void set_instance_mgr(struct gazelle_instance_mgr *instance)
 {
     g_instance_mgr = instance;
-    return;
 }
 
 struct gazelle_instance_mgr *gazelle_instance_mgr_create(void)
@@ -85,16 +82,6 @@ struct gazelle_instance_mgr *gazelle_instance_mgr_create(void)
     mgr->net_mask = htonl(get_ltran_config()->dispatcher.ipv4_net_mask);
     mgr->subnet_size = (uint32_t)(get_ltran_config()->dispatcher.ipv4_subnet_size);
     mgr->max_instance_num = get_ltran_config()->dispatcher.num_clients;
-
-    mgr->ipv4_to_client = malloc(mgr->subnet_size * sizeof(*mgr->ipv4_to_client));
-    if (mgr->ipv4_to_client == NULL) {
-        free(mgr);
-        return NULL;
-    }
-
-    for (uint32_t i = 0; i < mgr->subnet_size; i++) {
-        mgr->ipv4_to_client[i] = GAZELLE_NULL_CLIENT;
-    }
 
     return mgr;
 }
@@ -112,37 +99,16 @@ void gazelle_instance_mgr_destroy(void)
             GAZELLE_FREE(mgr->instances[i]);
         }
     }
-    GAZELLE_FREE(mgr->ipv4_to_client);
+
     GAZELLE_FREE(g_instance_mgr);
 }
 
-int32_t gazelle_instance_map_set(struct gazelle_instance_mgr *mgr, const struct gazelle_instance *instance)
+struct gazelle_instance *gazelle_instance_get_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip)
 {
-    if (instance == NULL) {
-        return GAZELLE_ERR;
-    }
-
-    uint32_t ip_idx = instance->ip_addr.s_addr & mgr->net_mask;
-
-    for (uint8_t i = 0; i < GAZELLE_MAX_INSTANCE_ARRAY_SIZE; i++) {
-        if (mgr->instances[i] == instance) {
-            mgr->ipv4_to_client[ntohl(ip_idx)] = i;
-            return GAZELLE_OK;
+    for (uint32_t i = 0; i < GAZELLE_MAX_INSTANCE_NUM; i++) {
+        if (mgr->instances[i]->ip_addr.s_addr == ip) {
+            return mgr->instances[i];
         }
-    }
-
-    return GAZELLE_ERR;
-}
-
-struct gazelle_instance *gazelle_instance_map_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip)
-{
-    uint32_t ip_idx = ntohl(ip & mgr->net_mask);
-    if (ip_idx < mgr->subnet_size) {
-        uint8_t cl_idx = mgr->ipv4_to_client[ip_idx];
-        if (cl_idx == GAZELLE_NULL_CLIENT) {
-            return NULL;
-        }
-        return mgr->instances[cl_idx];
     }
     return NULL;
 }
@@ -304,8 +270,7 @@ static int32_t instance_info_check(const struct client_proc_conf *conf)
         return GAZELLE_ERR;
     }
 
-    if (gazelle_instance_map_by_ip(get_instance_mgr(), in.s_addr) ||
-        gazelle_instance_get_by_pid(get_instance_mgr(), conf->pid)) {
+    if (gazelle_instance_get_by_pid(get_instance_mgr(), conf->pid)) {
         LTRAN_ERR("pid %u: ip %s already exist.\n", conf->pid, addr);
         return GAZELLE_ERR;
     }
@@ -564,12 +529,6 @@ int32_t handle_reg_msg_proc_att(int32_t fd, struct reg_request_msg *recv_msg)
         goto END;
     }
 
-    ret = gazelle_instance_map_set(get_instance_mgr(), instance);
-    if (ret != GAZELLE_OK) {
-        LTRAN_RTE_ERR("pid %u, gazelle_instance_map_set failed. ret=%d.\n", conf->pid, ret);
-        goto END;
-    }
-
     ret = simple_response(fd, RSP_OK);
     if (ret != 0) {
         return GAZELLE_ERR;
@@ -680,7 +639,6 @@ static void handle_stack_logout(struct gazelle_instance *instance, const struct 
     gazelle_stack_del_by_tid(gazelle_get_stack_htable(), stack->tid);
 
     LTRAN_INFO("tid %u, stack logout successfully.\n", tid);
-    return;
 }
 
 static void handle_inst_logout_for_reg_thrd_ring(struct gazelle_instance *instance)
@@ -697,20 +655,14 @@ static void handle_inst_logout_for_reg_thrd_ring(struct gazelle_instance *instan
 
         handle_stack_logout(instance, stack);
     }
-
-    return;
 }
 
-static int32_t handle_inst_logout_reg_proc_att(struct gazelle_instance *instance,
-    struct gazelle_instance_mgr *instance_mgr)
+static int32_t handle_inst_logout_reg_proc_att(struct gazelle_instance *instance)
 {
     int32_t ret;
 
     instance->socket_size = 0;
     instance->base_virtaddr = 0;
-
-    uint32_t ip_idx = instance->ip_addr.s_addr & instance_mgr->net_mask;
-    instance_mgr->ipv4_to_client[ntohl(ip_idx)] = GAZELLE_NULL_CLIENT;
 
     ret = rte_eal_sec_detach(instance->file_prefix, (int32_t)strlen(instance->file_prefix));
     if (ret < 0) {
@@ -725,7 +677,6 @@ static void handle_inst_logout_reg_proc_mem(struct gazelle_instance *instance)
     remove_virtual_area(instance->base_virtaddr, (size_t)instance->socket_size);
 
     free(instance);
-    return;
 }
 
 void handle_instance_logout(uint32_t pid)
@@ -751,7 +702,7 @@ void handle_instance_logout(uint32_t pid)
             handle_inst_logout_for_reg_thrd_ring(instance);
             /* fallthrough */
         case RQT_REG_PROC_ATT:
-            ret = handle_inst_logout_reg_proc_att(instance, instance_mgr);
+            ret = handle_inst_logout_reg_proc_att(instance);
             /* fallthrough */
         case RQT_REG_PROC_MEM:
             /* instance ptr has been free after this func */

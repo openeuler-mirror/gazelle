@@ -62,8 +62,6 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf 
     dst_data = (uint8_t *)PTR_TO_PRIVATE(dst);
     src_data = (uint8_t *)PTR_TO_PRIVATE(src);
     rte_memcpy(dst_data, src_data, GAZELLE_MBUFF_PRIV_SIZE);
-
-    return;
 }
 
 static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)

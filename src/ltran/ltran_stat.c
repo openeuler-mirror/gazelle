@@ -80,7 +80,6 @@ int32_t get_start_latency_flag(void)
 void set_ltran_stop_flag(int32_t flag)
 {
     g_ltran_stop_flag = flag;
-    return;
 }
 
 int32_t get_ltran_stop_flag(void)
@@ -355,10 +354,9 @@ void handle_resp_ltran_latency(int32_t fd)
 void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_t fd)
 {
     struct gazelle_stat_lstack_total stat = {0};
-    struct gazelle_instance *instance = NULL;
-    int32_t ret;
 
-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), msg->ip.s_addr);
+    struct gazelle_instance *instance = (msg->pid > 0) ? gazelle_instance_get_by_pid(get_instance_mgr(), msg->pid) :
+        gazelle_instance_get_by_ip(get_instance_mgr(), msg->ip.s_addr);
     if (instance == NULL) {
         LTRAN_ERR("Can't find the client ip to check\n");
         return;
@@ -369,7 +367,7 @@ void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_
     }
 
     for (uint32_t i = 0; i < instance->stack_cnt; i++) {
-        ret = gazelle_filling_lstack_stat_total(&stat, instance->stack_array[i]);
+        int32_t ret = gazelle_filling_lstack_stat_total(&stat, instance->stack_array[i]);
         if (ret != GAZELLE_OK) {
             LTRAN_ERR("gazelle_filling_lstack_stat_total failed. ret=%d.\n", ret);
             return;
@@ -387,48 +385,18 @@ void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_
     }
 }
 
-static int32_t find_sockfd_by_ip(struct gazelle_in_addr ip)
+void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t dfx_fd)
 {
-    struct gazelle_instance *instance = NULL;
+    struct gazelle_stack_dfx_data stat = {0};
 
-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), ip.s_addr);
+    struct gazelle_instance *instance = (msg->pid > 0) ? gazelle_instance_get_by_pid(get_instance_mgr(), msg->pid) :
+        gazelle_instance_get_by_ip(get_instance_mgr(), msg->ip.s_addr);
     if (instance == NULL) {
-        LTRAN_WARN("get null instance by ip %u\n", ip.s_addr);
-        return -1;
-    }
-
-    return instance->sockfd;
-}
-
-void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg)
-{
-    struct gazelle_stack_dfx_data stat = {0};
-    int32_t lstack_fd, ret;
-
-    lstack_fd = find_sockfd_by_ip(msg->ip);
-    if (lstack_fd < 0) {
+        LTRAN_ERR("get null instance by ip %u pid %u\n", msg->ip.s_addr, msg->pid);
         return;
     }
 
-    (void)write_specied_len(lstack_fd, (const char *)msg, sizeof(struct gazelle_stat_msg_request));
-
-    /* wait lstack finish this cmd avoid two write to lstack */
-    while (stat.eof == 0) {
-        ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
-        if (ret != GAZELLE_OK) {
-            return;
-        }
-    }
-}
-
-void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t fd)
-{
-    int32_t lstack_fd;
-    struct gazelle_stack_dfx_data stat = {0};
-    int32_t cmd_fd = fd;
-    int32_t ret;
-
-    lstack_fd = find_sockfd_by_ip(msg->ip);
+    int32_t lstack_fd = instance->sockfd;
     if (lstack_fd < 0) {
         return;
     }
@@ -436,12 +404,13 @@ void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int
     (void)write_specied_len(lstack_fd, (const char *)msg, sizeof(struct gazelle_stat_msg_request));
 
     while (stat.eof == 0) {
-        ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
+        int32_t ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
         if (ret != GAZELLE_OK) {
             return;
         }
-        (void)write_specied_len(cmd_fd, (char *)&stat, sizeof(stat));
-    }
 
-    return;
+        if (dfx_fd > 0) {
+            (void)write_specied_len(dfx_fd, (char *)&stat, sizeof(stat));
+        }
+    }
 }

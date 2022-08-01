@@ -246,8 +246,8 @@ static int32_t parse_stack_cpu_number(void)
 
 static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t num)
 {
-    char path[PATH_MAX];
-    char strbuf[PATH_MAX];
+    char path[PATH_MAX] = {0};
+    char strbuf[PATH_MAX] = {0};
 
     int32_t ret = snprintf_s(path, sizeof(path), PATH_MAX - 1, NUMA_CPULIST_PATH, socket_id);
     if (ret < 0) {
@@ -330,7 +330,7 @@ static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vadd
     viraddr = strtoull(arg, &end, BASE_HEX_SCALE);
 
     /* check for errors */
-    if ((errno != 0) || (arg[0] == '\0') || end == NULL || (*end != '\0')) {
+    if ((errno != 0) || (arg[0] == '\0') || (end == NULL) || (*end != '\0')) {
         return -EINVAL;
     }
 
@@ -408,7 +408,6 @@ static void print_dpdk_param(void)
 
 static int32_t turn_args_to_config(int32_t argc, char **argv)
 {
-    char host_addr[PATH_MAX];
     int32_t ret;
     int32_t idx;
 
@@ -419,13 +418,8 @@ static int32_t turn_args_to_config(int32_t argc, char **argv)
     // OPT_FILE_PREFIX
     idx = get_param_idx(argc, argv, OPT_FILE_PREFIX);
     if (idx < 0) {
-        ret = sprintf_s(host_addr, sizeof(host_addr), "%s", inet_ntoa(g_config_params.host_addr));
-        if (ret < 0) {
-            return -1;
-        }
-
         ret = sprintf_s(g_config_params.sec_attach_arg.file_prefix, sizeof(g_config_params.sec_attach_arg.file_prefix),
-                        "gazelle_%s", host_addr);
+                        "gazelle_%d", getpid());
         if (ret < 0) {
             return -1;
         }

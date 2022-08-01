@@ -286,8 +286,6 @@ static void dfx_server_msg_proc(uint32_t events, struct sockfd_data *data)
         close(conn_fd);
         return;
     }
-
-    return;
 }
 
 static int32_t ltran_req_mode_process(int32_t fd, struct gazelle_stat_msg_request *req_msg)
@@ -311,12 +309,12 @@ static int32_t ltran_req_mode_process(int32_t fd, struct gazelle_stat_msg_reques
             handle_resp_ltran_latency(fd);
             break;
         case GAZELLE_STAT_LTRAN_START_LATENCY:
-            handle_cmd_to_lstack(req_msg);
+            handle_resp_lstack_transfer(req_msg, -1);
             set_start_latency_flag(GAZELLE_ON);
             break;
         case GAZELLE_STAT_LTRAN_STOP_LATENCY:
             set_start_latency_flag(GAZELLE_OFF);
-            handle_cmd_to_lstack(req_msg);
+            handle_resp_lstack_transfer(req_msg, -1);
             break;
         case GAZELLE_STAT_LTRAN_QUIT:
             set_ltran_stop_flag(GAZELLE_TRUE);
@@ -333,7 +331,7 @@ static int32_t lstack_req_mode_process(int32_t fd, const struct gazelle_stat_msg
 {
     switch (req_msg->stat_mode) {
         case GAZELLE_STAT_LSTACK_LOG_LEVEL_SET:
-            handle_cmd_to_lstack(req_msg);
+            handle_resp_lstack_transfer(req_msg, -1);
             break;
         case GAZELLE_STAT_LSTACK_SHOW_RATE:
             handle_resp_lstack_total(req_msg, fd);
@@ -392,7 +390,6 @@ END:
     /* always close cmd_fd */
     g_dfx_fd_cnt--;
     sockfd_data_free(data);
-    return;
 }
 
 static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
@@ -433,8 +430,6 @@ static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
         sockfd_data_free(event.data.ptr);
         return;
     }
-
-    return;
 }
 
 static void reg_conn_msg_proc(uint32_t events, struct sockfd_data *data)
@@ -480,7 +475,6 @@ END:
         handle_instance_logout(data->pid);
     }
     sockfd_data_free(data);
-    return;
 }
 
 static void gazelle_ctl_loop(void)

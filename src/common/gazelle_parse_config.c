@@ -32,20 +32,27 @@ static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
 
     elem = strtok_s(args, delim, &next_token);
     start = strtol(elem, &endptr, 0);
+    if (endptr == elem) {
+        return cnt;
+    }
 
     elem = strtok_s(NULL, delim, &next_token);
     if (elem == NULL) {
         /* just a single data */
-        array[cnt++] = start;
+        array[cnt++] = (uint32_t)start;
         return cnt;
     }
     end = strtol(elem, &endptr, 0);
+    if (endptr == elem) {
+        array[cnt++] = start;
+        return cnt;
+    }
 
     for (int64_t i = start; i <= end && cnt < array_size; i++) {
         if (i < 0 || i > UINT_MAX) {
             break;
         }
-        array[cnt++] = i;
+        array[cnt++] = (uint32_t)i;
     }
 
     return cnt;
