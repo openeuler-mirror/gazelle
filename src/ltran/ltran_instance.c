@@ -106,6 +106,10 @@ void gazelle_instance_mgr_destroy(void)
 struct gazelle_instance *gazelle_instance_get_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip)
 {
     for (uint32_t i = 0; i < GAZELLE_MAX_INSTANCE_NUM; i++) {
+        if (mgr->instances[i] == NULL) {
+            continue;
+        }
+
         if (mgr->instances[i]->ip_addr.s_addr == ip) {
             return mgr->instances[i];
         }
