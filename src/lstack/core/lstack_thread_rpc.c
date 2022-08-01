@@ -24,6 +24,7 @@
 #include "lstack_thread_rpc.h"
 
 #define RPC_MSG_MAX            32
+#define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
 struct rpc_msg_pool {
     struct rpc_msg msgs[RPC_MSG_MAX];
     uint32_t prod __rte_cache_aligned;
@@ -37,12 +38,12 @@ static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct 
     uint32_t cons = __atomic_load_n(&rpc_pool->cons, __ATOMIC_ACQUIRE);
     uint32_t prod = rpc_pool->prod + 1;
 
-    if (prod == cons) {
+    if (prod - cons >= RPC_MSG_MAX) {
         return NULL;
     }
 
     rpc_pool->prod = prod;
-    return &rpc_pool->msgs[prod];
+    return &rpc_pool->msgs[prod & RPC_MSG_MASK];
 }
 
 static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
