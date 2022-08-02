@@ -172,7 +172,8 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
 
     lstack_get_low_power_info(&dfx->low_power_info);
 
-    int32_t ret = memcpy_s(&dfx->data.pkts.stack_stat, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
+    int32_t ret = memcpy_s(&dfx->data.pkts.stack_stat, sizeof(struct gazelle_stack_stat),
+        &stack->stats, sizeof(struct gazelle_stack_stat));
     if (ret != EOK) {
         LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
         return;
