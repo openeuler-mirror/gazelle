@@ -182,7 +182,7 @@ Gazelle wrap应用程序POSIX接口，应用程序无需修改代码。
 ```
 Usage: gazellectl [-h | help]
   or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time]
-  or:  gazellectl lstack show {ip} [LSTACK_OPTIONS] [time]
+  or:  gazellectl lstack show {ip | pid} [LSTACK_OPTIONS] [time]
 
   quit            ltran process exit
 
