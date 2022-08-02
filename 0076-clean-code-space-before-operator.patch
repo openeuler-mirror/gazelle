@@ -1,0 +1,25 @@
+From 5208fe70d61a7ee9e7bf4e99500e7417bb93df66 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 2 Aug 2022 10:38:43 +0800
+Subject: [PATCH 1/5] clean code space before operator
+
+---
+ src/lstack/api/lstack_epoll.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 963a696..9c44f87 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -384,7 +384,7 @@ static void change_epollfd_kernel_thread(struct wakeup_poll *wakeup, struct prot
+ static void epoll_bind_statck(struct wakeup_poll *wakeup)
+ {
+     /* all fd is kernel, set rand stack */
+-    if (wakeup->bind_stack == NULL && wakeup->max_stack== NULL) {
++    if (wakeup->bind_stack == NULL && wakeup->max_stack == NULL) {
+         update_epoll_max_stack(wakeup);
+     }
+ 
+-- 
+2.23.0
+

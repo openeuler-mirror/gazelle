@@ -1,0 +1,835 @@
+From aea2e454eb573edaad09eb3aed245a014050b8ad Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 2 Aug 2022 10:39:30 +0800
+Subject: [PATCH 2/5] ltran-support-muti-proc-with-same-ip
+
+---
+ src/common/dpdk_common.h            |  2 -
+ src/common/gazelle_dfx_msg.h        |  1 +
+ src/common/gazelle_parse_config.c   | 11 ++++-
+ src/lstack/core/lstack_cfg.c        | 14 ++-----
+ src/lstack/core/lstack_stack_stat.c |  4 +-
+ src/ltran/ltran_dfx.c               | 23 +++++++---
+ src/ltran/ltran_errno.c             |  1 -
+ src/ltran/ltran_forward.c           | 57 +++++++++----------------
+ src/ltran/ltran_instance.c          | 65 ++++-------------------------
+ src/ltran/ltran_instance.h          | 10 ++---
+ src/ltran/ltran_monitor.c           | 12 ++----
+ src/ltran/ltran_param.c             |  4 +-
+ src/ltran/ltran_stack.c             |  2 -
+ src/ltran/ltran_stat.c              | 57 ++++++-------------------
+ src/ltran/ltran_stat.h              |  3 +-
+ src/ltran/ltran_tcp_conn.c          |  3 --
+ src/ltran/ltran_tcp_sock.c          |  2 -
+ 17 files changed, 82 insertions(+), 189 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index b3d67c1..d06bcb7 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -62,8 +62,6 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf
+     dst_data = (uint8_t *)PTR_TO_PRIVATE(dst);
+     src_data = (uint8_t *)PTR_TO_PRIVATE(src);
+     rte_memcpy(dst_data, src_data, GAZELLE_MBUFF_PRIV_SIZE);
+-
+-    return;
+ }
+ 
+ static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index 68b6364..4d838c0 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -224,6 +224,7 @@ struct gazelle_in_addr {
+ struct gazelle_stat_msg_request {
+     enum GAZELLE_STAT_MODE stat_mode;
+     struct gazelle_in_addr ip;
++    uint32_t pid;
+ 
+     union stat_param {
+         char log_level[GAZELLE_LOG_LEVEL_MAX];
+diff --git a/src/common/gazelle_parse_config.c b/src/common/gazelle_parse_config.c
+index 4e96fcc..8556e37 100644
+--- a/src/common/gazelle_parse_config.c
++++ b/src/common/gazelle_parse_config.c
+@@ -32,20 +32,27 @@ static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
+ 
+     elem = strtok_s(args, delim, &next_token);
+     start = strtol(elem, &endptr, 0);
++    if (endptr == elem) {
++        return cnt;
++    }
+ 
+     elem = strtok_s(NULL, delim, &next_token);
+     if (elem == NULL) {
+         /* just a single data */
+-        array[cnt++] = start;
++        array[cnt++] = (uint32_t)start;
+         return cnt;
+     }
+     end = strtol(elem, &endptr, 0);
++    if (endptr == elem) {
++        array[cnt++] = start;
++        return cnt;
++    }
+ 
+     for (int64_t i = start; i <= end && cnt < array_size; i++) {
+         if (i < 0 || i > UINT_MAX) {
+             break;
+         }
+-        array[cnt++] = i;
++        array[cnt++] = (uint32_t)i;
+     }
+ 
+     return cnt;
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index ee914c5..5cd326b 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -246,8 +246,8 @@ static int32_t parse_stack_cpu_number(void)
+ 
+ static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t num)
+ {
+-    char path[PATH_MAX];
+-    char strbuf[PATH_MAX];
++    char path[PATH_MAX] = {0};
++    char strbuf[PATH_MAX] = {0};
+ 
+     int32_t ret = snprintf_s(path, sizeof(path), PATH_MAX - 1, NUMA_CPULIST_PATH, socket_id);
+     if (ret < 0) {
+@@ -330,7 +330,7 @@ static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vadd
+     viraddr = strtoull(arg, &end, BASE_HEX_SCALE);
+ 
+     /* check for errors */
+-    if ((errno != 0) || (arg[0] == '\0') || end == NULL || (*end != '\0')) {
++    if ((errno != 0) || (arg[0] == '\0') || (end == NULL) || (*end != '\0')) {
+         return -EINVAL;
+     }
+ 
+@@ -408,7 +408,6 @@ static void print_dpdk_param(void)
+ 
+ static int32_t turn_args_to_config(int32_t argc, char **argv)
+ {
+-    char host_addr[PATH_MAX];
+     int32_t ret;
+     int32_t idx;
+ 
+@@ -419,13 +418,8 @@ static int32_t turn_args_to_config(int32_t argc, char **argv)
+     // OPT_FILE_PREFIX
+     idx = get_param_idx(argc, argv, OPT_FILE_PREFIX);
+     if (idx < 0) {
+-        ret = sprintf_s(host_addr, sizeof(host_addr), "%s", inet_ntoa(g_config_params.host_addr));
+-        if (ret < 0) {
+-            return -1;
+-        }
+-
+         ret = sprintf_s(g_config_params.sec_attach_arg.file_prefix, sizeof(g_config_params.sec_attach_arg.file_prefix),
+-                        "gazelle_%s", host_addr);
++                        "gazelle_%d", getpid());
+         if (ret < 0) {
+             return -1;
+         }
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index ca7ce52..09aa04c 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -172,12 +172,12 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
+ 
+     lstack_get_low_power_info(&dfx->low_power_info);
+ 
+-    int32_t ret = memcpy_s(&dfx->data.pkts, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
++    int32_t ret = memcpy_s(&dfx->data.pkts.stack_stat, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
+     if (ret != EOK) {
+         LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+         return;
+     }
+-    
++
+     get_wakeup_stat(stack, &dfx->data.pkts.wakeup_stat);
+ 
+     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index d52f2f0..8bd141b 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -861,7 +861,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
+     do {
+         printf("\n------ stack tid: %6u ------\n", stat->tid);
+         printf("No.   Proto  recv_cnt  recv_ring  in_send  send_ring  sem_cnt  fd     Local Address  "
+-            "      Foreign Address        State\n");
++            "      Foreign Address    State\n");
+         uint32_t unread_pkts = 0;
+         uint32_t unsend_pkts = 0;
+         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
+@@ -870,13 +870,13 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
+             rip.s_addr = conn_info->rip;
+             lip.s_addr = conn_info->lip;
+             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
+-                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%s:%hu\t   %s:%hu\t  %s\n", i, conn_info->recv_cnt,
++                printf("%-6utcp    %-10u%-11u%-9u%-11u%-9d%-7d%s:%hu   %s:%hu  %s\n", i, conn_info->recv_cnt,
+                     conn_info->recv_ring_cnt, conn_info->in_send, conn_info->send_ring_cnt, conn_info->sem_cnt,
+-                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
++                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
+                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
+                     tcp_state_to_str(conn_info->tcp_sub_state));
+             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
+-                printf("%-6utcp    %-50u%s:%hu\t   0.0.0.0:*\t\t  LISTEN\n", i, conn_info->recv_cnt,
++                printf("%-6utcp    %-57u%s:%hu   0.0.0.0:*          LISTEN\n", i, conn_info->recv_cnt,
+                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
+             } else {
+                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
+@@ -1125,14 +1125,24 @@ static int32_t parse_dfx_lstack_args(int32_t argc, char *argv[], struct gazelle_
+ {
+     int32_t num_cmd = 0;
+     struct in_addr ip;
++    uint32_t pid = 0;
+ 
+     if (argc < GAZELLE_LSTACK_PARAM_NUM) {
+         return num_cmd;
+     }
+ 
++    /* args3 have ',' is ip or is pid */
+     char *param = argv[GAZELLE_OPTIONS_ARG_IDX];
+-    if (inet_aton(param, &ip) == 0) {
+-        return num_cmd;
++    if (strstr(param, ".")) {
++        if (inet_aton(param, &ip) == 0) {
++            return num_cmd;
++        }
++    } else {
++        char *end = NULL;
++        pid = (uint32_t)strtoul(param, &end, 0);
++        if (end == NULL || *end != '\0') {
++            return num_cmd;
++        }
+     }
+ 
+     param = argv[GAZELLE_COMMAND_ARG_IDX];
+@@ -1146,6 +1156,7 @@ static int32_t parse_dfx_lstack_args(int32_t argc, char *argv[], struct gazelle_
+ 
+     for (int32_t i = 0; i < num_cmd; i++) {
+         req_msg[i].ip.s_addr = ip.s_addr;
++        req_msg[i].pid = pid;
+     }
+     return num_cmd;
+ }
+diff --git a/src/ltran/ltran_errno.c b/src/ltran/ltran_errno.c
+index beaf30f..4bf7dcd 100644
+--- a/src/ltran/ltran_errno.c
++++ b/src/ltran/ltran_errno.c
+@@ -22,6 +22,5 @@ int32_t gazelle_get_errno(void)
+ void gazelle_set_errno(const int32_t value)
+ {
+     g_gazelle_errno = value;
+-    return;
+ }
+ 
+diff --git a/src/ltran/ltran_forward.c b/src/ltran/ltran_forward.c
+index fb864b3..1a92348 100644
+--- a/src/ltran/ltran_forward.c
++++ b/src/ltran/ltran_forward.c
+@@ -289,7 +289,7 @@ static struct gazelle_stack* get_icmp_handle_stack(const struct rte_mbuf *m)
+     struct gazelle_instance *instance = NULL;
+ 
+     ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), ipv4_hdr->dst_addr);
++    instance = gazelle_instance_get_by_ip(get_instance_mgr(), ipv4_hdr->dst_addr);
+     if (instance == NULL) {
+         return NULL;
+     }
+@@ -336,38 +336,30 @@ static __rte_always_inline int32_t ipv4_handle(struct rte_mbuf *m, struct rte_ip
+ 
+ static __rte_always_inline void arp_handle(struct rte_mbuf *m)
+ {
+-    uint32_t i;
+-    struct gazelle_stack** stack_array = NULL;
+-    struct gazelle_instance *instance = NULL;
+-    struct rte_mbuf *m_copy = NULL;
+-    struct rte_arp_hdr *arph = NULL;
++    struct rte_arp_hdr *arph = rte_pktmbuf_mtod_offset(m, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr));
+ 
+     get_statistics()->port_stats[g_port_index].arp_pkt++;
+ 
+-    arph = rte_pktmbuf_mtod_offset(m, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr));
+-    /* in arp_handle, we do not check legality of the packet. just forward it to client.
+-     * this will not miss any packet to client(except some case discript below).
+-     * but maybe client recive more packet. */
+-    /* we do NOT handle gratuitous ARP now and do NOT handle the case that recieving other request
+-        to update our arp table. It will cause more ARP packet, just this. */
+-
+-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), arph->arp_data.arp_tip);
+-
+-    if (instance == NULL) {
+-        return;
+-    }
++    /* arp pkt forward to every lwip stack */
++    struct gazelle_instance_mgr *mgr = get_instance_mgr();
++    for (uint32_t i = 0; i < GAZELLE_MAX_INSTANCE_NUM; i++) {
++        struct gazelle_instance *instance = mgr->instances[i];
++        if (instance == NULL || instance->ip_addr.s_addr != arph->arp_data.arp_tip) {
++            continue;
++        }
+ 
+-    stack_array = instance->stack_array;
+-    for (i = 0; i < instance->stack_cnt; i++) {
+-        if (stack_array[i] != NULL && INSTANCE_IS_ON(stack_array[i])) {
+-            m_copy = rte_pktmbuf_alloc(m->pool);
+-            if (m_copy == NULL) {
+-                LTRAN_ERR("copy mbuf failed in arp_handle. \n");
+-                return;
++        struct gazelle_stack **stack_array = instance->stack_array;
++        for (uint32_t j = 0; j < instance->stack_cnt; j++) {
++            if (stack_array[j] != NULL && INSTANCE_IS_ON(stack_array[j])) {
++                struct rte_mbuf *m_copy = rte_pktmbuf_alloc(m->pool);
++                if (m_copy == NULL) {
++                    LTRAN_ERR("copy mbuf failed in arp_handle. \n");
++                    return;
++                }
++                copy_mbuf(m_copy, m);
++                // send and free m_copy in enqueue_rx_packet
++                enqueue_rx_packet(stack_array[j], m_copy);
+             }
+-            copy_mbuf(m_copy, m);
+-            // send and free m_copy in enqueue_rx_packet
+-            enqueue_rx_packet(stack_array[i], m_copy);
+         }
+     }
+ }
+@@ -404,7 +396,6 @@ forward_to_kni:
+     if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
+         enqueue_rx_packet(get_kni_stack(), m);
+     }
+-    return;
+ }
+ 
+ static __rte_always_inline void msg_to_quintuple(struct gazelle_quintuple *transfer_qtuple,
+@@ -501,8 +492,6 @@ static void tcp_hash_table_modify(struct gazelle_stack *stack, const struct reg_
+             LTRAN_ERR("unknown REG_RING type\n");
+             break;
+     }
+-
+-    return;
+ }
+ 
+ static __rte_always_inline void tcp_hash_table_handle(struct gazelle_stack *stack)
+@@ -529,7 +518,6 @@ static __rte_always_inline void tcp_hash_table_handle(struct gazelle_stack *stac
+     if (pthread_mutex_unlock(&sock_htable->mlock) != 0) {
+         LTRAN_WARN("write tcp_htable: unlock failed, errno %d\n", errno);
+     }
+-    return;
+ }
+ 
+ 
+@@ -620,7 +608,6 @@ static __rte_always_inline void upstream_forward_loop(uint32_t port_id, uint32_t
+ 
+     // After receiving packets from the NIC for 64 times, we sends the packets in the TX queue to each thread.
+     flush_all_stack();
+-    return;
+ }
+ 
+ void upstream_forward(const uint16_t *port)
+@@ -660,7 +647,6 @@ void upstream_forward(const uint16_t *port)
+     }
+ 
+     LTRAN_DEBUG("ltran rx loop stop.\n");
+-    return;
+ }
+ 
+ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *stack, uint32_t port_id, uint32_t queue_id)
+@@ -714,7 +700,6 @@ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *sta
+ 
+     get_statistics()->port_stats[g_port_index].tx_bytes += tx_bytes;
+     get_statistics()->port_stats[g_port_index].tx += tx_pkts;
+-    return;
+ }
+ 
+ static __rte_always_inline void downstream_forward_loop(uint32_t port_id, uint32_t queue_id)
+@@ -736,8 +721,6 @@ static __rte_always_inline void downstream_forward_loop(uint32_t port_id, uint32
+             }
+         }
+     }
+-
+-    return;
+ }
+ 
+ int32_t downstream_forward(uint16_t *port)
+diff --git a/src/ltran/ltran_instance.c b/src/ltran/ltran_instance.c
+index 5560d0c..648eb89 100644
+--- a/src/ltran/ltran_instance.c
++++ b/src/ltran/ltran_instance.c
+@@ -43,7 +43,6 @@ static int32_t simple_response(int32_t fd, enum response_type type);
+ void set_tx_loop_count(void)
+ {
+     g_tx_loop_count++;
+-    return;
+ }
+ 
+ unsigned long get_tx_loop_count(void)
+@@ -54,7 +53,6 @@ unsigned long get_tx_loop_count(void)
+ void set_rx_loop_count(void)
+ {
+     g_rx_loop_count++;
+-    return;
+ }
+ 
+ unsigned long get_rx_loop_count(void)
+@@ -70,7 +68,6 @@ struct gazelle_instance_mgr *get_instance_mgr(void)
+ void set_instance_mgr(struct gazelle_instance_mgr *instance)
+ {
+     g_instance_mgr = instance;
+-    return;
+ }
+ 
+ struct gazelle_instance_mgr *gazelle_instance_mgr_create(void)
+@@ -86,16 +83,6 @@ struct gazelle_instance_mgr *gazelle_instance_mgr_create(void)
+     mgr->subnet_size = (uint32_t)(get_ltran_config()->dispatcher.ipv4_subnet_size);
+     mgr->max_instance_num = get_ltran_config()->dispatcher.num_clients;
+ 
+-    mgr->ipv4_to_client = malloc(mgr->subnet_size * sizeof(*mgr->ipv4_to_client));
+-    if (mgr->ipv4_to_client == NULL) {
+-        free(mgr);
+-        return NULL;
+-    }
+-
+-    for (uint32_t i = 0; i < mgr->subnet_size; i++) {
+-        mgr->ipv4_to_client[i] = GAZELLE_NULL_CLIENT;
+-    }
+-
+     return mgr;
+ }
+ 
+@@ -112,37 +99,16 @@ void gazelle_instance_mgr_destroy(void)
+             GAZELLE_FREE(mgr->instances[i]);
+         }
+     }
+-    GAZELLE_FREE(mgr->ipv4_to_client);
+-    GAZELLE_FREE(g_instance_mgr);
+-}
+-
+-int32_t gazelle_instance_map_set(struct gazelle_instance_mgr *mgr, const struct gazelle_instance *instance)
+-{
+-    if (instance == NULL) {
+-        return GAZELLE_ERR;
+-    }
+-
+-    uint32_t ip_idx = instance->ip_addr.s_addr & mgr->net_mask;
+ 
+-    for (uint8_t i = 0; i < GAZELLE_MAX_INSTANCE_ARRAY_SIZE; i++) {
+-        if (mgr->instances[i] == instance) {
+-            mgr->ipv4_to_client[ntohl(ip_idx)] = i;
+-            return GAZELLE_OK;
+-        }
+-    }
+-
+-    return GAZELLE_ERR;
++    GAZELLE_FREE(g_instance_mgr);
+ }
+ 
+-struct gazelle_instance *gazelle_instance_map_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip)
++struct gazelle_instance *gazelle_instance_get_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip)
+ {
+-    uint32_t ip_idx = ntohl(ip & mgr->net_mask);
+-    if (ip_idx < mgr->subnet_size) {
+-        uint8_t cl_idx = mgr->ipv4_to_client[ip_idx];
+-        if (cl_idx == GAZELLE_NULL_CLIENT) {
+-            return NULL;
++    for (uint32_t i = 0; i < GAZELLE_MAX_INSTANCE_NUM; i++) {
++        if (mgr->instances[i]->ip_addr.s_addr == ip) {
++            return mgr->instances[i];
+         }
+-        return mgr->instances[cl_idx];
+     }
+     return NULL;
+ }
+@@ -304,8 +270,7 @@ static int32_t instance_info_check(const struct client_proc_conf *conf)
+         return GAZELLE_ERR;
+     }
+ 
+-    if (gazelle_instance_map_by_ip(get_instance_mgr(), in.s_addr) ||
+-        gazelle_instance_get_by_pid(get_instance_mgr(), conf->pid)) {
++    if (gazelle_instance_get_by_pid(get_instance_mgr(), conf->pid)) {
+         LTRAN_ERR("pid %u: ip %s already exist.\n", conf->pid, addr);
+         return GAZELLE_ERR;
+     }
+@@ -564,12 +529,6 @@ int32_t handle_reg_msg_proc_att(int32_t fd, struct reg_request_msg *recv_msg)
+         goto END;
+     }
+ 
+-    ret = gazelle_instance_map_set(get_instance_mgr(), instance);
+-    if (ret != GAZELLE_OK) {
+-        LTRAN_RTE_ERR("pid %u, gazelle_instance_map_set failed. ret=%d.\n", conf->pid, ret);
+-        goto END;
+-    }
+-
+     ret = simple_response(fd, RSP_OK);
+     if (ret != 0) {
+         return GAZELLE_ERR;
+@@ -680,7 +639,6 @@ static void handle_stack_logout(struct gazelle_instance *instance, const struct
+     gazelle_stack_del_by_tid(gazelle_get_stack_htable(), stack->tid);
+ 
+     LTRAN_INFO("tid %u, stack logout successfully.\n", tid);
+-    return;
+ }
+ 
+ static void handle_inst_logout_for_reg_thrd_ring(struct gazelle_instance *instance)
+@@ -697,21 +655,15 @@ static void handle_inst_logout_for_reg_thrd_ring(struct gazelle_instance *instan
+ 
+         handle_stack_logout(instance, stack);
+     }
+-
+-    return;
+ }
+ 
+-static int32_t handle_inst_logout_reg_proc_att(struct gazelle_instance *instance,
+-    struct gazelle_instance_mgr *instance_mgr)
++static int32_t handle_inst_logout_reg_proc_att(struct gazelle_instance *instance)
+ {
+     int32_t ret;
+ 
+     instance->socket_size = 0;
+     instance->base_virtaddr = 0;
+ 
+-    uint32_t ip_idx = instance->ip_addr.s_addr & instance_mgr->net_mask;
+-    instance_mgr->ipv4_to_client[ntohl(ip_idx)] = GAZELLE_NULL_CLIENT;
+-
+     ret = rte_eal_sec_detach(instance->file_prefix, (int32_t)strlen(instance->file_prefix));
+     if (ret < 0) {
+         LTRAN_RTE_ERR("rte_eal_sec_detach failed:%d.\n", ret);
+@@ -725,7 +677,6 @@ static void handle_inst_logout_reg_proc_mem(struct gazelle_instance *instance)
+     remove_virtual_area(instance->base_virtaddr, (size_t)instance->socket_size);
+ 
+     free(instance);
+-    return;
+ }
+ 
+ void handle_instance_logout(uint32_t pid)
+@@ -751,7 +702,7 @@ void handle_instance_logout(uint32_t pid)
+             handle_inst_logout_for_reg_thrd_ring(instance);
+             /* fallthrough */
+         case RQT_REG_PROC_ATT:
+-            ret = handle_inst_logout_reg_proc_att(instance, instance_mgr);
++            ret = handle_inst_logout_reg_proc_att(instance);
+             /* fallthrough */
+         case RQT_REG_PROC_MEM:
+             /* instance ptr has been free after this func */
+diff --git a/src/ltran/ltran_instance.h b/src/ltran/ltran_instance.h
+index a8808df..2b888ec 100644
+--- a/src/ltran/ltran_instance.h
++++ b/src/ltran/ltran_instance.h
+@@ -41,6 +41,8 @@ struct gazelle_instance {
+     uint64_t socket_size;
+     uint8_t mac_addr[ETHER_ADDR_LEN];
+     char file_prefix[PATH_MAX];
++
++    struct gazelle_instance *next;
+ };
+ 
+ struct gazelle_instance_mgr {
+@@ -53,11 +55,6 @@ struct gazelle_instance_mgr {
+ 
+     struct gazelle_instance *instances[GAZELLE_MAX_INSTANCE_NUM];
+ 
+-    /* we use ip to decide witch client to deliver
+-     * all of the ip address should be in one subnet
+-     * ipv4_to_client[ip_int & mask]
+-     */
+-    uint8_t *ipv4_to_client;
+     /* net byte order */
+     uint32_t net_mask;
+     uint32_t subnet_size;
+@@ -82,8 +79,7 @@ void gazelle_instance_mgr_destroy(void);
+ struct gazelle_instance_mgr *gazelle_instance_mgr_create(void);
+ 
+ struct gazelle_instance *gazelle_instance_get_by_pid(const struct gazelle_instance_mgr *mgr, uint32_t pid);
+-struct gazelle_instance *gazelle_instance_map_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip);
+-int32_t gazelle_instance_map_set(struct gazelle_instance_mgr *mgr, const struct gazelle_instance *instance);
++struct gazelle_instance *gazelle_instance_get_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip);
+ struct gazelle_instance *gazelle_instance_add_by_pid(struct gazelle_instance_mgr *mgr, uint32_t pid);
+ 
+ int32_t handle_reg_msg_proc_mem(int32_t fd, struct reg_request_msg *recv_msg);
+diff --git a/src/ltran/ltran_monitor.c b/src/ltran/ltran_monitor.c
+index 0562ce1..dfda93f 100644
+--- a/src/ltran/ltran_monitor.c
++++ b/src/ltran/ltran_monitor.c
+@@ -286,8 +286,6 @@ static void dfx_server_msg_proc(uint32_t events, struct sockfd_data *data)
+         close(conn_fd);
+         return;
+     }
+-
+-    return;
+ }
+ 
+ static int32_t ltran_req_mode_process(int32_t fd, struct gazelle_stat_msg_request *req_msg)
+@@ -311,12 +309,12 @@ static int32_t ltran_req_mode_process(int32_t fd, struct gazelle_stat_msg_reques
+             handle_resp_ltran_latency(fd);
+             break;
+         case GAZELLE_STAT_LTRAN_START_LATENCY:
+-            handle_cmd_to_lstack(req_msg);
++            handle_resp_lstack_transfer(req_msg, -1);
+             set_start_latency_flag(GAZELLE_ON);
+             break;
+         case GAZELLE_STAT_LTRAN_STOP_LATENCY:
+             set_start_latency_flag(GAZELLE_OFF);
+-            handle_cmd_to_lstack(req_msg);
++            handle_resp_lstack_transfer(req_msg, -1);
+             break;
+         case GAZELLE_STAT_LTRAN_QUIT:
+             set_ltran_stop_flag(GAZELLE_TRUE);
+@@ -333,7 +331,7 @@ static int32_t lstack_req_mode_process(int32_t fd, const struct gazelle_stat_msg
+ {
+     switch (req_msg->stat_mode) {
+         case GAZELLE_STAT_LSTACK_LOG_LEVEL_SET:
+-            handle_cmd_to_lstack(req_msg);
++            handle_resp_lstack_transfer(req_msg, -1);
+             break;
+         case GAZELLE_STAT_LSTACK_SHOW_RATE:
+             handle_resp_lstack_total(req_msg, fd);
+@@ -392,7 +390,6 @@ END:
+     /* always close cmd_fd */
+     g_dfx_fd_cnt--;
+     sockfd_data_free(data);
+-    return;
+ }
+ 
+ static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
+@@ -433,8 +430,6 @@ static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
+         sockfd_data_free(event.data.ptr);
+         return;
+     }
+-
+-    return;
+ }
+ 
+ static void reg_conn_msg_proc(uint32_t events, struct sockfd_data *data)
+@@ -480,7 +475,6 @@ END:
+         handle_instance_logout(data->pid);
+     }
+     sockfd_data_free(data);
+-    return;
+ }
+ 
+ static void gazelle_ctl_loop(void)
+diff --git a/src/ltran/ltran_param.c b/src/ltran/ltran_param.c
+index 9273ee2..b8e9732 100644
+--- a/src/ltran/ltran_param.c
++++ b/src/ltran/ltran_param.c
+@@ -60,7 +60,7 @@ static int32_t parse_str2mac(char *mac_str, uint8_t *ether_addr)
+     char *tmp = NULL;
+     int32_t i = 0;
+     token = strtok_s(mac_str, delim, &tmp);
+-    while (token != NULL) {
++    while (token != NULL && *token != '\0') {
+         one_bit_mac = strtoul(token, &end, HEX_BASE);
+         if ((end == NULL) || (*end != '\0')) {
+             gazelle_set_errno(GAZELLE_EMAC);
+@@ -420,7 +420,6 @@ static void macs_cache_free(char **bond_mac_cache, int32_t cnt, int32_t max_cnt)
+     for (int32_t i = 0; i < cnt; i++) {
+         GAZELLE_FREE(bond_mac_cache[i]);
+     }
+-    return;
+ }
+ 
+ static void parse_bond_macs_separate(const char *bond_macs_str, char **bond_mac_cache, int32_t cache_cnt,
+@@ -452,7 +451,6 @@ static void parse_bond_macs_separate(const char *bond_macs_str, char **bond_mac_
+     }
+ 
+     free(bond_macs);
+-    return;
+ }
+ 
+ static int32_t parse_bond_macs(const config_t *config, const char *key, struct ltran_config *ltran_config)
+diff --git a/src/ltran/ltran_stack.c b/src/ltran/ltran_stack.c
+index 4be7c23..1c0d4f7 100644
+--- a/src/ltran/ltran_stack.c
++++ b/src/ltran/ltran_stack.c
+@@ -27,7 +27,6 @@ struct gazelle_stack_htable *gazelle_get_stack_htable(void)
+ void gazelle_set_stack_htable(struct gazelle_stack_htable *htable)
+ {
+     g_stack_htable = htable;
+-    return;
+ }
+ 
+ struct gazelle_stack_hbucket *gazelle_stack_hbucket_get_by_tid(struct gazelle_stack_htable *stack_htable, uint32_t tid);
+@@ -186,6 +185,5 @@ void gazelle_stack_del_by_tid(struct gazelle_stack_htable *stack_htable, uint32_
+     stack_hbucket->chain_size--;
+ 
+     free(stack);
+-    return;
+ }
+ 
+diff --git a/src/ltran/ltran_stat.c b/src/ltran/ltran_stat.c
+index af79b76..50f65e3 100644
+--- a/src/ltran/ltran_stat.c
++++ b/src/ltran/ltran_stat.c
+@@ -80,7 +80,6 @@ int32_t get_start_latency_flag(void)
+ void set_ltran_stop_flag(int32_t flag)
+ {
+     g_ltran_stop_flag = flag;
+-    return;
+ }
+ 
+ int32_t get_ltran_stop_flag(void)
+@@ -355,10 +354,9 @@ void handle_resp_ltran_latency(int32_t fd)
+ void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_t fd)
+ {
+     struct gazelle_stat_lstack_total stat = {0};
+-    struct gazelle_instance *instance = NULL;
+-    int32_t ret;
+ 
+-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), msg->ip.s_addr);
++    struct gazelle_instance *instance = (msg->pid > 0) ? gazelle_instance_get_by_pid(get_instance_mgr(), msg->pid) :
++        gazelle_instance_get_by_ip(get_instance_mgr(), msg->ip.s_addr);
+     if (instance == NULL) {
+         LTRAN_ERR("Can't find the client ip to check\n");
+         return;
+@@ -369,7 +367,7 @@ void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_
+     }
+ 
+     for (uint32_t i = 0; i < instance->stack_cnt; i++) {
+-        ret = gazelle_filling_lstack_stat_total(&stat, instance->stack_array[i]);
++        int32_t ret = gazelle_filling_lstack_stat_total(&stat, instance->stack_array[i]);
+         if (ret != GAZELLE_OK) {
+             LTRAN_ERR("gazelle_filling_lstack_stat_total failed. ret=%d.\n", ret);
+             return;
+@@ -387,61 +385,32 @@ void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_
+     }
+ }
+ 
+-static int32_t find_sockfd_by_ip(struct gazelle_in_addr ip)
++void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t dfx_fd)
+ {
+-    struct gazelle_instance *instance = NULL;
++    struct gazelle_stack_dfx_data stat = {0};
+ 
+-    instance = gazelle_instance_map_by_ip(get_instance_mgr(), ip.s_addr);
++    struct gazelle_instance *instance = (msg->pid > 0) ? gazelle_instance_get_by_pid(get_instance_mgr(), msg->pid) :
++        gazelle_instance_get_by_ip(get_instance_mgr(), msg->ip.s_addr);
+     if (instance == NULL) {
+-        LTRAN_WARN("get null instance by ip %u\n", ip.s_addr);
+-        return -1;
++        LTRAN_ERR("get null instance by ip %u pid %u\n", msg->ip.s_addr, msg->pid);
++        return;
+     }
+ 
+-    return instance->sockfd;
+-}
+-
+-void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg)
+-{
+-    struct gazelle_stack_dfx_data stat = {0};
+-    int32_t lstack_fd, ret;
+-
+-    lstack_fd = find_sockfd_by_ip(msg->ip);
++    int32_t lstack_fd = instance->sockfd;
+     if (lstack_fd < 0) {
+         return;
+     }
+ 
+     (void)write_specied_len(lstack_fd, (const char *)msg, sizeof(struct gazelle_stat_msg_request));
+ 
+-    /* wait lstack finish this cmd avoid two write to lstack */
+     while (stat.eof == 0) {
+-        ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
++        int32_t ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
+         if (ret != GAZELLE_OK) {
+             return;
+         }
+-    }
+-}
+-
+-void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t fd)
+-{
+-    int32_t lstack_fd;
+-    struct gazelle_stack_dfx_data stat = {0};
+-    int32_t cmd_fd = fd;
+-    int32_t ret;
+-
+-    lstack_fd = find_sockfd_by_ip(msg->ip);
+-    if (lstack_fd < 0) {
+-        return;
+-    }
+ 
+-    (void)write_specied_len(lstack_fd, (const char *)msg, sizeof(struct gazelle_stat_msg_request));
+-
+-    while (stat.eof == 0) {
+-        ret = read_specied_len(lstack_fd, (char *)&stat, sizeof(stat));
+-        if (ret != GAZELLE_OK) {
+-            return;
++        if (dfx_fd > 0) {
++            (void)write_specied_len(dfx_fd, (char *)&stat, sizeof(stat));
+         }
+-        (void)write_specied_len(cmd_fd, (char *)&stat, sizeof(stat));
+     }
+-
+-    return;
+ }
+diff --git a/src/ltran/ltran_stat.h b/src/ltran/ltran_stat.h
+index 494c83e..f91b0c4 100644
+--- a/src/ltran/ltran_stat.h
++++ b/src/ltran/ltran_stat.h
+@@ -145,14 +145,13 @@ struct statistics *get_statistics(void);
+ 
+ struct gazelle_stat_msg_request;
+ void handle_resp_ltran_latency(int32_t fd);
+-void handle_cmd_to_lstack(const struct gazelle_stat_msg_request *msg);
+ void handle_resp_ltran_sock(int32_t fd);
+ void handle_resp_ltran_total(int32_t fd);
+ void handle_resp_ltran_client(int32_t fd);
+ void handle_resp_ltran_conn(int32_t fd);
+ void handle_resp_lstack_latency(int32_t fd);
+ void set_ltran_log_level(struct gazelle_stat_msg_request *msg);
+-void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t fd);
++void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int32_t dfx_fd);
+ void handle_resp_lstack_total(const struct gazelle_stat_msg_request *msg, int32_t fd);
+ 
+ #endif /* ifndef __GAZELLE_STAT_H__ */
+diff --git a/src/ltran/ltran_tcp_conn.c b/src/ltran/ltran_tcp_conn.c
+index faa42e1..e0ad562 100644
+--- a/src/ltran/ltran_tcp_conn.c
++++ b/src/ltran/ltran_tcp_conn.c
+@@ -27,7 +27,6 @@ struct gazelle_tcp_conn_htable *gazelle_get_tcp_conn_htable(void)
+ void gazelle_set_tcp_conn_htable(struct gazelle_tcp_conn_htable *htable)
+ {
+     g_tcp_conn_htable = htable;
+-    return;
+ }
+ 
+ struct gazelle_tcp_conn_htable *gazelle_tcp_conn_htable_create(uint32_t max_conn_num)
+@@ -73,7 +72,6 @@ void gazelle_tcp_conn_htable_destroy(void)
+ 
+     g_tcp_conn_htable = NULL;
+     rte_free(conn_htable);
+-    return;
+ }
+ 
+ struct gazelle_tcp_conn_hbucket *gazelle_conn_hbucket_get(struct gazelle_tcp_conn_htable *conn_htable,
+@@ -181,6 +179,5 @@ void gazelle_conn_del_by_quintuple(struct gazelle_tcp_conn_htable *conn_htable,
+     rte_free(conn);
+     conn_htable->cur_conn_num--;
+     conn_hbucket->chain_size--;
+-    return;
+ }
+ 
+diff --git a/src/ltran/ltran_tcp_sock.c b/src/ltran/ltran_tcp_sock.c
+index e3b696b..7ba23f0 100644
+--- a/src/ltran/ltran_tcp_sock.c
++++ b/src/ltran/ltran_tcp_sock.c
+@@ -30,7 +30,6 @@ struct gazelle_tcp_sock_htable *gazelle_get_tcp_sock_htable(void)
+ void gazelle_set_tcp_sock_htable(struct gazelle_tcp_sock_htable *htable)
+ {
+     g_tcp_sock_htable = htable;
+-    return;
+ }
+ 
+ static struct gazelle_tcp_sock_hbucket *gazelle_hbucket_get_by_ipport(struct gazelle_tcp_sock_htable *tcp_sock_htable,
+@@ -84,7 +83,6 @@ void gazelle_tcp_sock_htable_destroy(void)
+     }
+ 
+     GAZELLE_FREE(g_tcp_sock_htable);
+-    return;
+ }
+ 
+ static struct gazelle_tcp_sock_hbucket *gazelle_hbucket_get_by_ipport(struct gazelle_tcp_sock_htable *tcp_sock_htable,
+-- 
+2.23.0
+
