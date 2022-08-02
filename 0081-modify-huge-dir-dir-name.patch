@@ -1,0 +1,92 @@
+From e81e8e8febb948e9e378c62661d18ebbed73ea34 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 2 Aug 2022 11:27:23 +0800
+Subject: [PATCH] modify-huge-dir-dir-name
+
+---
+ README.md              | 20 ++++++++++----------
+ src/lstack/lstack.conf |  2 +-
+ src/ltran/ltran.conf   |  2 +-
+ 3 files changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/README.md b/README.md
+index 3c1487c..887a4ae 100644
+--- a/README.md
++++ b/README.md
+@@ -71,12 +71,12 @@ grep Huge /proc/meminfo
+ ### 4. 挂载大页内存  
+ 创建两个目录，分别给lstack的进程、ltran进程访问大页内存使用。操作步骤如下：  
+ ``` sh
+-mkdir -p /mnt/hugepages
+-mkdir -p /mnt/hugepages-2M
+-chmod -R 700 /mnt/hugepages
+-chmod -R 700 /mnt/hugepages-2M
+-mount -t hugetlbfs nodev /mnt/hugepages -o pagesize=2M
+-mount -t hugetlbfs nodev /mnt/hugepages-2M -o pagesize=2M
++mkdir -p /mnt/hugepages-ltran
++mkdir -p /mnt/hugepages-lstack
++chmod -R 700 /mnt/hugepages-ltran
++chmod -R 700 /mnt/hugepages-lstack
++mount -t hugetlbfs nodev /mnt/hugepages-ltran -o pagesize=2M
++mount -t hugetlbfs nodev /mnt/hugepages-lstack -o pagesize=2M
+ ```
+ 
+ ### 5. 应用程序使用Gazelle
+@@ -116,7 +116,7 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
+ 
+ lstack.conf示例：
+ ``` conf
+-dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-2M", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
++dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-lstack", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
+ 
+ use_ltran=1
+ kni_switch=0
+@@ -150,7 +150,7 @@ devices="aa:bb:cc:dd:ee:ff"
+ 
+ ltran.conf示例：
+ ``` conf
+-forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages --proc-type primary --legacy-mem --map-perfect --syslog daemon"
++forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages-ltran --proc-type primary --legacy-mem --map-perfect --syslog daemon"
+ forward_kit="dpdk"
+ 
+ kni_switch=0
+@@ -248,8 +248,8 @@ Gazelle可能存在如下安全风险，用户需要根据使用场景评估风
+   
+ **共享内存**  
+ - 现状  
+-  大页内存 mount 至 /mnt/hugepages-2M 目录，链接 liblstack.so 的进程初始化时在 /mnt/hugepages-2M 目录下创建文件，每个文件对应 2M 大页内存，并 mmap 这些文件。ltran 在收到 lstask 的注册信息后，根据大页内存配置信息也 mmap 目录下文件，实现大页内存共享。
+-  ltran 在 /mnt/hugepages 目录的大页内存同理。
++  大页内存 mount 至 /mnt/hugepages-lstack 目录，链接 liblstack.so 的进程初始化时在 /mnt/hugepages-lstack 目录下创建文件，每个文件对应 2M 大页内存，并 mmap 这些文件。ltran 在收到 lstask 的注册信息后，根据大页内存配置信息也 mmap 目录下文件，实现大页内存共享。
++  ltran 在 /mnt/hugepages-ltran 目录的大页内存同理。
+ - 当前消减措施
+   大页文件权限 600，只有 OWNER 用户才能访问文件，默认 root 用户，支持配置成其它用户； 
+   大页文件有 DPDK 文件锁，不能直接写或者映射。
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index b53068d..1a91aee 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -8,7 +8,7 @@
+ # PURPOSE.
+ # See the Mulan PSL v2 for more details.
+ 
+-dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-2M", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
++dpdk_args=["--socket-mem", "2048,0,0,0", "--huge-dir", "/mnt/hugepages-lstack", "--proc-type", "primary", "--legacy-mem", "--map-perfect"]
+ 
+ use_ltran=1
+ kni_switch=0
+diff --git a/src/ltran/ltran.conf b/src/ltran/ltran.conf
+index cfcd5f7..3c1a2bc 100644
+--- a/src/ltran/ltran.conf
++++ b/src/ltran/ltran.conf
+@@ -8,7 +8,7 @@
+ # PURPOSE.
+ # See the Mulan PSL v2 for more details.
+ 
+-forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages --proc-type primary --legacy-mem --map-perfect --syslog daemon"
++forward_kit_args="-l 0,1 --socket-mem 1024,0,0,0 --huge-dir /mnt/hugepages-ltran --proc-type primary --legacy-mem --map-perfect --syslog daemon"
+ forward_kit="dpdk"
+ 
+ kni_switch=0
+-- 
+2.23.0
+

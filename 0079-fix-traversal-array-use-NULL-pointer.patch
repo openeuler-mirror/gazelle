@@ -1,0 +1,27 @@
+From fef672fb6a817d96c220e13f416d57cca65dc1ea Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 2 Aug 2022 10:40:16 +0800
+Subject: [PATCH 4/5] fix-traversal-array-use-NULL-pointer
+
+---
+ src/ltran/ltran_instance.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/ltran/ltran_instance.c b/src/ltran/ltran_instance.c
+index 648eb89..fc5b0fb 100644
+--- a/src/ltran/ltran_instance.c
++++ b/src/ltran/ltran_instance.c
+@@ -106,6 +106,10 @@ void gazelle_instance_mgr_destroy(void)
+ struct gazelle_instance *gazelle_instance_get_by_ip(const struct gazelle_instance_mgr *mgr, uint32_t ip)
+ {
+     for (uint32_t i = 0; i < GAZELLE_MAX_INSTANCE_NUM; i++) {
++        if (mgr->instances[i] == NULL) {
++            continue;
++        }
++
+         if (mgr->instances[i]->ip_addr.s_addr == ip) {
+             return mgr->instances[i];
+         }
+-- 
+2.23.0
+
