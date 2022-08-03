@@ -26,33 +26,73 @@
  */
 struct ClientUnit
 {
-    int32_t *cnntfds;           ///< the connect socket file descriptor
-    int32_t epfd;               ///< the connect epoll file descriptor
-    struct epoll_event *epevs;  ///< the epoll events
-    pthread_mutex_t *lock;      ///< mutex lock
-    uint32_t connections;       ///< current connections
-    char *ip;                   ///< server ip
-    uint32_t port;              ///< server port
-    uint32_t connect_num;       ///< connect number
-    uint32_t pktlen;            ///< the length of peckage
-    bool verify;                ///< if we verify the message or not
-    uint32_t msg_idx;           ///< the start charactors index of message
-    bool debug;                 ///< if we print the debug information
+    struct ClientHandler *handlers;     ///< the handlers
+    int32_t epfd;                       ///< the connect epoll file descriptor
+    struct epoll_event *epevs;          ///< the epoll events
+    uint32_t connections;               ///< current connections
+    uint64_t send_bytes;                ///< total send bytes
+    in_addr_t ip;                       ///< server ip
+    uint16_t port;                      ///< server port
+    uint32_t connect_num;               ///< connect number
+    uint32_t pktlen;                    ///< the length of peckage
+    bool verify;                        ///< if we verify or not
+    bool debug;                         ///< if we print the debug information
+    struct ClientUnit *next;            ///< next pointer
+};
+
+/**
+ * @brief client
+ * The information of client.
+ */
+struct Client
+{
+    struct ClientUnit *uints;           ///< the server mum unit
+    bool debug;                         ///< if we print the debug information
 };
 
 
 /**
  * @brief the single thread, client prints informations
  * The single thread, client prints informations.
- * @param arg           each thread's information of server
- * @return              the result pointer
+ * @param client_unit       the client unit
+ * @param str               the debug information
+ * @param ip                the ip address
+ * @param port              the port
+ * @return                  the result pointer
  */
-void clithd_debug_print(struct ClientUnit *client_unit, const char *str, const char *ip, uint32_t port);
+void clithd_debug_print(struct ClientUnit *client_unit, const char *str, const char *ip, uint16_t port);
+
+/**
+ * @brief the client prints informations
+ * The client prints informations.
+ * @param client            the client information
+ */
+void client_info_print(struct Client *client);
+
+/**
+ * @brief the single thread, client try to connect to server, register to epoll
+ * The single thread, client try to connect to server, register to epoll.
+ * @param client_handler    the client handler
+ * @param epoll_fd          the epoll file descriptor
+ * @param ip                ip address
+ * @param port              port
+ * @return                  the result pointer
+ */
+int32_t clithd_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port);
+
+/**
+ * @brief the single thread, client retry to connect to server, register to epoll
+ * The single thread, client retry to connect to server, register to epoll.
+ * @param client_unit       the client unit
+ * @param client_handler    the client handler
+ * @return                  the result pointer
+ */
+int32_t clithd_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler);
 
 /**
  * @brief the single thread, client connects and gets epoll feature descriptors
  * The single thread, client connects and gets epoll feature descriptors.
- * @param arg           each thread's information of server
+ * @param client_unit   the client unit
  * @return              the result pointer
  */
 int32_t clithd_get_epfd(struct ClientUnit *client_unit);

@@ -22,66 +22,76 @@
 #define BUSSINESS_MESSAGE_SIZE                  26                          ///< the size of business message
 
 
-static const char bussiness_messages_low[] = "abcdefghijklmnopqrstuvwxyz";  ///< the lower charactors of business message
-static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  ///< the capital charactors of business message
+/**
+ * @brief server handler
+ * The server handler.
+ */
+struct ServerHandler
+{
+    int32_t fd;                 ///< socket file descriptor
+};
+
+/**
+ * @brief client handler
+ * The client handler.
+ */
+struct ClientHandler
+{
+    int32_t fd;                 ///< socket file descriptor
+    uint32_t msg_idx;           ///< the start charactors index of message
+};
 
 
 /**
  * @brief the business processsing of server
  * This function processes the business of server.
- * @param in            the input string
  * @param out           the output string
+ * @param in            the input string
  * @param size          the size of input and output
  * @param verify        if we verify or not
- * @param msg_idx       the start charactors index of message
  * @return              the result
  */
-int32_t server_bussiness(const char *in, char *out, uint32_t size, bool verify, uint32_t *msg_idx);
+void server_bussiness(char *out, const char *in, uint32_t size);
 
 /**
  * @brief the business processsing of client
  * This function processes the business of client.
- * @param in            the input string
  * @param out           the output string
+ * @param in            the input string
  * @param size          the size of input and output
  * @param verify        if we verify or not
  * @param msg_idx       the start charactors index of message
  * @return              the result
  */
-int32_t client_bussiness(const char *in, char *out, uint32_t size, bool verify, uint32_t *msg_idx);
+int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, uint32_t *msg_idx);
 
 /**
  * @brief server checks the information and answers
  * This function checks the information and answers.
- * @param connect_fd    the conneced client's file descriptor
- * @param pktlen        the length of packet
- * @param verify        verify the packet or not
- * @param msg_idx       the start charactors index of message
- * @return              the result
+ * @param server_handler    server handler
+ * @param pktlen            the length of package
+ * @return                  the result
  */
-int32_t server_chk_ans(int32_t connect_fd, uint32_t pktlen, bool verify, uint32_t *msg_idx);
+int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen);
 
 /**
  * @brief client asks server
  * This function asks server.
- * @param connect_fd    the conneced client's file descriptor
- * @param pktlen        the length of packet
- * @param verify        verify the packet or not
- * @param msg_idx       the start charactors index of message
- * @return              the result
+ * @param client_handler    client handler
+ * @param pktlen            the length of package
+ * @return                  the result
  */
-int32_t client_ask(int32_t connect_fd, uint32_t pktlen, bool verify, uint32_t *msg_idx);
+int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen);
 
 /**
  * @brief client checks the information and answers
  * This function checks the information and answers.
- * @param connect_fd    the conneced client's file descriptor
- * @param pktlen        the length of packet
- * @param verify        verify the packet or not
- * @param msg_idx       the start charactors index of message
- * @return              the result
+ * @param client_handler    client handler
+ * @param pktlen            the length of package
+ * @param verify            verify or not
+ * @return                  the result
  */
-int32_t client_chk_ans(int32_t connect_fd, uint32_t pktlen, bool verify, uint32_t *msg_idx);
+int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify);
 
 
 #endif // __EXAMPLES_BUSSINESS_H__

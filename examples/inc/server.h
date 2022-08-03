@@ -26,28 +26,28 @@
  */
 struct ServerMumUnit
 {
-    int32_t lstnfd;             ///< the listen socket file descriptor
-    int32_t epfd;               ///< the listen epoll file descriptor
-    struct epoll_event *epevs;  ///< the epoll events
-    uint32_t connections;       ///< current connections
-    pthread_mutex_t *lock;      ///< mutex lock
-    char *ip;                   ///< server ip
-    uint32_t port;              ///< server port
-    uint32_t pktlen;            ///< the length of peckage
-    bool verify;                ///< if we verify the message or not
-    uint32_t msg_idx;           ///< the start charactors index of message
-    bool debug;                 ///< if we print the debug information
+    struct ServerHandler listener;          ///< the listen handler
+    int32_t epfd;                           ///< the listen epoll file descriptor
+    struct epoll_event *epevs;              ///< the epoll events
+    uint32_t connections;                   ///< current connections
+    uint64_t recv_bytes;                    ///< total receive bytes
+    in_addr_t ip;                           ///< server ip
+    uint16_t port;                          ///< server port
+    uint32_t pktlen;                        ///< the length of peckage
+    bool debug;                             ///< if we print the debug information
+    struct ServerMumUnit *next;             ///< next pointer
 };
 
-
 /**
- * @brief the single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors
- * The single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors.
- * @param server_unit       the server unit
- * @return                  the result pointer
+ * @brief server model mum
+ * The information of server model mum.
  */
-// the single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors
-int32_t sersum_get_epfd(struct ServerMumUnit *server_unit);
+struct ServerMum
+{
+    struct ServerMumUnit *uints;            ///< the server mum unit
+    bool debug;                             ///< if we print the debug information
+};
+
 
 /**
  * @brief the single thread, unblock, mutliplexing IO server prints debug informations
@@ -58,7 +58,31 @@ int32_t sersum_get_epfd(struct ServerMumUnit *server_unit);
  * @param port              the port
  * @return                  the result pointer
  */
-void sersum_debug_print(struct ServerMumUnit *server_unit, const char *str, const char *ip, uint32_t port);
+void sersum_debug_print(struct ServerMumUnit *server_unit, const char *str, const char *ip, uint16_t port);
+
+/**
+ * @brief the multi thread, unblock, mutliplexing IO server prints informations
+ * The multi thread, unblock, mutliplexing IO server prints informations.
+ * @param server_mum        the server information
+ */
+void sermum_info_print(struct ServerMum *server_mum);
+
+/**
+ * @brief the single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors
+ * The single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors.
+ * @param server_unit       the server unit
+ * @return                  the result pointer
+ */
+int32_t sersum_get_epfd(struct ServerMumUnit *server_unit);
+
+/**
+ * @brief the single thread, unblock, mutliplexing IO server accepts the connections
+ * The single thread, unblock, mutliplexing IO server accepts the connections.
+ * @param server_unit       the server unit
+ * @param server_handler    the server handler
+ * @return                  the result pointer
+ */
+int32_t sersum_try_accept(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler);
 
 /**
  * @brief the single thread, unblock, mutliplexing IO server processes the events
