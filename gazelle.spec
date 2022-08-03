@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       15
+Release:       16
 Summary:       gazelle is a high performance user-mode stack
 License:       Mulan PSL v2
 URL:           https://gitee.com/openeuler/gazelle
@@ -91,6 +91,12 @@ Patch9072:     0072-Support-build-gazelle-with-clang.patch
 Patch9073:     0073-Allow-dynamic-load-PMDs.patch
 Patch9074:     0074-resolve-patch-conflicts.patch
 Patch9075:     0075-support-epoll-oneshot.patch
+Patch9076:     0076-clean-code-space-before-operator.patch
+Patch9077:     0077-ltran-support-muti-proc-with-same-ip.patch
+Patch9078:     0078-fix-rpc-msg-out-of-bound.patch
+Patch9079:     0079-fix-traversal-array-use-NULL-pointer.patch
+Patch9080:     0080-same-stack-thread-don-t-repeate-send-msg.patch
+Patch9081:     0081-modify-huge-dir-dir-name.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -131,6 +137,11 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue Aug 2 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-16
+- ltran support muti proc with same ip
+- same bugfix and clean code
+- modify huge dir dir name
+
 * Thu Jul 26 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-15
 - support epoll oneshot
 
