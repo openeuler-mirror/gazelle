@@ -40,7 +40,8 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 |解读系列(一):Gazelle总体方案介绍|1，支持场景、特性、规格<br>2，与dpdk、lwip关系<br>3，总体框架<br>4，替换posix接口|2022/8/17|
 |解读系列(二):Gazelle为什么能提升xx|介绍提关键技术点：减少拷贝、亲和性、减少上下文切换|2022/9/2|
 |解读系列(三):Gazelle代码框架流程|1，Gazelle框架<br>2，事件、读、写、ltran报文流程图|2022/9/9|
-|参与Gazelle指导|1，怎么判断应用适不适合应gazelle加速<br>2，如何提ISSUE，检索历史ISSUE<br>3，如何提交PR，注意事项|2022/8/5|
+|参与Gazelle指导|1，怎么判断应用适不适合应gazelle加速<br>2，Gazelle常见问题调试<br>|2022/8/5|
+|[openEuler指南](https://gitee.com/openeuler/community/blob/master/zh/contributors/README.md)| 如何参与openEuler社区 | 已发布 |
 ## 路标
 #### 近期
 - 完成openGauss调试验证 --- 2022.7.23
@@ -53,3 +54,9 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 - 报文输入可配，当前只能使用dpdk从网卡读取报文，后续可选XDP、智能网卡、RDMA等
 - lwip可配，当前报文都会经过lwip处理，后续可配是否使用lwip
 - 支持容器场景
+
+## 联系方式
+[注册邮件列表](https://mailweb.openeuler.org/postorius/lists/high-performance-network.openeuler.org/)  
+[历史邮件](https://mailweb.openeuler.org/hyperkitty/list/high-performance-network@openeuler.org/)  
+微信群名称：openEuler 高性能网络sig  
+[SIG首页](https://gitee.com/wu-changsheng/community/tree/master/sig/sig-high-performance-network)
