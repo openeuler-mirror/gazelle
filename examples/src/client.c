@@ -14,20 +14,152 @@
 #include "client.h"
 
 
+static pthread_mutex_t client_printf_mutex;                     // the client mutex for printf
+
+
 // the single thread, client prints informations
-void clithd_debug_print(struct ClientUnit *client_unit, const char *str, const char *ip, uint32_t port)
+void clithd_debug_print(struct ClientUnit *client_unit, const char *str, const char *ip, uint16_t port)
 {
     if (client_unit->debug == true) {
-        pthread_mutex_lock(client_unit->lock);
-        PRINT_CLIENT("'pid: %d' 'tid: %ld' 'connections: %d' [%s] -> %s:%d. ", \
+        pthread_mutex_lock(&client_printf_mutex);
+        PRINT_CLIENT("[pid: %d] [tid: %ld cnnt: %d] [%s -> %s:%d]. ", \
                     getpid(), \
                     pthread_self(), \
                     client_unit->connections, \
                     str, \
                     ip, \
                     port);
-        pthread_mutex_unlock(client_unit->lock);
+        pthread_mutex_unlock(&client_printf_mutex);
     }
+}
+
+// the client prints informations
+void client_info_print(struct Client *client)
+{
+    if (client->debug == false) {
+        struct timeval begin;
+        gettimeofday(&begin, NULL);
+        uint64_t begin_time = (uint64_t)begin.tv_sec * 1000 + (uint64_t)begin.tv_usec / 1000;
+
+        uint32_t connections = 0;
+        double bytes_ps = 0;
+        uint64_t begin_send_bytes = 0;
+        struct ClientUnit *begin_uint = client->uints;
+        while (begin_uint != NULL) {
+            connections += begin_uint->connections;
+            begin_send_bytes += begin_uint->send_bytes;
+            begin_uint = begin_uint->next;
+        }
+
+        struct timeval delay;
+        delay.tv_sec = 0;
+        delay.tv_usec = TERMINAL_REFRESH_MS * 1000;
+        select(0, NULL, NULL, NULL, &delay);
+
+        uint64_t end_send_bytes = 0;
+        struct ClientUnit *end_uint = client->uints;
+        while (end_uint != NULL) {
+            end_send_bytes += end_uint->send_bytes;
+            end_uint = end_uint->next;
+        }
+
+        struct timeval end;
+        gettimeofday(&end, NULL);
+        uint64_t end_time = (uint64_t)end.tv_sec * 1000 + (uint64_t)end.tv_usec / 1000;
+        
+        double bytes_sub = end_send_bytes > begin_send_bytes ? (double)(end_send_bytes - begin_send_bytes) : 0;
+        double time_sub = end_time > begin_time ? (double)(end_time - begin_time) / 1000 : 0;
+
+        bytes_ps = bytes_sub  / time_sub;
+
+        if (bytes_ps < 1024) {
+            PRINT_SERVER_DATAFLOW("[connections]: %d, [send]: %.3f b/s", connections, bytes_ps);
+        } else if (bytes_ps < (1024 * 1024)) {
+            PRINT_SERVER_DATAFLOW("[connections]: %d, [send]: %.3f kb/s", connections, bytes_ps / 1024);
+        } else {
+            PRINT_SERVER_DATAFLOW("[connections]: %d, [send]: %.3f mb/s", connections, bytes_ps / (1024 * 1024));
+        }
+    }
+}
+
+// the single thread, client try to connect to server, register to epoll
+int32_t clithd_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port)
+{
+    client_handler->fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_handler->fd < 0) {
+        PRINT_ERROR("client can't create socket %d! ", client_handler->fd);
+        return PROGRAM_FAULT;
+    }
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = ip;
+    server_addr.sin_port = port;
+    int32_t connect_ret = connect(client_handler->fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (connect_ret < 0) {
+        if (errno == EINPROGRESS) {
+            struct epoll_event ep_ev;
+            ep_ev.events = EPOLLOUT;
+            ep_ev.data.ptr = (void *)client_handler;
+            int32_t epoll_ctl_ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_handler->fd, &ep_ev);
+            if (epoll_ctl_ret < 0) {
+                PRINT_ERROR("client cant't set epoll %d! ", epoll_ctl_ret);
+                return PROGRAM_FAULT;
+            }
+            return PROGRAM_INPROGRESS;
+        } else {
+            PRINT_ERROR("client can't connect to the server %d! ", errno);
+            return PROGRAM_FAULT;
+        }
+    }
+
+    return PROGRAM_OK;
+}
+
+// the single thread, client retry to connect to server, register to epoll
+int32_t clithd_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler)
+{
+    struct epoll_event ep_ev;
+    ep_ev.events = EPOLLIN | EPOLLET;
+    ep_ev.data.ptr = (void *)client_handler;
+    int32_t epoll_ctl_ret = epoll_ctl(client_unit->epfd, EPOLL_CTL_ADD, client_handler->fd, &ep_ev);
+    if (epoll_ctl_ret < 0) {
+        PRINT_ERROR("client cant't set epoll %d! ", epoll_ctl_ret);
+        return PROGRAM_FAULT;
+    }
+
+    ++(client_unit->connections);
+
+    struct sockaddr_in server_addr;
+    socklen_t server_addr_len = sizeof(server_addr);
+    if (getpeername(client_handler->fd, (struct sockaddr *)&server_addr, &server_addr_len) < 0) {
+        PRINT_ERROR("client can't socket peername! ");
+        return PROGRAM_FAULT;
+    }
+    clithd_debug_print(client_unit, "connect", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+
+    int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen);
+    if (client_ask_ret == PROGRAM_FAULT) {
+        --client_unit->connections;
+        struct epoll_event ep_ev;
+        if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, client_handler->fd, &ep_ev) < 0) {
+            PRINT_ERROR("client can't delete socket '%d' to control epoll! ", client_handler->fd);
+            return PROGRAM_FAULT;
+        }
+    } else if (client_ask_ret == PROGRAM_ABORT) {
+        --client_unit->connections;
+        if (close(client_handler->fd) < 0) {
+            PRINT_ERROR("client can't close the socket! ");
+            return PROGRAM_FAULT;
+        }
+        clithd_debug_print(client_unit, "close", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+    } else {
+        client_unit->send_bytes += client_unit->pktlen;
+        clithd_debug_print(client_unit, "send", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+    }
+
+    return PROGRAM_OK;
 }
 
 // the single thread, client connects and gets epoll feature descriptors
@@ -37,43 +169,57 @@ int32_t clithd_get_epfd(struct ClientUnit *client_unit)
 
     client_unit->epfd = epoll_create(CLIENT_EPOLL_SIZE_MAX);
     if (client_unit->epfd < 0) {
-        PRINT_ERROR("client can't create epoll! ");
+        PRINT_ERROR("client can't create epoll %d! ", client_unit->epfd);
         return PROGRAM_FAULT;
     }
 
-    struct epoll_event ep_ev;
-    for (int i = 0; i < connect_num; ++i) {
-        client_unit->cnntfds[i] = socket(AF_INET, SOCK_STREAM, 0);
-        if (client_unit->cnntfds[i] < 0) {
-            PRINT_ERROR("client can't create socket! ");
-            return PROGRAM_FAULT;
-        }
-
-        struct sockaddr_in server_addr;
-        memset(&server_addr, 0, sizeof(server_addr));
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_addr.s_addr = inet_addr(client_unit->ip);
-        server_addr.sin_port = htons(client_unit->port);
-
-        int32_t connect_ret = connect(client_unit->cnntfds[i], (struct sockaddr *)&server_addr, sizeof(server_addr));
-        if (connect_ret < 0) {
-            if (errno != EINPROGRESS) {
-                PRINT_ERROR("client can't connect to the server! ");
-                return PROGRAM_FAULT;
-            } else {
-                ep_ev.events = EPOLLOUT;
+    for (uint32_t i = 0; i < connect_num; ++i) {
+        int32_t clithd_try_cnntask_ret = clithd_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->port);
+        if (clithd_try_cnntask_ret < 0) {
+            if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
+                continue;
             }
-        } else {
-            ep_ev.events = EPOLLIN | EPOLLET;
-            client_unit->connections = i + 1;
-        }
-        ep_ev.data.fd = client_unit->cnntfds[i];
-        if (epoll_ctl(client_unit->epfd, EPOLL_CTL_ADD, client_unit->cnntfds[i], &ep_ev) < 0) {
-            PRINT_ERROR("client cant't set epoll! ");
             return PROGRAM_FAULT;
-        }
+        } else {
+            struct epoll_event ep_ev;
+            ep_ev.events = EPOLLIN | EPOLLET;
+            ep_ev.data.ptr = (struct ClientHandler *)(client_unit->handlers + i);
+            int32_t epoll_ctl_ret = epoll_ctl(client_unit->epfd, EPOLL_CTL_ADD, (client_unit->handlers + i)->fd, &ep_ev);
+            if (epoll_ctl_ret < 0) {
+                PRINT_ERROR("client cant't set epoll %d! ", epoll_ctl_ret);
+                return PROGRAM_FAULT;
+            }
 
-        clithd_debug_print(client_unit, "connect", client_unit->ip, client_unit->port);
+            ++(client_unit->connections);
+
+            struct sockaddr_in server_addr;
+            socklen_t server_addr_len = sizeof(server_addr);
+            if (getpeername((client_unit->handlers + i)->fd, (struct sockaddr *)&server_addr, &server_addr_len) < 0) {
+                PRINT_ERROR("client can't socket peername! ");
+                return PROGRAM_FAULT;
+            }
+            clithd_debug_print(client_unit, "connect", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+
+            int32_t client_ask_ret = client_ask(client_unit->handlers + i, client_unit->pktlen);
+            if (client_ask_ret == PROGRAM_FAULT) {
+                --client_unit->connections;
+                struct epoll_event ep_ev;
+                if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, (client_unit->handlers + i)->fd, &ep_ev) < 0) {
+                    PRINT_ERROR("client can't delete socket '%d' to control epoll! ", client_unit->epevs[i].data.fd);
+                    return PROGRAM_FAULT;
+                }
+            } else if (client_ask_ret == PROGRAM_ABORT) {
+                --client_unit->connections;
+                if (close((client_unit->handlers + i)->fd) < 0) {
+                    PRINT_ERROR("client can't close the socket! ");
+                    return PROGRAM_FAULT;
+                }
+                clithd_debug_print(client_unit, "close", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+            } else {
+                client_unit->send_bytes += client_unit->pktlen;
+                clithd_debug_print(client_unit, "send", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+            }
+        }
     }
 
     return PROGRAM_OK;
@@ -88,39 +234,78 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
         return PROGRAM_FAULT;
     }
 
-    struct epoll_event ep_ev;
-    for (int i = 0; i < epoll_nfds; ++i) {
-        if (client_unit->epevs[i].events == EPOLLOUT) {
+    for (int32_t i = 0; i < epoll_nfds; ++i) {
+        if (client_unit->epevs[i].events == EPOLLERR) {
+            PRINT_ERROR("client epoll wait error! %d", client_unit->epevs[i].events);
+            return PROGRAM_FAULT;
+        } else if (client_unit->epevs[i].events == EPOLLOUT) {
             int32_t connect_error = 0;
             socklen_t connect_error_len = sizeof(connect_error);
-            if (getsockopt(client_unit->epevs[i].data.fd, SOL_SOCKET, SO_ERROR, (void *)(&connect_error), &connect_error_len)) {
-                PRINT_ERROR("client can't get socket option! ");
+            struct ClientHandler *client_handler = (struct ClientHandler *)client_unit->epevs[i].data.ptr;
+            int32_t getsockopt_ret = getsockopt(client_handler->fd, SOL_SOCKET, SO_ERROR, (void *)(&connect_error), &connect_error_len);
+            if (getsockopt_ret < 0) {
+                PRINT_ERROR("client can't get socket option %d! ", getsockopt_ret);
                 return PROGRAM_FAULT;
             }
             if (connect_error < 0) {
+                if (connect_error == ETIMEDOUT) {
+                    if (clithd_retry_connect(client_unit, client_handler) < 0) {
+                        return PROGRAM_FAULT;
+                    }
+                    continue;
+                }
                 PRINT_ERROR("client connect error %d! ", connect_error);
                 return PROGRAM_FAULT;
             } else {
-                // firstly ask
-            }
-        }
+                ++(client_unit->connections);
 
-        if (client_unit->epevs[i].events == EPOLLIN) {
+                struct sockaddr_in server_addr;
+                socklen_t server_addr_len = sizeof(server_addr);
+                int32_t getpeername_ret = getpeername(client_handler->fd, (struct sockaddr *)&server_addr, &server_addr_len);
+                if (getpeername_ret < 0) {
+                    PRINT_ERROR("client can't socket peername %d! ", getpeername_ret);
+                    return PROGRAM_FAULT;
+                }
+                clithd_debug_print(client_unit, "connect", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+
+                int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen);
+                if (client_ask_ret == PROGRAM_FAULT) {
+                    --client_unit->connections;
+                    struct epoll_event ep_ev;
+                    if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, client_unit->epevs[i].data.fd, &ep_ev) < 0) {
+                        PRINT_ERROR("client can't delete socket '%d' to control epoll! ", client_unit->epevs[i].data.fd);
+                        return PROGRAM_FAULT;
+                    }
+                } else if (client_ask_ret == PROGRAM_ABORT) {
+                    --client_unit->connections;
+                    if (close(client_unit->epevs[i].data.fd) < 0) {
+                        PRINT_ERROR("client can't close the socket! ");
+                        return PROGRAM_FAULT;
+                    }
+                    clithd_debug_print(client_unit, "close", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+                } else {
+                    client_unit->send_bytes += client_unit->pktlen;
+                    clithd_debug_print(client_unit, "send", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
+                }
+            }
+        } else if (client_unit->epevs[i].events == EPOLLIN) {
             struct sockaddr_in server_addr;
             socklen_t server_addr_len = sizeof(server_addr);
-
-            if (getpeername(client_unit->epevs[i].data.fd, (struct sockaddr *)&server_addr, &server_addr_len) < 0) {
-                PRINT_ERROR("client can't socket peername! ");
+            struct ClientHandler *client_handler = (struct ClientHandler *)client_unit->epevs[i].data.ptr;
+            int32_t getpeername_ret = getpeername(client_handler->fd, (struct sockaddr *)&server_addr, &server_addr_len);
+            if (getpeername_ret < 0) {
+                PRINT_ERROR("client can't socket peername %d! ", getpeername_ret);
                 return PROGRAM_FAULT;
             }
-            int32_t client_handle_ret = client_chk_ans(client_unit->epevs[i].data.fd, client_unit->pktlen, client_unit->verify, &client_unit->msg_idx);
-            if (client_handle_ret == PROGRAM_FAULT) {
+            int32_t client_chkans_ret = client_chkans((struct ClientHandler *)client_unit->epevs[i].data.ptr, client_unit->pktlen, client_unit->verify);
+            if (client_chkans_ret == PROGRAM_FAULT) {
                 --client_unit->connections;
+                struct epoll_event ep_ev;
                 if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, client_unit->epevs[i].data.fd, &ep_ev) < 0) {
                     PRINT_ERROR("client can't delete socket '%d' to control epoll! ", client_unit->epevs[i].data.fd);
                     return PROGRAM_FAULT;
                 }
-            } else if (client_handle_ret == PROGRAM_ABORT) {
+            } else if (client_chkans_ret == PROGRAM_ABORT) {
                 --client_unit->connections;
                 if (close(client_unit->epevs[i].data.fd) < 0) {
                     PRINT_ERROR("client can't close the socket! ");
@@ -128,6 +313,7 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
                 }
                 clithd_debug_print(client_unit, "close", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
             } else {
+                client_unit->send_bytes += client_unit->pktlen;
                 clithd_debug_print(client_unit, "receive", inet_ntoa(server_addr.sin_addr), server_addr.sin_port);
             }
         }
@@ -144,15 +330,13 @@ void *client_s_create(void *arg)
     if (clithd_get_epfd(client_unit) < 0) {
        exit(PROGRAM_FAULT);
     }
-
     while (true) {
         if (clithd_proc_epevs(client_unit) < 0) {
             exit(PROGRAM_FAULT);
         }
     }
-
     for (int i = 0; i < client_unit->connect_num; ++i) {
-        if (close(*(client_unit->cnntfds + i)) < 0) {
+        if (close((client_unit->handlers + i)->fd) < 0) {
             exit(PROGRAM_FAULT);
         }
     }
@@ -169,39 +353,58 @@ int32_t client_create(struct ProgramParams *params)
     const uint32_t connect_num = params->connect_num;
     const uint32_t thread_num = params->thread_num;
     pthread_t *tids = (pthread_t *)malloc(thread_num * sizeof(pthread_t));
-    struct ClientUnit *client_unit = (struct ClientUnit *)malloc(thread_num * sizeof(struct ClientUnit *));
+    struct Client *client = (struct Client *)malloc(sizeof(struct Client));
+    struct ClientUnit *client_unit = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
 
-    pthread_mutex_t lock;
-    if (params->debug == true) {
-        if (pthread_mutex_init(&lock, NULL) != 0) {
-            PRINT_ERROR("client can't init posix mutex! ");
+    int32_t pthread_mutex_init_ret = pthread_mutex_init(&client_printf_mutex, NULL);
+    if (pthread_mutex_init_ret < 0) {
+        PRINT_ERROR("client can't init posix mutex %d! ", pthread_mutex_init_ret);
+        return PROGRAM_FAULT;
+    }
+
+    {
+        client->uints = client_unit;
+        client->debug = params->debug;
+    }
+
+    for (uint32_t i = 0; i < thread_num; ++i) {
+        client_unit->handlers = (struct ClientHandler *)malloc(connect_num * sizeof(struct ClientHandler));
+        for (uint32_t j = 0; j < connect_num; ++j) {
+            client_unit->handlers[j].fd = -1;
+            client_unit->handlers[j].msg_idx = 0;
+        }
+        client_unit->epfd = -1;
+        client_unit->epevs = (struct epoll_event *)malloc(CLIENT_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
+        client_unit->connections = 0;
+        client_unit->send_bytes = 0;
+        client_unit->ip = inet_addr(params->ip);
+        client_unit->port = htons(params->port);
+        client_unit->connect_num = params->connect_num;
+        client_unit->pktlen = params->pktlen;
+        client_unit->verify = params->verify;
+        client_unit->debug = params->debug;
+        client_unit->next = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
+
+        int32_t pthread_create_ret = pthread_create((tids + i), NULL, client_s_create, client_unit);
+        if (pthread_create_ret < 0) {
+            PRINT_ERROR("client can't create thread of poisx %d! ", pthread_create_ret);
             return PROGRAM_FAULT;
         }
+        client_unit = client_unit->next;
     }
 
-    for (int i = 0; i < params->thread_num; ++i) {
-        (client_unit + i)->cnntfds = (int32_t *)malloc(connect_num * sizeof(int32_t *));
-        (client_unit + i)->epfd = -1;
-        (client_unit + i)->epevs = (struct epoll_event *)malloc(CLIENT_EPOLL_SIZE_MAX * sizeof(struct epoll_event *));
-        (client_unit + i)->lock = (params->debug == true) ? &lock : NULL;
-        (client_unit + i)->connections = 0;
-        (client_unit + i)->ip = params->ip;
-        (client_unit + i)->port = params->port;
-        (client_unit + i)->connect_num = params->connect_num;
-        (client_unit + i)->pktlen = params->pktlen;
-        (client_unit + i)->verify = params->verify;
-        (client_unit + i)->msg_idx = 0;
-        (client_unit + i)->debug = params->debug;
-
-        if (pthread_create((tids + i), NULL, client_s_create, client_unit + i) != 0) {
-            PRINT_ERROR("client can't create thread of poisx! ");
-            return PROGRAM_FAULT;
-        }
+    if (client->debug == false) {
+        printf("[program informations]: \n\n");
+    }
+    while (true) {
+        client_info_print(client);
     }
 
-    for (int i = 0; i < params->thread_num; ++i) {
-        pthread_join(*(tids + i), NULL);
+    int32_t pthread_mutex_destroy_ret = pthread_mutex_destroy(&client_printf_mutex);
+    if (pthread_mutex_destroy_ret < 0) {
+        PRINT_ERROR("client can't destroy posix mutex %d! ", pthread_mutex_destroy_ret);
+        return PROGRAM_FAULT;
     }
 
-    return PROGRAM_OK; 
+    return PROGRAM_OK;
 }

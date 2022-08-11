@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
+#include<sys/time.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -60,26 +61,43 @@
                                                 printf(format, ##__VA_ARGS__); \
                                                 printf("\n"); \
                                             } while(0)
+#define PRINT_SERVER_DATAFLOW(format, ...)  do \
+                                            { \
+                                                printf("\033[?25l\033[A\033[K"); \
+                                                printf("--> <server>: "); \
+                                                printf(format, ##__VA_ARGS__); \
+                                                printf("\033[?25h\n"); \
+                                            } while(0)
+#define PRINT_CLIENT_DATAFLOW(format, ...)  do \
+                                            { \
+                                                printf("\033[?25l\033[A\033[K"); \
+                                                printf("--> <client>: "); \
+                                                printf(format, ##__VA_ARGS__); \
+                                                printf("\033[?25h\n"); \
+                                            } while(0)
 #define LIMIT_VAL_RANGE(val, min, max)      ((val) < (min) ? (min) : ((val) > (max) ? (max) : (val)))
 #define CHECK_VAL_RANGE(val, min, max)      ((val) < (min) ? (false) : ((val) > (max) ? (false) : (true)))
 
 #define PROGRAM_OK                          (0)                 ///< program ok flag
 #define PROGRAM_ABORT                       (1)                 ///< program abort flag
 #define PROGRAM_FAULT                       (-1)                ///< program fault flag
+#define PROGRAM_INPROGRESS                  (-2)                ///< program in progress flag
 
 #define UNIX_TCP_PORT_MIN                   (1024)              ///< TCP minimum port number in unix
 #define UNIX_TCP_PORT_MAX                   (65535)             ///< TCP minimum port number in unix
 #define THREAD_NUM_MIN                      (1)                 ///< minimum number of thead
 #define THREAD_NUM_MAX                      (1000)              ///< maximum number of thead
-#define MESSAGE_PKTLEN_MIN                  (1)                 ///< minimum length of message (1 byte)
-#define MESSAGE_PKTLEN_MAX                  (10485760)          ///< maximum length of message (10 Mb)
+#define MESSAGE_PKTLEN_MIN                  (2)                 ///< minimum length of message (1 byte)
+#define MESSAGE_PKTLEN_MAX                  (1024 * 1024 * 10)  ///< maximum length of message (10 Mb)
 
 #define SERVER_SOCKET_LISTEN_BACKLOG        (128)               ///< the queue of socket
-#define SERVER_EPOLL_SIZE_MAX               (1000)              ///< the max wait event of epoll
+#define SERVER_EPOLL_SIZE_MAX               (10000)             ///< the max wait event of epoll
 #define SERVER_EPOLL_WAIT_TIMEOUT           (0)                 ///< the timeout value of epoll
 
-#define CLIENT_EPOLL_SIZE_MAX               (1000)              ///< the max wait event of epoll
+#define CLIENT_EPOLL_SIZE_MAX               (10000)             ///< the max wait event of epoll
 #define CLIENT_EPOLL_WAIT_TIMEOUT           (0)                 ///< the timeout value of epoll
+
+#define TERMINAL_REFRESH_MS                 (100)               ///< the time cut off between of terminal refresh
 
 
 /**
@@ -90,7 +108,7 @@
  * @param port          port number
  * @return              the result
  */
-int32_t socket_create(int32_t *socket_fd, const char *ip, uint32_t port);
+int32_t socket_create(int32_t *socket_fd, in_addr_t ip, uint16_t port);
 
 /**
  * @brief set the socket to unblock
