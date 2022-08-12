@@ -30,9 +30,9 @@ int32_t main(int argc, char *argv[])
     program_params_print(&prog_params);
 
     if (strcmp(prog_params.as, "server") == 0) {
-        server_create(&prog_params);
+        server_create_and_run(&prog_params);
     } else {
-        client_create(&prog_params);
+        client_create_and_run(&prog_params);
     }
 
     return ret;

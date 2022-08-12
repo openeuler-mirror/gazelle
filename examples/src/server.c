@@ -14,23 +14,318 @@
 #include "server.h"
 
 
-static pthread_mutex_t server_printf_mutex;                     // the server mutex for printf
+static pthread_mutex_t server_debug_mutex;      // the server mutex for debug
 
-
-// the single thread, unblock, mutliplexing IO server prints debug informations
-void sersum_debug_print(struct ServerMumUnit *server_unit, const char *str, const char *ip, uint16_t port)
+// server debug information print
+void server_debug_print(const char *ch_str, const char *act_str, in_addr_t ip, uint16_t port, bool debug)
 {
-    if (server_unit->debug == true) {
-        pthread_mutex_lock(&server_printf_mutex);
-        PRINT_SERVER("[mum pid: %d] [tid: %ld cnnt: %d] [%s <- %s:%d]. ", \
+    if (debug == true) {
+        pthread_mutex_lock(&server_debug_mutex);
+        struct in_addr sin_addr;
+        sin_addr.s_addr = ip;
+        PRINT_SERVER("[%s] [pid: %d] [tid: %ld] [%s <- %s:%d]. ", \
+                    ch_str, \
                     getpid(), \
                     pthread_self(), \
-                    server_unit->connections, \
-                    str, \
-                    ip, \
-                    port);
-        pthread_mutex_unlock(&server_printf_mutex);
+                    act_str, \
+                    inet_ntoa(sin_addr), \
+                    ntohs(port));
+        pthread_mutex_unlock(&server_debug_mutex);
     }
+}
+
+// the multi thread, unblock, dissymmetric server prints informations
+void sermud_info_print(struct ServerMud *server_mud)
+{
+    if (server_mud->debug == false) {
+        uint32_t curr_connect = server_mud->curr_connect;
+
+        struct timeval begin;
+        gettimeofday(&begin, NULL);
+        uint64_t begin_time = (uint64_t)begin.tv_sec * 1000 + (uint64_t)begin.tv_usec / 1000;
+
+        double bytes_ps = 0;
+        uint64_t begin_recv_bytes = 0;
+        struct ServerMudWorker *begin_uint = server_mud->workers;
+        while (begin_uint != NULL) {
+            begin_recv_bytes += begin_uint->recv_bytes;
+            begin_uint = begin_uint->next;
+        }
+
+        struct timeval delay;
+        delay.tv_sec = 0;
+        delay.tv_usec = TERMINAL_REFRESH_MS * 1000;
+        select(0, NULL, NULL, NULL, &delay);
+
+        uint64_t end_recv_bytes = 0;
+        struct ServerMudWorker *end_uint = server_mud->workers;
+        while (end_uint != NULL) {
+            end_recv_bytes += end_uint->recv_bytes;
+            end_uint = end_uint->next;
+        }
+
+        struct timeval end;
+        gettimeofday(&end, NULL);
+        uint64_t end_time = (uint64_t)end.tv_sec * 1000 + (uint64_t)end.tv_usec / 1000;
+        
+        double bytes_sub = end_recv_bytes > begin_recv_bytes ? (double)(end_recv_bytes - begin_recv_bytes) : 0;
+        double time_sub = end_time > begin_time ? (double)(end_time - begin_time) / 1000 : 0;
+
+        bytes_ps = bytes_sub  / time_sub;
+
+        if (bytes_ps < 1024) {
+            PRINT_SERVER_DATAFLOW("[connect num]: %d, [receive]: %.3f B/s", curr_connect, bytes_ps);
+        } else if (bytes_ps < (1024 * 1024)) {
+            PRINT_SERVER_DATAFLOW("[connect num]: %d, [receive]: %.3f KB/s", curr_connect, bytes_ps / 1024);
+        } else {
+            PRINT_SERVER_DATAFLOW("[connect num]: %d, [receive]: %.3f MB/s", curr_connect, bytes_ps / (1024 * 1024));
+        }
+    }
+}
+
+// the worker thread, unblock, dissymmetric server listens and gets epoll feature descriptors
+int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
+{
+    worker_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    if (worker_unit->epfd < 0) {
+       PRINT_ERROR("server can't create epoll %d! ", worker_unit->epfd);
+       return PROGRAM_FAULT;
+    }
+
+    struct epoll_event ep_ev;
+    ep_ev.data.ptr = (void *)&(worker_unit->worker);
+    ep_ev.events = EPOLLIN | EPOLLET;
+    int32_t epoll_ctl_ret = epoll_ctl(worker_unit->epfd, EPOLL_CTL_ADD, worker_unit->worker.fd, &ep_ev);
+    if (epoll_ctl_ret < 0) {
+        PRINT_ERROR("server can't control epoll %d! ", epoll_ctl_ret);
+        return PROGRAM_FAULT;
+    }
+
+    return PROGRAM_OK;
+}
+
+// the listener thread, unblock, dissymmetric server listens and gets epoll feature descriptors
+int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
+{
+    server_mud->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    if (server_mud->epfd < 0) {
+       PRINT_ERROR("server can't create epoll %d! ", server_mud->epfd);
+       return PROGRAM_FAULT;
+    }
+
+    struct epoll_event ep_ev;
+    ep_ev.data.ptr = (void *)&(server_mud->listener);
+    ep_ev.events = EPOLLIN | EPOLLET;
+    int32_t epoll_ctl_ret = epoll_ctl(server_mud->epfd, EPOLL_CTL_ADD, server_mud->listener.fd, &ep_ev);
+    if (epoll_ctl_ret < 0) {
+        PRINT_ERROR("server can't control epoll %d! ", epoll_ctl_ret);
+        return PROGRAM_FAULT;
+    }
+
+    server_debug_print("server mud listener", "waiting", server_mud->ip, server_mud->port, server_mud->debug);
+
+    return PROGRAM_OK;
+}
+
+// the listener thread, unblock, dissymmetric server accepts the connections
+int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
+{
+    while (true) {
+        struct sockaddr_in accept_addr;
+        uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
+        int32_t accept_fd = accept(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
+        if (accept_fd < 0) {
+            break;
+        }
+
+        int32_t set_socket_unblock_ret = set_socket_unblock(accept_fd);
+        if (set_socket_unblock_ret < 0) {
+            PRINT_ERROR("server can't set the connect socket to unblock %d! ", set_socket_unblock_ret);
+            return PROGRAM_FAULT;
+        }
+
+        ++(server_mud->curr_connect);
+
+        pthread_t *tid = (pthread_t *)malloc(sizeof(pthread_t));
+        struct ServerMudWorker *worker = (struct ServerMudWorker *)malloc(sizeof(struct ServerMudWorker));
+        worker->worker.fd = accept_fd;
+        worker->epfd = -1;
+        worker->epevs = (struct epoll_event *)malloc(sizeof(struct epoll_event));
+        worker->recv_bytes = 0;
+        worker->pktlen = server_mud->pktlen;
+        worker->ip = accept_addr.sin_addr.s_addr;
+        worker->port = accept_addr.sin_port;
+        worker->debug = server_mud->debug;
+        worker->next = server_mud->workers;
+
+        server_mud->workers = worker;
+
+        int32_t pthread_create_ret = pthread_create(tid, NULL, sermud_worker_create_and_run, server_mud->workers);
+        if (pthread_create_ret < 0) {
+            PRINT_ERROR("server can't create poisx thread %d! ", pthread_create_ret);
+            return PROGRAM_FAULT;
+        }
+
+        server_debug_print("server mud listener", "accept", accept_addr.sin_addr.s_addr, accept_addr.sin_port, server_mud->debug);
+    }
+
+    return PROGRAM_OK;
+}
+
+// the worker thread, unblock, dissymmetric server processes the events
+int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit)
+{
+    int32_t epoll_nfds = epoll_wait(worker_unit->epfd, worker_unit->epevs, SERVER_EPOLL_SIZE_MAX, SERVER_EPOLL_WAIT_TIMEOUT);
+    if (epoll_nfds < 0) {
+        PRINT_ERROR("server epoll wait error %d! ", epoll_nfds);
+        return PROGRAM_FAULT;
+    }
+
+    for (int32_t i = 0; i < epoll_nfds; ++i) {
+        if (worker_unit->epevs[i].events == EPOLLERR || worker_unit->epevs[i].events == EPOLLHUP || worker_unit->epevs[i].events == EPOLLRDHUP) {
+            PRINT_ERROR("server epoll wait error %d! ", worker_unit->epevs[i].events);
+            return PROGRAM_FAULT;
+        }
+
+        if (worker_unit->epevs[i].events == EPOLLIN) {
+            struct ServerHandler *server_handler = (struct ServerHandler *)worker_unit->epevs[i].data.ptr;
+
+            int32_t server_ans_ret = server_ans(server_handler, worker_unit->pktlen);
+            if (server_ans_ret == PROGRAM_FAULT) {
+                struct epoll_event ep_ev;
+                int32_t epoll_ctl_ret = epoll_ctl(worker_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev);
+                if (epoll_ctl_ret < 0) {
+                    PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", server_handler->fd, epoll_ctl_ret);
+                    return PROGRAM_FAULT;
+                }
+            } else if (server_ans_ret == PROGRAM_ABORT) {
+                int32_t cloes_ret = close(server_handler->fd);
+                if (cloes_ret < 0) {
+                    PRINT_ERROR("server can't close the socket %d! ", cloes_ret);
+                    return PROGRAM_FAULT;
+                }
+                server_debug_print("server mud worker", "close", worker_unit->ip, worker_unit->port, worker_unit->debug);
+            } else {
+                worker_unit->recv_bytes += worker_unit->pktlen;
+                server_debug_print("server mud worker", "receive", worker_unit->ip, worker_unit->port, worker_unit->debug);
+            }
+        }
+    }
+
+    return PROGRAM_OK;
+}
+
+// the listener thread, unblock, dissymmetric server processes the events
+int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
+{
+    int32_t epoll_nfds = epoll_wait(server_mud->epfd, server_mud->epevs, SERVER_EPOLL_SIZE_MAX, SERVER_EPOLL_WAIT_TIMEOUT);
+    if (epoll_nfds < 0) {
+        PRINT_ERROR("server epoll wait error %d! ", epoll_nfds);
+        return PROGRAM_FAULT;
+    }
+
+    for (int32_t i = 0; i < epoll_nfds; ++i) {
+        if (server_mud->epevs[i].events == EPOLLERR || server_mud->epevs[i].events == EPOLLHUP || server_mud->epevs[i].events == EPOLLRDHUP) {
+            PRINT_ERROR("server epoll wait error %d! ", server_mud->epevs[i].events);
+            return PROGRAM_FAULT;
+        }
+
+        if (server_mud->epevs[i].events == EPOLLIN) {
+            int32_t sermud_listener_accept_connects_ret = sermud_listener_accept_connects(server_mud);
+            if (sermud_listener_accept_connects_ret < 0) {
+                PRINT_ERROR("server try accept error %d! ", sermud_listener_accept_connects_ret);
+                return PROGRAM_FAULT;
+            }
+        }
+    }
+
+    return PROGRAM_OK;
+}
+
+// create the worker thread, unblock, dissymmetric server and run
+void *sermud_worker_create_and_run(void *arg)
+{
+    pthread_detach(pthread_self());
+
+    struct ServerMudWorker *worker_unit = (struct ServerMudWorker *)arg;
+
+    if (sermud_worker_create_epfd_and_reg(worker_unit) < 0) {
+       exit(PROGRAM_FAULT);
+    }
+    while (true) {
+        if (sermud_worker_proc_epevs(worker_unit) < 0) {
+            exit(PROGRAM_FAULT);
+        }
+    }
+
+    close(worker_unit->worker.fd);
+    close(worker_unit->epfd);
+
+    return (void *)PROGRAM_OK;
+}
+
+// create the listener thread, unblock, dissymmetric server and run
+void *sermud_listener_create_and_run(void *arg)
+{
+    struct ServerMud *server_mud = (struct ServerMud *)arg;
+
+    if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->port, server_mud->api) < 0) {
+        exit(PROGRAM_FAULT);
+    }
+    if (sermud_listener_create_epfd_and_reg(server_mud) < 0) {
+       exit(PROGRAM_FAULT);
+    }
+    while (true) {
+        if (sermud_listener_proc_epevs(server_mud) < 0) {
+            exit(PROGRAM_FAULT);
+        }
+    }
+    if (close(server_mud->listener.fd) < 0 || close(server_mud->epfd) < 0) {
+        exit(PROGRAM_FAULT);
+    }
+
+    return (void *)PROGRAM_OK;
+}
+
+// create the multi thread, unblock, dissymmetric server and run
+int32_t sermud_create_and_run(struct ProgramParams *params)
+{
+    pthread_t *tid = (pthread_t *)malloc(sizeof(pthread_t));
+    struct ServerMud *server_mud = (struct ServerMud *)malloc(sizeof(struct ServerMud));
+
+    int32_t pthread_mutex_init_ret = pthread_mutex_init(&server_debug_mutex, NULL);
+    if (pthread_mutex_init_ret < 0) {
+        PRINT_ERROR("server can't init posix mutex %d! ", pthread_mutex_init_ret);
+        return PROGRAM_FAULT;
+    }
+
+    server_mud->listener.fd = -1;
+    server_mud->workers = NULL;
+    server_mud->epfd = -1;
+    server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
+    server_mud->curr_connect = 0;
+    server_mud->ip = inet_addr(params->ip);
+    server_mud->port = htons(params->port);
+    server_mud->pktlen = params->pktlen;
+    server_mud->api = params->api;
+    server_mud->debug = params->debug;
+
+    int32_t pthread_create_ret = pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud);
+    if (pthread_create_ret < 0) {
+        PRINT_ERROR("server can't create poisx thread %d! ", pthread_create_ret);
+        return PROGRAM_FAULT;
+    }
+
+    if (server_mud->debug == false) {
+        printf("[program informations]: \n\n");
+    }
+    while (true) {
+        sermud_info_print(server_mud);
+    }
+
+    pthread_mutex_destroy(&server_debug_mutex);
+
+    return PROGRAM_OK;
 }
 
 // the multi thread, unblock, mutliplexing IO server prints informations
@@ -41,12 +336,12 @@ void sermum_info_print(struct ServerMum *server_mum)
         gettimeofday(&begin, NULL);
         uint64_t begin_time = (uint64_t)begin.tv_sec * 1000 + (uint64_t)begin.tv_usec / 1000;
 
-        uint32_t connections = 0;
+        uint32_t curr_connect = 0;
         double bytes_ps = 0;
         uint64_t begin_recv_bytes = 0;
         struct ServerMumUnit *begin_uint = server_mum->uints;
         while (begin_uint != NULL) {
-            connections += begin_uint->connections;
+            curr_connect += begin_uint->curr_connect;
             begin_recv_bytes += begin_uint->recv_bytes;
             begin_uint = begin_uint->next;
         }
@@ -73,39 +368,40 @@ void sermum_info_print(struct ServerMum *server_mum)
         bytes_ps = bytes_sub  / time_sub;
 
         if (bytes_ps < 1024) {
-            PRINT_SERVER_DATAFLOW("[connections]: %d, [receive]: %.3f b/s", connections, bytes_ps);
+            PRINT_SERVER_DATAFLOW("[connect num]: %d, [receive]: %.3f B/s", curr_connect, bytes_ps);
         } else if (bytes_ps < (1024 * 1024)) {
-            PRINT_SERVER_DATAFLOW("[connections]: %d, [receive]: %.3f kb/s", connections, bytes_ps / 1024);
+            PRINT_SERVER_DATAFLOW("[connect num]: %d, [receive]: %.3f KB/s", curr_connect, bytes_ps / 1024);
         } else {
-            PRINT_SERVER_DATAFLOW("[connections]: %d, [receive]: %.3f mb/s", connections, bytes_ps / (1024 * 1024));
+            PRINT_SERVER_DATAFLOW("[connect num]: %d, [receive]: %.3f MB/s", curr_connect, bytes_ps / (1024 * 1024));
         }
     }
 }
 
 // the single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors
-int32_t sersum_get_epfd(struct ServerMumUnit *server_unit)
+int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
 {
     server_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
     if (server_unit->epfd < 0) {
-       PRINT_ERROR("server can't create epoll!");
+       PRINT_ERROR("server can't create epoll %d! ", server_unit->epfd);
        return PROGRAM_FAULT;
     }
 
     struct epoll_event ep_ev;
     ep_ev.data.ptr = (void *)&(server_unit->listener);
     ep_ev.events = EPOLLIN | EPOLLET;
-    if (epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, server_unit->listener.fd, &ep_ev) < 0) {
-        PRINT_ERROR("server can't control epoll! ");
+    int32_t epoll_ctl_ret = epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, server_unit->listener.fd, &ep_ev);
+    if (epoll_ctl_ret < 0) {
+        PRINT_ERROR("server can't control epoll %d! ", epoll_ctl_ret);
         return PROGRAM_FAULT;
     }
 
-    sersum_debug_print(server_unit, "waiting", "xxx.xxx.xxx.xxx", 0);
+    server_debug_print("server mum unit", "waiting", server_unit->ip, server_unit->port, server_unit->debug);
 
     return PROGRAM_OK;
 }
 
 // the single thread, unblock, mutliplexing IO server accepts the connections
-int32_t sersum_try_accept(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler)
+int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler)
 {
     while (true) {
         struct sockaddr_in accept_addr;
@@ -132,8 +428,9 @@ int32_t sersum_try_accept(struct ServerMumUnit *server_unit, struct ServerHandle
             return PROGRAM_FAULT;
         }
 
-        ++server_unit->connections;
-        sersum_debug_print(server_unit, "accept", inet_ntoa(accept_addr.sin_addr), accept_addr.sin_port);
+        ++server_unit->curr_connect;
+        
+        server_debug_print("server mum unit", "accept", accept_addr.sin_addr.s_addr, accept_addr.sin_port, server_unit->debug);
     }
 
     return PROGRAM_OK;
@@ -156,9 +453,9 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
 
         if (server_unit->epevs[i].events == EPOLLIN) {
             if (server_unit->epevs[i].data.ptr == (void *)&(server_unit->listener)) {
-                int32_t sersum_try_accept_ret = sersum_try_accept(server_unit, &(server_unit->listener));
-                if (sersum_try_accept_ret < 0) {
-                    PRINT_ERROR("server try accept error %d! ", sersum_try_accept_ret);
+                int32_t sersum_accept_connects_ret = sersum_accept_connects(server_unit, &(server_unit->listener));
+                if (sersum_accept_connects_ret < 0) {
+                    PRINT_ERROR("server try accept error %d! ", sersum_accept_connects_ret);
                     return PROGRAM_FAULT;
                 }
                 continue;
@@ -174,7 +471,7 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
 
                 int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen);
                 if (server_ans_ret == PROGRAM_FAULT) {
-                    --server_unit->connections;
+                    --server_unit->curr_connect;
                     struct epoll_event ep_ev;
                     int32_t epoll_ctl_ret = epoll_ctl(server_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev);
                     if (epoll_ctl_ret < 0) {
@@ -182,16 +479,16 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                         return PROGRAM_FAULT;
                     }
                 } else if (server_ans_ret == PROGRAM_ABORT) {
-                    --server_unit->connections;
+                    --server_unit->curr_connect;
                     int32_t cloes_ret = close(server_handler->fd);
                     if (cloes_ret < 0) {
                         PRINT_ERROR("server can't close the socket %d! ", cloes_ret);
                         return PROGRAM_FAULT;
                     }
-                    sersum_debug_print(server_unit, "close", inet_ntoa(connect_addr.sin_addr), connect_addr.sin_port);
+                    server_debug_print("server mum unit", "close", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
                 } else {
                     server_unit->recv_bytes += server_unit->pktlen;
-                    sersum_debug_print(server_unit, "receive", inet_ntoa(connect_addr.sin_addr), connect_addr.sin_port);
+                    server_debug_print("server mum unit", "receive", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
                 }
             }
         }
@@ -201,14 +498,14 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
 }
 
 // create the single thread, unblock, mutliplexing IO server
-void *sersum_create(void *arg)
+void *sersum_create_and_run(void *arg)
 {
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)arg;
 
-    if (socket_create(&(server_unit->listener.fd), server_unit->ip, server_unit->port) < 0) {
+    if (create_socket_and_listen(&(server_unit->listener.fd), server_unit->ip, server_unit->port, server_unit->api) < 0) {
         exit(PROGRAM_FAULT);
     }
-    if (sersum_get_epfd(server_unit) < 0) {
+    if (sersum_create_epfd_and_reg(server_unit) < 0) {
        exit(PROGRAM_FAULT);
     }
     while (true) {
@@ -216,45 +513,44 @@ void *sersum_create(void *arg)
             exit(PROGRAM_FAULT);
         }
     }
-    if (close(server_unit->listener.fd) < 0 || close(server_unit->epfd) < 0) {
-        exit(PROGRAM_FAULT);
-    }
+    
+    close(server_unit->listener.fd);
+    close(server_unit->epfd);
 
     return (void *)PROGRAM_OK;
 }
 
 // create the multi thread, unblock, mutliplexing IO server
-int32_t sermum_create(struct ProgramParams *params)
+int32_t sermum_create_and_run(struct ProgramParams *params)
 {
     const uint32_t thread_num = params->thread_num;
     pthread_t *tids = (pthread_t *)malloc(thread_num * sizeof(pthread_t));
     struct ServerMum *server_mum = (struct ServerMum *)malloc(sizeof(struct ServerMum));
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
 
-    int32_t pthread_mutex_init_ret = pthread_mutex_init(&server_printf_mutex, NULL);
+    int32_t pthread_mutex_init_ret = pthread_mutex_init(&server_debug_mutex, NULL);
     if (pthread_mutex_init_ret < 0) {
         PRINT_ERROR("server can't init posix mutex %d! ", pthread_mutex_init_ret);
         return PROGRAM_FAULT;
     }
 
-    {
-        server_mum->uints = server_unit;
-        server_mum->debug = params->debug;
-    }
+    server_mum->uints = server_unit;
+    server_mum->debug = params->debug;
 
     for (uint32_t i = 0; i < thread_num; ++i) {
         server_unit->listener.fd = -1;
         server_unit->epfd = -1;
         server_unit->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
-        server_unit->connections = 0;
+        server_unit->curr_connect = 0;
         server_unit->recv_bytes = 0;
         server_unit->ip = inet_addr(params->ip);
         server_unit->port = htons(params->port);
         server_unit->pktlen = params->pktlen;
+        server_unit->api = params->api;
         server_unit->debug = params->debug;
         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
 
-        int32_t pthread_create_ret = pthread_create((tids + i), NULL, sersum_create, server_unit);
+        int32_t pthread_create_ret = pthread_create((tids + i), NULL, sersum_create_and_run, server_unit);
         if (pthread_create_ret < 0) {
             PRINT_ERROR("server can't create poisx thread %d! ", pthread_create_ret);
             return PROGRAM_FAULT;
@@ -269,22 +565,20 @@ int32_t sermum_create(struct ProgramParams *params)
         sermum_info_print(server_mum);
     }
 
-    int32_t pthread_mutex_destroy_ret = pthread_mutex_destroy(&server_printf_mutex);
-    if (pthread_mutex_destroy_ret < 0) {
-        PRINT_ERROR("server can't destroy posix mutex %d! ", pthread_mutex_destroy_ret);
-        return PROGRAM_FAULT;
-    }
+    pthread_mutex_destroy(&server_debug_mutex);
 
     return PROGRAM_OK;
 }
 
-// create server
-int32_t server_create(struct ProgramParams *params)
+// create server and run
+int32_t server_create_and_run(struct ProgramParams *params)
 {
     int32_t ret = PROGRAM_OK;
 
     if (strcmp(params->model, "mum") == 0) {
-        ret = sermum_create(params);
+        ret = sermum_create_and_run(params);
+    } else {
+        ret = sermud_create_and_run(params);
     }
 
     return ret;

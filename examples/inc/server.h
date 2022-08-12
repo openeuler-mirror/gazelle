@@ -29,11 +29,12 @@ struct ServerMumUnit
     struct ServerHandler listener;          ///< the listen handler
     int32_t epfd;                           ///< the listen epoll file descriptor
     struct epoll_event *epevs;              ///< the epoll events
-    uint32_t connections;                   ///< current connections
+    uint32_t curr_connect;                  ///< current connection number
     uint64_t recv_bytes;                    ///< total receive bytes
     in_addr_t ip;                           ///< server ip
     uint16_t port;                          ///< server port
     uint32_t pktlen;                        ///< the length of peckage
+    char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
     struct ServerMumUnit *next;             ///< next pointer
 };
@@ -48,17 +49,124 @@ struct ServerMum
     bool debug;                             ///< if we print the debug information
 };
 
+/**
+ * @brief server unit of model mud worker unit
+ * The information of worker unit of server of model mud.
+ */
+struct ServerMudWorker
+{
+    struct ServerHandler worker;            ///< the worker handler
+    int32_t epfd;                           ///< the worker epoll file descriptor
+    struct epoll_event *epevs;              ///< the epoll events
+    uint64_t recv_bytes;                    ///< total receive bytes
+    uint32_t pktlen;                        ///< the length of peckage
+    in_addr_t ip;                           ///< client ip
+    uint16_t port;                          ///< client port
+    bool debug;                             ///< if we print the debug information
+    struct ServerMudWorker *next;           ///< next pointer
+};
 
 /**
- * @brief the single thread, unblock, mutliplexing IO server prints debug informations
- * The single thread, unblock, mutliplexing IO server prints debug informations.
- * @param server_unit       the server unit
- * @param str               the debug information
+ * @brief server model mud
+ * The information of server model mud.
+ */
+struct ServerMud
+{
+    struct ServerHandler listener;          ///< the listen handler
+    struct ServerMudWorker *workers;        ///< the workers
+    int32_t epfd;                           ///< the listen epoll file descriptor
+    struct epoll_event *epevs;              ///< the epoll events
+    uint32_t curr_connect;                  ///< current connection number
+    in_addr_t ip;                           ///< server ip
+    uint16_t port;                          ///< server port
+    uint32_t pktlen;                        ///< the length of peckage
+    char* api;                              ///< the type of api
+    bool debug;                             ///< if we print the debug information
+};
+
+
+/**
+ * @brief the worker thread, unblock, dissymmetric server prints debug informations
+ * The worker thread, unblock, dissymmetric server prints debug informations.
+ * @param ch_str            the charactor string
+ * @param act_str           the action string
  * @param ip                the ip address
  * @param port              the port
+ * @param debug             if debug or not
  * @return                  the result pointer
  */
-void sersum_debug_print(struct ServerMumUnit *server_unit, const char *str, const char *ip, uint16_t port);
+void server_debug_print(const char *ch_str, const char *act_str, in_addr_t ip, uint16_t port, bool debug);
+
+/**
+ * @brief the multi thread, unblock, dissymmetric server prints informations
+ * The multi thread, unblock, dissymmetric server prints informations.
+ * @param server_mud        the server information
+ */
+void sermud_info_print(struct ServerMud *server_mud);
+
+/**
+ * @brief the worker thread, unblock, dissymmetric server listens and gets epoll feature descriptors
+ * The worker thread, unblock, dissymmetric server listens and gets epoll feature descriptors.
+ * @param worker_unit       the server worker
+ * @return                  the result pointer
+ */
+int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit);
+
+/**
+ * @brief the listener thread, unblock, dissymmetric server listens and gets epoll feature descriptors
+ * The listener thread, unblock, dissymmetric server listens and gets epoll feature descriptors.
+ * @param server_mud        the server unit
+ * @return                  the result pointer
+ */
+int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud);
+
+/**
+ * @brief the listener thread, unblock, dissymmetric server accepts the connections
+ * The listener thread, unblock, dissymmetric server accepts the connections.
+ * @param server_mud        the server unit
+ * @return                  the result pointer
+ */
+int32_t sermud_listener_accept_connects(struct ServerMud *server_mud);
+
+/**
+ * @brief the worker thread, unblock, dissymmetric server processes the events
+ * The worker thread, unblock, dissymmetric server processes the events.
+ * @param worker_unit       the server worker
+ * @return                  the result pointer
+ */
+int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit);
+
+/**
+ * @brief the listener thread, unblock, dissymmetric server processes the events
+ * The listener thread, unblock, dissymmetric server processes the events.
+ * @param server_mud        the server unit
+ * @return                  the result pointer
+ */
+int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud);
+
+/**
+ * @brief create the worker thread, unblock, dissymmetric server and run
+ * This function creates the worker thread, unblock, dissymmetric server and run.
+ * @param arg           each thread's information of server
+ * @return              the result pointer
+ */
+void *sermud_worker_create_and_run(void *arg);
+
+/**
+ * @brief create the listener thread, unblock, dissymmetric server and run
+ * This function creates the listener thread, unblock, dissymmetric server and run.
+ * @param arg           each thread's information of server
+ * @return              the result pointer
+ */
+void *sermud_listener_create_and_run(void *arg);
+
+/**
+ * @brief create the multi thread, unblock, dissymmetric server and run
+ * This function creates the multi thread, unblock, dissymmetric server and run.
+ * @param params        the parameters pointer
+ * @return              the result
+ */
+int32_t sermud_create_and_run(struct ProgramParams *params);
 
 /**
  * @brief the multi thread, unblock, mutliplexing IO server prints informations
@@ -73,7 +181,7 @@ void sermum_info_print(struct ServerMum *server_mum);
  * @param server_unit       the server unit
  * @return                  the result pointer
  */
-int32_t sersum_get_epfd(struct ServerMumUnit *server_unit);
+int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit);
 
 /**
  * @brief the single thread, unblock, mutliplexing IO server accepts the connections
@@ -82,7 +190,7 @@ int32_t sersum_get_epfd(struct ServerMumUnit *server_unit);
  * @param server_handler    the server handler
  * @return                  the result pointer
  */
-int32_t sersum_try_accept(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler);
+int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler);
 
 /**
  * @brief the single thread, unblock, mutliplexing IO server processes the events
@@ -98,23 +206,23 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit);
  * @param arg           each thread's information of server
  * @return              the result pointer
  */
-void *sersum_create(void *arg);
+void *sersum_create_and_run(void *arg);
 
 /**
- * @brief create the multi thread, unblock, mutliplexing IO server
- * This function creates the multi thread, unblock, mutliplexing IO server.
+ * @brief create the multi thread, unblock, mutliplexing IO server and run
+ * This function creates the multi thread, unblock, mutliplexing IO server and run.
  * @param params        the parameters pointer
  * @return              the result
  */
-int32_t sermum_create(struct ProgramParams *params);
+int32_t sermum_create_and_run(struct ProgramParams *params);
 
 /**
- * @brief create server
- * This function create the specify server.
+ * @brief create server and run
+ * This function create the specify server and run.
  * @param params        the parameters pointer
  * @return              the result
  */
-int32_t server_create(struct ProgramParams *params);
+int32_t server_create_and_run(struct ProgramParams *params);
 
 
 #endif // __EXAMPLES_SERVER_H__
