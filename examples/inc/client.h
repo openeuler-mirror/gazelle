@@ -29,13 +29,14 @@ struct ClientUnit
     struct ClientHandler *handlers;     ///< the handlers
     int32_t epfd;                       ///< the connect epoll file descriptor
     struct epoll_event *epevs;          ///< the epoll events
-    uint32_t connections;               ///< current connections
+    uint32_t curr_connect;              ///< current connection number
     uint64_t send_bytes;                ///< total send bytes
     in_addr_t ip;                       ///< server ip
     uint16_t port;                      ///< server port
-    uint32_t connect_num;               ///< connect number
+    uint32_t connect_num;               ///< total connection number
     uint32_t pktlen;                    ///< the length of peckage
     bool verify;                        ///< if we verify or not
+    char* api;                          ///< the type of api
     bool debug;                         ///< if we print the debug information
     struct ClientUnit *next;            ///< next pointer
 };
@@ -54,13 +55,14 @@ struct Client
 /**
  * @brief the single thread, client prints informations
  * The single thread, client prints informations.
- * @param client_unit       the client unit
- * @param str               the debug information
+ * @param ch_str            the charactor string
+ * @param act_str           the action string
  * @param ip                the ip address
  * @param port              the port
+ * @param debug             if debug or not
  * @return                  the result pointer
  */
-void clithd_debug_print(struct ClientUnit *client_unit, const char *str, const char *ip, uint16_t port);
+void client_debug_print(const char *ch_str, const char *act_str, in_addr_t ip, uint16_t port, bool debug);
 
 /**
  * @brief the client prints informations
@@ -76,9 +78,10 @@ void client_info_print(struct Client *client);
  * @param epoll_fd          the epoll file descriptor
  * @param ip                ip address
  * @param port              port
+ * @param api               the api
  * @return                  the result pointer
  */
-int32_t clithd_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port);
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port, const char *api);
 
 /**
  * @brief the single thread, client retry to connect to server, register to epoll
@@ -87,7 +90,7 @@ int32_t clithd_try_connect(struct ClientHandler *client_handler, int32_t epoll_f
  * @param client_handler    the client handler
  * @return                  the result pointer
  */
-int32_t clithd_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler);
+int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler);
 
 /**
  * @brief the single thread, client connects and gets epoll feature descriptors
@@ -95,23 +98,23 @@ int32_t clithd_retry_connect(struct ClientUnit *client_unit, struct ClientHandle
  * @param client_unit   the client unit
  * @return              the result pointer
  */
-int32_t clithd_get_epfd(struct ClientUnit *client_unit);
+int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit);
 
 /**
- * @brief create client of single thread
- * This function creates client of single thread.
+ * @brief create client of single thread and run
+ * This function creates client of single thread and run.
  * @param arg           each thread's information of server
  * @return              the result pointer
  */
-void *client_s_create(void *arg);
+void *client_s_create_and_run(void *arg);
 
 /**
- * @brief create client
- * This function create the client.
+ * @brief create client and run
+ * This function create the client and run.
  * @param params        the parameters pointer
  * @return              the result
  */
-int32_t client_create(struct ProgramParams *params);
+int32_t client_create_and_run(struct ProgramParams *params);
 
 
 #endif // __EXAMPLES_CLIENT_H__

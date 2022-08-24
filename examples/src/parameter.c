@@ -172,7 +172,7 @@ void program_params_help(void)
     printf("    mum: multi thread, unblock, multiplexing IO network model. \n");
     printf("    mud: multi thread, unblock, dissymmetric network model. \n");
     printf("-t, --threadnum [xxxx]: set thread number in range of %d - %d. \n", THREAD_NUM_MIN, THREAD_NUM_MAX);
-    printf("-c, --connectnum [xxxx]: set thread number of connection. \n");
+    printf("-c, --connectnum [xxxx]: set connection number of each thread. \n");
     printf("-A, --api [unix | posix]: set api type is server or client. \n");
     printf("    unix: use unix's api. \n");
     printf("    posix: use posix api. \n");
