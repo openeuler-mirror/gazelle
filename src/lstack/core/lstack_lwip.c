@@ -321,7 +321,6 @@ void stack_send(struct rpc_msg *msg)
     int32_t flags = msg->args[MSG_ARG_2].i;
 
     struct protocol_stack *stack = get_protocol_stack();
-    __atomic_store_n(&stack->in_send, false, __ATOMIC_RELEASE);
 
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
