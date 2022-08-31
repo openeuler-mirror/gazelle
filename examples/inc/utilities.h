@@ -38,6 +38,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "securec.h"
+#include "securectype.h"
+
 
 #define PRINT_ERROR(format, ...)            do \
                                             { \
@@ -110,10 +113,10 @@
  * @param socket_fd     the socket file descriptor
  * @param ip            ip address
  * @param port          port number
- * @param api           api
+ * @param domain        domain
  * @return              the result
  */
-int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port, const char *api);
+int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port, const char *domain);
 
 /**
  * @brief create the socket and connect
@@ -121,10 +124,10 @@ int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port
  * @param socket_fd     the socket file descriptor
  * @param ip            ip address
  * @param port          port number
- * @param api           api
+ * @param domain        domain
  * @return              the result
  */
-int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t port, const char *api);
+int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t port, const char *domain);
 
 /**
  * @brief set the socket to unblock

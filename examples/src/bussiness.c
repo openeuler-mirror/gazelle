@@ -18,6 +18,56 @@ static const char bussiness_messages_low[] = "abcdefghijklmnopqrstuvwxyz";  // t
 static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // the capital charactors of business message
 
 
+// read by specify api
+ int32_t read_api(int32_t fd, char *buffer_in, const uint32_t length, const char *api)
+ {
+    if (strcmp(api, "readwrite") == 0) {
+        return read(fd, buffer_in, length);
+    } else if (strcmp(api, "recvsend") == 0) {
+        return recv(fd, buffer_in, length, 0);
+    } else {
+        struct msghdr msg_recv;
+        struct iovec iov;
+
+        msg_recv.msg_name = NULL;
+        msg_recv.msg_namelen = 0;
+        msg_recv.msg_iov = &iov;
+        msg_recv.msg_iovlen = 1;
+        msg_recv.msg_iov->iov_base = buffer_in;
+        msg_recv.msg_iov->iov_len = length;
+        msg_recv.msg_control = 0;
+        msg_recv.msg_controllen = 0;
+        msg_recv.msg_flags = 0;
+
+        return recvmsg(fd, &msg_recv, 0);
+    }
+ }
+
+// write by specify api
+ int32_t write_api(int32_t fd, char *buffer_out, const uint32_t length, const char *api)
+ {
+    if (strcmp(api, "readwrite") == 0) {
+        return write(fd, buffer_out, length);
+    } else if (strcmp(api, "recvsend") == 0) {
+        return send(fd, buffer_out, length, 0);
+    } else {
+        struct msghdr msg_send;
+        struct iovec iov;
+
+        msg_send.msg_name = NULL;
+        msg_send.msg_namelen = 0;
+        msg_send.msg_iov = &iov;
+        msg_send.msg_iovlen = 1;
+        msg_send.msg_iov->iov_base = buffer_out;
+        msg_send.msg_iov->iov_len = length;
+        msg_send.msg_control = 0;
+        msg_send.msg_controllen = 0;
+        msg_send.msg_flags = 0;
+
+        return sendmsg(fd, &msg_send, 0);
+    }
+ }
+
 // the business processsing of server
 void server_bussiness(char *out, const char *in, uint32_t size)
 {
@@ -56,7 +106,7 @@ int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, 
 }
 
 // server answers
-int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen)
+int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
@@ -65,7 +115,7 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen)
     int32_t cread = 0;
     int32_t sread = length;
     while (cread < sread) {
-        int32_t nread = read(server_handler->fd, buffer_in, length);
+        int32_t nread = read_api(server_handler->fd, buffer_in, length, api);
         if (nread == 0) {
             return PROGRAM_ABORT;
         } else if (nread < 0) {
@@ -83,7 +133,7 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen)
     int32_t cwrite = 0;
     int32_t swrite = length;
     while (cwrite < swrite) {
-        int32_t nwrite = write(server_handler->fd, buffer_out, length);
+        int32_t nwrite = write_api(server_handler->fd, buffer_out, length, api);
         if (nwrite == 0) {
             return PROGRAM_ABORT;
         } else if (nwrite < 0) {
@@ -103,7 +153,7 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen)
 }
 
 // client asks
-int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen)
+int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
@@ -114,7 +164,7 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen)
     int32_t cwrite = 0;
     int32_t swrite = length;
     while (cwrite < swrite) {
-        int32_t nwrite = write(client_handler->fd, buffer_out, length);
+        int32_t nwrite = write_api(client_handler->fd, buffer_out, length, api);
         if (nwrite == 0) {
             return PROGRAM_ABORT;
         } else if (nwrite < 0) {
@@ -134,7 +184,7 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen)
 }
 
 // client checks
-int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify)
+int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
@@ -143,7 +193,7 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
     int32_t cread = 0;
     int32_t sread = length;
     while (cread < sread) {
-        int32_t nread = read(client_handler->fd, buffer_in, length);
+        int32_t nread = read_api(client_handler->fd, buffer_in, length, api);
         if (nread == 0) {
             return PROGRAM_ABORT;
         } else if (nread < 0) {
@@ -164,7 +214,7 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
     int32_t cwrite = 0;
     int32_t swrite = length;
     while (cwrite < swrite) {
-        int32_t nwrite = write(client_handler->fd, buffer_out, length);
+        int32_t nwrite = write_api(client_handler->fd, buffer_out, length, api);
         if (nwrite == 0) {
             return PROGRAM_ABORT;
         } else if (nwrite < 0) {

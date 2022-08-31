@@ -18,7 +18,7 @@ project(${PROJECT_NAME})
 message(STATUS "PROJECT_SOURCE_DIR: " ${PROJECT_SOURCE_DIR})
 message(STATUS "PROJECT_BINARY_DIR: " ${PROJECT_BINARY_DIR})
 
-set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -pthread")
+set(CMAKE_C_FLAGS "-O2 -g -fstack-protector-strong -Wall -Werror -pthread -lboundscheck")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D EXAMPLE_COMPILE")
 
 include_directories(${PROJECT_SOURCE_DIR}/inc)

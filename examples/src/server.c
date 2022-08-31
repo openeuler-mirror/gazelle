@@ -95,9 +95,8 @@ int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
     struct epoll_event ep_ev;
     ep_ev.data.ptr = (void *)&(worker_unit->worker);
     ep_ev.events = EPOLLIN | EPOLLET;
-    int32_t epoll_ctl_ret = epoll_ctl(worker_unit->epfd, EPOLL_CTL_ADD, worker_unit->worker.fd, &ep_ev);
-    if (epoll_ctl_ret < 0) {
-        PRINT_ERROR("server can't control epoll %d! ", epoll_ctl_ret);
+    if (epoll_ctl(worker_unit->epfd, EPOLL_CTL_ADD, worker_unit->worker.fd, &ep_ev) < 0) {
+        PRINT_ERROR("server can't control epoll %d! ", errno);
         return PROGRAM_FAULT;
     }
 
@@ -116,9 +115,8 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
     struct epoll_event ep_ev;
     ep_ev.data.ptr = (void *)&(server_mud->listener);
     ep_ev.events = EPOLLIN | EPOLLET;
-    int32_t epoll_ctl_ret = epoll_ctl(server_mud->epfd, EPOLL_CTL_ADD, server_mud->listener.fd, &ep_ev);
-    if (epoll_ctl_ret < 0) {
-        PRINT_ERROR("server can't control epoll %d! ", epoll_ctl_ret);
+    if (epoll_ctl(server_mud->epfd, EPOLL_CTL_ADD, server_mud->listener.fd, &ep_ev) < 0) {
+        PRINT_ERROR("server can't control epoll %d! ", errno);
         return PROGRAM_FAULT;
     }
 
@@ -138,9 +136,8 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
             break;
         }
 
-        int32_t set_socket_unblock_ret = set_socket_unblock(accept_fd);
-        if (set_socket_unblock_ret < 0) {
-            PRINT_ERROR("server can't set the connect socket to unblock %d! ", set_socket_unblock_ret);
+        if (set_socket_unblock(accept_fd) < 0) {
+            PRINT_ERROR("server can't set the connect socket to unblock! ");
             return PROGRAM_FAULT;
         }
 
@@ -155,14 +152,14 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
         worker->pktlen = server_mud->pktlen;
         worker->ip = accept_addr.sin_addr.s_addr;
         worker->port = accept_addr.sin_port;
+        worker->api = server_mud->api;
         worker->debug = server_mud->debug;
         worker->next = server_mud->workers;
 
         server_mud->workers = worker;
 
-        int32_t pthread_create_ret = pthread_create(tid, NULL, sermud_worker_create_and_run, server_mud->workers);
-        if (pthread_create_ret < 0) {
-            PRINT_ERROR("server can't create poisx thread %d! ", pthread_create_ret);
+        if (pthread_create(tid, NULL, sermud_worker_create_and_run, server_mud->workers) < 0) {
+            PRINT_ERROR("server can't create poisx thread %d! ", errno);
             return PROGRAM_FAULT;
         }
 
@@ -177,31 +174,31 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit)
 {
     int32_t epoll_nfds = epoll_wait(worker_unit->epfd, worker_unit->epevs, SERVER_EPOLL_SIZE_MAX, SERVER_EPOLL_WAIT_TIMEOUT);
     if (epoll_nfds < 0) {
-        PRINT_ERROR("server epoll wait error %d! ", epoll_nfds);
+        PRINT_ERROR("server epoll wait error %d! ", errno);
         return PROGRAM_FAULT;
     }
 
     for (int32_t i = 0; i < epoll_nfds; ++i) {
-        if (worker_unit->epevs[i].events == EPOLLERR || worker_unit->epevs[i].events == EPOLLHUP || worker_unit->epevs[i].events == EPOLLRDHUP) {
-            PRINT_ERROR("server epoll wait error %d! ", worker_unit->epevs[i].events);
+        struct epoll_event *curr_epev = worker_unit->epevs + i;
+
+        if (curr_epev->events == EPOLLERR || curr_epev->events == EPOLLHUP || curr_epev->events == EPOLLRDHUP) {
+            PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
             return PROGRAM_FAULT;
         }
 
-        if (worker_unit->epevs[i].events == EPOLLIN) {
-            struct ServerHandler *server_handler = (struct ServerHandler *)worker_unit->epevs[i].data.ptr;
+        if (curr_epev->events == EPOLLIN) {
+            struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
-            int32_t server_ans_ret = server_ans(server_handler, worker_unit->pktlen);
+            int32_t server_ans_ret = server_ans(server_handler, worker_unit->pktlen, worker_unit->api);
             if (server_ans_ret == PROGRAM_FAULT) {
                 struct epoll_event ep_ev;
-                int32_t epoll_ctl_ret = epoll_ctl(worker_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev);
-                if (epoll_ctl_ret < 0) {
-                    PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", server_handler->fd, epoll_ctl_ret);
+                if (epoll_ctl(worker_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev) < 0) {
+                    PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", server_handler->fd, errno);
                     return PROGRAM_FAULT;
                 }
             } else if (server_ans_ret == PROGRAM_ABORT) {
-                int32_t cloes_ret = close(server_handler->fd);
-                if (cloes_ret < 0) {
-                    PRINT_ERROR("server can't close the socket %d! ", cloes_ret);
+                if (close(server_handler->fd) < 0) {
+                    PRINT_ERROR("server can't close the socket %d! ", errno);
                     return PROGRAM_FAULT;
                 }
                 server_debug_print("server mud worker", "close", worker_unit->ip, worker_unit->port, worker_unit->debug);
@@ -220,17 +217,19 @@ int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
 {
     int32_t epoll_nfds = epoll_wait(server_mud->epfd, server_mud->epevs, SERVER_EPOLL_SIZE_MAX, SERVER_EPOLL_WAIT_TIMEOUT);
     if (epoll_nfds < 0) {
-        PRINT_ERROR("server epoll wait error %d! ", epoll_nfds);
+        PRINT_ERROR("server epoll wait error %d! ", errno);
         return PROGRAM_FAULT;
     }
 
     for (int32_t i = 0; i < epoll_nfds; ++i) {
-        if (server_mud->epevs[i].events == EPOLLERR || server_mud->epevs[i].events == EPOLLHUP || server_mud->epevs[i].events == EPOLLRDHUP) {
-            PRINT_ERROR("server epoll wait error %d! ", server_mud->epevs[i].events);
+        struct epoll_event *curr_epev = server_mud->epevs + i;
+    
+        if (curr_epev->events == EPOLLERR || curr_epev->events == EPOLLHUP || curr_epev->events == EPOLLRDHUP) {
+            PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
             return PROGRAM_FAULT;
         }
 
-        if (server_mud->epevs[i].events == EPOLLIN) {
+        if (curr_epev->events == EPOLLIN) {
             int32_t sermud_listener_accept_connects_ret = sermud_listener_accept_connects(server_mud);
             if (sermud_listener_accept_connects_ret < 0) {
                 PRINT_ERROR("server try accept error %d! ", sermud_listener_accept_connects_ret);
@@ -269,7 +268,7 @@ void *sermud_listener_create_and_run(void *arg)
 {
     struct ServerMud *server_mud = (struct ServerMud *)arg;
 
-    if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->port, server_mud->api) < 0) {
+    if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->port, server_mud->domain) < 0) {
         exit(PROGRAM_FAULT);
     }
     if (sermud_listener_create_epfd_and_reg(server_mud) < 0) {
@@ -293,9 +292,8 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     pthread_t *tid = (pthread_t *)malloc(sizeof(pthread_t));
     struct ServerMud *server_mud = (struct ServerMud *)malloc(sizeof(struct ServerMud));
 
-    int32_t pthread_mutex_init_ret = pthread_mutex_init(&server_debug_mutex, NULL);
-    if (pthread_mutex_init_ret < 0) {
-        PRINT_ERROR("server can't init posix mutex %d! ", pthread_mutex_init_ret);
+    if (pthread_mutex_init(&server_debug_mutex, NULL) < 0) {
+        PRINT_ERROR("server can't init posix mutex %d! ", errno);
         return PROGRAM_FAULT;
     }
 
@@ -307,12 +305,12 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->ip = inet_addr(params->ip);
     server_mud->port = htons(params->port);
     server_mud->pktlen = params->pktlen;
+    server_mud->domain = params->domain;
     server_mud->api = params->api;
     server_mud->debug = params->debug;
 
-    int32_t pthread_create_ret = pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud);
-    if (pthread_create_ret < 0) {
-        PRINT_ERROR("server can't create poisx thread %d! ", pthread_create_ret);
+    if (pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud) < 0) {
+        PRINT_ERROR("server can't create poisx thread %d! ", errno);
         return PROGRAM_FAULT;
     }
 
@@ -389,9 +387,8 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
     struct epoll_event ep_ev;
     ep_ev.data.ptr = (void *)&(server_unit->listener);
     ep_ev.events = EPOLLIN | EPOLLET;
-    int32_t epoll_ctl_ret = epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, server_unit->listener.fd, &ep_ev);
-    if (epoll_ctl_ret < 0) {
-        PRINT_ERROR("server can't control epoll %d! ", epoll_ctl_ret);
+    if (epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, server_unit->listener.fd, &ep_ev) < 0) {
+        PRINT_ERROR("server can't control epoll %d! ", errno);
         return PROGRAM_FAULT;
     }
 
@@ -411,9 +408,8 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
             break;
         }
 
-        int32_t set_socket_unblock_ret = set_socket_unblock(accept_fd);
-        if (set_socket_unblock_ret < 0) {
-            PRINT_ERROR("server can't set the connect socket to unblock %d! ", set_socket_unblock_ret);
+        if (set_socket_unblock(accept_fd) < 0) {
+            PRINT_ERROR("server can't set the connect socket to unblock! ");
             return PROGRAM_FAULT;
         }
 
@@ -422,9 +418,8 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
         struct epoll_event ep_ev;
         ep_ev.data.ptr = (void *)server_handler;
         ep_ev.events = EPOLLIN | EPOLLET;
-        int32_t epoll_ctl_ret = epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, accept_fd, &ep_ev);
-        if (epoll_ctl_ret < 0) {
-            PRINT_ERROR("server can't add socket '%d' to control epoll %d! ", accept_fd, epoll_ctl_ret);
+        if (epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, accept_fd, &ep_ev) < 0) {
+            PRINT_ERROR("server can't add socket '%d' to control epoll %d! ", accept_fd, errno);
             return PROGRAM_FAULT;
         }
 
@@ -441,18 +436,20 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
 {
     int32_t epoll_nfds = epoll_wait(server_unit->epfd, server_unit->epevs, SERVER_EPOLL_SIZE_MAX, SERVER_EPOLL_WAIT_TIMEOUT);
     if (epoll_nfds < 0) {
-        PRINT_ERROR("server epoll wait error %d! ", epoll_nfds);
+        PRINT_ERROR("server epoll wait error %d! ", errno);
         return PROGRAM_FAULT;
     }
 
     for (int32_t i = 0; i < epoll_nfds; ++i) {
-        if (server_unit->epevs[i].events == EPOLLERR || server_unit->epevs[i].events == EPOLLHUP || server_unit->epevs[i].events == EPOLLRDHUP) {
-            PRINT_ERROR("server epoll wait error %d! ", server_unit->epevs[i].events);
+        struct epoll_event *curr_epev = server_unit->epevs + i;
+
+        if (curr_epev->events == EPOLLERR || curr_epev->events == EPOLLHUP || curr_epev->events == EPOLLRDHUP) {
+            PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
             return PROGRAM_FAULT;
         }
 
-        if (server_unit->epevs[i].events == EPOLLIN) {
-            if (server_unit->epevs[i].data.ptr == (void *)&(server_unit->listener)) {
+        if (curr_epev->events == EPOLLIN) {
+            if (curr_epev->data.ptr == (void *)&(server_unit->listener)) {
                 int32_t sersum_accept_connects_ret = sersum_accept_connects(server_unit, &(server_unit->listener));
                 if (sersum_accept_connects_ret < 0) {
                     PRINT_ERROR("server try accept error %d! ", sersum_accept_connects_ret);
@@ -460,29 +457,26 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                 }
                 continue;
             } else {
-                struct ServerHandler *server_handler = (struct ServerHandler *)server_unit->epevs[i].data.ptr;
+                struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
                 struct sockaddr_in connect_addr;
                 socklen_t connect_addr_len = sizeof(connect_addr);
-                int32_t getpeername_ret = getpeername(server_handler->fd, (struct sockaddr *)&connect_addr, &connect_addr_len);
-                if (getpeername_ret < 0) {
-                    PRINT_ERROR("server can't socket peername %d! ", getpeername_ret);
+                if (getpeername(server_handler->fd, (struct sockaddr *)&connect_addr, &connect_addr_len) < 0) {
+                    PRINT_ERROR("server can't socket peername %d! ", errno);
                     return PROGRAM_FAULT;
                 }
 
-                int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen);
+                int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen, server_unit->api);
                 if (server_ans_ret == PROGRAM_FAULT) {
                     --server_unit->curr_connect;
                     struct epoll_event ep_ev;
-                    int32_t epoll_ctl_ret = epoll_ctl(server_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev);
-                    if (epoll_ctl_ret < 0) {
-                        PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", server_handler->fd, epoll_ctl_ret);
+                    if (epoll_ctl(server_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev) < 0) {
+                        PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", server_handler->fd, errno);
                         return PROGRAM_FAULT;
                     }
                 } else if (server_ans_ret == PROGRAM_ABORT) {
                     --server_unit->curr_connect;
-                    int32_t cloes_ret = close(server_handler->fd);
-                    if (cloes_ret < 0) {
-                        PRINT_ERROR("server can't close the socket %d! ", cloes_ret);
+                    if (close(server_handler->fd) < 0) {
+                        PRINT_ERROR("server can't close the socket %d! ", errno);
                         return PROGRAM_FAULT;
                     }
                     server_debug_print("server mum unit", "close", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
@@ -502,7 +496,7 @@ void *sersum_create_and_run(void *arg)
 {
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)arg;
 
-    if (create_socket_and_listen(&(server_unit->listener.fd), server_unit->ip, server_unit->port, server_unit->api) < 0) {
+    if (create_socket_and_listen(&(server_unit->listener.fd), server_unit->ip, server_unit->port, server_unit->domain) < 0) {
         exit(PROGRAM_FAULT);
     }
     if (sersum_create_epfd_and_reg(server_unit) < 0) {
@@ -528,9 +522,8 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
     struct ServerMum *server_mum = (struct ServerMum *)malloc(sizeof(struct ServerMum));
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
 
-    int32_t pthread_mutex_init_ret = pthread_mutex_init(&server_debug_mutex, NULL);
-    if (pthread_mutex_init_ret < 0) {
-        PRINT_ERROR("server can't init posix mutex %d! ", pthread_mutex_init_ret);
+    if (pthread_mutex_init(&server_debug_mutex, NULL) < 0) {
+        PRINT_ERROR("server can't init posix mutex %d! ", errno);
         return PROGRAM_FAULT;
     }
 
@@ -546,13 +539,13 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->ip = inet_addr(params->ip);
         server_unit->port = htons(params->port);
         server_unit->pktlen = params->pktlen;
+        server_unit->domain = params->domain;
         server_unit->api = params->api;
         server_unit->debug = params->debug;
         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
 
-        int32_t pthread_create_ret = pthread_create((tids + i), NULL, sersum_create_and_run, server_unit);
-        if (pthread_create_ret < 0) {
-            PRINT_ERROR("server can't create poisx thread %d! ", pthread_create_ret);
+        if (pthread_create((tids + i), NULL, sersum_create_and_run, server_unit) < 0) {
+            PRINT_ERROR("server can't create poisx thread %d! ", errno);
             return PROGRAM_FAULT;
         }
         server_unit = server_unit->next;

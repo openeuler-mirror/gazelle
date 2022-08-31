@@ -24,7 +24,8 @@
 #define PARAM_DEFAULT_MODEL         ("mum")                 ///< default model type
 #define PARAM_DEFAULT_CONNECT_NUM   (10)                    ///< default connection number
 #define PARAM_DEFAULT_THREAD_NUM    (8)                     ///< default thread number
-#define PARAM_DEFAULT_API           ("posix")               ///< default API type
+#define PARAM_DEFAULT_DOMAIN        ("posix")               ///< default communication domain
+#define PARAM_DEFAULT_API           ("readwrite")           ///< default API type
 #define PARAM_DEFAULT_PKTLEN        (1024)                  ///< default packet length of message
 #define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
 #define PARAM_DEFAULT_DEBUG         (false)                 ///< default flag of debug
@@ -43,6 +44,8 @@ enum {
     PARAM_NUM_CONNECT_NUM = 'c',
 #define PARAM_NAME_THREAD_NUM       ("threadnum")           ///< name of parameter thread number
     PARAM_NUM_THREAD_NUM = 't',
+#define PARAM_NAME_DOMAIN           ("domain")              ///< name of parameter domain
+    PARAM_NUM_DOMAIN = 'D',
 #define PARAM_NAME_API              ("api")                 ///< name of parameter API type
     PARAM_NUM_API = 'A',
 #define PARAM_NAME_PKTLEN           ("pktlen")              ///< name of parameter packet length of message
@@ -84,6 +87,7 @@ struct ProgramParams {
     char*               model;              ///< model type
     uint32_t            thread_num;         ///< the number of threads
     uint32_t            connect_num;        ///< the connection number
+    char*               domain;             ///< the communication dimain
     char*               api;                ///< the type of api
     uint32_t            pktlen;             ///< the packet length
     bool                verify;             ///< if we verify the message or not

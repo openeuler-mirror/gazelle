@@ -36,6 +36,7 @@ struct ClientUnit
     uint32_t connect_num;               ///< total connection number
     uint32_t pktlen;                    ///< the length of peckage
     bool verify;                        ///< if we verify or not
+    char* domain;                       ///< the communication domain
     char* api;                          ///< the type of api
     bool debug;                         ///< if we print the debug information
     struct ClientUnit *next;            ///< next pointer
@@ -78,7 +79,7 @@ void client_info_print(struct Client *client);
  * @param epoll_fd          the epoll file descriptor
  * @param ip                ip address
  * @param port              port
- * @param api               the api
+ * @param domain            domain
  * @return                  the result pointer
  */
 int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port, const char *api);
