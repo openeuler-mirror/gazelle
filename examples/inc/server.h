@@ -34,6 +34,7 @@ struct ServerMumUnit
     in_addr_t ip;                           ///< server ip
     uint16_t port;                          ///< server port
     uint32_t pktlen;                        ///< the length of peckage
+    char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
     struct ServerMumUnit *next;             ///< next pointer
@@ -62,6 +63,7 @@ struct ServerMudWorker
     uint32_t pktlen;                        ///< the length of peckage
     in_addr_t ip;                           ///< client ip
     uint16_t port;                          ///< client port
+    char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
     struct ServerMudWorker *next;           ///< next pointer
 };
@@ -80,6 +82,7 @@ struct ServerMud
     in_addr_t ip;                           ///< server ip
     uint16_t port;                          ///< server port
     uint32_t pktlen;                        ///< the length of peckage
+    char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
 };

@@ -43,6 +43,28 @@ struct ClientHandler
 
 
 /**
+ * @brief read by specify api
+ * This function processes the reading by specify api.
+ * @param fd            the file descriptor
+ * @param buffer_in     the input buffer
+ * @param length        the length
+ * @param api           the type of api
+ * @return              the result
+ */
+ int32_t read_api(int32_t fd, char *buffer_in, const uint32_t length, const char *api);
+
+/**
+ * @brief write by specify api
+ * This function processes the writing by specify api.
+ * @param fd            the file descriptor
+ * @param buffer_out    the output buffer
+ * @param length        the length
+ * @param api           the type of api
+ * @return              the result
+ */
+ int32_t write_api(int32_t fd, char *buffer_out, const uint32_t length, const char *api);
+
+/**
  * @brief the business processsing of server
  * This function processes the business of server.
  * @param out           the output string
@@ -70,18 +92,20 @@ int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, 
  * This function checks the information and answers.
  * @param server_handler    server handler
  * @param pktlen            the length of package
+ * @param api               the api
  * @return                  the result
  */
-int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen);
+int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api);
 
 /**
  * @brief client asks server
  * This function asks server.
  * @param client_handler    client handler
  * @param pktlen            the length of package
+ * @param api               the api
  * @return                  the result
  */
-int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen);
+int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api);
 
 /**
  * @brief client checks the information and answers
@@ -89,9 +113,10 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen);
  * @param client_handler    client handler
  * @param pktlen            the length of package
  * @param verify            verify or not
+ * @param api               the api
  * @return                  the result
  */
-int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify);
+int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api);
 
 
 #endif // __EXAMPLES_BUSSINESS_H__
