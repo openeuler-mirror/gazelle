@@ -256,12 +256,12 @@ static inline void del_data_out_event(struct lwip_sock *sock)
 ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 {
     if (sock->errevent > 0) {
-        return 0;
+        GAZELLE_RETURN(ENOTCONN);
     }
 
     uint32_t free_count = gazelle_ring_readable_count(sock->send_ring);
     if (free_count == 0) {
-        return -1;
+        return 0;
     }
 
     struct pbuf *pbuf = NULL;
@@ -293,7 +293,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         }
     }
 
-    return (send_len <= 0) ? -1 : send_len;
+    return send_len;
 }
 
 static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
