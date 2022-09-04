@@ -445,44 +445,44 @@ int32_t dpdk_ethdev_init(void)
         nb_queues = get_global_cfg_params()->tot_queue_num;
     }
 
-        struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-        int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
-        if (port_id < 0) {
-            return port_id;
-        }
-	get_global_cfg_params()->port_id = port_id;
+    int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
+    if (port_id < 0) {
+        return port_id;
+    }
+    get_global_cfg_params()->port_id = port_id;
 
-        struct rte_eth_dev_info dev_info;
-        int32_t ret = rte_eth_dev_info_get(port_id, &dev_info);
-        if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "get dev info ret=%d\n", ret);
-            return ret;
-        }
+    struct rte_eth_dev_info dev_info;
+    int32_t ret = rte_eth_dev_info_get(port_id, &dev_info);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "get dev info ret=%d\n", ret);
+        return ret;
+    }
 
-        int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
-        if (max_queues < nb_queues) {
-            LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
-            return -EINVAL;
-        }
+    int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
+    if (max_queues < nb_queues) {
+        LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
+        return -EINVAL;
+    }
 
-        struct eth_params *eth_params = alloc_eth_params(port_id, nb_queues);
-        if (eth_params == NULL) {
-            return -ENOMEM;
-        }
-        eth_params_checksum(&eth_params->conf, &dev_info);
-        int32_t rss_enable = 0;
-        if (use_ltran()) {
-            rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
-        }
-        stack_group->eth_params = eth_params;
-        stack_group->port_id = eth_params->port_id;
-        stack_group->rx_offload = eth_params->conf.rxmode.offloads;
-        stack_group->tx_offload = eth_params->conf.txmode.offloads;
-	/* used for tcp port alloc */
-	stack_group->reta_mask = dev_info.reta_size - 1;
-	stack_group->nb_queues = nb_queues;
-        
+    struct eth_params *eth_params = alloc_eth_params(port_id, nb_queues);
+    if (eth_params == NULL) {
+        return -ENOMEM;
+    }
+    eth_params_checksum(&eth_params->conf, &dev_info);
+    int32_t rss_enable = 0;
+    if (!get_global_cfg_params()->tuple_filter) {
+        rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
+    }
+    stack_group->eth_params = eth_params;
+    stack_group->port_id = eth_params->port_id;
+    stack_group->rx_offload = eth_params->conf.rxmode.offloads;
+    stack_group->tx_offload = eth_params->conf.txmode.offloads;
+    /* used for tcp port alloc */
+    stack_group->reta_mask = dev_info.reta_size - 1;
+    stack_group->nb_queues = nb_queues;
+
     if (get_global_cfg_params()->is_primary) {
         for (uint32_t i = 0; i < stack_group->stack_num; i++) {
             struct protocol_stack *stack = stack_group->stacks[i];
@@ -512,7 +512,7 @@ int32_t dpdk_ethdev_init(void)
             return ret;
         }
 
-        if (rss_enable && use_ltran()) {
+        if (rss_enable && !get_global_cfg_params()->tuple_filter) {
             rss_setup(port_id, nb_queues);
             stack_group->reta_mask = dev_info.reta_size - 1;
         }

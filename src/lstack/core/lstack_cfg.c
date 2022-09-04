@@ -69,6 +69,7 @@ static int32_t parse_num_process(void);
 static int32_t parse_process_numa(void);
 static int32_t parse_process_index(void);
 static int32_t parse_seperate_sendrecv_args(void);
+static int32_t parse_tuple_filter(void);
 
 static inline int32_t parse_int(void *arg, char * arg_string, int32_t default_val,
                              int32_t min_val, int32_t max_val)
@@ -120,6 +121,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "num_process",  parse_num_process },
     { "process_numa", parse_process_numa },
     { "process_idx", parse_process_index },
+    { "tuple_filter", parse_tuple_filter },
     { NULL,           NULL }
 };
 
@@ -1030,3 +1032,14 @@ static int parse_process_index(void)
     return 0;
 }
 
+static int parse_tuple_filter(void)
+{
+    parse_int(&g_config_params.tuple_filter, "tuple_filter", 0, 0, 1);
+    if (g_config_params.tuple_filter == 0) {
+        return 0;
+    }
+    if (g_config_params.use_ltran || g_config_params.listen_shadow) {
+        return -EINVAL;
+    }
+    return 0;
+}

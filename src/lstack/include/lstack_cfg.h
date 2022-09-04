@@ -103,6 +103,7 @@ struct cfg_params {
     char unix_socket_filename[NAME_MAX];
     uint16_t send_ring_size;
     bool expand_send_ring;
+    bool tuple_filter;
 };
 
 struct cfg_params *get_global_cfg_params(void);

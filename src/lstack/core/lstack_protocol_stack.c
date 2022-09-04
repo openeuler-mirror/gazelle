@@ -132,10 +132,10 @@ struct protocol_stack *get_bind_protocol_stack(void)
     int min_conn_num = GAZELLE_MAX_CLIENTS;
 
     /* close listen shadow, per app communication thread select only one stack */
-    if (use_ltran() && get_global_cfg_params()->listen_shadow == 0) {
+    if (get_global_cfg_params()->listen_shadow == 0) {
         static _Atomic uint16_t stack_index = 0;
-	index = atomic_fetch_add(&stack_index, 1);
-	if (index >= stack_group->stack_num) {
+        index = atomic_fetch_add(&stack_index, 1);
+        if (index >= stack_group->stack_num) {
             LSTACK_LOG(ERR, LSTACK, "thread =%hu larger than stack num = %hu\n", index, stack_group->stack_num);
             return NULL;
         }
@@ -645,8 +645,6 @@ int32_t init_protocol_stack(void)
         struct sys_thread *thread = sys_thread_new(name, libnet_listen_thread, (void*)(&stack_group->sem_listen_thread), 0, 0);
         free(thread);
         sem_wait(&stack_group->sem_listen_thread);
-
-        create_flow_rule_map();
    }
 
     if (get_init_fail()) {
