@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       14
+Release:       15
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -99,6 +99,7 @@ Patch9081:     0081-read-data-with-err-event.patch
 Patch9082:     0082-del-gazelle-ring-cons.tail-atomic-protect.patch
 Patch9083:     0083-fix-send-return-vale.patch
 Patch9084:     0084-add-examples.patch
+Patch9085:     0085-expand-thread-rpc-msg-pool-size.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -139,6 +140,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Sep 05 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-15
+- expand rpc msg pool size
+
 * Mon Sep 05 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-14
 - backport bugfix and doc
 
