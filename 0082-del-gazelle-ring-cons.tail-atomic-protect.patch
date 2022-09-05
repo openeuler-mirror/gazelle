@@ -1,0 +1,44 @@
+From 138399196dcb2fb926cc2dbeedfcdb4bf1f1401b Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 3 Sep 2022 21:31:15 +0800
+Subject: [PATCH 19/20] del gazelle ring cons.tail atomic protect
+
+---
+ src/common/dpdk_common.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 987fbdd..1c3e7e8 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -141,7 +141,7 @@ static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_
+ static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void **obj_table, uint32_t n)
+ {
+     uint32_t head = __atomic_load_n(&r->cons.head, __ATOMIC_ACQUIRE);
+-    uint32_t tail = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
++    uint32_t tail = r->cons.tail;
+ 
+     uint32_t entries = r->capacity + tail - head;
+     if (n > entries) {
+@@ -158,8 +158,8 @@ static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r,
+ 
+ static __rte_always_inline uint32_t gazelle_ring_sc_dequeue(struct rte_ring *r, void **obj_table, uint32_t n)
+ {
+-    uint32_t cons = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
+     uint32_t prod = __atomic_load_n(&r->prod.tail, __ATOMIC_ACQUIRE);
++    uint32_t cons = r->cons.tail;
+ 
+     uint32_t entries = prod - cons;
+     if (n > entries) {
+@@ -172,7 +172,7 @@ static __rte_always_inline uint32_t gazelle_ring_sc_dequeue(struct rte_ring *r,
+ 
+     __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
+ 
+-    __atomic_store_n(&r->cons.tail, cons + n, __ATOMIC_RELEASE);
++    r->cons.tail = cons + n;
+ 
+     return n;
+ }
+-- 
+2.23.0
+

@@ -1,0 +1,37 @@
+From 5d10ccf130b742f4e910568b642ac351a489c072 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Fri, 2 Sep 2022 19:26:05 +0800
+Subject: [PATCH 17/20] fix proc can not exit due to lack of mem startup fail
+
+---
+ src/lstack/core/lstack_protocol_stack.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 4f1ad41..3009286 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -373,10 +373,12 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+     struct protocol_stack *stack = malloc(sizeof(*stack));
+     if (stack == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
++        sem_post(&stack_group->thread_phase1);
+         return NULL;
+     }
+ 
+     if (init_stack_value(stack, queue_id) != 0) {
++        sem_post(&stack_group->thread_phase1);
+         free(stack);
+         return NULL;
+     }
+@@ -389,6 +391,7 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+ 
+     if (use_ltran()) {
+         if (client_reg_thrd_ring() != 0) {
++            sem_post(&stack_group->thread_phase1);
+             free(stack);
+             return NULL;
+         }
+-- 
+2.23.0
+
