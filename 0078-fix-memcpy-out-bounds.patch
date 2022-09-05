@@ -1,0 +1,26 @@
+From 4d5832685f7fbdb5314acdf04fbd0882357880ec Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 2 Aug 2022 19:32:54 +0800
+Subject: [PATCH 11/20] fix memcpy out bounds
+
+---
+ src/lstack/core/lstack_stack_stat.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index 09aa04c..e8c5bc3 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -172,7 +172,8 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
+ 
+     lstack_get_low_power_info(&dfx->low_power_info);
+ 
+-    int32_t ret = memcpy_s(&dfx->data.pkts.stack_stat, sizeof(dfx->data.pkts), &stack->stats, sizeof(dfx->data.pkts));
++    int32_t ret = memcpy_s(&dfx->data.pkts.stack_stat, sizeof(struct gazelle_stack_stat),
++        &stack->stats, sizeof(struct gazelle_stack_stat));
+     if (ret != EOK) {
+         LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+         return;
+-- 
+2.23.0
+
