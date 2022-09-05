@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       13
+Release:       14
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -87,6 +87,18 @@ Patch9069:     0069-clean-code.patch
 Patch9070:     0070-Support-build-gazelle-with-clang.patch
 Patch9071:     0071-Allow-dynamic-load-PMDs.patch
 Patch9072:     0072-support-epoll-oneshot.patch
+Patch9073:     0073-modify-readme-and-clean-code.patch
+Patch9074:     0074-ltran-support-muti-proc-with-same-ip.patch
+Patch9075:     0075-fix-rpc-msg-out-of-bound.patch
+Patch9076:     0076-fix-traversal-array-use-NULL-pointer.patch
+Patch9077:     0077-same-stack-thread-don-t-repeate-send-msg.patch
+Patch9078:     0078-fix-memcpy-out-bounds.patch
+Patch9079:     0079-fix-miss-send-rpc-msg-err.patch
+Patch9080:     0080-fix-proc-can-not-exit-due-to-lack-of-mem-startup-fai.patch
+Patch9081:     0081-read-data-with-err-event.patch
+Patch9082:     0082-del-gazelle-ring-cons.tail-atomic-protect.patch
+Patch9083:     0083-fix-send-return-vale.patch
+Patch9084:     0084-add-examples.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -127,6 +139,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Sep 05 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-14
+- backport bugfix and doc
+
 * Mon Aug 08 2022 fushanqing <fushanqing@kylinos.cn> - 1.0.1-13
 - Unified license name specification
 

@@ -1,0 +1,39 @@
+From 9404570889caba130960d55fdba39b8bffc61274 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Mon, 1 Aug 2022 17:27:49 +0800
+Subject: [PATCH 07/20] fix rpc msg out of bound
+
+---
+ src/lstack/core/lstack_thread_rpc.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 5a05c82..358ce54 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -24,6 +24,7 @@
+ #include "lstack_thread_rpc.h"
+ 
+ #define RPC_MSG_MAX            32
++#define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
+ struct rpc_msg_pool {
+     struct rpc_msg msgs[RPC_MSG_MAX];
+     uint32_t prod __rte_cache_aligned;
+@@ -37,12 +38,12 @@ static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct
+     uint32_t cons = __atomic_load_n(&rpc_pool->cons, __ATOMIC_ACQUIRE);
+     uint32_t prod = rpc_pool->prod + 1;
+ 
+-    if (prod == cons) {
++    if (prod - cons >= RPC_MSG_MAX) {
+         return NULL;
+     }
+ 
+     rpc_pool->prod = prod;
+-    return &rpc_pool->msgs[prod];
++    return &rpc_pool->msgs[prod & RPC_MSG_MASK];
+ }
+ 
+ static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
+-- 
+2.23.0
+

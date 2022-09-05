@@ -1,0 +1,25 @@
+From 1981869b950e5eaaebfa55bb938336e57e682d7c Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 26 Jul 2022 21:45:48 +0800
+Subject: [PATCH 04/20] modify readme and clean code
+
+---
+ src/lstack/api/lstack_epoll.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 963a696..9c44f87 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -384,7 +384,7 @@ static void change_epollfd_kernel_thread(struct wakeup_poll *wakeup, struct prot
+ static void epoll_bind_statck(struct wakeup_poll *wakeup)
+ {
+     /* all fd is kernel, set rand stack */
+-    if (wakeup->bind_stack == NULL && wakeup->max_stack== NULL) {
++    if (wakeup->bind_stack == NULL && wakeup->max_stack == NULL) {
+         update_epoll_max_stack(wakeup);
+     }
+ 
+-- 
+2.23.0
+

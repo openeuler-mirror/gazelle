@@ -1,0 +1,25 @@
+From 27f6745def82693c661aaf0a1a6353790955755c Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 3 Sep 2022 20:51:41 +0800
+Subject: [PATCH 18/20] read data with err event
+
+---
+ src/lstack/core/lstack_lwip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 35b67f5..10c2cd9 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -577,7 +577,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+         GAZELLE_RETURN(EINVAL);
+     }
+ 
+-    if (sock->errevent > 0) {
++    if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
+         return 0;
+     }
+ 
+-- 
+2.23.0
+

@@ -1,0 +1,40 @@
+From 09ca97c3777c5459fa8717e3ce298a62ff0c84e6 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 3 Sep 2022 21:50:27 +0800
+Subject: [PATCH 20/20] fix send return vale
+
+---
+ src/lstack/core/lstack_lwip.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 10c2cd9..5174e4c 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -256,12 +256,12 @@ static inline void del_data_out_event(struct lwip_sock *sock)
+ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+ {
+     if (sock->errevent > 0) {
+-        return 0;
++        GAZELLE_RETURN(ENOTCONN);
+     }
+ 
+     uint32_t free_count = gazelle_ring_readable_count(sock->send_ring);
+     if (free_count == 0) {
+-        return -1;
++        return 0;
+     }
+ 
+     struct pbuf *pbuf = NULL;
+@@ -293,7 +293,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+         }
+     }
+ 
+-    return (send_len <= 0) ? -1 : send_len;
++    return send_len;
+ }
+ 
+ static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
+-- 
+2.23.0
+
