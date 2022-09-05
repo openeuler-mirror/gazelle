@@ -217,6 +217,26 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
     return 0;
 }
 
+struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t size,
+    uint32_t flags, int32_t idx)
+{
+    char pool_name [RTE_MEMPOOL_NAMESIZE];
+    struct rte_mempool *mempool;
+    int32_t ret = snprintf_s(pool_name, sizeof(pool_name), RTE_MEMPOOL_NAMESIZE - 1,
+        "%s_%d", name, idx);
+    if (ret < 0) {
+        return NULL;
+    }
+
+    mempool = rte_mempool_create(pool_name, count, size,
+        0, 0, NULL, NULL, NULL, NULL, rte_socket_id(), flags);
+    if (mempool == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "%s create failed. errno: %d.\n", name, rte_errno);
+    }
+
+    return mempool;
+}
+
 struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id)
 {
     char ring_name[RTE_RING_NAMESIZE] = {0};
