@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       17
+Release:       18
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -56,7 +56,6 @@ Patch9038:     0038-refactor-event.patch
 Patch9039:     0039-update-license-lockless-queue.patch
 Patch9040:     0040-adapt-to-gazelle.patch
 Patch9041:     0041-modify-securec-to-boundscheck.patch
-
 Patch9042:     0042-fix-sock-invalid-address.patch
 Patch9043:     0043-exit-lstack-process-after-ltran-instance-logout.patch
 Patch9044:     0044-use-atomic-variales-to-count.patch
@@ -97,6 +96,15 @@ Patch9078:     0078-fix-rpc-msg-out-of-bound.patch
 Patch9079:     0079-fix-traversal-array-use-NULL-pointer.patch
 Patch9080:     0080-same-stack-thread-don-t-repeate-send-msg.patch
 Patch9081:     0081-modify-huge-dir-dir-name.patch
+Patch9082:     0082-fix-memcpy-out-bounds.patch
+Patch9083:     0083-fix-miss-send-rpc-msg-err.patch
+Patch9084:     0084-fix-proc-can-not-exit-due-to-lack-of-mem-startup-fai.patch
+Patch9085:     0085-read-data-with-err-event.patch
+Patch9086:     0086-del-gazelle-ring-cons.tail-atomic-protect.patch
+Patch9087:     0087-fix-send-return-vale.patch
+Patch9088:     0088-add-examples.patch
+Patch9089:     0089-expand-thread-rpc-msg-pool-size.patch
+Patch9090:     0090-fix-ltran-sig_default_handler-kill-pid.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -137,6 +145,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Sep 05 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-18
+- backport bugfix and doc
+
 * Mon Aug 08 2022 fushanqing <fushanqing@kylinos.cn> - 1.0.1-17
 - Unified license name specification
 

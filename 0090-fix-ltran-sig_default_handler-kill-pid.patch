@@ -1,0 +1,33 @@
+From 21ae5e6b6bc7baa02dbe934b28677ad9e0646447 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 6 Sep 2022 10:41:59 +0800
+Subject: [PATCH] fix ltran sig handler get pid
+
+---
+ src/ltran/main.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/ltran/main.c b/src/ltran/main.c
+index d1e4030..2e3af82 100644
+--- a/src/ltran/main.c
++++ b/src/ltran/main.c
+@@ -17,6 +17,7 @@
+ #include <syslog.h>
+ #include <sys/types.h>
+ #include <rte_malloc.h>
++#include <unistd.h>
+ 
+ #include "dpdk_common.h"
+ #include "ltran_log.h"
+@@ -58,7 +59,7 @@ static void sig_default_handler(int32_t sig)
+     LTRAN_ERR("ltran dumped，caught signal：%d.\n", sig);
+     print_stack();
+     dpdk_kni_release();
+-    kill(getpt(), sig);
++    kill(getpid(), sig);
+ }
+ 
+ static void signal_init(void)
+-- 
+2.23.0
+
