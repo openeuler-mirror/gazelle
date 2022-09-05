@@ -23,7 +23,7 @@
 #include "lstack_dpdk.h"
 #include "lstack_thread_rpc.h"
 
-#define RPC_MSG_MAX            32
+#define RPC_MSG_MAX            512
 #define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
 struct rpc_msg_pool {
     struct rpc_msg msgs[RPC_MSG_MAX];
