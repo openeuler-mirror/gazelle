@@ -1,0 +1,138 @@
+From 9c3fe074be66abe142f19709bf7d1fe9793e104f Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Mon, 1 Aug 2022 22:34:13 +0800
+Subject: [PATCH 09/20] same stack thread don't repeate send msg
+
+---
+ src/lstack/core/lstack_lwip.c              | 13 +++++++------
+ src/lstack/core/lstack_protocol_stack.c    |  6 +++---
+ src/lstack/core/lstack_thread_rpc.c        |  8 +++++++-
+ src/lstack/include/lstack_protocol_stack.h |  5 +++--
+ 4 files changed, 20 insertions(+), 12 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 80d781f..96c6c96 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -310,10 +310,8 @@ static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
+         replenish_send_idlembuf(sock->send_ring);
+     }
+ 
+-    if (len  > 0) {
+-        if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
+-            add_epoll_event(sock->conn, EPOLLOUT);
+-        }
++    if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
++        add_epoll_event(sock->conn, EPOLLOUT);
+     }
+ }
+ 
+@@ -322,6 +320,9 @@ void stack_send(struct rpc_msg *msg)
+     int32_t fd = msg->args[MSG_ARG_0].i;
+     int32_t flags = msg->args[MSG_ARG_2].i;
+ 
++    struct protocol_stack *stack = get_protocol_stack();
++    __atomic_store_n(&stack->in_send, false, __ATOMIC_RELEASE);
++
+     struct lwip_sock *sock = get_socket(fd);
+     if (sock == NULL) {
+         msg->result = -1;
+@@ -337,9 +338,9 @@ void stack_send(struct rpc_msg *msg)
+     /* have remain data add sendlist */
+     if (NETCONN_IS_DATAOUT(sock)) {
+         if (list_is_null(&sock->send_list)) {
+-            list_add_node(&sock->stack->send_list, &sock->send_list);
++            list_add_node(&stack->send_list, &sock->send_list);
+         }
+-        sock->stack->stats.send_self_rpc++;
++        stack->stats.send_self_rpc++;
+     }
+ }
+ 
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index a2dd62c..4f1ad41 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -157,7 +157,7 @@ void low_power_idling(struct protocol_stack *stack)
+         2. If the number of received packets exceeds the threshold, the authorization mark will end;
+         3. If the number of rx queue packets is less than the threshold, set the CPU delegation flag; */
+     if (get_protocol_traffic(stack) < LSTACK_LPM_RX_PKTS) {
+-        nanosleep(&st, &st);
++        nanosleep(&st, NULL);
+         stack->low_power = true;
+         return;
+     }
+@@ -181,7 +181,7 @@ void low_power_idling(struct protocol_stack *stack)
+     }
+ 
+     if (stack->low_power) {
+-        nanosleep(&st, &st);
++        nanosleep(&st, NULL);
+     }
+ }
+ 
+@@ -238,7 +238,7 @@ static void* gazelle_wakeup_thread(void *arg)
+ 
+     for (;;) {
+         if (cfg->low_power_mod != 0 && stack->low_power) {
+-            nanosleep(&st, &st);
++            nanosleep(&st, NULL);
+         }
+ 
+         sem_t *event_sem[WAKEUP_MAX_NUM];
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 358ce54..d0f5257 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -429,7 +429,12 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
+ 
+ void rpc_call_send(int fd, const void *buf, size_t len, int flags)
+ {
++    /* same stack don't repeat send msg */
+     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
++    if (__atomic_load_n(&stack->in_send, __ATOMIC_ACQUIRE)) {
++        return;
++    }
++
+     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_send);
+     if (msg == NULL) {
+         return;
+@@ -438,8 +443,9 @@ void rpc_call_send(int fd, const void *buf, size_t len, int flags)
+     msg->args[MSG_ARG_0].i = fd;
+     msg->args[MSG_ARG_1].size = len;
+     msg->args[MSG_ARG_2].i = flags;
+-
+     msg->self_release = 0;
++
++    stack->in_send = true;
+     rpc_call(&stack->rpc_queue, msg);
+ }
+ 
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 39d29d7..2a6aec7 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -50,7 +50,7 @@ struct protocol_stack {
+     struct reg_ring_msg *reg_buf;
+ 
+     volatile bool low_power;
+-    volatile uint16_t conn_num __rte_cache_aligned;
++    volatile bool in_send __rte_cache_aligned;
+     lockless_queue rpc_queue __rte_cache_aligned;
+     char pad __rte_cache_aligned;
+ 
+@@ -62,9 +62,10 @@ struct protocol_stack {
+     struct list_node recv_list;
+     struct list_node send_list;
+ 
++    volatile uint16_t conn_num;
+     struct stats_ *lwip_stats;
+     struct gazelle_stack_latency latency;
+-    struct gazelle_stack_stat stats __rte_cache_aligned;
++    struct gazelle_stack_stat stats;
+ };
+ 
+ struct eth_params;
+-- 
+2.23.0
+
