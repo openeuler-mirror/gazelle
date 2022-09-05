@@ -1,0 +1,25 @@
+From 6c88041590ef9f79e85a243fa905267898f3ab98 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Mon, 5 Sep 2022 16:54:55 +0800
+Subject: [PATCH] expand thread rpc msg pool size
+
+---
+ src/lstack/core/lstack_thread_rpc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index a6e9725..c9fc4e9 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -23,7 +23,7 @@
+ #include "lstack_dpdk.h"
+ #include "lstack_thread_rpc.h"
+ 
+-#define RPC_MSG_MAX            32
++#define RPC_MSG_MAX            512
+ #define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
+ struct rpc_msg_pool {
+     struct rpc_msg msgs[RPC_MSG_MAX];
+-- 
+2.23.0
+
