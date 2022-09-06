@@ -446,7 +446,7 @@ int32_t dpdk_ethdev_init(void)
         rss_setup(port_id, nb_queues);
     }
 
-    return ERR_OK;
+    return 0;
 }
 
 static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, const struct protocol_stack *stack)
