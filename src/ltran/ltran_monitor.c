@@ -188,6 +188,7 @@ static int32_t gazelle_ctl_init(void)
 
     ret = gazelle_ep_event_init(&event_dfx, GAZELLE_DFX_SERVER_FD, listenfd);
     if (ret != GAZELLE_OK) {
+        close(listenfd);
         return GAZELLE_ERR;
     }
 
@@ -207,6 +208,7 @@ static int32_t gazelle_ctl_init(void)
 
     ret = gazelle_ep_event_init(&event_reg, GAZELLE_REG_SERVER_FD, listenfd);
     if (ret != GAZELLE_OK) {
+        close(listenfd);
         sockfd_data_free(event_dfx.data.ptr);
         return GAZELLE_ERR;
     }
@@ -283,7 +285,6 @@ static void dfx_server_msg_proc(uint32_t events, struct sockfd_data *data)
     if (ret < 0) {
         LTRAN_ERR("epoll_ctl ERROR, errno: %d. ret=%d.\n", errno, ret);
         sockfd_data_free(event.data.ptr);
-        close(conn_fd);
         return;
     }
 }
@@ -421,6 +422,7 @@ static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
     event.events = EPOLLIN;
     if (event.data.ptr == NULL) {
         LTRAN_ERR("alloc sockfd_data ERROR\n");
+        close(conn_fd);
         return;
     }
 
