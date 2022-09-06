@@ -574,6 +574,7 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
 
     int32_t param_num = sizeof(g_param_parse_tbl) / sizeof(g_param_parse_tbl[0]);
     for (int32_t i = 0; i < param_num; i++) {
+        gazelle_set_errno(GAZELLE_SUCCESS);
         ret = g_param_parse_tbl[i].func(&config, g_param_parse_tbl[i].param_name, ltran_config);
         if (ret != GAZELLE_OK) {
             config_destroy(&config);
