@@ -713,6 +713,7 @@ void control_server_thread(void *arg)
 
     int32_t epfd = init_epoll(listenfd);
     if (epfd < 0) {
+        posix_api->close_fn(listenfd);
         LSTACK_LOG(ERR, LSTACK, "init_epoll failed\n");
         return;
     }
@@ -744,7 +745,9 @@ void control_server_thread(void *arg)
 
             evt_array.data.fd = connfd;
             evt_array.events = EPOLLIN;
-            posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_ADD, connfd, &evt_array);
+            if (posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_ADD, connfd, &evt_array) < 0) {
+                posix_api->close_fn(connfd);
+            }
         } else {
             if (handle_stat_request(evt_array.data.fd) < 0) {
                 posix_api->close_fn(evt_array.data.fd);
@@ -761,6 +764,7 @@ void control_client_thread(void *arg)
 
     epfd = init_epoll(sockfd);
     if (epfd < 0) {
+        posix_api->close_fn(sockfd);
         LSTACK_LOG(ERR, LSTACK, "control_thread fail\n");
         return;
     }
