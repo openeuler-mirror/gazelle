@@ -414,7 +414,7 @@ static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
     timeout.tv_sec = 60; /* 60: timeout 60S */
     ret = setsockopt(conn_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     if (ret != 0) {
-        LTRAN_ERR("setsockopt ERROR, errno: %d. ret=%d.\n", errno, ret);
+        LTRAN_WARN("setsockopt ERROR, errno: %d. ret=%d.\n", errno, ret);
     }
 
     struct epoll_event event = {0};
