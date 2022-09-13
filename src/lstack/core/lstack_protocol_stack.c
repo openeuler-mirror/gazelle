@@ -270,11 +270,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
 
     stack_group->stacks[queue_id] = stack;
 
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(stack->cpu_id, &cpuset);
-    if (rte_thread_set_affinity(&cpuset) != 0) {
-        LSTACK_LOG(ERR, LSTACK, "rte_thread_set_affinity failed\n");
+    if (thread_affinity_init(stack->cpu_id) != 0) {
         return -1;
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
@@ -300,6 +296,8 @@ static void* gazelle_kernel_event(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+
+    bind_to_stack_numa(stack);
 
     int32_t epoll_fd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
     if (epoll_fd < 0) {
@@ -382,8 +380,6 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
         free(stack);
         return NULL;
     }
-
-    thread_affinity_init(stack->cpu_id);
 
     hugepage_init();
 
