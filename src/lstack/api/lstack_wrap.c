@@ -185,7 +185,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     }
 
     int32_t ret = rpc_call_connect(s, name, namelen);
-    if (ret == 0) {
+    if (ret == 0 || errno == EISCONN) {
         return ret;
     }
 
