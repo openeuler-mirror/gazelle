@@ -208,6 +208,33 @@ static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
     return -1;
 }
 
+static bool have_corelist_arg(int32_t argc, char **argv)
+{
+	for (uint32_t i  = 0; i < argc; i++) {
+		if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
+			return true;
+		}
+
+		if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
+			return true;
+		}
+
+		if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
+			return true;
+		}
+
+		if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
+			return true;
+		}
+
+		if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static int32_t parse_stack_cpu_number(void)
 {
     const config_setting_t *num_cpus = NULL;
@@ -222,14 +249,15 @@ static int32_t parse_stack_cpu_number(void)
     if (args == NULL) {
         return -EINVAL;
     }
+    if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
+        int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
+        if (idx < 0) {
+            g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+            g_config_params.dpdk_argc++;
 
-    int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
-    if (idx < 0) {
-        g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
-        g_config_params.dpdk_argc++;
-
-        g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
-        g_config_params.dpdk_argc++;
+            g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+            g_config_params.dpdk_argc++;
+        }
     }
 
     char *tmp_arg = strdup(args);
