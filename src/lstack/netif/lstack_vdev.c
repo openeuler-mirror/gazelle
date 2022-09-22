@@ -99,11 +99,6 @@ static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkt
     return sent_pkts;
 }
 
-static inline uint32_t get_reg_ring_free_count(const struct rte_ring *reg_ring)
-{
-    return (reg_ring->capacity + reg_ring->cons.tail - reg_ring->cons.head);
-}
-
 int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
 {
     if (!use_ltran()) {
@@ -132,7 +127,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
     do {
         (void)gazelle_ring_sc_dequeue(stack->reg_ring, free_buf, VDEV_REG_QUEUE_SZ);
 
-        if (get_reg_ring_free_count(stack->reg_ring) == 0) {
+        if (gazelle_ring_free_count(stack->reg_ring) == 0) {
             continue;
         }
 
