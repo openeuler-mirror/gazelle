@@ -432,18 +432,25 @@ static __rte_always_inline void tcp_hash_table_add_conn(struct gazelle_stack *st
     struct gazelle_quintuple *transfer_qtuple, uint32_t tid)
 {
     struct gazelle_tcp_conn *tcp_conn = NULL;
+    struct gazelle_tcp_conn_htable *conn_htable = gazelle_get_tcp_conn_htable();
 
-    /* When lstack is the server, conn is created in tcp_handle func. lwip send the connect command after
-       receiving syn, and delete conn timeout. */
-    tcp_conn = gazelle_conn_get_by_quintuple(gazelle_get_tcp_conn_htable(), transfer_qtuple);
+    tcp_conn = gazelle_conn_get_by_quintuple(conn_htable, transfer_qtuple);
     if (tcp_conn) {
-        tcp_conn->conn_timeout = -1;
-        return;
+        /* When lstack is the server, conn is created in tcp_handle func. lwip send the connect command after
+	 * receiving syn, and delete conn timeout. */
+	if (tcp_conn->conn_timeout >= 0) {
+            tcp_conn->conn_timeout = -1;
+	    return;
+	} else {
+	    /* del old invaild conn */
+            gazelle_conn_del_by_quintuple(conn_htable, transfer_qtuple);
+	    printf("del old conn port=%d\n", ntohs(transfer_qtuple->dst_port));
+	}
     }
 
     /* When lstack is the client, lwip send the connect command while calling connect func. conn is created
        without a timeout */
-    tcp_conn = gazelle_conn_add_by_quintuple(gazelle_get_tcp_conn_htable(), transfer_qtuple);
+    tcp_conn = gazelle_conn_add_by_quintuple(conn_htable, transfer_qtuple);
     if (tcp_conn == NULL) {
         LTRAN_ERR("add tcp conn htable failed\n");
         return;
