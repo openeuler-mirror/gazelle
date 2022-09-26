@@ -526,7 +526,12 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
         if (ret < 0) {
             return buflen == 0 ? ret : buflen;
         }
+
         buflen += ret;
+
+        if (ret < message->msg_iov[i].iov_len) {
+            return buflen;
+        }
     }
 
     return buflen;
