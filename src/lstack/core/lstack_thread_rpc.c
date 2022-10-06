@@ -427,13 +427,13 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
-void rpc_call_send(int fd, const void *buf, size_t len, int flags)
+int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
 
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_send);
     if (msg == NULL) {
-        return;
+        return -1;
     }
 
     msg->args[MSG_ARG_0].i = fd;
@@ -442,6 +442,8 @@ void rpc_call_send(int fd, const void *buf, size_t len, int flags)
     msg->self_release = 0;
 
     rpc_call(&stack->rpc_queue, msg);
+
+    return 0;
 }
 
 int32_t rpc_call_sendmsg(int fd, const struct msghdr *msghdr, int flags)
