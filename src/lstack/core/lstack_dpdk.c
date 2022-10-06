@@ -53,6 +53,7 @@ struct eth_params {
     struct rte_eth_txconf tx_conf;
 };
 struct rte_kni;
+static rte_bus *g_pci_bus = NULL;
 
 int32_t thread_affinity_default(void)
 {
@@ -536,9 +537,16 @@ int32_t dpdk_init_lstack_kni(void)
 void dpdk_skip_nic_init(void)
 {
     /* when lstack init nic again, ltran can't read pkts from nic. unregister pci_bus to avoid init nic in lstack */
-    struct rte_bus *pci_bus = rte_bus_find_by_name("pci");
-    if (pci_bus != NULL) {
-        rte_bus_unregister(pci_bus);
+    g_pci_bus = rte_bus_find_by_name("pci");
+    if (g_pci_bus != NULL) {
+        rte_bus_unregister(g_pci_bus);
+    }
+}
+
+void dpdk_restore_pci(void)
+{
+    if (g_pci_bus != NULL) {
+        rte_bus_register(g_pci_bus);
     }
 }
 

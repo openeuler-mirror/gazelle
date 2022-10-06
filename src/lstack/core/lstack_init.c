@@ -251,6 +251,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
     /*
     * Init control plane and dpdk init */
     create_control_thread();
+    dpdk_restore_pci();
 
     /*
     * cancel the core binding from DPDK initialization */

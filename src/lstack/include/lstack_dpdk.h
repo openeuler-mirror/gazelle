@@ -50,5 +50,6 @@ int dpdk_ethdev_init(void);
 int dpdk_ethdev_start(void);
 void dpdk_skip_nic_init(void);
 int32_t dpdk_init_lstack_kni(void);
+void dpdk_restore_pci(void);
 
 #endif /* GAZELLE_DPDK_H */
