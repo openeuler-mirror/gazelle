@@ -53,7 +53,7 @@ struct eth_params {
     struct rte_eth_txconf tx_conf;
 };
 struct rte_kni;
-static rte_bus *g_pci_bus = NULL;
+static struct rte_bus *g_pci_bus = NULL;
 
 int32_t thread_affinity_default(void)
 {

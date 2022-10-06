@@ -77,6 +77,7 @@ static void reset_sock_data(struct lwip_sock *sock)
     sock->listen_next = NULL;
     sock->epoll_events = 0;
     sock->events = 0;
+    sock->in_send = 0;
 
     if (sock->recv_lastdata) {
         pbuf_free(sock->recv_lastdata);
@@ -328,6 +329,9 @@ void stack_send(struct rpc_msg *msg)
         return;
     }
 
+    __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+    rte_mb();
+
     if (!NETCONN_IS_DATAOUT(sock)) {
         return;
     }
@@ -338,6 +342,7 @@ void stack_send(struct rpc_msg *msg)
     if (NETCONN_IS_DATAOUT(sock)) {
         if (list_is_null(&sock->send_list)) {
             list_add_node(&stack->send_list, &sock->send_list);
+            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
         }
         stack->stats.send_self_rpc++;
     }
@@ -352,6 +357,9 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
     list_for_each_safe(node, temp, &stack->send_list) {
         sock = container_of(node, struct lwip_sock, send_list);
 
+        __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+        rte_mb();
+
         if (sock->conn == NULL || !NETCONN_IS_DATAOUT(sock)) {
             list_del_node_null(&sock->send_list);
             continue;
@@ -361,6 +369,8 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
 
         if (!NETCONN_IS_DATAOUT(sock)) {
             list_del_node_null(&sock->send_list);
+        } else {
+            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
         }
 
         if (++read_num >= send_max) {
@@ -507,7 +517,12 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
         return 0;
     }
 
-    rpc_call_send(fd, NULL, send, flags);
+    if (__atomic_load_n(&sock->in_send, __ATOMIC_ACQUIRE) == 0) {
+        __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+        if (rpc_call_send(fd, NULL, send, flags) != 0) {
+            __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+        }
+    }
     return send;
 }
 
