@@ -76,6 +76,7 @@ struct cfg_params {
     bool use_ltran; // ture:lstack read from nic false:read form ltran
     bool kni_switch;
     bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
+    bool app_bind_numa;
     int dpdk_argc;
     char **dpdk_argv;
     struct secondary_attach_arg sec_attach_arg;

@@ -343,7 +343,9 @@ static void epoll_bind_statck(struct wakeup_poll *wakeup)
     }
 
     if (wakeup->bind_stack != wakeup->max_stack && wakeup->max_stack) {
-        bind_to_stack_numa(wakeup->max_stack);
+        if (get_global_cfg_params()->app_bind_numa) {
+            bind_to_stack_numa(wakeup->max_stack);
+        }
         if (wakeup->bind_stack) {
             unregister_wakeup(wakeup->bind_stack, wakeup);
         }
@@ -461,7 +463,10 @@ static void poll_bind_statck(struct wakeup_poll *wakeup, int32_t *stack_count)
     if (wakeup->bind_stack) {
         unregister_wakeup(wakeup->bind_stack, wakeup);
     }
-    bind_to_stack_numa(stack_group->stacks[bind_id]);
+    
+    if (get_global_cfg_params()->app_bind_numa) {
+        bind_to_stack_numa(stack_group->stacks[bind_id]);
+    }
     wakeup->bind_stack = stack_group->stacks[bind_id];
     register_wakeup(wakeup->bind_stack, wakeup);
 }
