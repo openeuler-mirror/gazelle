@@ -1,0 +1,24 @@
+From b7fe5b572c7d09a0e5ce58d0102ff76777edc8c4 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 6 Sep 2022 19:16:00 +0800
+Subject: [PATCH 03/21] init g_gazelle_errno before use
+
+---
+ src/ltran/ltran_param.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/ltran/ltran_param.c b/src/ltran/ltran_param.c
+index 75cc2f9..fc45895 100644
+--- a/src/ltran/ltran_param.c
++++ b/src/ltran/ltran_param.c
+@@ -574,6 +574,7 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
+ 
+     int32_t param_num = sizeof(g_param_parse_tbl) / sizeof(g_param_parse_tbl[0]);
+     for (int32_t i = 0; i < param_num; i++) {
++        gazelle_set_errno(GAZELLE_SUCCESS);
+         ret = g_param_parse_tbl[i].func(&config, g_param_parse_tbl[i].param_name, ltran_config);
+         if (ret != GAZELLE_OK) {
+             config_destroy(&config);
+-- 
+2.23.0
+

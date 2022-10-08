@@ -1,0 +1,48 @@
+From 7a5a641ad5d56df224fd352b0a8366814bb819d2 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 13 Sep 2022 19:32:14 +0800
+Subject: [PATCH 06/21] fix gazelle kernel event thread affinity same with
+ stack thread
+
+---
+ src/lstack/core/lstack_protocol_stack.c | 10 +++-------
+ 1 file changed, 3 insertions(+), 7 deletions(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 3009286..1dc6c3f 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -270,11 +270,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+ 
+     stack_group->stacks[queue_id] = stack;
+ 
+-    cpu_set_t cpuset;
+-    CPU_ZERO(&cpuset);
+-    CPU_SET(stack->cpu_id, &cpuset);
+-    if (rte_thread_set_affinity(&cpuset) != 0) {
+-        LSTACK_LOG(ERR, LSTACK, "rte_thread_set_affinity failed\n");
++    if (thread_affinity_init(stack->cpu_id) != 0) {
+         return -1;
+     }
+     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
+@@ -301,6 +297,8 @@ static void* gazelle_kernel_event(void *arg)
+     uint16_t queue_id = *(uint16_t *)arg;
+     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+ 
++    bind_to_stack_numa(stack);
++
+     int32_t epoll_fd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
+     if (epoll_fd < 0) {
+         LSTACK_LOG(ERR, LSTACK, "queue_id=%hu epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
+@@ -383,8 +381,6 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+         return NULL;
+     }
+ 
+-    thread_affinity_init(stack->cpu_id);
+-
+     hugepage_init();
+ 
+     tcpip_init(NULL, NULL);
+-- 
+2.23.0
+

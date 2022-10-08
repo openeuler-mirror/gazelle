@@ -1,0 +1,69 @@
+From 4d12b47a714217615a04f2a084b9c4857167e258 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Thu, 6 Oct 2022 15:14:21 +0800
+Subject: [PATCH 12/21] lstack restore pci bus after init
+
+---
+ src/lstack/core/lstack_dpdk.c    | 14 +++++++++++---
+ src/lstack/core/lstack_init.c    |  1 +
+ src/lstack/include/lstack_dpdk.h |  1 +
+ 3 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 340ae94..10207d1 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -53,6 +53,7 @@ struct eth_params {
+     struct rte_eth_txconf tx_conf;
+ };
+ struct rte_kni;
++static rte_bus *g_pci_bus = NULL;
+ 
+ int32_t thread_affinity_default(void)
+ {
+@@ -536,9 +537,16 @@ int32_t dpdk_init_lstack_kni(void)
+ void dpdk_skip_nic_init(void)
+ {
+     /* when lstack init nic again, ltran can't read pkts from nic. unregister pci_bus to avoid init nic in lstack */
+-    struct rte_bus *pci_bus = rte_bus_find_by_name("pci");
+-    if (pci_bus != NULL) {
+-        rte_bus_unregister(pci_bus);
++    g_pci_bus = rte_bus_find_by_name("pci");
++    if (g_pci_bus != NULL) {
++        rte_bus_unregister(g_pci_bus);
++    }
++}
++
++void dpdk_restore_pci(void)
++{
++    if (g_pci_bus != NULL) {
++        rte_bus_register(g_pci_bus);
+     }
+ }
+ 
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index 9fafda9..b1c69e6 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -251,6 +251,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
+     /*
+     * Init control plane and dpdk init */
+     create_control_thread();
++    dpdk_restore_pci();
+ 
+     /*
+     * cancel the core binding from DPDK initialization */
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index f0bf4a1..e224f23 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -50,5 +50,6 @@ int dpdk_ethdev_init(void);
+ int dpdk_ethdev_start(void);
+ void dpdk_skip_nic_init(void);
+ int32_t dpdk_init_lstack_kni(void);
++void dpdk_restore_pci(void);
+ 
+ #endif /* GAZELLE_DPDK_H */
+-- 
+2.23.0
+
