@@ -27,6 +27,7 @@ void gazelle_init_sock(int32_t fd);
 int32_t gazelle_socket(int domain, int type, int protocol);
 void gazelle_clean_sock(int32_t fd);
 struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags);
+void write_lwip_over(struct lwip_sock *sock, uint32_t n);
 ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
 ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
 ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);

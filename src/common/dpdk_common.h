@@ -177,6 +177,31 @@ static __rte_always_inline uint32_t gazelle_ring_sc_dequeue(struct rte_ring *r, 
     return n;
 }
 
+/* get ring obj dont dequeue */
+static __rte_always_inline uint32_t gazelle_ring_sc_peek(struct rte_ring *r, void **obj_table, uint32_t n)
+{
+    uint32_t prod = __atomic_load_n(&r->prod.tail, __ATOMIC_ACQUIRE);
+    uint32_t cons = r->cons.tail;
+
+    uint32_t entries = prod - cons;
+    if (n > entries) {
+        n = entries;
+    }
+    if (unlikely(n == 0)) {
+        return 0;
+    }
+
+
+    __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
+
+    return n;
+}
+
+static __rte_always_inline void gazelle_ring_dequeue_over(struct rte_ring *r, uint32_t n)
+{
+    r->cons.tail += n;
+}
+
 static __rte_always_inline uint32_t gazelle_ring_read(struct rte_ring *r, void **obj_table, uint32_t n)
 {
     uint32_t cons = __atomic_load_n(&r->cons.head, __ATOMIC_ACQUIRE);
