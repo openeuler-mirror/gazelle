@@ -42,13 +42,19 @@ enum KERNEL_LWIP_PATH {
     PATH_UNKNOW,
 };
 
+bool select_thread_path(void);
+
 static enum KERNEL_LWIP_PATH select_path(int fd)
 {
-    if (posix_api == NULL) {
+    if (unlikely(posix_api == NULL)) {
         /* posix api maybe call before gazelle init */
         if (posix_api_init() != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
         }
+        return PATH_KERNEL;
+    }
+
+    if (!select_thread_path()) {
         return PATH_KERNEL;
     }
 
@@ -93,7 +99,7 @@ static inline int32_t do_epoll_create(int32_t size)
 
 static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
 {
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -102,7 +108,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
@@ -369,7 +375,7 @@ static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (unlikely(posix_api->ues_posix) || nfds == 0) {
+    if (unlikely(posix_api->ues_posix) || nfds == 0 || !select_thread_path()) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 
