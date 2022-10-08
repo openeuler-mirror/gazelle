@@ -192,7 +192,6 @@ static int32_t parse_devices(void)
 
 static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
 {
-    int32_t ret;
     int32_t idx;
 
     if ((argc <= 0) || (argv == NULL) || (param == NULL)) {
@@ -200,8 +199,7 @@ static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
     }
 
     for (idx = 0; idx < argc; ++idx) {
-        ret = strncmp(argv[idx], param, strlen(param));
-        if (ret == 0) {
+        if (strncmp(argv[idx], param, strlen(param)) == 0) {
             return idx;
         }
     }
@@ -249,6 +247,7 @@ static int32_t parse_stack_cpu_number(void)
     if (args == NULL) {
         return -EINVAL;
     }
+
     if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
         int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
         if (idx < 0) {
@@ -465,12 +464,15 @@ static int32_t turn_args_to_config(int32_t argc, char **argv)
     // OPT_SOCKET_MEM
     idx = get_param_idx(argc, argv, OPT_SOCKET_MEM);
     if ((idx < 0) || (idx + 1 >= argc)) {
-        LSTACK_LOG(ERR, LSTACK, "Cannot find param %s\n", OPT_SOCKET_MEM);
-        return idx;
-    }
-    ret = gazelle_parse_socket_mem(argv[idx + 1], &g_config_params.sec_attach_arg);
-    if (ret < 0) {
-        return ret;
+        if (use_ltran()) {
+            LSTACK_LOG(ERR, LSTACK, "Cannot find param %s\n", OPT_SOCKET_MEM);
+            return idx;
+        }
+    } else {
+        ret = gazelle_parse_socket_mem(argv[idx + 1], &g_config_params.sec_attach_arg);
+        if (ret < 0) {
+            return ret;
+        }
     }
 
     // OPT_BASE_VIRTADDR
