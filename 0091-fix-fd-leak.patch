@@ -1,0 +1,80 @@
+From 0e4e3a3357d5a2ffff06bf9a32bba95e207e8ff0 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 6 Sep 2022 16:23:58 +0800
+Subject: [PATCH 01/21] fix fd leak
+
+---
+ src/lstack/core/lstack_control_plane.c | 6 +++++-
+ src/ltran/ltran_monitor.c              | 4 +++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index 8012fa6..7f62254 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -713,6 +713,7 @@ void control_server_thread(void *arg)
+ 
+     int32_t epfd = init_epoll(listenfd);
+     if (epfd < 0) {
++        posix_api->close_fn(listenfd);
+         LSTACK_LOG(ERR, LSTACK, "init_epoll failed\n");
+         return;
+     }
+@@ -744,7 +745,9 @@ void control_server_thread(void *arg)
+ 
+             evt_array.data.fd = connfd;
+             evt_array.events = EPOLLIN;
+-            posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_ADD, connfd, &evt_array);
++            if (posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_ADD, connfd, &evt_array) < 0) {
++                posix_api->close_fn(connfd);
++            }
+         } else {
+             if (handle_stat_request(evt_array.data.fd) < 0) {
+                 posix_api->close_fn(evt_array.data.fd);
+@@ -761,6 +764,7 @@ void control_client_thread(void *arg)
+ 
+     epfd = init_epoll(sockfd);
+     if (epfd < 0) {
++        posix_api->close_fn(sockfd);
+         LSTACK_LOG(ERR, LSTACK, "control_thread fail\n");
+         return;
+     }
+diff --git a/src/ltran/ltran_monitor.c b/src/ltran/ltran_monitor.c
+index dfda93f..7da65ea 100644
+--- a/src/ltran/ltran_monitor.c
++++ b/src/ltran/ltran_monitor.c
+@@ -188,6 +188,7 @@ static int32_t gazelle_ctl_init(void)
+ 
+     ret = gazelle_ep_event_init(&event_dfx, GAZELLE_DFX_SERVER_FD, listenfd);
+     if (ret != GAZELLE_OK) {
++        close(listenfd);
+         return GAZELLE_ERR;
+     }
+ 
+@@ -207,6 +208,7 @@ static int32_t gazelle_ctl_init(void)
+ 
+     ret = gazelle_ep_event_init(&event_reg, GAZELLE_REG_SERVER_FD, listenfd);
+     if (ret != GAZELLE_OK) {
++        close(listenfd);
+         sockfd_data_free(event_dfx.data.ptr);
+         return GAZELLE_ERR;
+     }
+@@ -283,7 +285,6 @@ static void dfx_server_msg_proc(uint32_t events, struct sockfd_data *data)
+     if (ret < 0) {
+         LTRAN_ERR("epoll_ctl ERROR, errno: %d. ret=%d.\n", errno, ret);
+         sockfd_data_free(event.data.ptr);
+-        close(conn_fd);
+         return;
+     }
+ }
+@@ -421,6 +422,7 @@ static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
+     event.events = EPOLLIN;
+     if (event.data.ptr == NULL) {
+         LTRAN_ERR("alloc sockfd_data ERROR\n");
++        close(conn_fd);
+         return;
+     }
+ 
+-- 
+2.23.0
+
