@@ -50,6 +50,8 @@ struct protocol_stack {
     struct reg_ring_msg *reg_buf;
 
     volatile bool low_power;
+    struct wakeup_poll *wakeup_list;
+    pthread_spinlock_t wakeup_list_lock;
     lockless_queue rpc_queue __rte_cache_aligned;
     char pad __rte_cache_aligned;
 
@@ -84,8 +86,6 @@ struct protocol_stack_group {
     /* dfx stats */
     bool latency_start;
     uint64_t call_alloc_fail;
-    pthread_spinlock_t wakeup_list_lock;
-    struct wakeup_poll *wakeup_list __rte_cache_aligned;
 };
 
 long get_stack_tid(void);
