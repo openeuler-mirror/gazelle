@@ -236,7 +236,8 @@ int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf)
 
     msg->self_release = 0;
     msg->args[MSG_ARG_0].p = mbuf;
-    lockless_queue_mpsc_push(&stack->rpc_queue, &msg->queue_node);
+
+    rpc_call(&stack->rpc_queue, msg);
 
     return 0;
 }
@@ -446,32 +447,3 @@ int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
     return 0;
 }
 
-int32_t rpc_call_sendmsg(int fd, const struct msghdr *msghdr, int flags)
-{
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
-    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_sendmsg);
-    if (msg == NULL) {
-        return -1;
-    }
-
-    msg->args[MSG_ARG_0].i = fd;
-    msg->args[MSG_ARG_1].cp = msghdr;
-    msg->args[MSG_ARG_2].i = flags;
-
-    return rpc_sync_call(&stack->rpc_queue, msg);
-}
-
-int32_t rpc_call_recvmsg(int fd, struct msghdr *msghdr, int flags)
-{
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
-    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_recvmsg);
-    if (msg == NULL) {
-        return -1;
-    }
-
-    msg->args[MSG_ARG_0].i = fd;
-    msg->args[MSG_ARG_1].p = msghdr;
-    msg->args[MSG_ARG_2].i = flags;
-
-    return rpc_sync_call(&stack->rpc_queue, msg);
-}

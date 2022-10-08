@@ -67,8 +67,6 @@ int32_t rpc_call_listen(int s, int backlog);
 int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t rpc_call_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags);
-int32_t rpc_call_sendmsg(int fd, const struct msghdr *msg, int flags);
-int32_t rpc_call_recvmsg(int fd, struct msghdr *msg, int flags);
 int32_t rpc_call_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t rpc_call_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t rpc_call_getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen);

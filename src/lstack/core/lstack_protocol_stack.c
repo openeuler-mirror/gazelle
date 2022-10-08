@@ -608,22 +608,6 @@ void stack_recv(struct rpc_msg *msg)
         msg->args[MSG_ARG_3].i);
 }
 
-void stack_sendmsg(struct rpc_msg *msg)
-{
-    msg->result = lwip_sendmsg(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].i);
-    if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
-    }
-}
-
-void stack_recvmsg(struct rpc_msg *msg)
-{
-    msg->result = lwip_recvmsg(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].i);
-    if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
-    }
-}
-
 /* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
 void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack)
 {

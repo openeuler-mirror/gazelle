@@ -259,6 +259,22 @@ static inline void del_data_out_event(struct lwip_sock *sock)
     pthread_spin_unlock(&sock->wakeup->event_list_lock);
 }
 
+void write_stack_over(struct lwip_sock *sock)
+{
+    if (sock->send_lastdata) {
+        sock->send_lastdata->tot_len = sock->send_lastdata->len = sock->send_datalen;
+        sock->send_lastdata = NULL;
+    }
+
+    gazelle_ring_read_over(sock->send_ring);
+
+    if (sock->wakeup) {
+        if (sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLOUT)) {
+            del_data_out_event(sock);
+        }
+    }
+}
+
 ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 {
     if (sock->errevent > 0) {
@@ -272,31 +288,37 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 
     struct pbuf *pbuf = NULL;
     ssize_t send_len = 0;
-    size_t copy_len;
     uint32_t send_pkt = 0;
 
     while (send_len < len && send_pkt < free_count) {
-        if (gazelle_ring_read(sock->send_ring, (void **)&pbuf, 1) != 1) {
-            if (sock->wakeup) {
-                sock->wakeup->stat.app_write_idlefail++;
+        if (sock->send_lastdata) {
+            pbuf = sock->send_lastdata;
+        } else {
+            if (gazelle_ring_read(sock->send_ring, (void **)&pbuf, 1) != 1) {
+                if (sock->wakeup) {
+                    sock->wakeup->stat.app_write_idlefail++;
+                }
+                break;
             }
-            break;
+            sock->send_lastdata = pbuf;
+            sock->send_datalen = 0;
         }
 
-        copy_len = (len - send_len > pbuf->len) ? pbuf->len : (len - send_len);
-        pbuf_take(pbuf, (char *)buf + send_len, copy_len);
-        pbuf->tot_len = pbuf->len = copy_len;
+        uint16_t remian_len = pbuf->len - sock->send_datalen;
+        uint16_t copy_len = (len - send_len > remian_len) ? remian_len : (len - send_len);
+        pbuf_take_at(pbuf, (char *)buf + send_len, copy_len, sock->send_datalen);
+        sock->send_datalen += copy_len;
+        if (sock->send_datalen >= pbuf->len) {
+            sock->send_lastdata = NULL;
+            pbuf->tot_len = pbuf->len = sock->send_datalen;
+            send_pkt++;
+        }
 
         send_len += copy_len;
-        send_pkt++;
     }
-    gazelle_ring_read_over(sock->send_ring);
 
     if (sock->wakeup) {
         sock->wakeup->stat.app_write_cnt += send_pkt;
-        if (sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLOUT)) {
-            del_data_out_event(sock);
-        }
     }
 
     return send_len;
@@ -500,6 +522,16 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
     return buflen;
 }
 
+static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
+{
+    if (__atomic_load_n(&sock->in_send, __ATOMIC_ACQUIRE) == 0) {
+        __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+        if (rpc_call_send(fd, NULL, len, flags) != 0) {
+            __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+        }
+    }
+}
+
 ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
 {
     if (buf == NULL) {
@@ -516,18 +548,12 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
     }
 
     ssize_t send = write_stack_data(sock, buf, len);
-    if (send < 0) {
-        GAZELLE_RETURN(EAGAIN);
-    } else if (send == 0) {
-        return 0;
+    if (send <= 0) {
+        return send;
     }
+    write_stack_over(sock);
 
-    if (__atomic_load_n(&sock->in_send, __ATOMIC_ACQUIRE) == 0) {
-        __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
-        if (rpc_call_send(fd, NULL, send, flags) != 0) {
-            __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
-        }
-    }
+    notice_stack_send(sock, fd, send, flags);
     return send;
 }
 
@@ -537,23 +563,37 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
     int32_t i;
     ssize_t buflen = 0;
 
+    struct lwip_sock *sock = get_socket(s);
+    if (sock == NULL) {
+        GAZELLE_RETURN(EINVAL);
+    }
+
     if (check_msg_vaild(message)) {
         GAZELLE_RETURN(EINVAL);
     }
 
     for (i = 0; i < message->msg_iovlen; i++) {
-        ret = gazelle_send(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
+        if (message->msg_iov[i].iov_len == 0) {
+            continue;
+        }
+
+        ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
         if (ret < 0) {
-            return buflen == 0 ? ret : buflen;
+            buflen = (buflen == 0) ? ret : buflen;
+            break;
         }
 
         buflen += ret;
 
         if (ret < message->msg_iov[i].iov_len) {
-            return buflen;
+           break;
         }
     }
 
+    if (buflen > 0) {
+        write_stack_over(sock);
+        notice_stack_send(sock, s, buflen, flags);
+    }
     return buflen;
 }
 
