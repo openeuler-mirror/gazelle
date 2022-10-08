@@ -134,13 +134,11 @@ static void get_wakeup_stat(struct protocol_stack *stack, struct gazelle_wakeup_
 
     struct wakeup_poll *node = stack->wakeup_list;
     while (node) {
-        if (node->bind_stack == stack) {
-            stat->app_events += node->stat.app_events;
-            stat->read_null += node->stat.read_null;
-            stat->app_write_cnt += node->stat.app_write_cnt;
-            stat->app_write_idlefail += node->stat.app_write_idlefail;
-            stat->app_read_cnt += node->stat.app_read_cnt;
-        }
+        stat->app_events += node->stat.app_events;
+        stat->read_null += node->stat.read_null;
+        stat->app_write_cnt += node->stat.app_write_cnt;
+        stat->app_write_idlefail += node->stat.app_write_idlefail;
+        stat->app_read_cnt += node->stat.app_read_cnt;
 
         node = node->next;
     }

@@ -359,7 +359,7 @@ void stack_send(struct rpc_msg *msg)
     __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
     rte_mb();
 
-    if (!NETCONN_IS_DATAOUT(sock)) {
+    if (!NETCONN_IS_DATAOUT(sock) || sock->errevent > 0) {
         return;
     }
 
@@ -387,7 +387,7 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
         __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
         rte_mb();
 
-        if (sock->conn == NULL || !NETCONN_IS_DATAOUT(sock)) {
+        if (sock->conn == NULL || sock->errevent > 0 || !NETCONN_IS_DATAOUT(sock)) {
             list_del_node_null(&sock->send_list);
             continue;
         }
@@ -578,7 +578,7 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
         }
 
         ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
-        if (ret < 0) {
+        if (ret <= 0) {
             buflen = (buflen == 0) ? ret : buflen;
             break;
         }
@@ -741,6 +741,8 @@ void gazelle_connected_callback(struct netconn *conn)
     if (sock == NULL || sock->conn == NULL) {
         return;
     }
+
+    posix_api->shutdown_fn(fd, SHUT_RDWR);
 
     SET_CONN_TYPE_LIBOS(conn);
 
