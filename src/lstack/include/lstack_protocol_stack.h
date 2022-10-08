@@ -124,8 +124,6 @@ void stack_listen(struct rpc_msg *msg);
 void stack_accept(struct rpc_msg *msg);
 void stack_connect(struct rpc_msg *msg);
 void stack_recv(struct rpc_msg *msg);
-void stack_sendmsg(struct rpc_msg *msg);
-void stack_recvmsg(struct rpc_msg *msg);
 void stack_getpeername(struct rpc_msg *msg);
 void stack_getsockname(struct rpc_msg *msg);
 void stack_getsockopt(struct rpc_msg *msg);
