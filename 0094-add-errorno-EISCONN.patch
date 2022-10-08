@@ -1,0 +1,25 @@
+From 39cbe5776adb427d0e7d9a9bec58302a08202145 Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Wed, 21 Sep 2022 14:31:15 +0000
+Subject: [PATCH 10/21] add errorno EISCONN
+
+---
+ src/lstack/api/lstack_wrap.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index e402ce1..296906e 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -185,7 +185,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
+     }
+ 
+     int32_t ret = rpc_call_connect(s, name, namelen);
+-    if (ret == 0) {
++    if (ret == 0 || errno == EISCONN) {
+         return ret;
+     }
+ 
+-- 
+2.23.0
+
