@@ -229,13 +229,18 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
 {
     struct pbuf *pbuf = NULL;
 
-    if (gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbuf, 1) != 1) {
+    if (gazelle_ring_sc_peek(sock->send_ring, (void **)&pbuf, 1) != 1) {
         *apiflags &= ~TCP_WRITE_FLAG_MORE;
         return NULL;
     }
 
     sock->stack->stats.write_lwip_cnt++;
     return pbuf;
+}
+
+void write_lwip_over(struct lwip_sock *sock, uint32_t n)
+{
+    gazelle_ring_dequeue_over(sock->send_ring, n);
 }
 
 static inline void del_data_out_event(struct lwip_sock *sock)
