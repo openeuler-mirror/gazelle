@@ -1,0 +1,37 @@
+From b2cb29c59dcfbeb2652d57e5f6484c5e1239dd94 Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Wed, 21 Sep 2022 11:56:18 +0000
+Subject: [PATCH 09/21] remove get_reg_ring_free_count
+
+---
+ src/lstack/netif/lstack_vdev.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index 31c1843..f9fa5a3 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -99,11 +99,6 @@ static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkt
+     return sent_pkts;
+ }
+ 
+-static inline uint32_t get_reg_ring_free_count(const struct rte_ring *reg_ring)
+-{
+-    return (reg_ring->capacity + reg_ring->cons.tail - reg_ring->cons.head);
+-}
+-
+ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+ {
+     if (!use_ltran()) {
+@@ -132,7 +127,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+     do {
+         (void)gazelle_ring_sc_dequeue(stack->reg_ring, free_buf, VDEV_REG_QUEUE_SZ);
+ 
+-        if (get_reg_ring_free_count(stack->reg_ring) == 0) {
++        if (gazelle_ring_free_count(stack->reg_ring) == 0) {
+             continue;
+         }
+ 
+-- 
+2.23.0
+

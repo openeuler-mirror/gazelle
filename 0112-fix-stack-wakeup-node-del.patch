@@ -1,0 +1,79 @@
+From ef98d32ed9dbde08412c8d4587bfeb7a6e75ec7c Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sun, 9 Oct 2022 20:21:40 +0800
+Subject: [PATCH] fix stack wakeup node del
+
+---
+ src/lstack/api/lstack_epoll.c           | 4 ++--
+ src/lstack/core/lstack_lwip.c           | 2 +-
+ src/lstack/core/lstack_protocol_stack.c | 6 ++++++
+ src/lstack/core/lstack_stack_stat.c     | 1 +
+ 4 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 6ac245c..dcd58e7 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -164,8 +164,8 @@ int32_t lstack_epoll_close(int32_t fd)
+     }
+ 
+     if (sock->wakeup) {
+-        if (sock->stack) {
+-            unregister_wakeup(sock->stack, sock->wakeup);
++        if (sock->wakeup->bind_stack) {
++            unregister_wakeup(sock->wakeup->bind_stack, sock->wakeup);
+         }
+         posix_api->close_fn(sock->wakeup->eventfd);
+         pthread_spin_destroy(&sock->wakeup->event_list_lock);
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 8c1df26..4fbaed1 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -486,7 +486,7 @@ static int32_t check_msg_vaild(const struct msghdr *message)
+     }
+ 
+     for (int32_t i = 0; i < message->msg_iovlen; i++) {
+-        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
++        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len < 0) ||
+             ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
+             ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
+             GAZELLE_RETURN(EINVAL);
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index fbeca62..8283a41 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -355,6 +355,10 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+ 
+ static void wakeup_stack_wait(struct protocol_stack *stack)
+ {
++    if (pthread_spin_trylock(&stack->wakeup_list_lock)) {
++        return;
++    }
++
+     struct wakeup_poll *node = stack->wakeup_list;
+     while (node) {
+         if (node->have_event) {
+@@ -363,6 +367,8 @@ static void wakeup_stack_wait(struct protocol_stack *stack)
+         }
+         node = node->next;
+     }
++
++    pthread_spin_unlock(&stack->wakeup_list_lock);
+ }
+ 
+ static void* gazelle_stack_thread(void *arg)
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index b32f082..c011aed 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -124,6 +124,7 @@ void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup)
+     } else {
+         stack->wakeup_list = node->next;
+     }
++    node->next = NULL;
+ 
+     pthread_spin_unlock(&stack->wakeup_list_lock);
+ }
+-- 
+2.23.0
+
