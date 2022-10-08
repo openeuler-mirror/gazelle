@@ -309,7 +309,7 @@ static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
     if (len == 0) {
         /* FIXME: should use POLLRDHUP, when connection be closed. lwip event-callback no POLLRDHUP */
         sock->errevent = 1;
-        add_epoll_event(sock->conn, EPOLLERR);
+        add_sock_event(sock, EPOLLERR);
     }
 
     if (gazelle_ring_readable_count(sock->send_ring) < SOCK_SEND_REPLENISH_THRES) {
@@ -317,7 +317,7 @@ static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
     }
 
     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
-        add_epoll_event(sock->conn, EPOLLOUT);
+        add_sock_event(sock, EPOLLOUT);
     }
 }
 
@@ -678,9 +678,9 @@ void read_recv_list(struct protocol_stack *stack, uint32_t max_num)
         if (len == 0) {
             /* FIXME: should use POLLRDHUP, when connection be closed. lwip event-callback no POLLRDHUP */
             sock->errevent = 1;
-            add_epoll_event(sock->conn, EPOLLERR);
+            add_sock_event(sock, EPOLLERR);
         } else if (len > 0) {
-            add_epoll_event(sock->conn, EPOLLIN);
+            add_sock_event(sock, EPOLLIN);
         }
 
         /* last_node:recv only once per sock. max_num avoid cost too much time this loop  */
@@ -688,6 +688,23 @@ void read_recv_list(struct protocol_stack *stack, uint32_t max_num)
             break;
         }
     }
+}
+
+void gazelle_connected_callback(struct netconn *conn)
+{
+    if (conn == NULL) {
+        return;
+    }
+
+    int32_t fd = conn->socket;
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+    if (sock == NULL || sock->conn == NULL) {
+        return;
+    }
+
+    SET_CONN_TYPE_LIBOS(conn);
+
+    add_sock_event(sock, EPOLLOUT);
 }
 
 static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const struct tcp_pcb *pcb)
@@ -711,10 +728,6 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
             conn->recv_ring_cnt += (sock->recv_lastdata) ? 1 : 0;
 
             conn->send_ring_cnt = gazelle_ring_readover_count(sock->send_ring);
-
-            if (sock->wakeup) {
-                sem_getvalue(&sock->wakeup->event_sem, &conn->sem_cnt);
-            }
         }
     }
 }

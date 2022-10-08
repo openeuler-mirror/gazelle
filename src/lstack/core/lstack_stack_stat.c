@@ -92,25 +92,21 @@ static void set_latency_start_flag(bool start)
     }
 }
 
-void register_wakeup(struct wakeup_poll *wakeup)
+void register_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    pthread_spin_lock(&stack->wakeup_list_lock);
 
-    pthread_spin_lock(&stack_group->wakeup_list_lock);
+    wakeup->next = stack->wakeup_list;
+    stack->wakeup_list = wakeup;
 
-    wakeup->next = stack_group->wakeup_list;
-    stack_group->wakeup_list = wakeup;
-
-    pthread_spin_unlock(&stack_group->wakeup_list_lock);
+    pthread_spin_unlock(&stack->wakeup_list_lock);
 }
 
-void unregister_wakeup(struct wakeup_poll *wakeup)
+void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    pthread_spin_lock(&stack->wakeup_list_lock);
 
-    pthread_spin_lock(&stack_group->wakeup_list_lock);
-
-    struct wakeup_poll *node = stack_group->wakeup_list;
+    struct wakeup_poll *node = stack->wakeup_list;
     struct wakeup_poll *pre = NULL;
 
     while (node && node != wakeup) {
@@ -119,26 +115,24 @@ void unregister_wakeup(struct wakeup_poll *wakeup)
     }
 
     if (node == NULL) {
-        pthread_spin_unlock(&stack_group->wakeup_list_lock);
+        pthread_spin_unlock(&stack->wakeup_list_lock);
         return;
     }
 
     if (pre) {
         pre->next = node->next;
     } else {
-        stack_group->wakeup_list = node->next;
+        stack->wakeup_list = node->next;
     }
 
-    pthread_spin_unlock(&stack_group->wakeup_list_lock);
+    pthread_spin_unlock(&stack->wakeup_list_lock);
 }
 
 static void get_wakeup_stat(struct protocol_stack *stack, struct gazelle_wakeup_stat *stat)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    pthread_spin_lock(&stack->wakeup_list_lock);
 
-    pthread_spin_lock(&stack_group->wakeup_list_lock);
-
-    struct wakeup_poll *node = stack_group->wakeup_list;
+    struct wakeup_poll *node = stack->wakeup_list;
     while (node) {
         if (node->bind_stack == stack) {
             stat->app_events += node->stat.app_events;
@@ -151,7 +145,7 @@ static void get_wakeup_stat(struct protocol_stack *stack, struct gazelle_wakeup_
         node = node->next;
     }
 
-    pthread_spin_unlock(&stack_group->wakeup_list_lock);
+    pthread_spin_unlock(&stack->wakeup_list_lock);
 }
 
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info)

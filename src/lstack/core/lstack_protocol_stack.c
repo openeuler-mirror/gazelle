@@ -262,6 +262,8 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     stack->cpu_id = get_global_cfg_params()->cpus[queue_id];
     stack->lwip_stats = &lwip_stats;
 
+    pthread_spin_init(&stack->wakeup_list_lock, PTHREAD_PROCESS_PRIVATE);
+
     init_list_node(&stack->recv_list);
     init_list_node(&stack->send_list);
 
@@ -290,70 +292,6 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     }
 
     return 0;
-}
-
-static void* gazelle_kernel_event(void *arg)
-{
-    uint16_t queue_id = *(uint16_t *)arg;
-    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
-
-    bind_to_stack_numa(stack);
-
-    int32_t epoll_fd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
-    if (epoll_fd < 0) {
-        LSTACK_LOG(ERR, LSTACK, "queue_id=%hu epoll_fd=%d errno=%d\n", queue_id, epoll_fd, errno);
-        /* exit in main thread, avoid create mempool and exit at the same time */
-        set_init_fail();
-        stack->epollfd = -1;
-        return NULL;
-    }
-
-    stack->epollfd = epoll_fd;
-
-    LSTACK_LOG(INFO, LSTACK, "kernel_event_%02hu start\n", queue_id);
-
-    struct epoll_event events[KERNEL_EPOLL_MAX];
-    for (;;) {
-        int32_t event_num = posix_api->epoll_wait_fn(epoll_fd, events, KERNEL_EPOLL_MAX, -1);
-        if (event_num <= 0) {
-            continue;
-        }
-
-        for (int32_t i = 0; i < event_num; i++) {
-            struct wakeup_poll *wakeup = events[i].data.ptr;
-            if (wakeup) {
-                __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
-                sem_post(&wakeup->event_sem);
-            }
-        }
-    }
-
-    return NULL;
-}
-
-static int32_t create_companion_thread(struct protocol_stack_group *stack_group, struct protocol_stack *stack)
-{
-    int32_t ret;
-
-    ret = create_thread(stack->queue_id, "gazellekernel", gazelle_kernel_event);
-    if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "gazellekernelEvent ret=%d errno=%d\n", ret, errno);
-        return ret;
-    }
-
-    /* wait gazelle_kernel_event finish use stack.avoid use stack after free when create gazelle_weakup_thread fail */
-    while (stack->epollfd == 0) {
-        usleep(1);
-    }
-
-    if (stack_group->wakeup_enable) {
-        ret = create_thread(stack->queue_id, "gazelleweakup", gazelle_wakeup_thread);
-        if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "gazelleweakup ret=%d errno=%d\n", ret, errno);
-        }
-    }
-
-    return ret;
 }
 
 void wait_sem_value(sem_t *sem, int32_t wait_value)
@@ -404,12 +342,27 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
         return NULL;
     }
 
-    if (create_companion_thread(stack_group, stack) != 0) {
-        free(stack);
-        return NULL;
+    if (stack_group->wakeup_enable) {
+        if (create_thread(stack->queue_id, "gazelleweakup", gazelle_wakeup_thread) != 0) {
+            LSTACK_LOG(ERR, LSTACK, "gazelleweakup errno=%d\n", errno);
+            free(stack);
+            return NULL;
+        }
     }
 
     return stack;
+}
+
+static void wakeup_stack_wait(struct protocol_stack *stack)
+{
+    struct wakeup_poll *node = stack->wakeup_list;
+    while (node) {
+        if (node->have_event) {
+            wakeup_epoll(stack, node);
+            node->have_event = false;
+        }
+        node = node->next;
+    }
 }
 
 static void* gazelle_stack_thread(void *arg)
@@ -437,6 +390,8 @@ static void* gazelle_stack_thread(void *arg)
 
         send_stack_list(stack, SEND_LIST_MAX);
 
+        wakeup_stack_wait(stack);
+
         sys_timer_run();
 
         if (get_global_cfg_params()->low_power_mod != 0) {
@@ -451,8 +406,6 @@ static int32_t init_protocol_sem(void)
 {
     int32_t ret;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-
-    pthread_spin_init(&stack_group->wakeup_list_lock, PTHREAD_PROCESS_PRIVATE);
 
     if (!use_ltran()) {
         ret = sem_init(&stack_group->ethdev_init, 0, 0);
@@ -484,7 +437,6 @@ int32_t init_protocol_stack(void)
 
     stack_group->stack_num = get_global_cfg_params()->num_cpu;
     stack_group->wakeup_enable = (get_global_cfg_params()->num_wakeup > 0) ? true : false;
-    stack_group->wakeup_list = NULL;
 
     if (init_protocol_sem() != 0) {
         return -1;
