@@ -137,7 +137,7 @@ int32_t lstack_epoll_create(int32_t size)
     event.data.fd = wakeup->eventfd;
     event.events = EPOLLIN | EPOLLET;
     if (posix_api->epoll_ctl_fn(fd, EPOLL_CTL_ADD, wakeup->eventfd, &event) < 0) {
-        LSTACK_LOG(ERR, LSTACK, "eventfd errno=%d\n", errno);
+        LSTACK_LOG(ERR, LSTACK, "ctl eventfd errno=%d\n", errno);
         posix_api->close_fn(fd);
         free(wakeup);
         GAZELLE_RETURN(EINVAL);
@@ -403,10 +403,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
     }
 
     if (del_event_fd(&events[lwip_num], kernel_num, wakeup->eventfd)) {
-        if (lwip_num == 0) {
-            lwip_num = epoll_lwip_event(wakeup, events, maxevents);
-        }
         kernel_num--;
+        if (lwip_num == 0) {
+            lwip_num = epoll_lwip_event(wakeup, &events[kernel_num], maxevents - kernel_num);
+        }
     }
 
     return lwip_num + kernel_num;
