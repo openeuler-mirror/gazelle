@@ -55,6 +55,7 @@ static int32_t parse_dpdk_args(void);
 static int32_t parse_gateway_addr(void);
 static int32_t parse_kni_switch(void);
 static int32_t parse_listen_shadow(void);
+static int32_t parse_app_bind_numa(void);
 
 struct config_vector_t {
     const char *name;
@@ -71,8 +72,9 @@ static struct config_vector_t g_config_tbl[] = {
     { "num_cpus",     parse_stack_cpu_number },
     { "num_wakeup",   parse_wakeup_cpu_number },
     { "low_power_mode", parse_low_power_mode },
-    { "kni_switch",   parse_kni_switch },
+    { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
+    { "app_bind_numa",  parse_app_bind_numa },
     { NULL,           NULL }
 };
 
@@ -706,6 +708,22 @@ static int32_t parse_listen_shadow(void)
 
     int32_t val = config_setting_get_int(arg);
     g_config_params.listen_shadow = (val == 0) ? false : true;
+
+    return 0;
+}
+
+static int32_t parse_app_bind_numa(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "app_bind_numa");
+    if (arg == NULL) {
+        g_config_params.app_bind_numa = true;
+        return 0;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    g_config_params.app_bind_numa = (val == 0) ? false : true;
 
     return 0;
 }
