@@ -27,6 +27,7 @@
 #include <rte_bus.h>
 #include <rte_errno.h>
 #include <rte_kni.h>
+#include <rte_thash.h>
 #include <lwip/posix_api.h>
 #include <lwipopts.h>
 #include <lwip/pbuf.h>
@@ -54,6 +55,15 @@ struct eth_params {
 };
 struct rte_kni;
 static struct rte_bus *g_pci_bus = NULL;
+
+#define RSS_HASH_KEY_LEN    40
+static uint8_t g_default_rss_key[] = {
+    0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
+    0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
+    0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
+    0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
+    0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa,
+};
 
 int32_t thread_affinity_default(void)
 {
@@ -327,8 +337,8 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
     int rss_enable = 0;
     uint64_t def_rss_hf = ETH_RSS_TCP | ETH_RSS_IP;
     struct rte_eth_rss_conf rss_conf = {
-        NULL,
-        40,
+        g_default_rss_key,
+        RSS_HASH_KEY_LEN,
         def_rss_hf,
     };
 
@@ -445,7 +455,9 @@ int32_t dpdk_ethdev_init(void)
 
     if (rss_enable) {
         rss_setup(port_id, nb_queues);
+        stack_group->reta_mask = dev_info.reta_size - 1;
     }
+    stack_group->nb_queues = nb_queues;
 
     return 0;
 }
@@ -571,3 +583,25 @@ int32_t init_dpdk_ethdev(void)
     sem_post(&stack_group->ethdev_init);
     return 0;
 }
+
+bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    if (stack_group->reta_mask == 0 || stack_group->nb_queues <= 1) {
+        return true;
+    }
+
+    struct rte_ipv4_tuple tuple = {0};
+    tuple.src_addr = rte_be_to_cpu_32(src_ip);
+    tuple.dst_addr = rte_be_to_cpu_32(dst_ip);
+    tuple.sport = src_port;
+    tuple.dport = dst_port;
+
+    uint32_t hash = rte_softrss((uint32_t *)&tuple, RTE_THASH_V4_L4_LEN, g_default_rss_key);
+
+    uint32_t reta_index = hash & stack_group->reta_mask;
+
+    struct protocol_stack *stack = get_protocol_stack();
+    return (reta_index % stack_group->nb_queues) == stack->queue_id;
+}
+
