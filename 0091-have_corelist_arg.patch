@@ -1,0 +1,77 @@
+From 37f9a2c0f60cb2757a0f1f64ad140ccbdc120501 Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Wed, 21 Sep 2022 07:57:35 +0000
+Subject: [PATCH 07/21] =?UTF-8?q?=E6=96=B0=E5=A2=9E=20have=5Fcorelist=5Far?=
+ =?UTF-8?q?g?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ src/lstack/core/lstack_cfg.c | 42 ++++++++++++++++++++++++++++++------
+ 1 file changed, 35 insertions(+), 7 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 5cd326b..b6a517b 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -208,6 +208,33 @@ static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
+     return -1;
+ }
+ 
++static bool have_corelist_arg(int32_t argc, char **argv)
++{
++	for (uint32_t i  = 0; i < argc; i++) {
++		if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
++			return true;
++		}
++
++		if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
++			return true;
++		}
++
++		if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
++			return true;
++		}
++
++		if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
++			return true;
++		}
++
++		if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
++			return true;
++		}
++	}
++
++	return false;
++}
++
+ static int32_t parse_stack_cpu_number(void)
+ {
+     const config_setting_t *num_cpus = NULL;
+@@ -222,14 +249,15 @@ static int32_t parse_stack_cpu_number(void)
+     if (args == NULL) {
+         return -EINVAL;
+     }
++    if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
++        int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
++        if (idx < 0) {
++            g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
++            g_config_params.dpdk_argc++;
+ 
+-    int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
+-    if (idx < 0) {
+-        g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+-        g_config_params.dpdk_argc++;
+-
+-        g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+-        g_config_params.dpdk_argc++;
++            g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
++            g_config_params.dpdk_argc++;
++        }
+     }
+ 
+     char *tmp_arg = strdup(args);
+-- 
+2.23.0
+
