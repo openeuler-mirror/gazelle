@@ -15,6 +15,7 @@
 
 #include <lwip/hlist.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <lwip/reg_sock.h>
 
 #include "gazelle_opt.h"
