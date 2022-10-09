@@ -62,6 +62,7 @@ struct protocol_stack {
 
     struct list_node recv_list;
     struct list_node send_list;
+    bool have_event;
 
     volatile uint16_t conn_num;
     struct stats_ *lwip_stats;
