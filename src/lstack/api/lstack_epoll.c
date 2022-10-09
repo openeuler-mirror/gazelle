@@ -164,8 +164,8 @@ int32_t lstack_epoll_close(int32_t fd)
     }
 
     if (sock->wakeup) {
-        if (sock->stack) {
-            unregister_wakeup(sock->stack, sock->wakeup);
+        if (sock->wakeup->bind_stack) {
+            unregister_wakeup(sock->wakeup->bind_stack, sock->wakeup);
         }
         posix_api->close_fn(sock->wakeup->eventfd);
         pthread_spin_destroy(&sock->wakeup->event_list_lock);

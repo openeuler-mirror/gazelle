@@ -355,6 +355,10 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
 
 static void wakeup_stack_wait(struct protocol_stack *stack)
 {
+    if (pthread_spin_trylock(&stack->wakeup_list_lock)) {
+        return;
+    }
+
     struct wakeup_poll *node = stack->wakeup_list;
     while (node) {
         if (node->have_event) {
@@ -363,6 +367,8 @@ static void wakeup_stack_wait(struct protocol_stack *stack)
         }
         node = node->next;
     }
+
+    pthread_spin_unlock(&stack->wakeup_list_lock);
 }
 
 static void* gazelle_stack_thread(void *arg)

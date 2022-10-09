@@ -486,7 +486,7 @@ static int32_t check_msg_vaild(const struct msghdr *message)
     }
 
     for (int32_t i = 0; i < message->msg_iovlen; i++) {
-        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len <= 0) ||
+        if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len < 0) ||
             ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
             ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
             GAZELLE_RETURN(EINVAL);
