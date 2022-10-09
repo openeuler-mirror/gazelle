@@ -50,6 +50,7 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
     }
 
     wakeup->have_event = true;
+    sock->stack->have_event = true;
 
     if (wakeup->type == WAKEUP_POLL) {
         return;
