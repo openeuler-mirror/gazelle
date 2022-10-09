@@ -124,6 +124,7 @@ void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup)
     } else {
         stack->wakeup_list = node->next;
     }
+    node->next = NULL;
 
     pthread_spin_unlock(&stack->wakeup_list_lock);
 }
