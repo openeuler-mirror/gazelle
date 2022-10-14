@@ -642,12 +642,8 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (sock->errevent > 0) {
+    if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
         return 0;
-    }
-
-    if (!NETCONN_IS_DATAIN(sock)) {
-        GAZELLE_RETURN(EAGAIN);
     }
 
     while (recv_left > 0) {
