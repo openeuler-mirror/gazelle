@@ -531,7 +531,7 @@ void stack_accept(struct rpc_msg *msg)
     int32_t fd = msg->args[MSG_ARG_0].i;
     msg->result = -1;
 
-    int32_t accept_fd = lwip_accept(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
+    int32_t accept_fd = lwip_accept4(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p, msg->args[MSG_ARG_3].i);
     if (accept_fd < 0) {
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
@@ -749,7 +749,7 @@ static void inline del_accept_in_event(struct lwip_sock *sock)
 }
 
 /* ergodic the protocol stack thread to find the connection, because all threads are listening */
-int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
+int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
 {
     int32_t ret = -1;
 
@@ -761,7 +761,7 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
 
     struct lwip_sock *min_sock = get_min_accept_sock(fd);
     if (min_sock && min_sock->conn) {
-        ret = rpc_call_accept(min_sock->conn->socket, addr, addrlen);
+        ret = rpc_call_accept(min_sock->conn->socket, addr, addrlen, flags);
     }
 
     if (min_sock && min_sock->wakeup && min_sock->wakeup->type == WAKEUP_EPOLL) {
@@ -772,4 +772,9 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
         errno = EAGAIN;
     }
     return ret;
+}
+
+int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
+{
+    return stack_broadcast_accept4(fd, addr, addrlen, 0);
 }

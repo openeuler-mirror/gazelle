@@ -790,7 +790,12 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
 
 int32_t gazelle_socket(int domain, int type, int protocol)
 {
-    int32_t fd = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    if (((type & SOCK_TYPE_MASK) & ~SOCK_STREAM) != 0){
+        LSTACK_LOG(ERR, LSTACK, "sock type error:%d, only support SOCK_STREAM \n", type);
+        return -1;
+    }
+
+    int32_t fd = lwip_socket(AF_INET, type, 0);
     if (fd < 0) {
         return fd;
     }

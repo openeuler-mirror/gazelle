@@ -115,6 +115,7 @@ int32_t stack_single_listen(int32_t fd, int32_t backlog);
 
 /* ergodic the protocol stack thread to find the connection, because all threads are listening */
 int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen);
+int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *addrlen, int32_t flags);
 
 struct rpc_msg;
 void stack_arp(struct rpc_msg *msg);

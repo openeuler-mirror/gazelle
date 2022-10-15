@@ -105,9 +105,8 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
     }
 }
 
-int32_t lstack_epoll_create(int32_t size)
+int32_t lstack_do_epoll_create(int32_t fd)
 {
-    int32_t fd = posix_api->epoll_create_fn(size);
     if (fd < 0) {
         return fd;
     }
@@ -152,6 +151,18 @@ int32_t lstack_epoll_create(int32_t size)
     sock->wakeup = wakeup;
 
     return fd;
+}
+
+int32_t lstack_epoll_create1(int32_t flags)
+{
+    int32_t fd = posix_api->epoll_create1_fn(flags);
+    return lstack_do_epoll_create(fd);
+}
+
+int32_t lstack_epoll_create(int32_t flags)
+{
+    int32_t fd = posix_api->epoll_create_fn(flags);
+    return lstack_do_epoll_create(fd);
 }
 
 int32_t lstack_epoll_close(int32_t fd)
