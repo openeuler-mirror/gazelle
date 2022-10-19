@@ -65,6 +65,7 @@ struct lwip_sock;
 void add_sock_event(struct lwip_sock *sock, uint32_t event);
 void wakeup_epoll(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 int32_t lstack_epoll_create(int32_t size);
+int32_t lstack_epoll_create1(int32_t flags);
 int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event *event);
 int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event *events, int32_t maxevents, int32_t timeout);
 int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout);

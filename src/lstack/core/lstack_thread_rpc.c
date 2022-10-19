@@ -299,7 +299,7 @@ int32_t rpc_call_listen(int s, int backlog)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
-int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
+int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_accept);
@@ -310,6 +310,7 @@ int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].p = addr;
     msg->args[MSG_ARG_2].p = addrlen;
+    msg->args[MSG_ARG_3].i = flags;
 
     return rpc_sync_call(&stack->rpc_queue, msg);
 }

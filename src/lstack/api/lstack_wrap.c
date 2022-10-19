@@ -80,6 +80,23 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
     return PATH_UNKNOW;
 }
 
+static inline int32_t do_epoll_create1(int32_t flags)
+{
+    if (posix_api == NULL) {
+        /* posix api maybe call before gazelle init */
+        if (posix_api_init() != 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+        }
+        return posix_api->epoll_create1_fn(flags);
+    }
+
+    if (unlikely(posix_api->ues_posix)) {
+        return posix_api->epoll_create1_fn(flags);
+    }
+
+    return lstack_epoll_create1(flags);
+}
+
 static inline int32_t do_epoll_create(int32_t size)
 {
     if (posix_api == NULL) {
@@ -147,11 +164,7 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
         return posix_api->accept4_fn(s, addr, addrlen, flags);
     }
 
-    if ((flags & SOCK_CLOEXEC) == 0) {
-        return 0;
-    }
-
-    int32_t fd = stack_broadcast_accept(s, addr, addrlen);
+    int32_t fd = stack_broadcast_accept(s, addr, addrlen, flags);
     if (fd >= 0) {
         return fd;
     }
@@ -432,6 +445,10 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
  *  -------  LD_PRELOAD mode replacement interface  --------
  *  --------------------------------------------------------
  */
+int32_t epoll_create1(int32_t flags)
+{
+    return do_epoll_create1(flags);
+}
 int32_t epoll_create(int32_t size)
 {
     return do_epoll_create(size);
@@ -550,6 +567,10 @@ pid_t fork(void)
  *  --------------------------------------------------------
  */
 
+int32_t __wrap_epoll_create1(int32_t size)
+{
+    return do_epoll_create1(size);
+}
 int32_t __wrap_epoll_create(int32_t size)
 {
     return do_epoll_create(size);
