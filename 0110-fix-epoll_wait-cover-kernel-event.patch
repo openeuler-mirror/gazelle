@@ -1,0 +1,130 @@
+From 05fe4efd5ff233edcf39a3abc1c4ef048f8173b6 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 8 Oct 2022 21:50:19 +0800
+Subject: [PATCH 21/21] fix epoll_wait cover kernel event
+
+---
+ src/lstack/api/lstack_epoll.c       |  6 +++---
+ src/lstack/core/lstack_lwip.c       |  8 +++++---
+ src/lstack/core/lstack_stack_stat.c | 12 +++++-------
+ src/ltran/ltran_forward.c           | 13 ++++++-------
+ 4 files changed, 19 insertions(+), 20 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index bd3396a..6ac245c 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -137,7 +137,7 @@ int32_t lstack_epoll_create(int32_t size)
+     event.data.fd = wakeup->eventfd;
+     event.events = EPOLLIN | EPOLLET;
+     if (posix_api->epoll_ctl_fn(fd, EPOLL_CTL_ADD, wakeup->eventfd, &event) < 0) {
+-        LSTACK_LOG(ERR, LSTACK, "eventfd errno=%d\n", errno);
++        LSTACK_LOG(ERR, LSTACK, "ctl eventfd errno=%d\n", errno);
+         posix_api->close_fn(fd);
+         free(wakeup);
+         GAZELLE_RETURN(EINVAL);
+@@ -403,10 +403,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
+     }
+ 
+     if (del_event_fd(&events[lwip_num], kernel_num, wakeup->eventfd)) {
++        kernel_num--;
+         if (lwip_num == 0) {
+-            lwip_num = epoll_lwip_event(wakeup, events, maxevents);
++            lwip_num = epoll_lwip_event(wakeup, &events[kernel_num], maxevents - kernel_num);
+         }
+-        kernel_num--;
+     }
+ 
+     return lwip_num + kernel_num;
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index f4128d7..60e30d9 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -359,7 +359,7 @@ void stack_send(struct rpc_msg *msg)
+     __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+     rte_mb();
+ 
+-    if (!NETCONN_IS_DATAOUT(sock)) {
++    if (!NETCONN_IS_DATAOUT(sock) || sock->errevent > 0) {
+         return;
+     }
+ 
+@@ -387,7 +387,7 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
+         __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+         rte_mb();
+ 
+-        if (sock->conn == NULL || !NETCONN_IS_DATAOUT(sock)) {
++        if (sock->conn == NULL || sock->errevent > 0 || !NETCONN_IS_DATAOUT(sock)) {
+             list_del_node_null(&sock->send_list);
+             continue;
+         }
+@@ -578,7 +578,7 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+         }
+ 
+         ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
+-        if (ret < 0) {
++        if (ret <= 0) {
+             buflen = (buflen == 0) ? ret : buflen;
+             break;
+         }
+@@ -742,6 +742,8 @@ void gazelle_connected_callback(struct netconn *conn)
+         return;
+     }
+ 
++    posix_api->shutdown_fn(fd, SHUT_RDWR);
++
+     SET_CONN_TYPE_LIBOS(conn);
+ 
+     add_sock_event(sock, EPOLLOUT);
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index 245bcd7..b32f082 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -134,13 +134,11 @@ static void get_wakeup_stat(struct protocol_stack *stack, struct gazelle_wakeup_
+ 
+     struct wakeup_poll *node = stack->wakeup_list;
+     while (node) {
+-        if (node->bind_stack == stack) {
+-            stat->app_events += node->stat.app_events;
+-            stat->read_null += node->stat.read_null;
+-            stat->app_write_cnt += node->stat.app_write_cnt;
+-            stat->app_write_idlefail += node->stat.app_write_idlefail;
+-            stat->app_read_cnt += node->stat.app_read_cnt;
+-        }
++        stat->app_events += node->stat.app_events;
++        stat->read_null += node->stat.read_null;
++        stat->app_write_cnt += node->stat.app_write_cnt;
++        stat->app_write_idlefail += node->stat.app_write_idlefail;
++        stat->app_read_cnt += node->stat.app_read_cnt;
+ 
+         node = node->next;
+     }
+diff --git a/src/ltran/ltran_forward.c b/src/ltran/ltran_forward.c
+index 9ca04aa..b73c983 100644
+--- a/src/ltran/ltran_forward.c
++++ b/src/ltran/ltran_forward.c
+@@ -437,15 +437,14 @@ static __rte_always_inline void tcp_hash_table_add_conn(struct gazelle_stack *st
+     tcp_conn = gazelle_conn_get_by_quintuple(conn_htable, transfer_qtuple);
+     if (tcp_conn) {
+         /* When lstack is the server, conn is created in tcp_handle func. lwip send the connect command after
+-	 * receiving syn, and delete conn timeout. */
+-	if (tcp_conn->conn_timeout >= 0) {
++	     * receiving syn, and delete conn timeout. */
++	    if (tcp_conn->conn_timeout >= 0) {
+             tcp_conn->conn_timeout = -1;
+-	    return;
+-	} else {
+-	    /* del old invaild conn */
++            return;
++	    } else {
++	        /* del old invaild conn */
+             gazelle_conn_del_by_quintuple(conn_htable, transfer_qtuple);
+-	    printf("del old conn port=%d\n", ntohs(transfer_qtuple->dst_port));
+-	}
++	    }
+     }
+ 
+     /* When lstack is the client, lwip send the connect command while calling connect func. conn is created
+-- 
+2.23.0
+

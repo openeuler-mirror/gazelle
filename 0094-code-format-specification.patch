@@ -1,0 +1,39 @@
+From c414e36e78b616b9d8a34317b2fd473c3c3ab000 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 6 Sep 2022 20:18:34 +0800
+Subject: [PATCH 04/21] code format specification
+
+---
+ src/lstack/core/lstack_dpdk.c | 2 +-
+ src/ltran/ltran_monitor.c     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 366655c..340ae94 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -446,7 +446,7 @@ int32_t dpdk_ethdev_init(void)
+         rss_setup(port_id, nb_queues);
+     }
+ 
+-    return ERR_OK;
++    return 0;
+ }
+ 
+ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, const struct protocol_stack *stack)
+diff --git a/src/ltran/ltran_monitor.c b/src/ltran/ltran_monitor.c
+index 7da65ea..d535726 100644
+--- a/src/ltran/ltran_monitor.c
++++ b/src/ltran/ltran_monitor.c
+@@ -414,7 +414,7 @@ static void reg_server_msg_proc(uint32_t events, struct sockfd_data *data)
+     timeout.tv_sec = 60; /* 60: timeout 60S */
+     ret = setsockopt(conn_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+     if (ret != 0) {
+-        LTRAN_ERR("setsockopt ERROR, errno: %d. ret=%d.\n", errno, ret);
++        LTRAN_WARN("setsockopt ERROR, errno: %d. ret=%d.\n", errno, ret);
+     }
+ 
+     struct epoll_event event = {0};
+-- 
+2.23.0
+
