@@ -875,8 +875,8 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
                     tcp_state_to_str(conn_info->tcp_sub_state));
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
-                printf("%-6utcp    %-57u%s:%hu   0.0.0.0:*          LISTEN\n", i, conn_info->recv_cnt,
-                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
+                printf("%-6utcp    %-50u%-7d%s:%hu   0.0.0.0:*          LISTEN\n", i, conn_info->recv_cnt,
+                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
             } else {
                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port, conn_info->state);

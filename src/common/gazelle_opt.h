@@ -24,6 +24,7 @@
 #define GAZELLE_FALSE    0
 
 #define PROTOCOL_STACK_MAX          32
+#define KERNEL_EPOLL_MAX            512
 
 #define ETHER_ADDR_LEN              6
 

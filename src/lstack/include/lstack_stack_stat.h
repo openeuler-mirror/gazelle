@@ -27,7 +27,6 @@ void stack_stat_init(void);
 int32_t handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode);
 uint64_t get_current_time(void);
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info);
-void register_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 
 #endif /* GAZELLE_STACK_STAT_H */

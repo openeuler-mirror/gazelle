@@ -164,7 +164,7 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
         return posix_api->accept4_fn(s, addr, addrlen, flags);
     }
 
-    int32_t fd = stack_broadcast_accept(s, addr, addrlen, flags);
+    int32_t fd = stack_broadcast_accept4(s, addr, addrlen, flags);
     if (fd >= 0) {
         return fd;
     }
@@ -201,6 +201,15 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
 
     if (select_path(s) == PATH_KERNEL) {
         return posix_api->connect_fn(s, name, namelen);
+    }
+
+    struct lwip_sock *sock = get_socket(s);
+    if (sock == NULL) {
+        return posix_api->connect_fn(s, name, namelen);
+    }
+
+    if (!netconn_is_nonblocking(sock->conn)) {
+        GAZELLE_RETURN(EINVAL);
     }
 
     int32_t ret = rpc_call_connect(s, name, namelen);

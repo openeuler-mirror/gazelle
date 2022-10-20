@@ -234,13 +234,13 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
         return NULL;
     }
 
-    sock->stack->stats.write_lwip_cnt++;
     return pbuf;
 }
 
 void write_lwip_over(struct lwip_sock *sock, uint32_t n)
 {
     gazelle_ring_dequeue_over(sock->send_ring, n);
+    sock->stack->stats.write_lwip_cnt += n;
 }
 
 static inline void del_data_out_event(struct lwip_sock *sock)
@@ -269,6 +269,7 @@ void write_stack_over(struct lwip_sock *sock)
     gazelle_ring_read_over(sock->send_ring);
 
     if (sock->wakeup) {
+        sock->wakeup->stat.app_write_cnt++;
         if (sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLOUT)) {
             del_data_out_event(sock);
         }
@@ -882,6 +883,7 @@ void get_lwip_conntable(struct rpc_msg *msg)
         conn[conn_num].l_port = pcbl->local_port;
         conn[conn_num].tcp_sub_state = pcbl->state;
         struct netconn *netconn = (struct netconn *)pcbl->callback_arg;
+        conn[conn_num].fd = netconn->socket;
         if (netconn != NULL && netconn->acceptmbox != NULL) {
             conn[conn_num].recv_cnt = rte_ring_count(netconn->acceptmbox->ring);
         }
