@@ -1,0 +1,133 @@
+From d168ee1528444bbdf3e1fd8f6a566295531177a8 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Thu, 6 Oct 2022 15:35:02 +0800
+Subject: [PATCH 13/21] fix malloc rpc msg fail
+
+---
+ src/lstack/core/lstack_dpdk.c          |  2 +-
+ src/lstack/core/lstack_lwip.c          | 17 ++++++++++++++++-
+ src/lstack/core/lstack_thread_rpc.c    |  6 ++++--
+ src/lstack/include/lstack_thread_rpc.h |  2 +-
+ 4 files changed, 22 insertions(+), 5 deletions(-)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 10207d1..8d45838 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -53,7 +53,7 @@ struct eth_params {
+     struct rte_eth_txconf tx_conf;
+ };
+ struct rte_kni;
+-static rte_bus *g_pci_bus = NULL;
++static struct rte_bus *g_pci_bus = NULL;
+ 
+ int32_t thread_affinity_default(void)
+ {
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index d1e09ce..6f08a1c 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -77,6 +77,7 @@ static void reset_sock_data(struct lwip_sock *sock)
+     sock->listen_next = NULL;
+     sock->epoll_events = 0;
+     sock->events = 0;
++    sock->in_send = 0;
+ 
+     if (sock->recv_lastdata) {
+         pbuf_free(sock->recv_lastdata);
+@@ -328,6 +329,9 @@ void stack_send(struct rpc_msg *msg)
+         return;
+     }
+ 
++    __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
++    rte_mb();
++
+     if (!NETCONN_IS_DATAOUT(sock)) {
+         return;
+     }
+@@ -338,6 +342,7 @@ void stack_send(struct rpc_msg *msg)
+     if (NETCONN_IS_DATAOUT(sock)) {
+         if (list_is_null(&sock->send_list)) {
+             list_add_node(&stack->send_list, &sock->send_list);
++            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+         }
+         stack->stats.send_self_rpc++;
+     }
+@@ -352,6 +357,9 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
+     list_for_each_safe(node, temp, &stack->send_list) {
+         sock = container_of(node, struct lwip_sock, send_list);
+ 
++        __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
++        rte_mb();
++
+         if (sock->conn == NULL || !NETCONN_IS_DATAOUT(sock)) {
+             list_del_node_null(&sock->send_list);
+             continue;
+@@ -361,6 +369,8 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
+ 
+         if (!NETCONN_IS_DATAOUT(sock)) {
+             list_del_node_null(&sock->send_list);
++        } else {
++            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+         }
+ 
+         if (++read_num >= send_max) {
+@@ -507,7 +517,12 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
+         return 0;
+     }
+ 
+-    rpc_call_send(fd, NULL, send, flags);
++    if (__atomic_load_n(&sock->in_send, __ATOMIC_ACQUIRE) == 0) {
++        __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
++        if (rpc_call_send(fd, NULL, send, flags) != 0) {
++            __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
++        }
++    }
+     return send;
+ }
+ 
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index c9fc4e9..d1f7580 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -427,13 +427,13 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
+     return rpc_sync_call(&stack->rpc_queue, msg);
+ }
+ 
+-void rpc_call_send(int fd, const void *buf, size_t len, int flags)
++int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
+ {
+     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
+ 
+     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_send);
+     if (msg == NULL) {
+-        return;
++        return -1;
+     }
+ 
+     msg->args[MSG_ARG_0].i = fd;
+@@ -442,6 +442,8 @@ void rpc_call_send(int fd, const void *buf, size_t len, int flags)
+     msg->self_release = 0;
+ 
+     rpc_call(&stack->rpc_queue, msg);
++
++    return 0;
+ }
+ 
+ int32_t rpc_call_sendmsg(int fd, const struct msghdr *msghdr, int flags)
+diff --git a/src/lstack/include/lstack_thread_rpc.h b/src/lstack/include/lstack_thread_rpc.h
+index 3732167..e1223de 100644
+--- a/src/lstack/include/lstack_thread_rpc.h
++++ b/src/lstack/include/lstack_thread_rpc.h
+@@ -66,7 +66,7 @@ int32_t rpc_call_bind(int32_t fd, const struct sockaddr *addr, socklen_t addrlen
+ int32_t rpc_call_listen(int s, int backlog);
+ int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
+ int32_t rpc_call_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
+-void rpc_call_send(int fd, const void *buf, size_t len, int flags);
++int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags);
+ int32_t rpc_call_sendmsg(int fd, const struct msghdr *msg, int flags);
+ int32_t rpc_call_recvmsg(int fd, struct msghdr *msg, int flags);
+ int32_t rpc_call_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
+-- 
+2.23.0
+

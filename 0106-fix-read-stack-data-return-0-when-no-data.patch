@@ -1,0 +1,45 @@
+From d039a4e91eb805ea688467e8e4643cbbcf81f35e Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sun, 9 Oct 2022 10:31:16 +0800
+Subject: [PATCH] fix read stack data return 0 when no data
+
+---
+ src/lstack/core/lstack_lwip.c | 6 +++++-
+ src/ltran/ltran_tcp_conn.h    | 1 +
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 60e30d9..8c1df26 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -642,10 +642,14 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+         GAZELLE_RETURN(EINVAL);
+     }
+ 
+-    if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
++    if (sock->errevent > 0) {
+         return 0;
+     }
+ 
++    if (!NETCONN_IS_DATAIN(sock)) {
++        GAZELLE_RETURN(EAGAIN);
++    }
++
+     while (recv_left > 0) {
+         if (sock->recv_lastdata) {
+             pbuf = sock->recv_lastdata;
+diff --git a/src/ltran/ltran_tcp_conn.h b/src/ltran/ltran_tcp_conn.h
+index 2b6e6ea..fa508bc 100644
+--- a/src/ltran/ltran_tcp_conn.h
++++ b/src/ltran/ltran_tcp_conn.h
+@@ -15,6 +15,7 @@
+ 
+ #include <lwip/hlist.h>
+ #include <stdint.h>
++#include <stdbool.h>
+ #include <lwip/reg_sock.h>
+ 
+ #include "gazelle_opt.h"
+-- 
+2.23.0
+

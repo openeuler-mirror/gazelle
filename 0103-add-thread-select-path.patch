@@ -1,0 +1,160 @@
+From b61caf98b117313d1c2d59c1954d494901adcb73 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 8 Oct 2022 20:39:48 +0800
+Subject: [PATCH 19/21] add thread select path
+
+---
+ src/lstack/api/lstack_wrap.c  | 14 ++++++---
+ src/lstack/core/lstack_init.c | 54 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 64 insertions(+), 4 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 296906e..d88513b 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -42,9 +42,11 @@ enum KERNEL_LWIP_PATH {
+     PATH_UNKNOW,
+ };
+ 
++bool select_thread_path(void);
++
+ static enum KERNEL_LWIP_PATH select_path(int fd)
+ {
+-    if (posix_api == NULL) {
++    if (unlikely(posix_api == NULL)) {
+         /* posix api maybe call before gazelle init */
+         if (posix_api_init() != 0) {
+             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+@@ -52,6 +54,10 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
+         return PATH_KERNEL;
+     }
+ 
++    if (!select_thread_path()) {
++        return PATH_KERNEL;
++    }
++
+     if (unlikely(posix_api->ues_posix)) {
+         return PATH_KERNEL;
+     }
+@@ -93,7 +99,7 @@ static inline int32_t do_epoll_create(int32_t size)
+ 
+ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
+ {
+-    if (unlikely(posix_api->ues_posix)) {
++    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
+         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
+     }
+ 
+@@ -102,7 +108,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct
+ 
+ static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
+ {
+-    if (unlikely(posix_api->ues_posix)) {
++    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
+         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
+     }
+ 
+@@ -369,7 +375,7 @@ static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+         GAZELLE_RETURN(EINVAL);
+     }
+ 
+-    if (unlikely(posix_api->ues_posix) || nfds == 0) {
++    if (unlikely(posix_api->ues_posix) || nfds == 0 || !select_thread_path()) {
+         return posix_api->poll_fn(fds, nfds, timeout);
+     }
+ 
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index b1c69e6..f647b8e 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -48,8 +48,10 @@
+ #define LSTACK_SO_NAME              "liblstack.so"
+ #define LSTACK_PRELOAD_NAME_LEN     PATH_MAX
+ #define LSTACK_PRELOAD_ENV_PROC     "GAZELLE_BIND_PROCNAME"
++#define LSTACK_ENV_THREAD           "GAZELLE_THREAD_NAME"
+ 
+ static volatile bool g_init_fail = false;
++static PER_THREAD int32_t g_thread_path = -1;
+ 
+ void set_init_fail(void)
+ {
+@@ -64,14 +66,34 @@ bool get_init_fail(void)
+ struct lstack_preload {
+     int32_t preload_switch;
+     char env_procname[LSTACK_PRELOAD_NAME_LEN];
++    bool get_thread_name;
++    char env_threadname[LSTACK_PRELOAD_NAME_LEN];
+ };
+ static struct lstack_preload g_preload_info = {0};
+ 
++static void get_select_thread_name(void)
++{
++    g_preload_info.get_thread_name = true;
++
++    char *enval = NULL;
++    enval = getenv(LSTACK_ENV_THREAD);
++    if (enval == NULL) {
++        return;
++    }
++    if (strcpy_s(g_preload_info.env_threadname, LSTACK_PRELOAD_NAME_LEN, enval) != EOK) {
++        return;
++    }
++
++    LSTACK_PRE_LOG(LSTACK_INFO, "thread name=%s ok\n", g_preload_info.env_threadname);
++}
++
+ static int32_t preload_info_init(void)
+ {
+     char *enval = NULL;
+ 
+     g_preload_info.preload_switch = 0;
++    
++    get_select_thread_name();
+ 
+     enval = getenv(LSTACK_PRELOAD_ENV_SYS);
+     if (enval == NULL) {
+@@ -91,9 +113,41 @@ static int32_t preload_info_init(void)
+     }
+ 
+     g_preload_info.preload_switch = 1;
++    LSTACK_PRE_LOG(LSTACK_INFO, "LD_PRELOAD ok\n");
+     return 0;
+ }
+ 
++bool select_thread_path(void)
++{
++    if (g_thread_path >= 0) {
++        return g_thread_path;
++    }
++
++    if (!g_preload_info.get_thread_name) {
++        get_select_thread_name();
++    }
++
++    /* not set GAZELLE_THREAD_NAME, select all thread */
++    if (g_preload_info.env_threadname[0] == '\0') {
++        g_thread_path = 1;
++        return true;
++    }
++
++    char thread_name[PATH_MAX] = {0};
++    if (pthread_getname_np(pthread_self(), thread_name, PATH_MAX) != 0) {
++        g_thread_path = 0;
++        return false;
++    }
++
++    if (strstr(thread_name, g_preload_info.env_threadname) == NULL) {
++        g_thread_path = 0;
++        return false;
++    }
++
++    g_thread_path = 1;
++    return true;
++}
++
+ static int32_t check_process_conflict(void)
+ {
+     int32_t ret;
+-- 
+2.23.0
+
