@@ -79,7 +79,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
     }
 }
 
-#define READ_PKTS_MAX   32
+#define READ_PKTS_MAX   128
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;

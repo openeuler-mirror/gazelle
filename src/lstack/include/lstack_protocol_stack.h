@@ -14,6 +14,7 @@
 #define __GAZELLE_PROTOCOL_STACK_H__
 
 #include <semaphore.h>
+#include <sys/epoll.h>
 
 #include <lwip/list.h>
 #include <lwip/netif.h>
@@ -50,10 +51,13 @@ struct protocol_stack {
     struct reg_ring_msg *reg_buf;
 
     volatile bool low_power;
-    struct wakeup_poll *wakeup_list;
-    pthread_spinlock_t wakeup_list_lock;
     lockless_queue rpc_queue __rte_cache_aligned;
     char pad __rte_cache_aligned;
+
+    /* kernel event thread read/write frequently */
+    struct epoll_event kernel_events[KERNEL_EPOLL_MAX];
+    int32_t kernel_event_num;
+    char pad1 __rte_cache_aligned;
 
     struct netif netif;
     struct eth_dev_ops *dev_ops;
@@ -62,7 +66,7 @@ struct protocol_stack {
 
     struct list_node recv_list;
     struct list_node send_list;
-    bool have_event;
+    struct list_node wakeup_list;
 
     volatile uint16_t conn_num;
     struct stats_ *lwip_stats;
@@ -85,6 +89,8 @@ struct protocol_stack_group {
     struct eth_params *eth_params;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
     bool wakeup_enable;
+    struct list_node  poll_list;
+    pthread_spinlock_t poll_list_lock;
 
     /* dfx stats */
     bool latency_start;
@@ -117,7 +123,11 @@ int32_t stack_single_listen(int32_t fd, int32_t backlog);
 int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *addrlen, int32_t flags);
 
+struct wakeup_poll;
+void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup);
+
 struct rpc_msg;
+void stack_clean_epoll(struct rpc_msg *msg);
 void stack_arp(struct rpc_msg *msg);
 void stack_socket(struct rpc_msg *msg);
 void stack_close(struct rpc_msg *msg);

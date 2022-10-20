@@ -88,7 +88,6 @@ static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *m
 
 static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
 {
-    pthread_spin_trylock(&msg->lock);
     lockless_queue_mpsc_push(queue, &msg->queue_node);
 }
 
@@ -96,6 +95,7 @@ static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queu
 {
     int32_t ret;
 
+    pthread_spin_trylock(&msg->lock);
     rpc_call(queue, msg);
 
     // waiting stack unlock
@@ -268,6 +268,18 @@ int32_t rpc_call_close(int fd)
     msg->args[MSG_ARG_0].i = fd;
 
     return rpc_sync_call(&stack->rpc_queue, msg);
+}
+
+void rpc_call_clean_epoll(struct protocol_stack *stack, struct wakeup_poll *wakeup)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_clean_epoll);
+    if (msg == NULL) {
+        return;
+    }
+
+    msg->args[MSG_ARG_0].p = wakeup;
+
+    rpc_sync_call(&stack->rpc_queue, msg);
 }
 
 int32_t rpc_call_bind(int32_t fd, const struct sockaddr *addr, socklen_t addrlen)
@@ -447,4 +459,3 @@ int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
 
     return 0;
 }
-

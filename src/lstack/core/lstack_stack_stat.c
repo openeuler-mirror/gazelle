@@ -92,59 +92,26 @@ static void set_latency_start_flag(bool start)
     }
 }
 
-void register_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup)
+static void get_wakeup_stat(struct protocol_stack_group *stack_group, struct protocol_stack *stack,
+    struct gazelle_wakeup_stat *stat)
 {
-    pthread_spin_lock(&stack->wakeup_list_lock);
+    struct list_node *node, *temp;
 
-    wakeup->next = stack->wakeup_list;
-    stack->wakeup_list = wakeup;
+    pthread_spin_lock(&stack_group->poll_list_lock);
 
-    pthread_spin_unlock(&stack->wakeup_list_lock);
-}
+    list_for_each_safe(node, temp, &stack_group->poll_list) {
+        struct wakeup_poll *wakeup = container_of(node, struct wakeup_poll, poll_list);
 
-void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup)
-{
-    pthread_spin_lock(&stack->wakeup_list_lock);
-
-    struct wakeup_poll *node = stack->wakeup_list;
-    struct wakeup_poll *pre = NULL;
-
-    while (node && node != wakeup) {
-        pre = node;
-        node = node->next;
+        if (wakeup->bind_stack == stack) {
+            stat->app_events += wakeup->stat.app_events;
+            stat->read_null += wakeup->stat.read_null;
+            stat->app_write_cnt += wakeup->stat.app_write_cnt;
+            stat->app_write_idlefail += wakeup->stat.app_write_idlefail;
+            stat->app_read_cnt += wakeup->stat.app_read_cnt;
+        }
     }
 
-    if (node == NULL) {
-        pthread_spin_unlock(&stack->wakeup_list_lock);
-        return;
-    }
-
-    if (pre) {
-        pre->next = node->next;
-    } else {
-        stack->wakeup_list = node->next;
-    }
-    node->next = NULL;
-
-    pthread_spin_unlock(&stack->wakeup_list_lock);
-}
-
-static void get_wakeup_stat(struct protocol_stack *stack, struct gazelle_wakeup_stat *stat)
-{
-    pthread_spin_lock(&stack->wakeup_list_lock);
-
-    struct wakeup_poll *node = stack->wakeup_list;
-    while (node) {
-        stat->app_events += node->stat.app_events;
-        stat->read_null += node->stat.read_null;
-        stat->app_write_cnt += node->stat.app_write_cnt;
-        stat->app_write_idlefail += node->stat.app_write_idlefail;
-        stat->app_read_cnt += node->stat.app_read_cnt;
-
-        node = node->next;
-    }
-
-    pthread_spin_unlock(&stack->wakeup_list_lock);
+    pthread_spin_unlock(&stack_group->poll_list_lock);
 }
 
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info)
@@ -172,7 +139,7 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
         return;
     }
 
-    get_wakeup_stat(stack, &dfx->data.pkts.wakeup_stat);
+    get_wakeup_stat(stack_group, stack, &dfx->data.pkts.wakeup_stat);
 
     dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
 
@@ -251,11 +218,13 @@ static int32_t send_control_cmd_data(int32_t fd, struct gazelle_stack_dfx_data *
 
 int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
 {
-    struct gazelle_stack_dfx_data dfx = {0};
+    struct gazelle_stack_dfx_data dfx;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
         struct protocol_stack *stack = stack_group->stacks[i];
+
+        memset_s(&dfx, sizeof(dfx), 0, sizeof(dfx));
         get_stack_dfx_data(&dfx, stack, stat_mode);
 
         if (!use_ltran() &&

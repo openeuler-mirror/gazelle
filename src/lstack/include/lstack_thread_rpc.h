@@ -50,7 +50,9 @@ struct rpc_msg {
 
 struct protocol_stack;
 struct rte_mbuf;
+struct wakeup_poll;
 void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
+void rpc_call_clean_epoll(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t rpc_call_recvlistcnt(struct protocol_stack *stack);
