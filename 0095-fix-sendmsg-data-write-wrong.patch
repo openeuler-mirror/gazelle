@@ -1,0 +1,29 @@
+From 241c72599d7da72ada7cc15da90b7309e74241ea Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 24 Sep 2022 21:48:12 +0800
+Subject: [PATCH 11/21] fix sendmsg data write wrong
+
+---
+ src/lstack/core/lstack_lwip.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 5174e4c..d1e09ce 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -526,7 +526,12 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+         if (ret < 0) {
+             return buflen == 0 ? ret : buflen;
+         }
++
+         buflen += ret;
++
++        if (ret < message->msg_iov[i].iov_len) {
++            return buflen;
++        }
+     }
+ 
+     return buflen;
+-- 
+2.23.0
+

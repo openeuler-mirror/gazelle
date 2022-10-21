@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       15
+Release:       16
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -100,6 +100,32 @@ Patch9082:     0082-del-gazelle-ring-cons.tail-atomic-protect.patch
 Patch9083:     0083-fix-send-return-vale.patch
 Patch9084:     0084-add-examples.patch
 Patch9085:     0085-expand-thread-rpc-msg-pool-size.patch
+Patch9086:     0086-fix-fd-leak.patch
+Patch9087:     0087-fix-del-conn-use-after-free.patch
+Patch9088:     0088-init-g_gazelle_errno-before-use.patch
+Patch9089:     0089-code-format-specification.patch
+Patch9090:     0090-fix-gazelle-kernel-event-thread-affinity-same-with-s.patch
+Patch9091:     0091-have_corelist_arg.patch
+Patch9092:     0092-ltran-update-list.patch
+Patch9093:     0093-remove-get_reg_ring_free_count.patch
+Patch9094:     0094-add-errorno-EISCONN.patch
+Patch9095:     0095-fix-sendmsg-data-write-wrong.patch
+Patch9096:     0096-lstack-restore-pci-bus-after-init.patch
+Patch9097:     0097-fix-malloc-rpc-msg-fail.patch
+Patch9098:     0098-support-dpdk-dynamic-memory.patch
+Patch9099:     0099-fix-lwip_send-fail-free-pbuf-miss-data.patch
+Patch9100:     0100-merger-wakeup.patch
+Patch9101:     0101-conenct-support-multi-queues.patch
+Patch9102:     0102-merge-sendmsg-write.patch
+Patch9103:     0103-add-thread-select-path.patch
+Patch9104:     0104-support-conf-control-app-bind-numa.patch
+Patch9105:     0105-fix-epoll_wait-cover-kernel-event.patch
+Patch9106:     0106-fix-read-stack-data-return-0-when-no-data.patch
+Patch9107:     0107-fix-stack-wakeup-node-del.patch
+Patch9108:     0108-avoid-useless-stack-check-wakeup-event.patch
+Patch9109:     0109-fix-mesg-loss.patch
+Patch9110:     0110-add-accept4-and-epoll_create1.patch
+Patch9111:     0111-refactor-event-notice.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -140,6 +166,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Oct 08 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-16
+- refactor event
+  addapt for ceph client
+
 * Mon Sep 05 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-15
 - expand rpc msg pool size
 

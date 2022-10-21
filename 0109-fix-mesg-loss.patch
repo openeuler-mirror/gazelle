@@ -1,0 +1,32 @@
+From f9183f5d025f8eac168c4f66d4b96992ff4dff28 Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Thu, 13 Oct 2022 08:54:40 +0000
+Subject: [PATCH 1/3] fix mesg loss
+
+---
+ src/lstack/core/lstack_lwip.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 4fbaed1..5ca0cc3 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -642,14 +642,10 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+         GAZELLE_RETURN(EINVAL);
+     }
+ 
+-    if (sock->errevent > 0) {
++    if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
+         return 0;
+     }
+ 
+-    if (!NETCONN_IS_DATAIN(sock)) {
+-        GAZELLE_RETURN(EAGAIN);
+-    }
+-
+     while (recv_left > 0) {
+         if (sock->recv_lastdata) {
+             pbuf = sock->recv_lastdata;
+-- 
+2.23.0
+

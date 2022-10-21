@@ -1,0 +1,29 @@
+From 898e627aad3f0a997fa87a54ee397e999953d695 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 6 Sep 2022 19:08:25 +0800
+Subject: [PATCH 02/21] fix del conn use after free
+
+---
+ src/ltran/ltran_timer.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/ltran/ltran_timer.c b/src/ltran/ltran_timer.c
+index 3ee266c..85ea324 100644
+--- a/src/ltran/ltran_timer.c
++++ b/src/ltran/ltran_timer.c
+@@ -101,11 +101,11 @@ void gazelle_detect_conn_logout(struct gazelle_tcp_conn_htable *conn_htable)
+                 hlist_del_init(&conn->conn_node);
+                 conn_htable->cur_conn_num--;
+                 conn_htable->array[i].chain_size--;
+-                rte_free(conn);
+                 LTRAN_DEBUG("delete the tcp conn htable: tid %u quintuple[%u %u %u %u %u]\n",
+                     conn->tid, conn->quintuple.protocol,
+                     conn->quintuple.src_ip, (uint32_t)ntohs(conn->quintuple.src_port),
+                     conn->quintuple.dst_ip, (uint32_t)ntohs(conn->quintuple.dst_port));
++                rte_free(conn);
+             }
+         }
+     }
+-- 
+2.23.0
+
