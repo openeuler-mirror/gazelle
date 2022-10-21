@@ -1,0 +1,60 @@
+From 315f57f4bed8aeaa375f7f326ab8723f21082e9a Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sun, 9 Oct 2022 22:15:19 +0800
+Subject: [PATCH] avoid useless stack check wakeup event
+
+---
+ src/lstack/api/lstack_epoll.c              | 1 +
+ src/lstack/core/lstack_protocol_stack.c    | 4 +++-
+ src/lstack/include/lstack_protocol_stack.h | 1 +
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index dcd58e7..4da88b0 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -50,6 +50,7 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
+     }
+ 
+     wakeup->have_event = true;
++    sock->stack->have_event = true;
+ 
+     if (wakeup->type == WAKEUP_POLL) {
+         return;
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 8283a41..71412b4 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -355,7 +355,7 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+ 
+ static void wakeup_stack_wait(struct protocol_stack *stack)
+ {
+-    if (pthread_spin_trylock(&stack->wakeup_list_lock)) {
++    if (!stack->have_event || pthread_spin_trylock(&stack->wakeup_list_lock)) {
+         return;
+     }
+ 
+@@ -369,6 +369,8 @@ static void wakeup_stack_wait(struct protocol_stack *stack)
+     }
+ 
+     pthread_spin_unlock(&stack->wakeup_list_lock);
++
++    stack->have_event = false;
+ }
+ 
+ static void* gazelle_stack_thread(void *arg)
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index f58ae56..4249217 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -62,6 +62,7 @@ struct protocol_stack {
+ 
+     struct list_node recv_list;
+     struct list_node send_list;
++    bool have_event;
+ 
+     volatile uint16_t conn_num;
+     struct stats_ *lwip_stats;
+-- 
+2.23.0
+
