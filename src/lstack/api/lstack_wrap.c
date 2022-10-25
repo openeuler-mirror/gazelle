@@ -333,6 +333,20 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
     return posix_api->read_fn(s, mem, len);
 }
 
+static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
+{
+   struct msghdr msg;
+
+   msg.msg_name = NULL;
+   msg.msg_namelen = 0;
+   msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
+   msg.msg_iovlen = iovcnt;
+   msg.msg_control = NULL;
+   msg.msg_controllen = 0;
+   msg.msg_flags = 0;
+   return recvmsg_from_stack(s, &msg, 0);
+}
+
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
 {
     if (select_path(sockfd) != PATH_LWIP) {
@@ -349,6 +363,20 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
     }
 
     return gazelle_send(s, mem, size, 0);
+}
+
+static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
+{
+   struct msghdr msg;
+
+   msg.msg_name = NULL;
+   msg.msg_namelen = 0;
+   msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
+   msg.msg_iovlen = iovcnt;
+   msg.msg_control = NULL;
+   msg.msg_controllen = 0;
+   msg.msg_flags = 0;
+   return sendmsg_to_stack(s, &msg, 0);
 }
 
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)
@@ -526,13 +554,25 @@ ssize_t read(int32_t s, void *mem, size_t len)
 {
     return do_read(s, mem, len);
 }
+ssize_t readv(int32_t s, const struct iovec *iov, int iovcnt)
+{
+    return do_readv(s, iov, iovcnt);
+}
 ssize_t write(int32_t s, const void *mem, size_t size)
 {
     return do_write(s, mem, size);
 }
+ssize_t writev(int32_t s, const struct iovec *iov, int iovcnt)
+{
+    return do_writev(s, iov, iovcnt);
+}
 ssize_t __wrap_write(int32_t s, const void *mem, size_t size)
 {
     return do_write(s, mem, size);
+}
+ssize_t __wrap_writev(int32_t s, const struct iovec *iov, int iovcnt)
+{
+    return do_writev(s, iov, iovcnt);
 }
 ssize_t recv(int32_t sockfd, void *buf, size_t len, int32_t flags)
 {
@@ -648,6 +688,10 @@ int32_t __wrap_socket(int32_t domain, int32_t type, int32_t protocol)
 ssize_t __wrap_read(int32_t s, void *mem, size_t len)
 {
     return do_read(s, mem, len);
+}
+ssize_t __wrap_readv(int32_t s, const struct iovec *iov, int iovcnt)
+{
+    return do_readv(s, iov, iovcnt);
 }
 ssize_t __wrap_recv(int32_t sockfd, void *buf, size_t len, int32_t flags)
 {
