@@ -419,6 +419,7 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
 static void* gazelle_stack_thread(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
+    bool use_ltran_flag = use_ltran();
 
     struct protocol_stack *stack = stack_thread_init(queue_id);
     if (stack == NULL) {
@@ -435,7 +436,7 @@ static void* gazelle_stack_thread(void *arg)
     for (;;) {
         poll_rpc_msg(stack, HANDLE_RPC_MSG_MAX);
 
-        eth_dev_poll();
+        gazelle_eth_dev_poll(stack, use_ltran_flag);
 
         read_recv_list(stack, READ_LIST_MAX);
 
@@ -523,7 +524,7 @@ void stack_arp(struct rpc_msg *msg)
 {
     struct rte_mbuf *mbuf = (struct rte_mbuf *)msg->args[MSG_ARG_0].p;
 
-    eth_dev_recv(mbuf);
+    eth_dev_recv(mbuf, NULL);
 }
 
 void stack_socket(struct rpc_msg *msg)
