@@ -22,6 +22,7 @@ struct eth_dev_ops {
 
 int32_t ethdev_init(struct protocol_stack *stack);
 int32_t eth_dev_poll(void);
-void eth_dev_recv(struct rte_mbuf *mbuf);
+int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag);
+void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack);
 
 #endif /* __GAZELLE_ETHDEV_H__ */

@@ -31,7 +31,7 @@
 
 #define PKTMBUF_MALLOC_FLAG     NULL
 
-void eth_dev_recv(struct rte_mbuf *mbuf)
+void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
 {
     int32_t ret;
     void *payload = NULL;
@@ -39,7 +39,9 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
     struct pbuf *prev = NULL;
     struct pbuf *head = NULL;
     struct pbuf_custom *pc = NULL;
-    struct protocol_stack *stack = get_protocol_stack();
+    if (!stack) {
+        stack = get_protocol_stack();
+    }
     struct rte_mbuf *m = mbuf;
     uint16_t len, pkt_len;
 
@@ -88,7 +90,7 @@ int32_t eth_dev_poll(void)
 
     nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
     if (nr_pkts == 0) {
-        return nr_pkts;
+        return 0;
     }
 
     if (!use_ltran() && get_protocol_stack_group()->latency_start) {
@@ -105,7 +107,40 @@ int32_t eth_dev_poll(void)
             }
         }
 
-        eth_dev_recv(pkts[i]);
+        eth_dev_recv(pkts[i], stack);
+    }
+
+    stack->stats.rx += nr_pkts;
+
+    return nr_pkts;
+}
+
+/* optimized eth_dev_poll() in lstack */
+int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
+{
+    uint32_t nr_pkts;
+    struct rte_mbuf *pkts[READ_PKTS_MAX];
+
+    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
+    if (nr_pkts == 0) {
+        return 0;
+    }
+
+    if (!use_ltran_flag && get_protocol_stack_group()->latency_start) {
+        uint64_t time_stamp = get_current_time();
+        time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
+    }
+
+    for (uint32_t i = 0; i < nr_pkts; i++) {
+        /* copy arp into other stack */
+        if (!use_ltran_flag) {
+            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
+            if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
+                stack_broadcast_arp(pkts[i], stack);
+            }
+        }
+
+        eth_dev_recv(pkts[i], stack);
     }
 
     stack->stats.rx += nr_pkts;
