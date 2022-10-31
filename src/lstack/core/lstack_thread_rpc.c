@@ -234,6 +234,7 @@ int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf)
 
     msg->self_release = 0;
     msg->args[MSG_ARG_0].p = mbuf;
+    msg->args[MSG_ARG_1].p = stack;
 
     rpc_call(&stack->rpc_queue, msg);
 
@@ -451,6 +452,7 @@ int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].size = len;
     msg->args[MSG_ARG_2].i = flags;
+    msg->args[MSG_ARG_3].p = stack;
     msg->self_release = 0;
 
     rpc_call(&stack->rpc_queue, msg);

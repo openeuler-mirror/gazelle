@@ -31,6 +31,7 @@
 #define GAZELLE_MBUFF_PRIV_SIZE     (sizeof(uint64_t) * 2)
 
 #define DEFAULT_RING_SIZE           (512)
+#define DEFAULT_RING_MASK           (511)
 #define DEFAULT_BACKUP_RING_SIZE_FACTOR   (16)
 
 #define VDEV_RX_QUEUE_SZ            DEFAULT_RING_SIZE

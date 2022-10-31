@@ -36,9 +36,9 @@
 #include "posix/lstack_epoll.h"
 #include "lstack_stack_stat.h"
 
-#define READ_LIST_MAX                   128
-#define SEND_LIST_MAX                   128
-#define HANDLE_RPC_MSG_MAX              128
+#define READ_LIST_MAX                   32 
+#define SEND_LIST_MAX                   32 
+#define HANDLE_RPC_MSG_MAX              32 
 #define KERNEL_EVENT_100us              100
 
 static PER_THREAD struct protocol_stack *g_stack_p = NULL;
@@ -164,7 +164,7 @@ void low_power_idling(struct protocol_stack *stack)
         last_cycle_ts = sys_now();
     }
 
-    uint64_t now_pkts = get_protocol_stack()->stats.rx;
+    uint64_t now_pkts = stack->stats.rx;
     uint32_t now_ts = sys_now();
     if (((now_ts - last_cycle_ts) > LSTACK_LPM_DETECT_MS) ||
         ((now_pkts - last_cycle_pkts) >= LSTACK_LPM_PKTS_IN_DETECT)) {
@@ -258,7 +258,9 @@ static void* gazelle_kernelevent_thread(void *arg)
     uint16_t queue_id = *(uint16_t *)arg;
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
 
-    bind_to_stack_numa(stack);
+    if (get_global_cfg_params()->app_bind_numa) {
+        bind_to_stack_numa(stack);
+    }
 
     LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", queue_id);
 
@@ -420,6 +422,7 @@ static void* gazelle_stack_thread(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
     bool use_ltran_flag = use_ltran();
+    uint32_t wakeup_tick = 0;
 
     struct protocol_stack *stack = stack_thread_init(queue_id);
     if (stack == NULL) {
@@ -442,9 +445,11 @@ static void* gazelle_stack_thread(void *arg)
 
         send_stack_list(stack, SEND_LIST_MAX);
 
-        wakeup_kernel_event(stack);
-
-        wakeup_stack_epoll(stack);
+        if ((wakeup_tick & 0xf) == 0) {
+            wakeup_kernel_event(stack);
+            wakeup_stack_epoll(stack);
+        }
+        wakeup_tick++;
 
         sys_timer_run();
 
@@ -523,8 +528,9 @@ int32_t init_protocol_stack(void)
 void stack_arp(struct rpc_msg *msg)
 {
     struct rte_mbuf *mbuf = (struct rte_mbuf *)msg->args[MSG_ARG_0].p;
+    struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_1].p;
 
-    eth_dev_recv(mbuf, NULL);
+    eth_dev_recv(mbuf, stack);
 }
 
 void stack_socket(struct rpc_msg *msg)
