@@ -39,9 +39,6 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
     struct pbuf *prev = NULL;
     struct pbuf *head = NULL;
     struct pbuf_custom *pc = NULL;
-    if (!stack) {
-        stack = get_protocol_stack();
-    }
     struct rte_mbuf *m = mbuf;
     uint16_t len, pkt_len;
 
@@ -81,7 +78,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
     }
 }
 
-#define READ_PKTS_MAX   128
+#define READ_PKTS_MAX   32
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;

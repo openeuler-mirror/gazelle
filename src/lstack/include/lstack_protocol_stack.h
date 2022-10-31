@@ -49,6 +49,7 @@ struct protocol_stack {
     struct rte_ring *reg_ring;
     struct rte_ring *wakeup_ring;
     struct reg_ring_msg *reg_buf;
+    uint32_t reg_head;
 
     volatile bool low_power;
     lockless_queue rpc_queue __rte_cache_aligned;

@@ -113,7 +113,6 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
     uint32_t sent_pkts = 0;
     void *free_buf[VDEV_REG_QUEUE_SZ];
     struct reg_ring_msg *tmp_buf = NULL;
-    static PER_THREAD uint32_t head = 0;
     const uint32_t tbegin = sys_now();
     struct protocol_stack *stack = get_protocol_stack();
 
@@ -124,6 +123,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
         }
     }
 
+    uint32_t reg_index = stack->reg_head++ & DEFAULT_RING_MASK;
     do {
         (void)gazelle_ring_sc_dequeue(stack->reg_ring, free_buf, VDEV_REG_QUEUE_SZ);
 
@@ -131,7 +131,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
             continue;
         }
 
-        tmp_buf = &stack->reg_buf[head];
+        tmp_buf = &stack->reg_buf[reg_index];
         tmp_buf->type = type;
         tmp_buf->tid = get_stack_tid();
         ret = memcpy_s(&tmp_buf->qtuple, sizeof(*qtuple), qtuple, sizeof(struct gazelle_quintuple));
@@ -144,9 +144,6 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
         sent_pkts = gazelle_ring_sp_enqueue(stack->reg_ring, free_buf, 1);
     } while ((sent_pkts < 1) && (ENQUEUE_RING_RETRY_TIMEOUT > sys_now() - tbegin) && get_register_state());
 
-    if (sent_pkts == 1) {
-        head = (head + 1) % VDEV_REG_QUEUE_SZ;
-    }
     return (int32_t)sent_pkts;
 }
 
