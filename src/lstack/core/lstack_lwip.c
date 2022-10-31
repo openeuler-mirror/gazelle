@@ -282,16 +282,11 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         GAZELLE_RETURN(ENOTCONN);
     }
 
-    uint32_t free_count = gazelle_ring_readable_count(sock->send_ring);
-    if (free_count == 0) {
-        return 0;
-    }
-
     struct pbuf *pbuf = NULL;
     ssize_t send_len = 0;
     uint32_t send_pkt = 0;
 
-    while (send_len < len && send_pkt < free_count) {
+    while (send_len < len) {
         if (sock->send_lastdata) {
             pbuf = sock->send_lastdata;
         } else {
@@ -322,6 +317,10 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         sock->wakeup->stat.app_write_cnt += send_pkt;
     }
 
+    if (send_len == 0) {
+        /* 100: give up cpu to other threads, when send_ring is full */
+        usleep(100);
+    }
     return send_len;
 }
 
