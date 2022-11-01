@@ -65,6 +65,7 @@ LIBRTE_LIB = $(LIB_PATH)/librte_bus_pci.so \
              $(LIB_PATH)/librte_mempool_ring.so \
              $(LIB_PATH)/librte_timer.so \
              $(LIB_PATH)/librte_eal.so \
+             $(LIB_PATH)/librte_gro.so \
              $(LIB_PATH)/librte_ring.so \
              $(LIB_PATH)/librte_mbuf.so \
              $(LIB_PATH)/librte_telemetry.so \

@@ -41,6 +41,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
     struct pbuf_custom *pc = NULL;
     struct rte_mbuf *m = mbuf;
     uint16_t len, pkt_len;
+    struct rte_mbuf *next_m = NULL;
 
     pkt_len = (uint16_t)rte_pktmbuf_pkt_len(m);
     while (m != NULL) {
@@ -66,7 +67,9 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
         }
         prev = next;
 
-        m = m->next;
+        next_m = m->next;
+        m->next = NULL;
+        m = next_m;
     }
 
     if (head != NULL) {

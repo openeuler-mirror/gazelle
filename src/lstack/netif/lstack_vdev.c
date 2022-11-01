@@ -18,6 +18,8 @@
 #include <rte_ring.h>
 #include <rte_malloc.h>
 #include <rte_ethdev.h>
+#include <rte_gro.h>
+#include <rte_net.h>
 
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"
@@ -63,7 +65,26 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
 
 static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf)
 {
-    return rte_eth_rx_burst(stack->port_id, stack->queue_id, pkts, max_mbuf);
+    struct rte_gro_param gro_param = {
+        .gro_types = RTE_GRO_TCP_IPV4,
+        /* 8*16=128(max) */
+        .max_flow_num = 8,
+        .max_item_per_flow = 16,
+    };
+
+    uint32_t pkt_num = rte_eth_rx_burst(stack->port_id, stack->queue_id, pkts, max_mbuf);
+    if (pkt_num <= 1) {
+        return pkt_num;
+    }
+
+    for (uint32_t i = 0; i < pkt_num; i++) {
+        struct rte_net_hdr_lens hdr_lens;
+        pkts[i]->packet_type = rte_net_get_ptype(pkts[i], &hdr_lens, RTE_PTYPE_ALL_MASK);
+        pkts[i]->l2_len = hdr_lens.l2_len;
+        pkts[i]->l3_len = hdr_lens.l3_len;
+        pkts[i]->l4_len = hdr_lens.l4_len;
+    }
+    return rte_gro_reassemble_burst(pkts, pkt_num, &gro_param);
 }
 
 static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
