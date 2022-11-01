@@ -596,17 +596,19 @@ static inline void del_data_in_event(struct lwip_sock *sock)
 
 static struct pbuf *pbuf_free_partial(struct pbuf *pbuf, uint16_t free_len)
 {
+    uint16_t tot_len = pbuf->tot_len - free_len;
+
     while (free_len && pbuf) {
         if (free_len >= pbuf->len) {
-            struct pbuf *p = pbuf;
+            free_len = free_len - pbuf->len;
             pbuf = pbuf->next;
-            free_len = free_len - p->len;
         } else {
             pbuf_remove_header(pbuf, free_len);
             break;
         }
     }
 
+    pbuf->tot_len = tot_len;
     return pbuf;
 }
 
@@ -636,13 +638,13 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
             }
         }
 
-        copy_len = (recv_left > pbuf->len) ? pbuf->len : (uint16_t)recv_left;
+        copy_len = (recv_left > pbuf->tot_len) ? pbuf->tot_len : (uint16_t)recv_left;
         pbuf_copy_partial(pbuf, (char *)buf + recvd, copy_len, 0);
 
         recvd += copy_len;
         recv_left -= copy_len;
 
-        if (pbuf->len > copy_len || pbuf->next) {
+        if (pbuf->tot_len > copy_len) {
             sock->recv_lastdata = pbuf_free_partial(pbuf, copy_len);
         } else {
             if (sock->wakeup) {
