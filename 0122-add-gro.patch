@@ -1,0 +1,133 @@
+From 6c36a958fc9b9889bf4bb42dfbdcf0c88cf3a566 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Wed, 2 Nov 2022 11:20:56 +0800
+Subject: [PATCH] add-gro
+
+---
+ src/lstack/Makefile              |  1 +
+ src/lstack/core/lstack_lwip.c    | 10 ++++++----
+ src/lstack/netif/lstack_ethdev.c |  5 ++++-
+ src/lstack/netif/lstack_vdev.c   | 23 ++++++++++++++++++++++-
+ 4 files changed, 33 insertions(+), 6 deletions(-)
+
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 799e7be..1560d0c 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -69,6 +69,7 @@ LIBRTE_LIB = $(DPDK_LIB_PATH)/librte_pci.so \
+              $(DPDK_LIB_PATH)/librte_mempool_ring.so \
+              $(DPDK_LIB_PATH)/librte_timer.so \
+              $(DPDK_LIB_PATH)/librte_eal.so \
++             $(DPDK_LIB_PATH)/librte_gro.so \
+              $(DPDK_LIB_PATH)/librte_ring.so \
+              $(DPDK_LIB_PATH)/librte_mbuf.so \
+              $(DPDK_LIB_PATH)/librte_kni.so \
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index f924ee7..52b4624 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -596,17 +596,19 @@ static inline void del_data_in_event(struct lwip_sock *sock)
+ 
+ static struct pbuf *pbuf_free_partial(struct pbuf *pbuf, uint16_t free_len)
+ {
++    uint16_t tot_len = pbuf->tot_len - free_len;
++
+     while (free_len && pbuf) {
+         if (free_len >= pbuf->len) {
+-            struct pbuf *p = pbuf;
++            free_len = free_len - pbuf->len;
+             pbuf = pbuf->next;
+-            free_len = free_len - p->len;
+         } else {
+             pbuf_remove_header(pbuf, free_len);
+             break;
+         }
+     }
+ 
++    pbuf->tot_len = tot_len;
+     return pbuf;
+ }
+ 
+@@ -636,13 +638,13 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+             }
+         }
+ 
+-        copy_len = (recv_left > pbuf->len) ? pbuf->len : (uint16_t)recv_left;
++        copy_len = (recv_left > pbuf->tot_len) ? pbuf->tot_len : (uint16_t)recv_left;
+         pbuf_copy_partial(pbuf, (char *)buf + recvd, copy_len, 0);
+ 
+         recvd += copy_len;
+         recv_left -= copy_len;
+ 
+-        if (pbuf->len > copy_len || pbuf->next) {
++        if (pbuf->tot_len > copy_len) {
+             sock->recv_lastdata = pbuf_free_partial(pbuf, copy_len);
+         } else {
+             if (sock->wakeup) {
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 30e7204..cf783f4 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -41,6 +41,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
+     struct pbuf_custom *pc = NULL;
+     struct rte_mbuf *m = mbuf;
+     uint16_t len, pkt_len;
++    struct rte_mbuf *next_m = NULL;
+ 
+     pkt_len = (uint16_t)rte_pktmbuf_pkt_len(m);
+     while (m != NULL) {
+@@ -66,7 +67,9 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
+         }
+         prev = next;
+ 
+-        m = m->next;
++        next_m = m->next;
++        m->next = NULL;
++        m = next_m;
+     }
+ 
+     if (head != NULL) {
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index 4f2960b..68b6a0c 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -18,6 +18,8 @@
+ #include <rte_ring.h>
+ #include <rte_malloc.h>
+ #include <rte_ethdev.h>
++#include <rte_gro.h>
++#include <rte_net.h>
+ 
+ #include "lstack_cfg.h"
+ #include "lstack_dpdk.h"
+@@ -63,7 +65,26 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
+ 
+ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf)
+ {
+-    return rte_eth_rx_burst(stack->port_id, stack->queue_id, pkts, max_mbuf);
++    struct rte_gro_param gro_param = {
++        .gro_types = RTE_GRO_TCP_IPV4,
++        /* 8*16=128(max) */
++        .max_flow_num = 8,
++        .max_item_per_flow = 16,
++    };
++
++    uint32_t pkt_num = rte_eth_rx_burst(stack->port_id, stack->queue_id, pkts, max_mbuf);
++    if (pkt_num <= 1) {
++        return pkt_num;
++    }
++
++    for (uint32_t i = 0; i < pkt_num; i++) {
++        struct rte_net_hdr_lens hdr_lens;
++        pkts[i]->packet_type = rte_net_get_ptype(pkts[i], &hdr_lens, RTE_PTYPE_ALL_MASK);
++        pkts[i]->l2_len = hdr_lens.l2_len;
++        pkts[i]->l3_len = hdr_lens.l3_len;
++        pkts[i]->l4_len = hdr_lens.l4_len;
++    }
++    return rte_gro_reassemble_burst(pkts, pkt_num, &gro_param);
+ }
+ 
+ static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
+-- 
+2.23.0
+
