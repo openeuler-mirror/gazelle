@@ -1,0 +1,25 @@
+From 6ccad03ae3ec736034e4ff403c9d2ef26516ef4a Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 1 Nov 2022 11:42:33 +0800
+Subject: [PATCH 7/7] expand nic rx desc size
+
+---
+ src/common/gazelle_opt.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index 8ab40ed..7521e8c 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -45,7 +45,7 @@
+ #define FREE_RX_QUEUE_SZ            DPDK_PKT_BURST_SIZE
+ 
+ #define RTE_TEST_TX_DESC_DEFAULT    512
+-#define RTE_TEST_RX_DESC_DEFAULT    128
++#define RTE_TEST_RX_DESC_DEFAULT    4096
+ 
+ #define DPDK_PKT_BURST_SIZE         512
+ 
+-- 
+2.23.0
+
