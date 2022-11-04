@@ -1,0 +1,150 @@
+From 3ac0281accfc1cbaa0fa70ef8be7f706e56efe8f Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Fri, 28 Oct 2022 22:20:35 +0800
+Subject: [PATCH 2/7] optimized some function in lstack
+
+---
+ src/lstack/core/lstack_protocol_stack.c |  5 +--
+ src/lstack/core/lstack_thread_rpc.c     |  4 +--
+ src/lstack/include/lstack_ethdev.h      |  3 +-
+ src/lstack/netif/lstack_ethdev.c        | 43 ++++++++++++++++++++++---
+ 4 files changed, 45 insertions(+), 10 deletions(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 79769f3..41dda89 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -419,6 +419,7 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
+ static void* gazelle_stack_thread(void *arg)
+ {
+     uint16_t queue_id = *(uint16_t *)arg;
++    bool use_ltran_flag = use_ltran();
+ 
+     struct protocol_stack *stack = stack_thread_init(queue_id);
+     if (stack == NULL) {
+@@ -435,7 +436,7 @@ static void* gazelle_stack_thread(void *arg)
+     for (;;) {
+         poll_rpc_msg(stack, HANDLE_RPC_MSG_MAX);
+ 
+-        eth_dev_poll();
++        gazelle_eth_dev_poll(stack, use_ltran_flag);
+ 
+         read_recv_list(stack, READ_LIST_MAX);
+ 
+@@ -523,7 +524,7 @@ void stack_arp(struct rpc_msg *msg)
+ {
+     struct rte_mbuf *mbuf = (struct rte_mbuf *)msg->args[MSG_ARG_0].p;
+ 
+-    eth_dev_recv(mbuf);
++    eth_dev_recv(mbuf, NULL);
+ }
+ 
+ void stack_socket(struct rpc_msg *msg)
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index 46cbbe7..db1de5a 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -108,11 +108,9 @@ static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queu
+ 
+ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
+ {
+-    uint32_t num;
+     struct rpc_msg *msg = NULL;
+ 
+-    num = 0;
+-    while (num++ < max_num) {
++    while (max_num--) {
+         lockless_queue_node *node = lockless_queue_mpsc_pop(&stack->rpc_queue);
+         if (node == NULL) {
+             break;
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index 91f5f13..a174978 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -22,6 +22,7 @@ struct eth_dev_ops {
+ 
+ int32_t ethdev_init(struct protocol_stack *stack);
+ int32_t eth_dev_poll(void);
+-void eth_dev_recv(struct rte_mbuf *mbuf);
++int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag);
++void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack);
+ 
+ #endif /* __GAZELLE_ETHDEV_H__ */
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 4757d72..5ddc0db 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -31,7 +31,7 @@
+ 
+ #define PKTMBUF_MALLOC_FLAG     NULL
+ 
+-void eth_dev_recv(struct rte_mbuf *mbuf)
++void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
+ {
+     int32_t ret;
+     void *payload = NULL;
+@@ -39,7 +39,9 @@ void eth_dev_recv(struct rte_mbuf *mbuf)
+     struct pbuf *prev = NULL;
+     struct pbuf *head = NULL;
+     struct pbuf_custom *pc = NULL;
+-    struct protocol_stack *stack = get_protocol_stack();
++    if (!stack) {
++        stack = get_protocol_stack();
++    }
+     struct rte_mbuf *m = mbuf;
+     uint16_t len, pkt_len;
+ 
+@@ -88,7 +90,7 @@ int32_t eth_dev_poll(void)
+ 
+     nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
+     if (nr_pkts == 0) {
+-        return nr_pkts;
++        return 0;
+     }
+ 
+     if (!use_ltran() && get_protocol_stack_group()->latency_start) {
+@@ -105,7 +107,40 @@ int32_t eth_dev_poll(void)
+             }
+         }
+ 
+-        eth_dev_recv(pkts[i]);
++        eth_dev_recv(pkts[i], stack);
++    }
++
++    stack->stats.rx += nr_pkts;
++
++    return nr_pkts;
++}
++
++/* optimized eth_dev_poll() in lstack */
++int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
++{
++    uint32_t nr_pkts;
++    struct rte_mbuf *pkts[READ_PKTS_MAX];
++
++    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
++    if (nr_pkts == 0) {
++        return 0;
++    }
++
++    if (!use_ltran_flag && get_protocol_stack_group()->latency_start) {
++        uint64_t time_stamp = get_current_time();
++        time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
++    }
++
++    for (uint32_t i = 0; i < nr_pkts; i++) {
++        /* copy arp into other stack */
++        if (!use_ltran_flag) {
++            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
++            if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
++                stack_broadcast_arp(pkts[i], stack);
++            }
++        }
++
++        eth_dev_recv(pkts[i], stack);
+     }
+ 
+     stack->stats.rx += nr_pkts;
+-- 
+2.23.0
+

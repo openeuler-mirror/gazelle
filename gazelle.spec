@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       16
+Release:       17
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -126,6 +126,13 @@ Patch9108:     0108-avoid-useless-stack-check-wakeup-event.patch
 Patch9109:     0109-fix-mesg-loss.patch
 Patch9110:     0110-add-accept4-and-epoll_create1.patch
 Patch9111:     0111-refactor-event-notice.patch
+Patch9112:     0112-add-writev-and-readv.patch
+Patch9113:     0113-optimized-some-function-in-lstack.patch
+Patch9114:     0114-fix-gazellectl-stats-err-when-donot-bind-numa.patch
+Patch9115:     0115-add-usleep-when-write_ring-is-busy.patch
+Patch9116:     0116-optimize-variable-access.patch
+Patch9117:     0117-add-gro.patch
+Patch9118:     0118-expand-nic-rx-desc-size.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -166,6 +173,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri Nov 04 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-17
+- Optimize ceph client performance
+
 * Sat Oct 08 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-16
 - refactor event
   addapt for ceph client
