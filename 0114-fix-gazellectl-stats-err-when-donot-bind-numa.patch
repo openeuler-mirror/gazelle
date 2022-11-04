@@ -1,0 +1,47 @@
+From 12f35b035e84c5085869ae3057733638452dcf7a Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Mon, 31 Oct 2022 17:23:49 +0800
+Subject: [PATCH 3/7] fix gazellectl stats err when donot bind numa
+
+---
+ src/lstack/api/lstack_epoll.c | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 417d69c..6ac049c 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -172,8 +172,11 @@ int32_t lstack_do_epoll_create(int32_t fd)
+     wakeup->epollfd = fd;
+     sock->wakeup = wakeup;
+ 
+-    update_epoll_max_stack(wakeup);
+-    change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, wakeup->max_stack);
++    if (!get_global_cfg_params()->app_bind_numa) {
++        update_epoll_max_stack(wakeup);
++        change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, wakeup->max_stack);
++        wakeup->bind_stack = wakeup->max_stack;
++    }
+ 
+     return fd;
+ }
+@@ -505,10 +508,12 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
+     list_add_node(&stack_group->poll_list, &wakeup->poll_list);
+     pthread_spin_unlock(&stack_group->poll_list_lock);
+ 
+-    int32_t stack_count[PROTOCOL_STACK_MAX] = {0};
+-    uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
+-    change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, stack_group->stacks[bind_id]);
+-    wakeup->bind_stack = stack_group->stacks[bind_id];
++    if (!get_global_cfg_params()->app_bind_numa) {
++        int32_t stack_count[PROTOCOL_STACK_MAX] = {0};
++        uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
++        change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, stack_group->stacks[bind_id]);
++        wakeup->bind_stack = stack_group->stacks[bind_id];
++    }
+ 
+     return 0;
+ }
+-- 
+2.23.0
+
