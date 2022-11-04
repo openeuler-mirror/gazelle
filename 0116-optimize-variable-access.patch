@@ -1,0 +1,432 @@
+From ac2c6340d9e08b94bf99682e12ab5d5836d2140d Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Mon, 31 Oct 2022 22:07:26 +0800
+Subject: [PATCH 5/7] optimize variable access
+
+---
+ src/common/gazelle_opt.h                   |   1 +
+ src/lstack/api/lstack_wrap.c               |   8 +-
+ src/lstack/core/lstack_lwip.c              | 102 +++++++++------------
+ src/lstack/core/lstack_protocol_stack.c    |  24 +++--
+ src/lstack/core/lstack_thread_rpc.c        |   2 +
+ src/lstack/include/lstack_protocol_stack.h |   1 +
+ src/lstack/netif/lstack_ethdev.c           |   5 +-
+ src/lstack/netif/lstack_vdev.c             |   7 +-
+ 8 files changed, 67 insertions(+), 83 deletions(-)
+
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index 011553c..8ab40ed 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -31,6 +31,7 @@
+ #define GAZELLE_MBUFF_PRIV_SIZE     (sizeof(uint64_t) * 2)
+ 
+ #define DEFAULT_RING_SIZE           (512)
++#define DEFAULT_RING_MASK           (511)
+ #define DEFAULT_BACKUP_RING_SIZE_FACTOR   (16)
+ 
+ #define VDEV_RX_QUEUE_SZ            DEFAULT_RING_SIZE
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 9672d3d..1c7a722 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -46,6 +46,10 @@ bool select_thread_path(void);
+ 
+ static enum KERNEL_LWIP_PATH select_path(int fd)
+ {
++    if (!select_thread_path()) {
++        return PATH_KERNEL;
++    }
++
+     if (unlikely(posix_api == NULL)) {
+         /* posix api maybe call before gazelle init */
+         if (posix_api_init() != 0) {
+@@ -54,10 +58,6 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
+         return PATH_KERNEL;
+     }
+ 
+-    if (!select_thread_path()) {
+-        return PATH_KERNEL;
+-    }
+-
+     if (unlikely(posix_api->ues_posix)) {
+         return PATH_KERNEL;
+     }
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 3a1eb81..f924ee7 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -37,8 +37,6 @@
+ #define HALF_DIVISOR                    (2)
+ #define USED_IDLE_WATERMARK             (VDEV_IDLE_QUEUE_SZ >> 2)
+ 
+-static int32_t lwip_alloc_pbufs(pbuf_layer layer, uint16_t length, pbuf_type type, void **pbufs, uint32_t num);
+-
+ static void free_ring_pbuf(struct rte_ring *ring)
+ {
+     void *pbufs[SOCK_RECV_RING_SIZE];
+@@ -85,17 +83,38 @@ static void reset_sock_data(struct lwip_sock *sock)
+     sock->recv_lastdata = NULL;
+ }
+ 
+-static void replenish_send_idlembuf(struct rte_ring *ring)
++static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, uint16_t length, pbuf_type type)
++{
++    struct pbuf_custom *pbuf_custom = mbuf_to_pbuf(mbuf);
++    pbuf_custom->custom_free_function = gazelle_free_pbuf;
++
++    void *data = rte_pktmbuf_mtod(mbuf, void *);
++    struct pbuf *pbuf = pbuf_alloced_custom(layer, length, type, pbuf_custom, data, MAX_PACKET_SZ);
++    if (pbuf) {
++        pbuf->ol_flags = 0;
++        pbuf->l2_len = 0;
++        pbuf->l3_len = 0;
++    }
++
++    return pbuf;
++}
++
++static void replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
+ {
+     void *pbuf[SOCK_SEND_RING_SIZE];
+ 
+     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+ 
+     uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
+-    if (lwip_alloc_pbufs(PBUF_TRANSPORT, TCP_MSS, PBUF_RAM, (void **)pbuf, alloc_num) != 0) {
++    if (rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
++        stack->stats.tx_allocmbuf_fail++;
+         return;
+     }
+ 
++    for (uint32_t i = 0; i < alloc_num; i++) {
++        pbuf[i] = init_mbuf_to_pbuf(pbuf[i], PBUF_TRANSPORT, TCP_MSS, PBUF_RAM);
++    }
++
+     uint32_t num = gazelle_ring_sp_enqueue(ring, pbuf, alloc_num);
+     for (uint32_t i = num; i < alloc_num; i++) {
+         pbuf_free(pbuf[i]);
+@@ -126,7 +145,7 @@ void gazelle_init_sock(int32_t fd)
+         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
+         return;
+     }
+-    replenish_send_idlembuf(sock->send_ring);
++    replenish_send_idlembuf(stack, sock->send_ring);
+ 
+     sock->stack = stack;
+     sock->stack->conn_num++;
+@@ -183,46 +202,17 @@ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs,
+     return 0;
+ }
+ 
+-static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, uint16_t length, pbuf_type type)
+-{
+-    struct pbuf_custom *pbuf_custom = mbuf_to_pbuf(mbuf);
+-    pbuf_custom->custom_free_function = gazelle_free_pbuf;
+-
+-    void *data = rte_pktmbuf_mtod(mbuf, void *);
+-    struct pbuf *pbuf = pbuf_alloced_custom(layer, length, type, pbuf_custom, data, MAX_PACKET_SZ);
+-    if (pbuf) {
+-        pbuf->ol_flags = 0;
+-        pbuf->l2_len = 0;
+-        pbuf->l3_len = 0;
+-    }
+-
+-    return pbuf;
+-}
+-
+-static int32_t lwip_alloc_pbufs(pbuf_layer layer, uint16_t length, pbuf_type type, void **bufs, uint32_t num)
+-{
+-    int32_t ret = rte_pktmbuf_alloc_bulk(get_protocol_stack()->tx_pktmbuf_pool, (struct rte_mbuf **)bufs, num);
+-    if (ret != 0) {
+-        get_protocol_stack()->stats.tx_allocmbuf_fail++;
+-        return -1;
+-    }
+-
+-    for (uint32_t i = 0; i < num; i++) {
+-        bufs[i] = init_mbuf_to_pbuf(bufs[i], layer, length, type);
+-    }
+-
+-    return 0;
+-}
+-
+ struct pbuf *lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type)
+ {
+-    struct pbuf *pbuf;
++    struct rte_mbuf *mbuf;
++    struct protocol_stack *stack = get_protocol_stack();
+ 
+-    if (lwip_alloc_pbufs(layer, length, type, (void **)&pbuf, 1) != 0) {
++    if (rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, &mbuf, 1) != 0) {
++        stack->stats.tx_allocmbuf_fail++;
+         return NULL;
+     }
+ 
+-    return pbuf;
++    return init_mbuf_to_pbuf(mbuf, layer, length, type);
+ }
+ 
+ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags)
+@@ -324,7 +314,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+     return send_len;
+ }
+ 
+-static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
++static void do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock, int32_t flags)
+ {
+     /* send all send_ring, so len set lwip send max. */
+     ssize_t len = lwip_send(fd, sock, UINT16_MAX, flags);
+@@ -335,7 +325,7 @@ static void do_lwip_send(int32_t fd, struct lwip_sock *sock, int32_t flags)
+     }
+ 
+     if (gazelle_ring_readable_count(sock->send_ring) < SOCK_SEND_REPLENISH_THRES) {
+-        replenish_send_idlembuf(sock->send_ring);
++        replenish_send_idlembuf(stack, sock->send_ring);
+     }
+ 
+     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
+@@ -347,8 +337,7 @@ void stack_send(struct rpc_msg *msg)
+ {
+     int32_t fd = msg->args[MSG_ARG_0].i;
+     int32_t flags = msg->args[MSG_ARG_2].i;
+-
+-    struct protocol_stack *stack = get_protocol_stack();
++    struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
+ 
+     struct lwip_sock *sock = get_socket(fd);
+     if (sock == NULL) {
+@@ -363,7 +352,7 @@ void stack_send(struct rpc_msg *msg)
+         return;
+     }
+ 
+-    do_lwip_send(fd, sock, flags);
++    do_lwip_send(stack, fd, sock, flags);
+ 
+     /* have remain data add sendlist */
+     if (NETCONN_IS_DATAOUT(sock)) {
+@@ -392,7 +381,7 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
+             continue;
+         }
+ 
+-        do_lwip_send(sock->conn->socket, sock, 0);
++        do_lwip_send(stack, sock->conn->socket, sock, 0);
+ 
+         if (!NETCONN_IS_DATAOUT(sock)) {
+             list_del_node_null(&sock->send_list);
+@@ -542,11 +531,7 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
+         return 0;
+     }
+ 
+-    struct lwip_sock *sock = get_socket(fd);
+-    if (sock == NULL) {
+-        GAZELLE_RETURN(EINVAL);
+-    }
+-
++    struct lwip_sock *sock = get_socket_by_fd(fd);
+     ssize_t send = write_stack_data(sock, buf, len);
+     if (send <= 0) {
+         return send;
+@@ -562,11 +547,7 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+     int32_t ret;
+     int32_t i;
+     ssize_t buflen = 0;
+-
+-    struct lwip_sock *sock = get_socket(s);
+-    if (sock == NULL) {
+-        GAZELLE_RETURN(EINVAL);
+-    }
++    struct lwip_sock *sock = get_socket_by_fd(s);
+ 
+     if (check_msg_vaild(message)) {
+         GAZELLE_RETURN(EINVAL);
+@@ -635,17 +616,16 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+     struct pbuf *pbuf = NULL;
+     ssize_t recvd = 0;
+     uint16_t copy_len;
+-
+-    struct lwip_sock *sock = get_socket(fd);
+-    if (sock == NULL) {
+-        LSTACK_LOG(ERR, LSTACK, "get_socket null fd %d.\n", fd);
+-        GAZELLE_RETURN(EINVAL);
+-    }
++    struct lwip_sock *sock = get_socket_by_fd(fd);
+ 
+     if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
+         return 0;
+     }
+ 
++    if (recv_left > UINT16_MAX) {
++        recv_left = UINT16_MAX;
++    }
++
+     while (recv_left > 0) {
+         if (sock->recv_lastdata) {
+             pbuf = sock->recv_lastdata;
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 41dda89..2759d7d 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -36,9 +36,9 @@
+ #include "posix/lstack_epoll.h"
+ #include "lstack_stack_stat.h"
+ 
+-#define READ_LIST_MAX                   128
+-#define SEND_LIST_MAX                   128
+-#define HANDLE_RPC_MSG_MAX              128
++#define READ_LIST_MAX                   32 
++#define SEND_LIST_MAX                   32 
++#define HANDLE_RPC_MSG_MAX              32 
+ #define KERNEL_EVENT_100us              100
+ 
+ static PER_THREAD struct protocol_stack *g_stack_p = NULL;
+@@ -164,7 +164,7 @@ void low_power_idling(struct protocol_stack *stack)
+         last_cycle_ts = sys_now();
+     }
+ 
+-    uint64_t now_pkts = get_protocol_stack()->stats.rx;
++    uint64_t now_pkts = stack->stats.rx;
+     uint32_t now_ts = sys_now();
+     if (((now_ts - last_cycle_ts) > LSTACK_LPM_DETECT_MS) ||
+         ((now_pkts - last_cycle_pkts) >= LSTACK_LPM_PKTS_IN_DETECT)) {
+@@ -258,7 +258,9 @@ static void* gazelle_kernelevent_thread(void *arg)
+     uint16_t queue_id = *(uint16_t *)arg;
+     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+ 
+-    bind_to_stack_numa(stack);
++    if (get_global_cfg_params()->app_bind_numa) {
++        bind_to_stack_numa(stack);
++    }
+ 
+     LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", queue_id);
+ 
+@@ -420,6 +422,7 @@ static void* gazelle_stack_thread(void *arg)
+ {
+     uint16_t queue_id = *(uint16_t *)arg;
+     bool use_ltran_flag = use_ltran();
++    uint32_t wakeup_tick = 0;
+ 
+     struct protocol_stack *stack = stack_thread_init(queue_id);
+     if (stack == NULL) {
+@@ -442,9 +445,11 @@ static void* gazelle_stack_thread(void *arg)
+ 
+         send_stack_list(stack, SEND_LIST_MAX);
+ 
+-        wakeup_kernel_event(stack);
+-
+-        wakeup_stack_epoll(stack);
++        if ((wakeup_tick & 0xf) == 0) {
++            wakeup_kernel_event(stack);
++            wakeup_stack_epoll(stack);
++        }
++        wakeup_tick++;
+ 
+         sys_timer_run();
+ 
+@@ -523,8 +528,9 @@ int32_t init_protocol_stack(void)
+ void stack_arp(struct rpc_msg *msg)
+ {
+     struct rte_mbuf *mbuf = (struct rte_mbuf *)msg->args[MSG_ARG_0].p;
++    struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_1].p;
+ 
+-    eth_dev_recv(mbuf, NULL);
++    eth_dev_recv(mbuf, stack);
+ }
+ 
+ void stack_socket(struct rpc_msg *msg)
+diff --git a/src/lstack/core/lstack_thread_rpc.c b/src/lstack/core/lstack_thread_rpc.c
+index db1de5a..295baf3 100644
+--- a/src/lstack/core/lstack_thread_rpc.c
++++ b/src/lstack/core/lstack_thread_rpc.c
+@@ -234,6 +234,7 @@ int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf)
+ 
+     msg->self_release = 0;
+     msg->args[MSG_ARG_0].p = mbuf;
++    msg->args[MSG_ARG_1].p = stack;
+ 
+     rpc_call(&stack->rpc_queue, msg);
+ 
+@@ -451,6 +452,7 @@ int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
+     msg->args[MSG_ARG_0].i = fd;
+     msg->args[MSG_ARG_1].size = len;
+     msg->args[MSG_ARG_2].i = flags;
++    msg->args[MSG_ARG_3].p = stack;
+     msg->self_release = 0;
+ 
+     rpc_call(&stack->rpc_queue, msg);
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index cc2cfb9..fed1882 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -49,6 +49,7 @@ struct protocol_stack {
+     struct rte_ring *reg_ring;
+     struct rte_ring *wakeup_ring;
+     struct reg_ring_msg *reg_buf;
++    uint32_t reg_head;
+ 
+     volatile bool low_power;
+     lockless_queue rpc_queue __rte_cache_aligned;
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 5ddc0db..3abed5e 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -39,9 +39,6 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
+     struct pbuf *prev = NULL;
+     struct pbuf *head = NULL;
+     struct pbuf_custom *pc = NULL;
+-    if (!stack) {
+-        stack = get_protocol_stack();
+-    }
+     struct rte_mbuf *m = mbuf;
+     uint16_t len, pkt_len;
+ 
+@@ -81,7 +78,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
+     }
+ }
+ 
+-#define READ_PKTS_MAX   128
++#define READ_PKTS_MAX   32
+ int32_t eth_dev_poll(void)
+ {
+     uint32_t nr_pkts;
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index f9fa5a3..1c148e1 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -113,7 +113,6 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+     uint32_t sent_pkts = 0;
+     void *free_buf[VDEV_REG_QUEUE_SZ];
+     struct reg_ring_msg *tmp_buf = NULL;
+-    static PER_THREAD uint32_t head = 0;
+     const uint32_t tbegin = sys_now();
+     struct protocol_stack *stack = get_protocol_stack();
+ 
+@@ -124,6 +123,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+         }
+     }
+ 
++    uint32_t reg_index = stack->reg_head++ & DEFAULT_RING_MASK;
+     do {
+         (void)gazelle_ring_sc_dequeue(stack->reg_ring, free_buf, VDEV_REG_QUEUE_SZ);
+ 
+@@ -131,7 +131,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+             continue;
+         }
+ 
+-        tmp_buf = &stack->reg_buf[head];
++        tmp_buf = &stack->reg_buf[reg_index];
+         tmp_buf->type = type;
+         tmp_buf->tid = get_stack_tid();
+         ret = memcpy_s(&tmp_buf->qtuple, sizeof(*qtuple), qtuple, sizeof(struct gazelle_quintuple));
+@@ -144,9 +144,6 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+         sent_pkts = gazelle_ring_sp_enqueue(stack->reg_ring, free_buf, 1);
+     } while ((sent_pkts < 1) && (ENQUEUE_RING_RETRY_TIMEOUT > sys_now() - tbegin) && get_register_state());
+ 
+-    if (sent_pkts == 1) {
+-        head = (head + 1) % VDEV_REG_QUEUE_SZ;
+-    }
+     return (int32_t)sent_pkts;
+ }
+ 
+-- 
+2.23.0
+
