@@ -520,8 +520,14 @@ static void set_kni_ip_mac(uint16_t port_id)
     if (strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME) != 0) {
         LSTACK_LOG(ERR, LSTACK, "strcpy_s fail \n");
     }
+
     if (posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr) < 0) {
         LSTACK_LOG(ERR, LSTACK, "set kni ip=%u fail\n", cfg->host_addr.addr);
+    }
+
+    sin->sin_addr.s_addr = cfg->netmask.addr;
+    if (posix_api->ioctl_fn(fd, SIOCSIFNETMASK, &set_ifr) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "set kni netmask=%u fail\n", cfg->netmask.addr);
     }
 
     posix_api->close_fn(fd);

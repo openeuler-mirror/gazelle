@@ -36,6 +36,10 @@
 #include "gazelle_base_func.h"
 #include "lstack_thread_rpc.h"
 
+#ifndef SOCK_TYPE_MASK
+#define SOCK_TYPE_MASK 0xf
+#endif
+
 enum KERNEL_LWIP_PATH {
     PATH_KERNEL = 0,
     PATH_LWIP,
@@ -293,7 +297,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
 static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     if ((domain != AF_INET && domain != AF_UNSPEC)
-        || posix_api->ues_posix) {
+        || posix_api->ues_posix || ((type & SOCK_TYPE_MASK) & ~SOCK_STREAM)) {
         return posix_api->socket_fn(domain, type, protocol);
     }
 

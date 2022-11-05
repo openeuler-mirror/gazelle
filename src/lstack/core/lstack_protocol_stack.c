@@ -422,6 +422,7 @@ static void* gazelle_stack_thread(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
     bool use_ltran_flag = use_ltran();
+    bool kni_switch = get_global_cfg_params()->kni_switch;
     uint32_t wakeup_tick = 0;
 
     struct protocol_stack *stack = stack_thread_init(queue_id);
@@ -449,6 +450,13 @@ static void* gazelle_stack_thread(void *arg)
             wakeup_kernel_event(stack);
             wakeup_stack_epoll(stack);
         }
+
+	/* KNI requests are generally low-rate I/Os,
+	 * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
+	if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
+	    rte_kni_handle_request(get_gazelle_kni());
+	}
+
         wakeup_tick++;
 
         sys_timer_run();
