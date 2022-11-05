@@ -1,0 +1,85 @@
+From d09e1b2a18c59ae9692d678004f9612f9e990e35 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Sat, 5 Nov 2022 15:00:44 +0800
+Subject: [PATCH] add kni support in lstack
+
+---
+ src/lstack/api/lstack_wrap.c            | 6 +++++-
+ src/lstack/core/lstack_dpdk.c           | 6 ++++++
+ src/lstack/core/lstack_protocol_stack.c | 8 ++++++++
+ 3 files changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 1c7a722..1a654e9 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -36,6 +36,10 @@
+ #include "gazelle_base_func.h"
+ #include "lstack_thread_rpc.h"
+ 
++#ifndef SOCK_TYPE_MASK
++#define SOCK_TYPE_MASK 0xf
++#endif
++
+ enum KERNEL_LWIP_PATH {
+     PATH_KERNEL = 0,
+     PATH_LWIP,
+@@ -293,7 +297,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
+ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
+ {
+     if ((domain != AF_INET && domain != AF_UNSPEC)
+-        || posix_api->ues_posix) {
++        || posix_api->ues_posix || ((type & SOCK_TYPE_MASK) & ~SOCK_STREAM)) {
+         return posix_api->socket_fn(domain, type, protocol);
+     }
+ 
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 39f8ecf..c63fbaa 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -520,10 +520,16 @@ static void set_kni_ip_mac(uint16_t port_id)
+     if (strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME) != 0) {
+         LSTACK_LOG(ERR, LSTACK, "strcpy_s fail \n");
+     }
++
+     if (posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr) < 0) {
+         LSTACK_LOG(ERR, LSTACK, "set kni ip=%u fail\n", cfg->host_addr.addr);
+     }
+ 
++    sin->sin_addr.s_addr = cfg->netmask.addr;
++    if (posix_api->ioctl_fn(fd, SIOCSIFNETMASK, &set_ifr) < 0) {
++        LSTACK_LOG(ERR, LSTACK, "set kni netmask=%u fail\n", cfg->netmask.addr);
++    }
++
+     posix_api->close_fn(fd);
+ }
+ 
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 2759d7d..3daa09f 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -422,6 +422,7 @@ static void* gazelle_stack_thread(void *arg)
+ {
+     uint16_t queue_id = *(uint16_t *)arg;
+     bool use_ltran_flag = use_ltran();
++    bool kni_switch = get_global_cfg_params()->kni_switch;
+     uint32_t wakeup_tick = 0;
+ 
+     struct protocol_stack *stack = stack_thread_init(queue_id);
+@@ -449,6 +450,13 @@ static void* gazelle_stack_thread(void *arg)
+             wakeup_kernel_event(stack);
+             wakeup_stack_epoll(stack);
+         }
++
++	/* KNI requests are generally low-rate I/Os,
++	 * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
++	if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
++	    rte_kni_handle_request(get_gazelle_kni());
++	}
++
+         wakeup_tick++;
+ 
+         sys_timer_run();
+-- 
+2.33.0
+
