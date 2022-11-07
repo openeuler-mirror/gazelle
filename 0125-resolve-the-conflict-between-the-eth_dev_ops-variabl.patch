@@ -1,0 +1,174 @@
+From 5b51e86ec445f7411f2fb8669397d84761766e3e Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Mon, 7 Nov 2022 15:37:14 +0800
+Subject: [PATCH] resolve the conflict between the eth_dev_ops variable and the
+ dpdk-19.11
+
+---
+ src/common/dpdk_common.h                   |  2 +-
+ src/lstack/core/lstack_lwip.c              |  3 ++-
+ src/lstack/include/lstack_ethdev.h         |  2 +-
+ src/lstack/include/lstack_protocol_stack.h |  3 ++-
+ src/lstack/include/lstack_vdev.h           |  6 ++++--
+ src/lstack/netif/lstack_ethdev.c           |  8 +++-----
+ src/lstack/netif/lstack_vdev.c             | 18 +++++-------------
+ 7 files changed, 18 insertions(+), 24 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index bff4913..315707f 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -135,7 +135,7 @@ static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_
+     cons.tail            prod.tail                prod.head                 cons.head
+     gazelle_ring_sp_enqueue: cons.head-->> cons.tal,  enqueue object
+     gazelle_ring_sc_dequeue: cons.tal -->> prod.tail, dequeue object
+-    gazelle_ring_read:       prod.tail-->> cons.head, read object, prod.head = prod.tail + N
++    gazelle_ring_read:       prod.head-->> cons.head, read object, prod.head = prod.tail + N
+     gazelle_ring_read_over:  prod.tail  =  prod.head, update prod.tail
+  */
+ static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void **obj_table, uint32_t n)
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 52b4624..0437187 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -619,6 +619,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+     ssize_t recvd = 0;
+     uint16_t copy_len;
+     struct lwip_sock *sock = get_socket_by_fd(fd);
++    bool latency_enable = get_protocol_stack_group()->latency_start;
+ 
+     if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
+         return 0;
+@@ -650,7 +651,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+             if (sock->wakeup) {
+                 sock->wakeup->stat.app_read_cnt += 1;
+             }
+-            if (get_protocol_stack_group()->latency_start) {
++            if (latency_enable) {
+                 calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ);
+             }
+             gazelle_ring_read_over(sock->recv_ring);
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index 95f5161..c64b4a0 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -15,7 +15,7 @@
+ 
+ struct protocol_stack;
+ struct rte_mbuf;
+-struct lstack_eth_dev_ops {
++struct lstack_dev_ops {
+     uint32_t (*rx_poll)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf);
+     uint32_t (*tx_xmit)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts);
+ };
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index c836b77..2d9053a 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -21,6 +21,7 @@
+ 
+ #include "gazelle_dfx_msg.h"
+ #include "lstack_lockless_queue.h"
++#include "lstack_ethdev.h"
+ #include "gazelle_opt.h"
+ 
+ #define SOCK_RECV_RING_SIZE         (128)
+@@ -61,7 +62,7 @@ struct protocol_stack {
+     char pad1 __rte_cache_aligned;
+ 
+     struct netif netif;
+-    struct lstack_eth_dev_ops *dev_ops;
++    struct lstack_dev_ops dev_ops;
+     uint32_t rx_ring_used;
+     uint32_t tx_ring_used;
+ 
+diff --git a/src/lstack/include/lstack_vdev.h b/src/lstack/include/lstack_vdev.h
+index b84d280..0693c4d 100644
+--- a/src/lstack/include/lstack_vdev.h
++++ b/src/lstack/include/lstack_vdev.h
+@@ -13,10 +13,12 @@
+ #ifndef _GAZELLE_VDEV_H_
+ #define _GAZELLE_VDEV_H_
+ 
+-struct lstack_eth_dev_ops;
++#include <stdbool.h>
++
++struct lstack_dev_ops;
+ struct gazelle_quintuple;
+ enum reg_ring_type;
+-void vdev_dev_ops_init(struct lstack_eth_dev_ops **dev_ops);
++void vdev_dev_ops_init(struct lstack_dev_ops *dev_ops);
+ int vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple);
+ 
+ #endif /* _GAZELLE_VDEV_H_ */
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index cf783f4..dbe7203 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -88,7 +88,7 @@ int32_t eth_dev_poll(void)
+     struct rte_mbuf *pkts[READ_PKTS_MAX];
+     struct protocol_stack *stack = get_protocol_stack();
+ 
+-    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
++    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
+     if (nr_pkts == 0) {
+         return 0;
+     }
+@@ -121,7 +121,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
+     uint32_t nr_pkts;
+     struct rte_mbuf *pkts[READ_PKTS_MAX];
+ 
+-    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
++    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
+     if (nr_pkts == 0) {
+         return 0;
+     }
+@@ -161,13 +161,11 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+     mbuf->data_len = pbuf->len;
+     mbuf->pkt_len = pbuf->tot_len;
+     rte_mbuf_refcnt_update(mbuf, 1);
+-#if CHECKSUM_GEN_IP_HW || CHECKSUM_GEN_TCP_HW
+     mbuf->ol_flags = pbuf->ol_flags;
+     mbuf->l2_len = pbuf->l2_len;
+     mbuf->l3_len = pbuf->l3_len;
+-#endif
+ 
+-    uint32_t sent_pkts = stack->dev_ops->tx_xmit(stack, &mbuf, 1);
++    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &mbuf, 1);
+     stack->stats.tx += sent_pkts;
+     if (sent_pkts < 1) {
+         stack->stats.tx_drop++;
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index 68b6a0c..e2671b4 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -168,21 +168,13 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+     return (int32_t)sent_pkts;
+ }
+ 
+-static struct lstack_eth_dev_ops g_eth_dev_ops = {
+-    .rx_poll = vdev_rx_poll,
+-    .tx_xmit = vdev_tx_xmit,
+-};
+-
+-static struct lstack_eth_dev_ops g_ltran_eth_dev_ops = {
+-    .rx_poll = ltran_rx_poll,
+-    .tx_xmit = ltran_tx_xmit,
+-};
+-
+-void vdev_dev_ops_init(struct lstack_eth_dev_ops **dev_ops)
++void vdev_dev_ops_init(struct lstack_dev_ops *dev_ops)
+ {
+     if (use_ltran()) {
+-        *dev_ops = &g_ltran_eth_dev_ops;
++        dev_ops->rx_poll = ltran_rx_poll;
++        dev_ops->tx_xmit = ltran_tx_xmit;
+     } else {
+-        *dev_ops = &g_eth_dev_ops;
++        dev_ops->rx_poll = vdev_rx_poll;
++        dev_ops->tx_xmit = vdev_tx_xmit;
+     }
+ }
+-- 
+2.23.0
+
