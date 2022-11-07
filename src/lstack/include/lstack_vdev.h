@@ -13,10 +13,12 @@
 #ifndef _GAZELLE_VDEV_H_
 #define _GAZELLE_VDEV_H_
 
-struct eth_dev_ops;
+#include <stdbool.h>
+
+struct lstack_dev_ops;
 struct gazelle_quintuple;
 enum reg_ring_type;
-void vdev_dev_ops_init(struct eth_dev_ops **dev_ops);
+void vdev_dev_ops_init(struct lstack_dev_ops *dev_ops);
 int vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple);
 
 #endif /* _GAZELLE_VDEV_H_ */
