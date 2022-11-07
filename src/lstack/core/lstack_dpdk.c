@@ -27,6 +27,7 @@
 #include <rte_bus.h>
 #include <rte_errno.h>
 #include <rte_kni.h>
+#include <rte_pdump.h>
 #include <rte_thash.h>
 #include <lwip/posix_api.h>
 #include <lwipopts.h>
@@ -104,6 +105,14 @@ int32_t dpdk_eal_init(void)
 {
     int32_t ret;
     struct cfg_params *global_params = get_global_cfg_params();
+    
+    ret = rte_pdump_init();
+    if (ret < 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "rte_pdump_init failed init, rte_errno %d\n", rte_errno);
+	/* We do not care whether the pdump is successfully loaded. So, just print an alarm. */
+    } else {
+        LSTACK_PRE_LOG(LSTACK_INFO, "rte_pdump_init success\n");
+    }
 
     ret = rte_eal_init(global_params->dpdk_argc, global_params->dpdk_argv);
     if (ret < 0) {
