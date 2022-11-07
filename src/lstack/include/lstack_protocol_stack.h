@@ -21,6 +21,7 @@
 
 #include "gazelle_dfx_msg.h"
 #include "lstack_lockless_queue.h"
+#include "lstack_ethdev.h"
 #include "gazelle_opt.h"
 
 #define SOCK_RECV_RING_SIZE         (128)
@@ -61,7 +62,7 @@ struct protocol_stack {
     char pad1 __rte_cache_aligned;
 
     struct netif netif;
-    struct eth_dev_ops *dev_ops;
+    struct lstack_dev_ops dev_ops;
     uint32_t rx_ring_used;
     uint32_t tx_ring_used;
 

@@ -168,21 +168,13 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
     return (int32_t)sent_pkts;
 }
 
-static struct eth_dev_ops g_eth_dev_ops = {
-    .rx_poll = vdev_rx_poll,
-    .tx_xmit = vdev_tx_xmit,
-};
-
-static struct eth_dev_ops g_ltran_eth_dev_ops = {
-    .rx_poll = ltran_rx_poll,
-    .tx_xmit = ltran_tx_xmit,
-};
-
-void vdev_dev_ops_init(struct eth_dev_ops **dev_ops)
+void vdev_dev_ops_init(struct lstack_dev_ops *dev_ops)
 {
     if (use_ltran()) {
-        *dev_ops = &g_ltran_eth_dev_ops;
+        dev_ops->rx_poll = ltran_rx_poll;
+        dev_ops->tx_xmit = ltran_tx_xmit;
     } else {
-        *dev_ops = &g_eth_dev_ops;
+        dev_ops->rx_poll = vdev_rx_poll;
+        dev_ops->tx_xmit = vdev_tx_xmit;
     }
 }

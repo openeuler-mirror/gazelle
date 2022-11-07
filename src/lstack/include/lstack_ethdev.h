@@ -15,7 +15,7 @@
 
 struct protocol_stack;
 struct rte_mbuf;
-struct eth_dev_ops {
+struct lstack_dev_ops {
     uint32_t (*rx_poll)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf);
     uint32_t (*tx_xmit)(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts);
 };

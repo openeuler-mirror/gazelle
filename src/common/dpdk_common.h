@@ -135,7 +135,7 @@ static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_
     cons.tail            prod.tail                prod.head                 cons.head
     gazelle_ring_sp_enqueue: cons.head-->> cons.tal,  enqueue object
     gazelle_ring_sc_dequeue: cons.tal -->> prod.tail, dequeue object
-    gazelle_ring_read:       prod.tail-->> cons.head, read object, prod.head = prod.tail + N
+    gazelle_ring_read:       prod.head-->> cons.head, read object, prod.head = prod.tail + N
     gazelle_ring_read_over:  prod.tail  =  prod.head, update prod.tail
  */
 static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void **obj_table, uint32_t n)

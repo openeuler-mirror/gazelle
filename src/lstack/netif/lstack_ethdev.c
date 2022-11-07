@@ -88,7 +88,7 @@ int32_t eth_dev_poll(void)
     struct rte_mbuf *pkts[READ_PKTS_MAX];
     struct protocol_stack *stack = get_protocol_stack();
 
-    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
+    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
     if (nr_pkts == 0) {
         return 0;
     }
@@ -121,7 +121,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
     uint32_t nr_pkts;
     struct rte_mbuf *pkts[READ_PKTS_MAX];
 
-    nr_pkts = stack->dev_ops->rx_poll(stack, pkts, READ_PKTS_MAX);
+    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
     if (nr_pkts == 0) {
         return 0;
     }
@@ -161,13 +161,11 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
     mbuf->data_len = pbuf->len;
     mbuf->pkt_len = pbuf->tot_len;
     rte_mbuf_refcnt_update(mbuf, 1);
-#if CHECKSUM_GEN_IP_HW || CHECKSUM_GEN_TCP_HW
     mbuf->ol_flags = pbuf->ol_flags;
     mbuf->l2_len = pbuf->l2_len;
     mbuf->l3_len = pbuf->l3_len;
-#endif
 
-    uint32_t sent_pkts = stack->dev_ops->tx_xmit(stack, &mbuf, 1);
+    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &mbuf, 1);
     stack->stats.tx += sent_pkts;
     if (sent_pkts < 1) {
         stack->stats.tx_drop++;

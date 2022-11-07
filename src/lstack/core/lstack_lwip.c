@@ -619,6 +619,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
     ssize_t recvd = 0;
     uint16_t copy_len;
     struct lwip_sock *sock = get_socket_by_fd(fd);
+    bool latency_enable = get_protocol_stack_group()->latency_start;
 
     if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
         return 0;
@@ -650,7 +651,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
             if (sock->wakeup) {
                 sock->wakeup->stat.app_read_cnt += 1;
             }
-            if (get_protocol_stack_group()->latency_start) {
+            if (latency_enable) {
                 calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ);
             }
             gazelle_ring_read_over(sock->recv_ring);
