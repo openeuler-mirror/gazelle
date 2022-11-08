@@ -1,0 +1,76 @@
+From 421ecec20e2dadf33941ab1b42c2eb592845ff21 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Mon, 7 Nov 2022 23:06:50 +0800
+Subject: [PATCH] add pdump support in lstack
+
+---
+ src/lstack/api/lstack_epoll.c | 18 +++++++-----------
+ src/lstack/core/lstack_dpdk.c |  9 +++++++++
+ 2 files changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 6ac049c..6979e12 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -172,11 +172,9 @@ int32_t lstack_do_epoll_create(int32_t fd)
+     wakeup->epollfd = fd;
+     sock->wakeup = wakeup;
+ 
+-    if (!get_global_cfg_params()->app_bind_numa) {
+-        update_epoll_max_stack(wakeup);
+-        change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, wakeup->max_stack);
+-        wakeup->bind_stack = wakeup->max_stack;
+-    }
++    update_epoll_max_stack(wakeup);
++    change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, wakeup->max_stack);
++    wakeup->bind_stack = wakeup->max_stack;
+ 
+     return fd;
+ }
+@@ -508,12 +506,10 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
+     list_add_node(&stack_group->poll_list, &wakeup->poll_list);
+     pthread_spin_unlock(&stack_group->poll_list_lock);
+ 
+-    if (!get_global_cfg_params()->app_bind_numa) {
+-        int32_t stack_count[PROTOCOL_STACK_MAX] = {0};
+-        uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
+-        change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, stack_group->stacks[bind_id]);
+-        wakeup->bind_stack = stack_group->stacks[bind_id];
+-    }
++    int32_t stack_count[PROTOCOL_STACK_MAX] = {0};
++    uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
++    change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, stack_group->stacks[bind_id]);
++    wakeup->bind_stack = stack_group->stacks[bind_id];
+ 
+     return 0;
+ }
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index c63fbaa..77ae3eb 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -27,6 +27,7 @@
+ #include <rte_bus.h>
+ #include <rte_errno.h>
+ #include <rte_kni.h>
++#include <rte_pdump.h>
+ #include <rte_thash.h>
+ #include <lwip/posix_api.h>
+ #include <lwipopts.h>
+@@ -104,6 +105,14 @@ int32_t dpdk_eal_init(void)
+ {
+     int32_t ret;
+     struct cfg_params *global_params = get_global_cfg_params();
++    
++    ret = rte_pdump_init();
++    if (ret < 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "rte_pdump_init failed init, rte_errno %d\n", rte_errno);
++	/* We do not care whether the pdump is successfully loaded. So, just print an alarm. */
++    } else {
++        LSTACK_PRE_LOG(LSTACK_INFO, "rte_pdump_init success\n");
++    }
+ 
+     ret = rte_eal_init(global_params->dpdk_argc, global_params->dpdk_argv);
+     if (ret < 0) {
+-- 
+2.33.0
+
