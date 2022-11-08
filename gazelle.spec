@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       21
+Release:       22
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -139,6 +139,7 @@ Patch9121:     0121-optimize-variable-access.patch
 Patch9122:     0122-add-gro.patch
 Patch9123:     0123-expand-nic-rx-desc-size.patch
 Patch9124:     0124-add-kni-local-support-in-lstack.patch
+Patch9125:     0125-resolve-the-conflict-between-the-eth_dev_ops-variabl.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -179,6 +180,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Nov 07 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-22
+- resolve the conflict between the eth_dev_ops variable and the dpdk-19.11
+
 * Sat Nov 05 2022 kircher <majun65@huawei.com> - 1.0.1-21
 - add kni local support in lstack
 
