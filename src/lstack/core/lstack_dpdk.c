@@ -452,6 +452,8 @@ int32_t dpdk_ethdev_init(void)
             stack->port_id = stack_group->port_id;
 	} else {
             LSTACK_LOG(ERR, LSTACK, "empty stack at stack_num %d\n", i);
+	    stack_group->eth_params = NULL;
+	    free(eth_params);
 	    return -EINVAL;
 	}
     }
