@@ -280,7 +280,6 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
 
     stack->tid = rte_gettid();
     stack->queue_id = queue_id;
-    stack->port_id = stack_group->port_id;
     stack->cpu_id = get_global_cfg_params()->cpus[queue_id];
     stack->lwip_stats = &lwip_stats;
 

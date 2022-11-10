@@ -446,6 +446,16 @@ int32_t dpdk_ethdev_init(void)
     stack_group->rx_offload = eth_params->conf.rxmode.offloads;
     stack_group->tx_offload = eth_params->conf.txmode.offloads;
 
+    for (uint32_t i = 0; i < stack_group->stack_num; i++) {
+	struct protocol_stack *stack = stack_group->stacks[i];
+	if (likely(stack)) {
+            stack->port_id = stack_group->port_id;
+	} else {
+            LSTACK_LOG(ERR, LSTACK, "empty stack at stack_num %d\n", i);
+	    return -EINVAL;
+	}
+    }
+
     ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
