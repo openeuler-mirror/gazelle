@@ -473,7 +473,7 @@ static int32_t check_msg_vaild(const struct msghdr *message)
     for (int32_t i = 0; i < message->msg_iovlen; i++) {
         if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len < 0) ||
             ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
-            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
+            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) < 0)) {
             GAZELLE_RETURN(EINVAL);
         }
         buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
@@ -491,6 +491,10 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
     }
 
     for (int32_t i = 0; i < message->msg_iovlen; i++) {
+	if (message->msg_iov[i].iov_len == 0){
+	    continue;
+	}
+
         ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
         if (recvd_local > 0) {
             buflen += recvd_local;
@@ -551,6 +555,10 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
 
     for (i = 0; i < message->msg_iovlen; i++) {
         if (message->msg_iov[i].iov_len == 0) {
+            continue;
+        }
+
+	if (message->msg_iov[i].iov_len == 0){
             continue;
         }
 
