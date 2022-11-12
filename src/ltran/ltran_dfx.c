@@ -1278,10 +1278,6 @@ int32_t main(int32_t argc, char *argv[])
     argv[argc - unix_arg] = argv[argc];
     argc -= unix_arg;
 
-    if (g_unix_prefix && filename_check(g_unix_prefix)) {
-	return -1;
-    }
-
     int32_t fd = dfx_connect_ltran(true, true);
     if (fd > 0) {
         g_use_ltran = true;
