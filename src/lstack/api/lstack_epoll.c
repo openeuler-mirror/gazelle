@@ -453,6 +453,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
             return lwip_num + kernel_num;
         }
 
+        if (timeout == 0) {
+            return 0;
+        }
+
         if (timeout < 0) {
             ret = pthread_mutex_lock(&wakeup->wait);
         } else {
@@ -652,6 +656,10 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 
         if (lwip_num + kernel_num > 0) {
             return lwip_num + kernel_num;
+        }
+
+        if (timeout == 0) {
+            return 0;
         }
 
         if (timeout < 0) {
