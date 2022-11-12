@@ -721,6 +721,10 @@ void gazelle_connected_callback(struct netconn *conn)
         return;
     }
 
+    if (sock->wakeup != NULL && sock->wakeup->epollfd > 0){
+	posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
+    }
+
     posix_api->shutdown_fn(fd, SHUT_RDWR);
 
     SET_CONN_TYPE_LIBOS(conn);
