@@ -21,6 +21,16 @@
 #include "gazelle_opt.h"
 #include "gazelle_base_func.h"
 
+#ifdef LTRAN_COMPILE
+#include "ltran_log.h"
+#define  COMMON_ERR(fmt, ...)    LTRAN_ERR(fmt, ##__VA_ARGS__)
+#define  COMMON_INFO(fmt, ...)   LTRAN_INFO(fmt, ##__VA_ARGS__)
+#else
+#include "lstack_log.h"
+#define  COMMON_ERR(fmt, ...)    LSTACK_LOG(ERR, LSTACK, fmt, ##__VA_ARGS__)
+#define  COMMON_INFO(fmt, ...)   LSTACK_LOG(INFO, LSTACK, fmt, ##__VA_ARGS__)
+#endif
+
 static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
 {
     const char *delim = "-";
@@ -85,5 +95,26 @@ int32_t check_and_set_run_dir(void)
             return -1;
         }
     }
+    return 0;
+}
+
+/* return 1 for check error */
+int32_t filename_check(const char* args)
+{
+    if (args == NULL) {
+	return 1;
+    }
+
+    if (strlen(args) <= 0 || strlen(args) > GAZELLE_SOCK_FILENAME_MAXLEN - 1) {
+	COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename exceeds the limit %d.\n", args, GAZELLE_SOCK_FILENAME_MAXLEN);
+	return 1;
+    }
+
+    char* sensitive_chars = strpbrk(args, "|;&$><`\\!\n");
+    if (sensitive_chars != NULL) {
+	COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename contains sensitive characters.\n", args);
+	return 1;
+    }
+
     return 0;
 }

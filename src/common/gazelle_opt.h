@@ -75,6 +75,8 @@
 #define GAZELLE_MAX_STACK_ARRAY_SIZE    GAZELLE_CLIENT_NUM
 
 #define GAZELLE_REG_SOCK_PATHNAME       "/var/run/gazelle/gazelle_client.sock"
+#define GAZELLE_REG_SOCK_FILENAME       "gazelle_client.sock"
+#define GAZELLE_SOCK_FILENAME_MAXLEN    128
 
 #define GAZELLE_RUN_DIR                  "/var/run/gazelle/"
 #define GAZELLE_FILE_PERMISSION          0700

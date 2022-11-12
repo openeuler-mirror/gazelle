@@ -58,6 +58,15 @@ static void sig_default_handler(int32_t sig)
     LTRAN_ERR("ltran dumped，caught signal：%d.\n", sig);
     print_stack();
     dpdk_kni_release();
+    int ret = 0;
+    ret = unlink(get_ltran_config()->unix_socket_filename);
+    if (ret) {
+	LTRAN_WARN("unlink %s ERROR. errn: %d. ret=%d\n", get_ltran_config()->unix_socket_filename, errno, ret);
+    }
+    ret = unlink(get_ltran_config()->dfx_socket_filename);
+    if (ret) {
+	LTRAN_WARN("unlink %s ERROR. errn: %d. ret=%d\n", get_ltran_config()->dfx_socket_filename, errno, ret);
+    }
     kill(getpid(), sig);
 }
 
