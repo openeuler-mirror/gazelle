@@ -32,6 +32,8 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size);
 
 int32_t check_and_set_run_dir(void);
 
+int32_t filename_check(const char* args);
+
 #undef container_of
 #define container_of(ptr, type, field) ((type *)(void*)(((char *)(ptr)) - offsetof(type, field)))
 

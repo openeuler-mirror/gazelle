@@ -67,9 +67,12 @@ static int control_unix_sock(struct sockaddr_un *address)
         posix_api->close_fn(sockfd);
         return -1;
     }
+
+    struct cfg_params *global_params = get_global_cfg_params();
+
     address->sun_family = AF_UNIX;
-    int ret = strncpy_s(address->sun_path, sizeof(address->sun_path), GAZELLE_REG_SOCK_PATHNAME,
-        strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
+    int ret = strncpy_s(address->sun_path, sizeof(address->sun_path), global_params->unix_socket_filename,
+        strlen(global_params->unix_socket_filename) + 1);
     if (ret != EOK) {
         posix_api->close_fn(sockfd);
         return -1;
@@ -459,6 +462,14 @@ void control_fd_close(void)
         /* 200ms: wait ltran instance logout */
         rte_delay_ms(200);
     }
+
+    struct cfg_params *global_params = get_global_cfg_params();
+    if (!global_params->use_ltran) {
+	int ret = unlink(global_params->unix_socket_filename);
+	if (ret == -1) {
+            LSTACK_LOG(ERR, LSTACK, "unlink failed, just skip it\n");
+	}
+    }
 }
 
 int32_t control_init_client(bool is_reconnect)
@@ -675,7 +686,7 @@ static int32_t control_init_server(void)
         return -1;
     }
 
-    ret = unlink(GAZELLE_REG_SOCK_PATHNAME);
+    ret = unlink(get_global_cfg_params()->unix_socket_filename);
     if (ret == -1) {
         LSTACK_LOG(ERR, LSTACK, "unlink failed, just skip it\n");
     }

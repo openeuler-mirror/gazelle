@@ -42,6 +42,7 @@
 #define PARAM_BOND_RX_QUEUE_NUM         "bond_rx_queue_num"
 #define PARAM_BOND_MACS                 "bond_macs"
 #define PARAM_TCP_CONN_SCAN_INTERVAL    "tcp_conn_scan_interval"
+#define PARAM_UNIX_PREFIX               "unix_prefix"
 
 static struct ltran_config g_ltran_config = {0};
 struct ltran_config* get_ltran_config(void)
@@ -537,6 +538,78 @@ struct param_parser {
     param_parse_func func;
 };
 
+static int32_t parse_unix_prefix(const config_t *config, const char *key, struct ltran_config *ltran_config)
+{
+    const char *prefix = NULL;
+    int32_t ret = 0;
+
+    ret = memset_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
+		   0, sizeof(ltran_config->unix_socket_filename));
+    if (ret != EOK) {
+	gazelle_set_errno(GAZELLE_EINETATON);
+	return GAZELLE_ERR;
+    }
+
+    ret = memset_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
+		   0, sizeof(ltran_config->dfx_socket_filename));
+    if (ret != EOK) {
+	gazelle_set_errno(GAZELLE_EINETATON);
+	return GAZELLE_ERR;
+    }
+
+    ret = strncpy_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
+		    GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+    if (ret != EOK) {
+	gazelle_set_errno(GAZELLE_EINETATON);
+	return GAZELLE_ERR;
+    }
+
+    ret = strncpy_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
+		    GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+    if (ret != EOK) {
+	gazelle_set_errno(GAZELLE_EINETATON);
+	return GAZELLE_ERR;
+    }
+
+    ret = config_lookup_string(config, key, &prefix);
+    if (ret) {
+        if (filename_check(prefix)) {
+	    gazelle_set_errno(GAZELLE_EINETATON);
+	    return GAZELLE_ERR;
+	}
+
+	ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
+			prefix, strlen(prefix) + 1);
+	if (ret != EOK) {
+	    gazelle_set_errno(GAZELLE_EINETATON);
+	    return GAZELLE_ERR;
+	}
+
+	ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
+			prefix, strlen(prefix) + 1);
+	if (ret != EOK) {
+	    gazelle_set_errno(GAZELLE_EINETATON);
+	    return GAZELLE_ERR;
+	}
+    }
+
+    ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
+		    GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+    if (ret != EOK) {
+	gazelle_set_errno(GAZELLE_EINETATON);
+	return GAZELLE_ERR;
+    }
+
+    ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
+		    GAZELLE_DFX_SOCK_FILENAME, strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
+    if (ret != EOK) {
+	gazelle_set_errno(GAZELLE_EINETATON);
+	return GAZELLE_ERR;
+    }
+
+    return GAZELLE_OK;
+}
+
 struct param_parser g_param_parse_tbl[] = {
     {PARAM_FORWARD_KIT_ARGS,        parse_forward_kit_args},
     {PARAM_DISPATCH_MAX_CLIENT,     parse_dispatch_max_client},
@@ -551,6 +624,7 @@ struct param_parser g_param_parse_tbl[] = {
     {PARAM_BOND_TX_QUEUE_NUM,       parse_bond_tx_queue_num},
     {PARAM_TCP_CONN_SCAN_INTERVAL,  parse_tcp_conn_scan_interval},
     {PARAM_KNI_SWITCH,              parse_kni_switch},
+    {PARAM_UNIX_PREFIX,             parse_unix_prefix},
 };
 
 int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config)
@@ -597,4 +671,3 @@ bool is_same_mac_addr(const uint8_t *smac, const uint8_t *dmac)
     }
     return true;
 }
-

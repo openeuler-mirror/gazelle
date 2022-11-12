@@ -80,6 +80,7 @@ struct cfg_params {
     int dpdk_argc;
     char **dpdk_argv;
     struct secondary_attach_arg sec_attach_arg;
+    char unix_socket_filename[NAME_MAX];
 };
 
 struct cfg_params *get_global_cfg_params(void);

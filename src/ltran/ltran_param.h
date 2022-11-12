@@ -56,6 +56,8 @@ struct ltran_config {
     struct {
         int32_t log_switch;
     } log;
+    char unix_socket_filename[NAME_MAX];
+    char dfx_socket_filename[NAME_MAX];
 };
 
 int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config);

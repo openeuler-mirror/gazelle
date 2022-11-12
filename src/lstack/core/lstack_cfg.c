@@ -56,6 +56,7 @@ static int32_t parse_gateway_addr(void);
 static int32_t parse_kni_switch(void);
 static int32_t parse_listen_shadow(void);
 static int32_t parse_app_bind_numa(void);
+static int32_t parse_unix_prefix(void);
 
 struct config_vector_t {
     const char *name;
@@ -75,6 +76,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
     { "app_bind_numa",  parse_app_bind_numa },
+    { "unix_prefix",    parse_unix_prefix },
     { NULL,           NULL }
 };
 
@@ -803,3 +805,47 @@ int32_t cfg_init(void)
     free(config_file);
     return ret;
 }
+
+static int32_t parse_unix_prefix(void)
+{
+    const config_setting_t *unix_prefix = NULL;
+    const char *args = NULL;
+    int32_t ret = 0;
+
+    ret = memset_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+		   0, sizeof(g_config_params.unix_socket_filename));
+    if (ret != EOK) {
+	return ret;
+    }
+
+    ret = strncpy_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+		   GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+    if (ret != EOK) {
+	return ret;
+    }
+
+    unix_prefix = config_lookup(&g_config, "unix_prefix");
+
+    if (unix_prefix) {
+        args = config_setting_get_string(unix_prefix);
+
+	if (filename_check(args)) {
+	    return -EINVAL;
+	}
+
+	ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+			args, strlen(args) + 1);
+	if (ret != EOK) {
+	    return ret;
+	}
+    }
+
+    ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+		    GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+    if (ret != EOK) {
+	return ret;
+    }
+
+    return 0;
+}
+

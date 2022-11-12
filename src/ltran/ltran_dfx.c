@@ -57,6 +57,8 @@ static struct gazelle_stat_lstack_total g_last_lstack_total[GAZELLE_MAX_STACK_AR
 
 static bool g_use_ltran = false;
 
+static char* g_unix_prefix;
+
 /* Use the largest data structure. */
 #define GAZELLE_CMD_RESP_BUFFER_SIZE (sizeof(struct gazelle_stack_dfx_data) / sizeof(char))
 
@@ -162,15 +164,23 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
         printf("%s:%d memset_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
     }
 
+    if (g_unix_prefix) {
+	ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
+			strlen(GAZELLE_RUN_DIR) + 1);
+	if (ret != EOK) {
+	    printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+	}
+    }
+
     addr.sun_family = AF_UNIX;
     if (use_ltran) {
-        ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
+        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
             strlen(GAZELLE_DFX_SOCK_PATHNAME) + 1);
         if (ret != EOK) {
             printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
         }
     } else {
-        ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_PATHNAME,
+        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_PATHNAME,
             strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
         if (ret != EOK) {
             printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
@@ -1250,6 +1260,27 @@ int32_t main(int32_t argc, char *argv[])
 {
     struct gazelle_stat_msg_request req_msg[GAZELLE_CMD_MAX] = {0};
     int32_t req_msg_num, ret;
+
+    int unix_arg = 0;
+    for (int32_t i = 1; i < argc; i++) {
+	if (unix_arg == 0) {
+	    if (!strcmp(argv[i], "-u")) {
+		unix_arg++;
+	    }
+	} else if (unix_arg == 1) {
+	    g_unix_prefix = argv[i];
+	    unix_arg++;
+	} else {
+	    argv[i - unix_arg] = argv[i];
+	}
+    }
+
+    argv[argc - unix_arg] = argv[argc];
+    argc -= unix_arg;
+
+    if (g_unix_prefix && filename_check(g_unix_prefix)) {
+	return -1;
+    }
 
     int32_t fd = dfx_connect_ltran(true, true);
     if (fd > 0) {
