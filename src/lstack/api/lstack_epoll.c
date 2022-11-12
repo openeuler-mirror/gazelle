@@ -55,6 +55,15 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
 
     if (wakeup->type == WAKEUP_EPOLL) {
         pthread_spin_lock(&wakeup->event_list_lock);
+
+        /* app thread have read/write, event is outdated */
+        if (event == EPOLLIN && sock->conn->state == NETCONN_LISTEN && !NETCONN_IS_DATAIN(sock)) {
+            return;
+        }
+        if (event == EPOLLOUT && !NETCONN_IS_OUTIDLE(sock)) {
+            return;
+        }
+
         sock->events |= (event == EPOLLERR) ? (EPOLLIN | EPOLLERR) : (event & sock->epoll_events);
         if (list_is_null(&sock->event_list)) {
             list_add_node(&wakeup->event_list, &sock->event_list);
