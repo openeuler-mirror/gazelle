@@ -352,7 +352,12 @@ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
    msg.msg_control = NULL;
    msg.msg_controllen = 0;
    msg.msg_flags = 0;
-   return recvmsg_from_stack(s, &msg, 0);
+   ssize_t result = recvmsg_from_stack(s, &msg, 0);
+   if(result == -1 && errno == EAGAIN){
+        errno = 0;
+	return 0;
+   }
+   return result;
 }
 
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
