@@ -423,17 +423,19 @@ static void* gazelle_stack_thread(void *arg)
     bool use_ltran_flag = use_ltran();
     bool kni_switch = get_global_cfg_params()->kni_switch;
     uint32_t wakeup_tick = 0;
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    bool wakeup_thread_enable = stack_group->wakeup_enable;
 
     struct protocol_stack *stack = stack_thread_init(queue_id);
     if (stack == NULL) {
         /* exit in main thread, avoid create mempool and exit at the same time */
         set_init_fail();
-        sem_post(&get_protocol_stack_group()->all_init);
+        sem_post(&stack_group->all_init);
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
         return NULL;
     }
 
-    sem_post(&get_protocol_stack_group()->all_init);
+    sem_post(&stack_group->all_init);
     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
 
     for (;;) {
@@ -447,7 +449,7 @@ static void* gazelle_stack_thread(void *arg)
 
         if ((wakeup_tick & 0xf) == 0) {
             wakeup_kernel_event(stack);
-            wakeup_stack_epoll(stack);
+            wakeup_stack_epoll(stack, wakeup_thread_enable);
         }
 
 	/* KNI requests are generally low-rate I/Os,

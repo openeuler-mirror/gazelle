@@ -77,14 +77,14 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
     }
 }
 
-void wakeup_stack_epoll(struct protocol_stack *stack)
+void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable)
 {
     struct list_node *node, *temp;
 
     list_for_each_safe(node, temp, &stack->wakeup_list) {
         struct wakeup_poll *wakeup = container_of((node - stack->queue_id), struct wakeup_poll, wakeup_list);
 
-        if (!get_protocol_stack_group()->wakeup_enable) {
+        if (!wakeup_thread_enable) {
             if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
                 __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
                 rte_mb();
