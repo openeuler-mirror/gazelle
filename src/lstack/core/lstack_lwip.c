@@ -307,10 +307,6 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         sock->wakeup->stat.app_write_cnt += send_pkt;
     }
 
-    if (send_len == 0) {
-        /* 100: give up cpu to other threads, when send_ring is full */
-        usleep(100);
-    }
     return send_len;
 }
 
