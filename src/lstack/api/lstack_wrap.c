@@ -339,6 +339,10 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 
 static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 {
+   if (select_path(s) != PATH_LWIP) {
+        return posix_api->readv_fn(s, iov, iovcnt);
+   }
+
    struct msghdr msg;
 
    msg.msg_name = NULL;
@@ -371,6 +375,10 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
 {
+   if (select_path(s) != PATH_LWIP) {
+        return posix_api->writev_fn(s, iov, iovcnt);
+   }
+
    struct msghdr msg;
 
    msg.msg_name = NULL;
