@@ -1,0 +1,66 @@
+From fce82f12ef0fde847d291b85057e9e0df07f011c Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Sat, 12 Nov 2022 14:19:30 +0000
+Subject: [PATCH 20/20] modify readv and writev first buf is null
+
+---
+ src/lstack/api/lstack_wrap.c  |  7 ++++++-
+ src/lstack/core/lstack_lwip.c | 10 +++++++++-
+ 2 files changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index d48fee0..2eeda6b 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -352,7 +352,12 @@ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
+    msg.msg_control = NULL;
+    msg.msg_controllen = 0;
+    msg.msg_flags = 0;
+-   return recvmsg_from_stack(s, &msg, 0);
++   ssize_t result = recvmsg_from_stack(s, &msg, 0);
++   if(result == -1 && errno == EAGAIN){
++        errno = 0;
++	return 0;
++   }
++   return result;
+ }
+ 
+ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index d9ae6c0..4fec74e 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -473,7 +473,7 @@ static int32_t check_msg_vaild(const struct msghdr *message)
+     for (int32_t i = 0; i < message->msg_iovlen; i++) {
+         if ((message->msg_iov[i].iov_base == NULL) || ((ssize_t)message->msg_iov[i].iov_len < 0) ||
+             ((size_t)(ssize_t)message->msg_iov[i].iov_len != message->msg_iov[i].iov_len) ||
+-            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) <= 0)) {
++            ((ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len) < 0)) {
+             GAZELLE_RETURN(EINVAL);
+         }
+         buflen = (ssize_t)(buflen + (ssize_t)message->msg_iov[i].iov_len);
+@@ -491,6 +491,10 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
+     }
+ 
+     for (int32_t i = 0; i < message->msg_iovlen; i++) {
++	if (message->msg_iov[i].iov_len == 0){
++	    continue;
++	}
++
+         ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
+         if (recvd_local > 0) {
+             buflen += recvd_local;
+@@ -554,6 +558,10 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+             continue;
+         }
+ 
++	if (message->msg_iov[i].iov_len == 0){
++            continue;
++        }
++
+         ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
+         if (ret <= 0) {
+             buflen = (buflen == 0) ? ret : buflen;
+-- 
+2.23.0
+

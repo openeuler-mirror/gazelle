@@ -1,0 +1,46 @@
+From a5c1ea6f66d8ae22b411154409c463899b8076c4 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Thu, 10 Nov 2022 10:21:05 +0800
+Subject: [PATCH 07/20] fix uninit stack->port_id when use mutil NIC
+
+---
+ src/lstack/core/lstack_dpdk.c           | 10 ++++++++++
+ src/lstack/core/lstack_protocol_stack.c |  1 -
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 77ae3eb..e187bca 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -446,6 +446,16 @@ int32_t dpdk_ethdev_init(void)
+     stack_group->rx_offload = eth_params->conf.rxmode.offloads;
+     stack_group->tx_offload = eth_params->conf.txmode.offloads;
+ 
++    for (uint32_t i = 0; i < stack_group->stack_num; i++) {
++	struct protocol_stack *stack = stack_group->stacks[i];
++	if (likely(stack)) {
++            stack->port_id = stack_group->port_id;
++	} else {
++            LSTACK_LOG(ERR, LSTACK, "empty stack at stack_num %d\n", i);
++	    return -EINVAL;
++	}
++    }
++
+     ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
+     if (ret < 0) {
+         LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 3daa09f..03ed18e 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -280,7 +280,6 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+ 
+     stack->tid = rte_gettid();
+     stack->queue_id = queue_id;
+-    stack->port_id = stack_group->port_id;
+     stack->cpu_id = get_global_cfg_params()->cpus[queue_id];
+     stack->lwip_stats = &lwip_stats;
+ 
+-- 
+2.23.0
+

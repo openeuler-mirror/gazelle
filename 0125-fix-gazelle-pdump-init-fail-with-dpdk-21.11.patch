@@ -1,0 +1,46 @@
+From 732557e3671bed8a71153f4d4f81a650d5a2ecb9 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Sat, 12 Nov 2022 16:09:49 +0800
+Subject: [PATCH 11/20] fix gazelle pdump init fail with dpdk-21.11
+
+---
+ src/lstack/core/lstack_dpdk.c | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 0198655..5dc2e54 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -106,14 +106,6 @@ int32_t dpdk_eal_init(void)
+     int32_t ret;
+     struct cfg_params *global_params = get_global_cfg_params();
+     
+-    ret = rte_pdump_init();
+-    if (ret < 0) {
+-        LSTACK_PRE_LOG(LSTACK_ERR, "rte_pdump_init failed init, rte_errno %d\n", rte_errno);
+-	/* We do not care whether the pdump is successfully loaded. So, just print an alarm. */
+-    } else {
+-        LSTACK_PRE_LOG(LSTACK_INFO, "rte_pdump_init success\n");
+-    }
+-
+     ret = rte_eal_init(global_params->dpdk_argc, global_params->dpdk_argv);
+     if (ret < 0) {
+         if (rte_errno == EALREADY) {
+@@ -127,6 +119,14 @@ int32_t dpdk_eal_init(void)
+         LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
+     }
+ 
++    ret = rte_pdump_init();
++    if (ret < 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "rte_pdump_init failed init, rte_errno %d\n", rte_errno);
++	/* We do not care whether the pdump is successfully loaded. So, just print an alarm. */
++    } else {
++        LSTACK_PRE_LOG(LSTACK_INFO, "rte_pdump_init success\n");
++    }
++
+     return ret;
+ }
+ 
+-- 
+2.23.0
+

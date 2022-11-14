@@ -1,0 +1,27 @@
+From 193937aa1b3bdf0c37059c6bc24504363f728c66 Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Sat, 12 Nov 2022 14:08:12 +0000
+Subject: [PATCH 19/20] cancel kernel sock epoll ctl when lwip sock connect
+
+---
+ src/lstack/core/lstack_lwip.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 087d09b..d9ae6c0 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -721,6 +721,10 @@ void gazelle_connected_callback(struct netconn *conn)
+         return;
+     }
+ 
++    if (sock->wakeup != NULL && sock->wakeup->epollfd > 0){
++	posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
++    }
++
+     posix_api->shutdown_fn(fd, SHUT_RDWR);
+ 
+     SET_CONN_TYPE_LIBOS(conn);
+-- 
+2.23.0
+
