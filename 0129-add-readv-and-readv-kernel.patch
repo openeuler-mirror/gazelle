@@ -1,0 +1,38 @@
+From 9a07e4017b13fa4e502ea18f16d7e7f4b49e088e Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Sat, 12 Nov 2022 09:58:25 +0000
+Subject: [PATCH 15/20] add readv and readv kernel
+
+---
+ src/lstack/api/lstack_wrap.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 1a654e9..d48fee0 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -339,6 +339,10 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
+ 
+ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
+ {
++   if (select_path(s) != PATH_LWIP) {
++        return posix_api->readv_fn(s, iov, iovcnt);
++   }
++
+    struct msghdr msg;
+ 
+    msg.msg_name = NULL;
+@@ -371,6 +375,10 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
+ 
+ static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
+ {
++   if (select_path(s) != PATH_LWIP) {
++        return posix_api->writev_fn(s, iov, iovcnt);
++   }
++
+    struct msghdr msg;
+ 
+    msg.msg_name = NULL;
+-- 
+2.23.0
+
