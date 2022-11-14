@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       23
+Release:       24
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -141,6 +141,19 @@ Patch9123:     0123-expand-nic-rx-desc-size.patch
 Patch9124:     0124-add-kni-local-support-in-lstack.patch
 Patch9125:     0125-resolve-the-conflict-between-the-eth_dev_ops-variabl.patch
 Patch9126:     0126-add-pdump-support-in-lstack.patch
+Patch9127:     0127-fix-uninit-stack-port_id-when-use-mutil-NIC.patch
+Patch9128:     0128-fix-memleak-in-dpdk_ethdev_init-unlikely-path.patch
+Patch9129:     0129-fix-epoll_wait-return-when-timeout-is-0.patch
+Patch9130:     0130-fix-gazelle-pdump-init-fail-with-dpdk-21.11.patch
+Patch9131:     0131-fix-add-outdated-event.patch
+Patch9132:     0132-revert-write-usleep.patch
+Patch9133:     0133-reduce-thread-variable-access.patch
+Patch9134:     0134-add-readv-and-readv-kernel.patch
+Patch9135:     0135-add-unlock-before-after.patch
+Patch9136:     0136-add-mutil-NIC-support-in-gazelle.patch
+Patch9137:     0137-remove-filename_check-in-gazellectl-to-fix-build-err.patch
+Patch9138:     0138-cancel-kernel-sock-epoll-ctl-when-lwip-sock-connect.patch
+Patch9139:     0139-modify-readv-and-writev-first-buf-is-null.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -181,6 +194,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Nov 14 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-24
+- support muti nic and fix bugs
+
 * Tue Nov 8 2022 kircher <majun65@huawei.com> - 1.0.1-23
 - add pdump support in lstack
 

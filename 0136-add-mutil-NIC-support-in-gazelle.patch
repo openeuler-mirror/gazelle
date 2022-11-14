@@ -1,0 +1,432 @@
+From 29ce2b92248fce0ce90abbcf0625653a5327b232 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Sat, 12 Nov 2022 21:12:03 +0800
+Subject: [PATCH 17/20] add mutil NIC support in gazelle
+
+---
+ src/common/gazelle_base_func.h         |  2 +
+ src/common/gazelle_opt.h               |  2 +
+ src/common/gazelle_parse_config.c      | 31 +++++++++++
+ src/lstack/core/lstack_cfg.c           | 46 ++++++++++++++++
+ src/lstack/core/lstack_control_plane.c | 17 ++++--
+ src/lstack/include/lstack_cfg.h        |  1 +
+ src/ltran/ltran_base.h                 |  1 +
+ src/ltran/ltran_dfx.c                  | 35 +++++++++++-
+ src/ltran/ltran_param.c                | 75 +++++++++++++++++++++++++-
+ src/ltran/ltran_param.h                |  2 +
+ src/ltran/main.c                       |  9 ++++
+ 11 files changed, 215 insertions(+), 6 deletions(-)
+
+diff --git a/src/common/gazelle_base_func.h b/src/common/gazelle_base_func.h
+index fe3411a..22d7a7f 100644
+--- a/src/common/gazelle_base_func.h
++++ b/src/common/gazelle_base_func.h
+@@ -32,6 +32,8 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size);
+ 
+ int32_t check_and_set_run_dir(void);
+ 
++int32_t filename_check(const char* args);
++
+ #undef container_of
+ #define container_of(ptr, type, field) ((type *)(void*)(((char *)(ptr)) - offsetof(type, field)))
+ 
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index 7521e8c..e9e3676 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -75,6 +75,8 @@
+ #define GAZELLE_MAX_STACK_ARRAY_SIZE    GAZELLE_CLIENT_NUM
+ 
+ #define GAZELLE_REG_SOCK_PATHNAME       "/var/run/gazelle/gazelle_client.sock"
++#define GAZELLE_REG_SOCK_FILENAME       "gazelle_client.sock"
++#define GAZELLE_SOCK_FILENAME_MAXLEN    128
+ 
+ #define GAZELLE_RUN_DIR                  "/var/run/gazelle/"
+ #define GAZELLE_FILE_PERMISSION          0700
+diff --git a/src/common/gazelle_parse_config.c b/src/common/gazelle_parse_config.c
+index 8556e37..fc286d9 100644
+--- a/src/common/gazelle_parse_config.c
++++ b/src/common/gazelle_parse_config.c
+@@ -21,6 +21,16 @@
+ #include "gazelle_opt.h"
+ #include "gazelle_base_func.h"
+ 
++#ifdef LTRAN_COMPILE
++#include "ltran_log.h"
++#define  COMMON_ERR(fmt, ...)    LTRAN_ERR(fmt, ##__VA_ARGS__)
++#define  COMMON_INFO(fmt, ...)   LTRAN_INFO(fmt, ##__VA_ARGS__)
++#else
++#include "lstack_log.h"
++#define  COMMON_ERR(fmt, ...)    LSTACK_LOG(ERR, LSTACK, fmt, ##__VA_ARGS__)
++#define  COMMON_INFO(fmt, ...)   LSTACK_LOG(INFO, LSTACK, fmt, ##__VA_ARGS__)
++#endif
++
+ static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
+ {
+     const char *delim = "-";
+@@ -87,3 +97,24 @@ int32_t check_and_set_run_dir(void)
+     }
+     return 0;
+ }
++
++/* return 1 for check error */
++int32_t filename_check(const char* args)
++{
++    if (args == NULL) {
++	return 1;
++    }
++
++    if (strlen(args) <= 0 || strlen(args) > GAZELLE_SOCK_FILENAME_MAXLEN - 1) {
++	COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename exceeds the limit %d.\n", args, GAZELLE_SOCK_FILENAME_MAXLEN);
++	return 1;
++    }
++
++    char* sensitive_chars = strpbrk(args, "|;&$><`\\!\n");
++    if (sensitive_chars != NULL) {
++	COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename contains sensitive characters.\n", args);
++	return 1;
++    }
++
++    return 0;
++}
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 2cd9989..1ff3794 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -56,6 +56,7 @@ static int32_t parse_gateway_addr(void);
+ static int32_t parse_kni_switch(void);
+ static int32_t parse_listen_shadow(void);
+ static int32_t parse_app_bind_numa(void);
++static int32_t parse_unix_prefix(void);
+ 
+ struct config_vector_t {
+     const char *name;
+@@ -75,6 +76,7 @@ static struct config_vector_t g_config_tbl[] = {
+     { "kni_switch",     parse_kni_switch },
+     { "listen_shadow",  parse_listen_shadow },
+     { "app_bind_numa",  parse_app_bind_numa },
++    { "unix_prefix",    parse_unix_prefix },
+     { NULL,           NULL }
+ };
+ 
+@@ -803,3 +805,47 @@ int32_t cfg_init(void)
+     free(config_file);
+     return ret;
+ }
++
++static int32_t parse_unix_prefix(void)
++{
++    const config_setting_t *unix_prefix = NULL;
++    const char *args = NULL;
++    int32_t ret = 0;
++
++    ret = memset_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
++		   0, sizeof(g_config_params.unix_socket_filename));
++    if (ret != EOK) {
++	return ret;
++    }
++
++    ret = strncpy_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
++		   GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
++    if (ret != EOK) {
++	return ret;
++    }
++
++    unix_prefix = config_lookup(&g_config, "unix_prefix");
++
++    if (unix_prefix) {
++        args = config_setting_get_string(unix_prefix);
++
++	if (filename_check(args)) {
++	    return -EINVAL;
++	}
++
++	ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
++			args, strlen(args) + 1);
++	if (ret != EOK) {
++	    return ret;
++	}
++    }
++
++    ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
++		    GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
++    if (ret != EOK) {
++	return ret;
++    }
++
++    return 0;
++}
++
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index 7f62254..0a10d83 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -67,9 +67,12 @@ static int control_unix_sock(struct sockaddr_un *address)
+         posix_api->close_fn(sockfd);
+         return -1;
+     }
++
++    struct cfg_params *global_params = get_global_cfg_params();
++
+     address->sun_family = AF_UNIX;
+-    int ret = strncpy_s(address->sun_path, sizeof(address->sun_path), GAZELLE_REG_SOCK_PATHNAME,
+-        strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
++    int ret = strncpy_s(address->sun_path, sizeof(address->sun_path), global_params->unix_socket_filename,
++        strlen(global_params->unix_socket_filename) + 1);
+     if (ret != EOK) {
+         posix_api->close_fn(sockfd);
+         return -1;
+@@ -459,6 +462,14 @@ void control_fd_close(void)
+         /* 200ms: wait ltran instance logout */
+         rte_delay_ms(200);
+     }
++
++    struct cfg_params *global_params = get_global_cfg_params();
++    if (!global_params->use_ltran) {
++	int ret = unlink(global_params->unix_socket_filename);
++	if (ret == -1) {
++            LSTACK_LOG(ERR, LSTACK, "unlink failed, just skip it\n");
++	}
++    }
+ }
+ 
+ int32_t control_init_client(bool is_reconnect)
+@@ -675,7 +686,7 @@ static int32_t control_init_server(void)
+         return -1;
+     }
+ 
+-    ret = unlink(GAZELLE_REG_SOCK_PATHNAME);
++    ret = unlink(get_global_cfg_params()->unix_socket_filename);
+     if (ret == -1) {
+         LSTACK_LOG(ERR, LSTACK, "unlink failed, just skip it\n");
+     }
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index 80dfd24..3864250 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -80,6 +80,7 @@ struct cfg_params {
+     int dpdk_argc;
+     char **dpdk_argv;
+     struct secondary_attach_arg sec_attach_arg;
++    char unix_socket_filename[NAME_MAX];
+ };
+ 
+ struct cfg_params *get_global_cfg_params(void);
+diff --git a/src/ltran/ltran_base.h b/src/ltran/ltran_base.h
+index 41d4cfb..6be9152 100644
+--- a/src/ltran/ltran_base.h
++++ b/src/ltran/ltran_base.h
+@@ -99,5 +99,6 @@
+ #define GAZELLE_INET_ADDRSTRLEN                         16
+ 
+ #define GAZELLE_DFX_SOCK_PATHNAME                       "/var/run/gazelle/gazelle_cmd.sock"
++#define GAZELLE_DFX_SOCK_FILENAME                       "gazelle_cmd.sock"
+ 
+ #endif /* ifndef __GAZELLE_BASE_H__ */
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index de97a48..bab3f89 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -57,6 +57,8 @@ static struct gazelle_stat_lstack_total g_last_lstack_total[GAZELLE_MAX_STACK_AR
+ 
+ static bool g_use_ltran = false;
+ 
++static char* g_unix_prefix;
++
+ /* Use the largest data structure. */
+ #define GAZELLE_CMD_RESP_BUFFER_SIZE (sizeof(struct gazelle_stack_dfx_data) / sizeof(char))
+ 
+@@ -162,15 +164,23 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
+         printf("%s:%d memset_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+     }
+ 
++    if (g_unix_prefix) {
++	ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
++			strlen(GAZELLE_RUN_DIR) + 1);
++	if (ret != EOK) {
++	    printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
++	}
++    }
++
+     addr.sun_family = AF_UNIX;
+     if (use_ltran) {
+-        ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
++        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
+             strlen(GAZELLE_DFX_SOCK_PATHNAME) + 1);
+         if (ret != EOK) {
+             printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+         }
+     } else {
+-        ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_PATHNAME,
++        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_PATHNAME,
+             strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
+         if (ret != EOK) {
+             printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+@@ -1251,6 +1261,27 @@ int32_t main(int32_t argc, char *argv[])
+     struct gazelle_stat_msg_request req_msg[GAZELLE_CMD_MAX] = {0};
+     int32_t req_msg_num, ret;
+ 
++    int unix_arg = 0;
++    for (int32_t i = 1; i < argc; i++) {
++	if (unix_arg == 0) {
++	    if (!strcmp(argv[i], "-u")) {
++		unix_arg++;
++	    }
++	} else if (unix_arg == 1) {
++	    g_unix_prefix = argv[i];
++	    unix_arg++;
++	} else {
++	    argv[i - unix_arg] = argv[i];
++	}
++    }
++
++    argv[argc - unix_arg] = argv[argc];
++    argc -= unix_arg;
++
++    if (g_unix_prefix && filename_check(g_unix_prefix)) {
++	return -1;
++    }
++
+     int32_t fd = dfx_connect_ltran(true, true);
+     if (fd > 0) {
+         g_use_ltran = true;
+diff --git a/src/ltran/ltran_param.c b/src/ltran/ltran_param.c
+index fc45895..4974085 100644
+--- a/src/ltran/ltran_param.c
++++ b/src/ltran/ltran_param.c
+@@ -42,6 +42,7 @@
+ #define PARAM_BOND_RX_QUEUE_NUM         "bond_rx_queue_num"
+ #define PARAM_BOND_MACS                 "bond_macs"
+ #define PARAM_TCP_CONN_SCAN_INTERVAL    "tcp_conn_scan_interval"
++#define PARAM_UNIX_PREFIX               "unix_prefix"
+ 
+ static struct ltran_config g_ltran_config = {0};
+ struct ltran_config* get_ltran_config(void)
+@@ -537,6 +538,78 @@ struct param_parser {
+     param_parse_func func;
+ };
+ 
++static int32_t parse_unix_prefix(const config_t *config, const char *key, struct ltran_config *ltran_config)
++{
++    const char *prefix = NULL;
++    int32_t ret = 0;
++
++    ret = memset_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
++		   0, sizeof(ltran_config->unix_socket_filename));
++    if (ret != EOK) {
++	gazelle_set_errno(GAZELLE_EINETATON);
++	return GAZELLE_ERR;
++    }
++
++    ret = memset_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
++		   0, sizeof(ltran_config->dfx_socket_filename));
++    if (ret != EOK) {
++	gazelle_set_errno(GAZELLE_EINETATON);
++	return GAZELLE_ERR;
++    }
++
++    ret = strncpy_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
++		    GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
++    if (ret != EOK) {
++	gazelle_set_errno(GAZELLE_EINETATON);
++	return GAZELLE_ERR;
++    }
++
++    ret = strncpy_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
++		    GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
++    if (ret != EOK) {
++	gazelle_set_errno(GAZELLE_EINETATON);
++	return GAZELLE_ERR;
++    }
++
++    ret = config_lookup_string(config, key, &prefix);
++    if (ret) {
++        if (filename_check(prefix)) {
++	    gazelle_set_errno(GAZELLE_EINETATON);
++	    return GAZELLE_ERR;
++	}
++
++	ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
++			prefix, strlen(prefix) + 1);
++	if (ret != EOK) {
++	    gazelle_set_errno(GAZELLE_EINETATON);
++	    return GAZELLE_ERR;
++	}
++
++	ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
++			prefix, strlen(prefix) + 1);
++	if (ret != EOK) {
++	    gazelle_set_errno(GAZELLE_EINETATON);
++	    return GAZELLE_ERR;
++	}
++    }
++
++    ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
++		    GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
++    if (ret != EOK) {
++	gazelle_set_errno(GAZELLE_EINETATON);
++	return GAZELLE_ERR;
++    }
++
++    ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
++		    GAZELLE_DFX_SOCK_FILENAME, strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
++    if (ret != EOK) {
++	gazelle_set_errno(GAZELLE_EINETATON);
++	return GAZELLE_ERR;
++    }
++
++    return GAZELLE_OK;
++}
++
+ struct param_parser g_param_parse_tbl[] = {
+     {PARAM_FORWARD_KIT_ARGS,        parse_forward_kit_args},
+     {PARAM_DISPATCH_MAX_CLIENT,     parse_dispatch_max_client},
+@@ -551,6 +624,7 @@ struct param_parser g_param_parse_tbl[] = {
+     {PARAM_BOND_TX_QUEUE_NUM,       parse_bond_tx_queue_num},
+     {PARAM_TCP_CONN_SCAN_INTERVAL,  parse_tcp_conn_scan_interval},
+     {PARAM_KNI_SWITCH,              parse_kni_switch},
++    {PARAM_UNIX_PREFIX,             parse_unix_prefix},
+ };
+ 
+ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config)
+@@ -597,4 +671,3 @@ bool is_same_mac_addr(const uint8_t *smac, const uint8_t *dmac)
+     }
+     return true;
+ }
+-
+diff --git a/src/ltran/ltran_param.h b/src/ltran/ltran_param.h
+index 3ec6451..6f013d5 100644
+--- a/src/ltran/ltran_param.h
++++ b/src/ltran/ltran_param.h
+@@ -56,6 +56,8 @@ struct ltran_config {
+     struct {
+         int32_t log_switch;
+     } log;
++    char unix_socket_filename[NAME_MAX];
++    char dfx_socket_filename[NAME_MAX];
+ };
+ 
+ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config);
+diff --git a/src/ltran/main.c b/src/ltran/main.c
+index 691595e..03b3ad5 100644
+--- a/src/ltran/main.c
++++ b/src/ltran/main.c
+@@ -58,6 +58,15 @@ static void sig_default_handler(int32_t sig)
+     LTRAN_ERR("ltran dumped，caught signal：%d.\n", sig);
+     print_stack();
+     dpdk_kni_release();
++    int ret = 0;
++    ret = unlink(get_ltran_config()->unix_socket_filename);
++    if (ret) {
++	LTRAN_WARN("unlink %s ERROR. errn: %d. ret=%d\n", get_ltran_config()->unix_socket_filename, errno, ret);
++    }
++    ret = unlink(get_ltran_config()->dfx_socket_filename);
++    if (ret) {
++	LTRAN_WARN("unlink %s ERROR. errn: %d. ret=%d\n", get_ltran_config()->dfx_socket_filename, errno, ret);
++    }
+     kill(getpid(), sig);
+ }
+ 
+-- 
+2.23.0
+
