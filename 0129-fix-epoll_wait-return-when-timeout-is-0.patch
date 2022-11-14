@@ -1,0 +1,38 @@
+From b37eb61864e0f54aff78ac11d20828cb57278753 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 12 Nov 2022 14:42:56 +0800
+Subject: [PATCH 10/20] fix epoll_wait return when timeout is 0
+
+---
+ src/lstack/api/lstack_epoll.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 6979e12..20ed224 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -453,6 +453,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
+             return lwip_num + kernel_num;
+         }
+ 
++        if (timeout == 0) {
++            return 0;
++        }
++
+         if (timeout < 0) {
+             ret = pthread_mutex_lock(&wakeup->wait);
+         } else {
+@@ -654,6 +658,10 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+             return lwip_num + kernel_num;
+         }
+ 
++        if (timeout == 0) {
++            return 0;
++        }
++
+         if (timeout < 0) {
+             ret = pthread_mutex_lock(&wakeup->wait);
+         } else {
+-- 
+2.23.0
+
