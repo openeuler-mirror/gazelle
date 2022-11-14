@@ -1,0 +1,83 @@
+From 16d35b610e00b18005049d80ad91bedb2ca64501 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 12 Nov 2022 17:24:02 +0800
+Subject: [PATCH 14/20] reduce thread variable access
+
+---
+ src/lstack/api/lstack_epoll.c           | 4 ++--
+ src/lstack/core/lstack_protocol_stack.c | 8 +++++---
+ src/lstack/include/posix/lstack_epoll.h | 2 +-
+ 3 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 759b0c0..ebad98e 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -77,14 +77,14 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
+     }
+ }
+ 
+-void wakeup_stack_epoll(struct protocol_stack *stack)
++void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable)
+ {
+     struct list_node *node, *temp;
+ 
+     list_for_each_safe(node, temp, &stack->wakeup_list) {
+         struct wakeup_poll *wakeup = container_of((node - stack->queue_id), struct wakeup_poll, wakeup_list);
+ 
+-        if (!get_protocol_stack_group()->wakeup_enable) {
++        if (!wakeup_thread_enable) {
+             if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
+                 __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+                 rte_mb();
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 03ed18e..7a3955d 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -423,17 +423,19 @@ static void* gazelle_stack_thread(void *arg)
+     bool use_ltran_flag = use_ltran();
+     bool kni_switch = get_global_cfg_params()->kni_switch;
+     uint32_t wakeup_tick = 0;
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    bool wakeup_thread_enable = stack_group->wakeup_enable;
+ 
+     struct protocol_stack *stack = stack_thread_init(queue_id);
+     if (stack == NULL) {
+         /* exit in main thread, avoid create mempool and exit at the same time */
+         set_init_fail();
+-        sem_post(&get_protocol_stack_group()->all_init);
++        sem_post(&stack_group->all_init);
+         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
+         return NULL;
+     }
+ 
+-    sem_post(&get_protocol_stack_group()->all_init);
++    sem_post(&stack_group->all_init);
+     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
+ 
+     for (;;) {
+@@ -447,7 +449,7 @@ static void* gazelle_stack_thread(void *arg)
+ 
+         if ((wakeup_tick & 0xf) == 0) {
+             wakeup_kernel_event(stack);
+-            wakeup_stack_epoll(stack);
++            wakeup_stack_epoll(stack, wakeup_thread_enable);
+         }
+ 
+ 	/* KNI requests are generally low-rate I/Os,
+diff --git a/src/lstack/include/posix/lstack_epoll.h b/src/lstack/include/posix/lstack_epoll.h
+index d6c81a7..6aa9d30 100644
+--- a/src/lstack/include/posix/lstack_epoll.h
++++ b/src/lstack/include/posix/lstack_epoll.h
+@@ -64,7 +64,7 @@ struct wakeup_poll {
+ struct netconn;
+ struct lwip_sock;
+ void add_sock_event(struct lwip_sock *sock, uint32_t event);
+-void wakeup_stack_epoll(struct protocol_stack *stack);
++void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable);
+ int32_t lstack_epoll_create(int32_t size);
+ int32_t lstack_epoll_create1(int32_t flags);
+ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event *event);
+-- 
+2.23.0
+

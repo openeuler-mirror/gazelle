@@ -1,0 +1,27 @@
+From fb2c23cc1be1171a70f650d2de6c7dad7539d2db Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 12 Nov 2022 16:58:10 +0800
+Subject: [PATCH 13/20] revert write usleep
+
+---
+ src/lstack/core/lstack_lwip.c | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 0437187..087d09b 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -307,10 +307,6 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+         sock->wakeup->stat.app_write_cnt += send_pkt;
+     }
+ 
+-    if (send_len == 0) {
+-        /* 100: give up cpu to other threads, when send_ring is full */
+-        usleep(100);
+-    }
+     return send_len;
+ }
+ 
+-- 
+2.23.0
+
