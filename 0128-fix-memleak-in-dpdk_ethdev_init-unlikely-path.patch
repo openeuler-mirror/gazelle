@@ -1,0 +1,25 @@
+From b82f1facd8fabf299719705602b0a2e354573af3 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Thu, 10 Nov 2022 17:34:43 +0800
+Subject: [PATCH 09/20] fix memleak in dpdk_ethdev_init unlikely path
+
+---
+ src/lstack/core/lstack_dpdk.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index e187bca..0198655 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -452,6 +452,8 @@ int32_t dpdk_ethdev_init(void)
+             stack->port_id = stack_group->port_id;
+ 	} else {
+             LSTACK_LOG(ERR, LSTACK, "empty stack at stack_num %d\n", i);
++	    stack_group->eth_params = NULL;
++	    free(eth_params);
+ 	    return -EINVAL;
+ 	}
+     }
+-- 
+2.23.0
+
