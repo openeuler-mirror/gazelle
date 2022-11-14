@@ -32,6 +32,7 @@
 #include "gazelle_dfx_msg.h"
 #include "gazelle_base_func.h"
 #include "ltran_monitor.h"
+#include "ltran_param.h"
 
 #define GAZELLE_LISTEN_BACKLOG          5
 
@@ -180,7 +181,7 @@ static int32_t gazelle_ctl_init(void)
         LTRAN_ERR("dir not exist and create fail. ret=%d.\n", ret);
         return GAZELLE_ERR;
     }
-    ret = unix_server_create(GAZELLE_DFX_SOCK_PATHNAME, &listenfd);
+    ret = unix_server_create(get_ltran_config()->dfx_socket_filename, &listenfd);
     if (ret != GAZELLE_OK) {
         LTRAN_ERR("unix_server_create failed. ret=%d.\n", ret);
         return GAZELLE_ERR;
@@ -199,7 +200,7 @@ static int32_t gazelle_ctl_init(void)
         return GAZELLE_ERR;
     }
 
-    ret = unix_server_create(GAZELLE_REG_SOCK_PATHNAME, &listenfd);
+    ret = unix_server_create(get_ltran_config()->unix_socket_filename, &listenfd);
     if (ret != GAZELLE_OK) {
         LTRAN_ERR("unix_server_create failed. ret=%d.\n", ret);
         sockfd_data_free(event_dfx.data.ptr);
