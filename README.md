@@ -38,10 +38,10 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 |参与Gazelle指导|1，怎么判断应用适不适合应gazelle加速<br>2，Gazelle常见问题调试<br>|2022/12/5|
 |[openEuler指南](https://gitee.com/openeuler/community/blob/master/zh/contributors/README.md)| 如何参与openEuler社区 | 已发布 |
 ## FAQ
-- 如何使用pdump工具抓包 （文档11.30发布）
+- [如何使用pdump工具抓包](doc/pdump/pdump.md) 
 - 如何使用procinfo读dpdk驱动计数统计（文档11.30发布）
 - listenshadow参数如何配置（文档11.30发布）
-- 多进程各自独立使用网卡（文档11.30发布）
+- [多进程各自独立使用网卡](doc/mNIC/mNIC.md)
 - 支持posix接口列表及支持应用列表（文档11.30发布）
 
 ## 路标

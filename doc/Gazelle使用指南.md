@@ -21,6 +21,16 @@ yum install gazelle
 ``` sh
 modprobe rte_kni carrier="on"
 ```
+
+配置NetworkManager不托管kni网卡
+```
+[root@localhost ~]# cat /etc/NetworkManager/conf.d/99-unmanaged-devices.conf
+[keyfile]
+unmanaged-devices=interface-name:kni
+[root@localhost ~]# systemctl reload NetworkManager
+```
+
+
 网卡从内核驱动绑为用户态驱动的ko，根据实际情况选择一种。mlx4和mlx5网卡不需要绑定vfio或uio驱动。
 ``` sh
 #若IOMMU能使用
