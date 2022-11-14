@@ -1,0 +1,32 @@
+From 9a7cb66fd9912c3073f3299e8db4167b4882c020 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 12 Nov 2022 16:48:50 +0800
+Subject: [PATCH 12/20] fix add outdated event
+
+---
+ src/lstack/api/lstack_epoll.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 20ed224..759b0c0 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -55,6 +55,15 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
+ 
+     if (wakeup->type == WAKEUP_EPOLL) {
+         pthread_spin_lock(&wakeup->event_list_lock);
++
++        /* app thread have read/write, event is outdated */
++        if (event == EPOLLIN && sock->conn->state == NETCONN_LISTEN && !NETCONN_IS_DATAIN(sock)) {
++            return;
++        }
++        if (event == EPOLLOUT && !NETCONN_IS_OUTIDLE(sock)) {
++            return;
++        }
++
+         sock->events |= (event == EPOLLERR) ? (EPOLLIN | EPOLLERR) : (event & sock->epoll_events);
+         if (list_is_null(&sock->event_list)) {
+             list_add_node(&wakeup->event_list, &sock->event_list);
+-- 
+2.23.0
+
