@@ -558,10 +558,6 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
             continue;
         }
 
-	if (message->msg_iov[i].iov_len == 0){
-            continue;
-        }
-
         ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
         if (ret <= 0) {
             buflen = (buflen == 0) ? ret : buflen;
@@ -730,7 +726,7 @@ void gazelle_connected_callback(struct netconn *conn)
     }
 
     if (sock->wakeup != NULL && sock->wakeup->epollfd > 0){
-	posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
+        posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
     }
 
     posix_api->shutdown_fn(fd, SHUT_RDWR);
