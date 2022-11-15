@@ -35,7 +35,7 @@ echo $COMMIT_ID $TARGET_BRANCH $FORK_TAR $USER $EMAIL
 
 workdir=$(pwd)
 patchname=$(git format-patch -1 $COMMIT_ID | tail -n1)
-gitmsg=$(git log --pretty=format:"%s" -1 HEAD | sed -e 's/^![0-9]* //g')
+gitmsg=$(git log --pretty=format:"%s" -1 $COMMIT_ID | sed -e 's/^![0-9]* //g')
 echo $patchname
 
 cd ..
