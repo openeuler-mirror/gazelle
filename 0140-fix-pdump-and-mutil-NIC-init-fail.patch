@@ -1,0 +1,57 @@
+From 846fc6abbb693183d042ab91f9450f4fa4cef345 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Mon, 14 Nov 2022 19:17:00 +0800
+Subject: [PATCH] fix pdump and mutil NIC init fail
+
+---
+ src/lstack/Makefile       | 3 ++-
+ src/ltran/ltran_monitor.c | 5 +++--
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index 1560d0c..908897d 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -81,7 +81,8 @@ LIBRTE_LIB = $(DPDK_LIB_PATH)/librte_pci.so \
+              $(DPDK_LIB_PATH)/librte_bus_vdev.so \
+              $(DPDK_LIB_PATH)/librte_net.so \
+              $(DPDK_LIB_PATH)/librte_ethdev.so \
+-             $(DPDK_LIB_PATH)/librte_pdump.so 
++             $(DPDK_LIB_PATH)/librte_pdump.so \
++             $(DPDK_LIB_PATH)/librte_pmd_pcap.so 
+ 
+ 
+ DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
+diff --git a/src/ltran/ltran_monitor.c b/src/ltran/ltran_monitor.c
+index d535726..bd047fc 100644
+--- a/src/ltran/ltran_monitor.c
++++ b/src/ltran/ltran_monitor.c
+@@ -32,6 +32,7 @@
+ #include "gazelle_dfx_msg.h"
+ #include "gazelle_base_func.h"
+ #include "ltran_monitor.h"
++#include "ltran_param.h"
+ 
+ #define GAZELLE_LISTEN_BACKLOG          5
+ 
+@@ -180,7 +181,7 @@ static int32_t gazelle_ctl_init(void)
+         LTRAN_ERR("dir not exist and create fail. ret=%d.\n", ret);
+         return GAZELLE_ERR;
+     }
+-    ret = unix_server_create(GAZELLE_DFX_SOCK_PATHNAME, &listenfd);
++    ret = unix_server_create(get_ltran_config()->dfx_socket_filename, &listenfd);
+     if (ret != GAZELLE_OK) {
+         LTRAN_ERR("unix_server_create failed. ret=%d.\n", ret);
+         return GAZELLE_ERR;
+@@ -199,7 +200,7 @@ static int32_t gazelle_ctl_init(void)
+         return GAZELLE_ERR;
+     }
+ 
+-    ret = unix_server_create(GAZELLE_REG_SOCK_PATHNAME, &listenfd);
++    ret = unix_server_create(get_ltran_config()->unix_socket_filename, &listenfd);
+     if (ret != GAZELLE_OK) {
+         LTRAN_ERR("unix_server_create failed. ret=%d.\n", ret);
+         sockfd_data_free(event_dfx.data.ptr);
+-- 
+2.33.0
+
