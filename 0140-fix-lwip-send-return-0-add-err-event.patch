@@ -1,0 +1,30 @@
+From ecd6f699994dd335fb0c3187d8296f741ff5fd17 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Wed, 16 Nov 2022 21:40:43 +0800
+Subject: [PATCH] fix lwip send return 0 add err event
+
+---
+ src/lstack/core/lstack_lwip.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 8a11aa5..9271bd6 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -336,12 +336,7 @@ static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip
+ static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock, int32_t flags)
+ {
+     /* send all send_ring, so len set lwip send max. */
+-    ssize_t len = lwip_send(fd, sock, UINT16_MAX, flags);
+-    if (len == 0) {
+-        /* FIXME: should use POLLRDHUP, when connection be closed. lwip event-callback no POLLRDHUP */
+-        sock->errevent = 1;
+-        add_sock_event(sock, EPOLLERR);
+-    }
++    (void)lwip_send(fd, sock, UINT16_MAX, flags);
+ 
+     return replenish_send_ring(stack, sock);
+ }
+-- 
+2.33.0
+

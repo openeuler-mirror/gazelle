@@ -1,0 +1,36 @@
+From c776269a5565c93b7ad06593901bb2619b828baf Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Tue, 15 Nov 2022 03:21:35 +0000
+Subject: [PATCH] modify duplicate code
+
+---
+ src/lstack/core/lstack_lwip.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 4fec74e..2fbbe97 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -558,10 +558,6 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+             continue;
+         }
+ 
+-	if (message->msg_iov[i].iov_len == 0){
+-            continue;
+-        }
+-
+         ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
+         if (ret <= 0) {
+             buflen = (buflen == 0) ? ret : buflen;
+@@ -730,7 +726,7 @@ void gazelle_connected_callback(struct netconn *conn)
+     }
+ 
+     if (sock->wakeup != NULL && sock->wakeup->epollfd > 0){
+-	posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
++        posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
+     }
+ 
+     posix_api->shutdown_fn(fd, SHUT_RDWR);
+-- 
+2.33.0
+
