@@ -227,6 +227,11 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
         return NULL;
     }
 
+    if (pbuf->tot_len > remain_size) {
+        *apiflags &= ~TCP_WRITE_FLAG_MORE;
+        return NULL;
+    }
+
     return pbuf;
 }
 
