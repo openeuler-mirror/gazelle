@@ -177,15 +177,9 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
         return -1;
     }
 
-    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, RX_MBUF_CACHE_SZ,
+    stack->rxtx_pktmbuf_pool = create_pktmbuf_mempool("rxtx_mbuf", RXTX_NB_MBUF / stack_num, RXTX_CACHE_SZ,
         stack->queue_id);
-    if (stack->rx_pktmbuf_pool == NULL) {
-        return -1;
-    }
-
-    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, TX_MBUF_CACHE_SZ,
-        stack->queue_id);
-    if (stack->tx_pktmbuf_pool == NULL) {
+    if (stack->rxtx_pktmbuf_pool == NULL) {
         return -1;
     }
 
@@ -488,7 +482,7 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, const stru
     int32_t ret;
 
     ret = rte_eth_rx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_rx_desc, stack->socket_id,
-        &eth_params->rx_conf, stack->rx_pktmbuf_pool);
+        &eth_params->rx_conf, stack->rxtx_pktmbuf_pool);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
         return -1;

@@ -207,7 +207,7 @@ int32_t ethdev_init(struct protocol_stack *stack)
 
     if (use_ltran()) {
         stack->rx_ring_used = 0;
-        int32_t ret = fill_mbuf_to_ring(stack->rx_pktmbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
+        int32_t ret = fill_mbuf_to_ring(stack->rxtx_pktmbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "fill mbuf to rx_ring failed ret=%d\n", ret);
             return ret;

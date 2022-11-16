@@ -43,8 +43,7 @@ struct protocol_stack {
     cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
     int32_t epollfd; /* kernel event thread epoll fd */
 
-    struct rte_mempool *rx_pktmbuf_pool;
-    struct rte_mempool *tx_pktmbuf_pool;
+    struct rte_mempool *rxtx_pktmbuf_pool;
     struct rte_ring  *rx_ring;
     struct rte_ring *tx_ring;
     struct rte_ring *reg_ring;

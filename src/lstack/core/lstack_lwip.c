@@ -106,7 +106,7 @@ static void replenish_send_idlembuf(struct protocol_stack *stack, struct rte_rin
     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
 
     uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
-    if (rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
+    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return;
     }
@@ -207,7 +207,7 @@ struct pbuf *lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type)
     struct rte_mbuf *mbuf;
     struct protocol_stack *stack = get_protocol_stack();
 
-    if (rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, &mbuf, 1) != 0) {
+    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, &mbuf, 1) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return NULL;
     }
