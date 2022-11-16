@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       24
+Release:       25
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -154,6 +154,7 @@ Patch9136:     0136-add-mutil-NIC-support-in-gazelle.patch
 Patch9137:     0137-remove-filename_check-in-gazellectl-to-fix-build-err.patch
 Patch9138:     0138-cancel-kernel-sock-epoll-ctl-when-lwip-sock-connect.patch
 Patch9139:     0139-modify-readv-and-writev-first-buf-is-null.patch
+Patch9140:     0140-fix-pdump-and-mutil-NIC-init-fail.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -194,6 +195,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue Nov 15 2022 kircher <majun65@huawei.com> - 1.0.1-25
+- fix pdump and mutil NIC init fail
+
 * Mon Nov 14 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-24
 - support muti nic and fix bugs
 
