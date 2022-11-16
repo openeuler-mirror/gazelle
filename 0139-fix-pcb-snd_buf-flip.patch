@@ -1,0 +1,28 @@
+From d51be32362f49a53d4c186f8da06a317b8dad21b Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Wed, 16 Nov 2022 20:04:01 +0800
+Subject: [PATCH] fix pcb snd_buf flip
+
+---
+ src/lstack/core/lstack_lwip.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 196420d..8a11aa5 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -227,6 +227,11 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
+         return NULL;
+     }
+ 
++    if (pbuf->tot_len > remain_size) {
++        *apiflags &= ~TCP_WRITE_FLAG_MORE;
++        return NULL;
++    }
++
+     return pbuf;
+ }
+ 
+-- 
+2.33.0
+
