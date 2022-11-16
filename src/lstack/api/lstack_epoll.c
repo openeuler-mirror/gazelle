@@ -456,8 +456,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
         wakeup->stat.app_events += lwip_num;
 
         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
-            __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
             kernel_num = posix_api->epoll_wait_fn(epfd, &events[lwip_num], maxevents - lwip_num, 0);
+	    if (!kernel_num) {
+                __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
+	    }
         }
 
         if (lwip_num + kernel_num > 0) {
@@ -657,12 +659,14 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         lwip_num = poll_lwip_event(fds, nfds);
 
         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
-            __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
             kernel_num = posix_api->epoll_wait_fn(wakeup->epollfd, wakeup->events, nfds, 0);
             for (int32_t i = 0; i < kernel_num; i++) {
                 uint32_t index = wakeup->events[i].data.u32;
                 fds[index].revents = wakeup->events[i].events;
             }
+	    if (!kernel_num) {
+                __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
+	    }
         }
 
         if (lwip_num + kernel_num > 0) {
