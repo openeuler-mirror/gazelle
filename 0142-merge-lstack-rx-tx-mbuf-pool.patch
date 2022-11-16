@@ -1,0 +1,141 @@
+From ac68de66115c072361738a8e5f610310d14d3b46 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Wed, 16 Nov 2022 19:24:54 +0800
+Subject: [PATCH] merge lstack rx tx mbuf pool
+
+---
+ src/lstack/core/lstack_dpdk.c              | 12 +++---------
+ src/lstack/core/lstack_lwip.c              |  4 ++--
+ src/lstack/core/lstack_protocol_stack.c    |  2 +-
+ src/lstack/include/lstack_dpdk.h           |  6 ++----
+ src/lstack/include/lstack_protocol_stack.h |  3 +--
+ src/lstack/netif/lstack_ethdev.c           |  2 +-
+ src/lstack/netif/lstack_vdev.c             |  2 +-
+ 7 files changed, 11 insertions(+), 20 deletions(-)
+
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 5dc2e54..535a138 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -177,15 +177,9 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
+         return -1;
+     }
+ 
+-    stack->rx_pktmbuf_pool = create_pktmbuf_mempool("rx_mbuf", RX_NB_MBUF / stack_num, RX_MBUF_CACHE_SZ,
++    stack->rxtx_pktmbuf_pool = create_pktmbuf_mempool("rxtx_mbuf", RXTX_NB_MBUF / stack_num, RXTX_CACHE_SZ,
+         stack->queue_id);
+-    if (stack->rx_pktmbuf_pool == NULL) {
+-        return -1;
+-    }
+-
+-    stack->tx_pktmbuf_pool = create_pktmbuf_mempool("tx_mbuf", TX_NB_MBUF / stack_num, TX_MBUF_CACHE_SZ,
+-        stack->queue_id);
+-    if (stack->tx_pktmbuf_pool == NULL) {
++    if (stack->rxtx_pktmbuf_pool == NULL) {
+         return -1;
+     }
+ 
+@@ -488,7 +482,7 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, const stru
+     int32_t ret;
+ 
+     ret = rte_eth_rx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_rx_desc, stack->socket_id,
+-        &eth_params->rx_conf, stack->rx_pktmbuf_pool);
++        &eth_params->rx_conf, stack->rxtx_pktmbuf_pool);
+     if (ret < 0) {
+         LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
+         return -1;
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 2fbbe97..fbc908c 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -106,7 +106,7 @@ static void replenish_send_idlembuf(struct protocol_stack *stack, struct rte_rin
+     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+ 
+     uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
+-    if (rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
++    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
+         stack->stats.tx_allocmbuf_fail++;
+         return;
+     }
+@@ -207,7 +207,7 @@ struct pbuf *lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type)
+     struct rte_mbuf *mbuf;
+     struct protocol_stack *stack = get_protocol_stack();
+ 
+-    if (rte_pktmbuf_alloc_bulk(stack->tx_pktmbuf_pool, &mbuf, 1) != 0) {
++    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, &mbuf, 1) != 0) {
+         stack->stats.tx_allocmbuf_fail++;
+         return NULL;
+     }
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 7a3955d..14c25f5 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -697,7 +697,7 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
+             continue;
+         }
+ 
+-        ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, &mbuf_copy, 1);
++        ret = gazelle_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+         if (ret != 0) {
+             stack->stats.rx_allocmbuf_fail++;
+             return;
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index 684d025..9a4fb35 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -15,10 +15,8 @@
+ 
+ #include "gazelle_opt.h"
+ 
+-#define RX_NB_MBUF          ((5 * MAX_CLIENTS) + (VDEV_RX_QUEUE_SZ * DEFAULT_BACKUP_RING_SIZE_FACTOR))
+-#define RX_MBUF_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
+-#define TX_NB_MBUF          (128 * DEFAULT_RING_SIZE)
+-#define TX_MBUF_CACHE_SZ    (DEFAULT_RING_SIZE)
++#define RXTX_NB_MBUF        (128 * 2000) /* mbuf per connect * connect num */
++#define RXTX_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
+ #define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 2)
+ #define KNI_MBUF_CACHE_SZ   (DEFAULT_RING_SIZE)
+ 
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 2d9053a..68cbbfa 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -43,8 +43,7 @@ struct protocol_stack {
+     cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
+     int32_t epollfd; /* kernel event thread epoll fd */
+ 
+-    struct rte_mempool *rx_pktmbuf_pool;
+-    struct rte_mempool *tx_pktmbuf_pool;
++    struct rte_mempool *rxtx_pktmbuf_pool;
+     struct rte_ring  *rx_ring;
+     struct rte_ring *tx_ring;
+     struct rte_ring *reg_ring;
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index d410a5c..62e4ecf 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -207,7 +207,7 @@ int32_t ethdev_init(struct protocol_stack *stack)
+ 
+     if (use_ltran()) {
+         stack->rx_ring_used = 0;
+-        int32_t ret = fill_mbuf_to_ring(stack->rx_pktmbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
++        int32_t ret = fill_mbuf_to_ring(stack->rxtx_pktmbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
+         if (ret != 0) {
+             LSTACK_LOG(ERR, LSTACK, "fill mbuf to rx_ring failed ret=%d\n", ret);
+             return ret;
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index e2671b4..8b0617e 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -51,7 +51,7 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
+     stack->rx_ring_used += rcvd_pkts;
+     if (unlikely(stack->rx_ring_used >= USED_RX_PKTS_WATERMARK)) {
+         uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, RING_SIZE(DPDK_PKT_BURST_SIZE));
+-        int32_t ret = gazelle_alloc_pktmbuf(stack->rx_pktmbuf_pool, (struct rte_mbuf **)free_buf, free_cnt);
++        int32_t ret = gazelle_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)free_buf, free_cnt);
+         if (likely(ret == 0)) {
+             nr_pkts = gazelle_ring_sp_enqueue(stack->rx_ring, (void **)free_buf, free_cnt);
+             stack->rx_ring_used -= nr_pkts;
+-- 
+2.33.0
+

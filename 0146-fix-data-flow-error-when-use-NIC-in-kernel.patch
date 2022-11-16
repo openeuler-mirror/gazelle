@@ -1,0 +1,44 @@
+From aab5985a79d6002b048e35db7376cdb0e3aa4a1d Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Wed, 16 Nov 2022 21:47:46 +0800
+Subject: [PATCH] fix data flow error when use NIC in kernel
+
+---
+ src/lstack/api/lstack_epoll.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 8d5439b..19dd69a 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -456,8 +456,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
+         wakeup->stat.app_events += lwip_num;
+ 
+         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
+-            __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
+             kernel_num = posix_api->epoll_wait_fn(epfd, &events[lwip_num], maxevents - lwip_num, 0);
++	    if (!kernel_num) {
++                __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
++	    }
+         }
+ 
+         if (lwip_num + kernel_num > 0) {
+@@ -657,12 +659,14 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+         lwip_num = poll_lwip_event(fds, nfds);
+ 
+         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
+-            __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
+             kernel_num = posix_api->epoll_wait_fn(wakeup->epollfd, wakeup->events, nfds, 0);
+             for (int32_t i = 0; i < kernel_num; i++) {
+                 uint32_t index = wakeup->events[i].data.u32;
+                 fds[index].revents = wakeup->events[i].events;
+             }
++	    if (!kernel_num) {
++                __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
++	    }
+         }
+ 
+         if (lwip_num + kernel_num > 0) {
+-- 
+2.33.0
+
