@@ -15,10 +15,8 @@
 
 #include "gazelle_opt.h"
 
-#define RX_NB_MBUF          ((5 * MAX_CLIENTS) + (VDEV_RX_QUEUE_SZ * DEFAULT_BACKUP_RING_SIZE_FACTOR))
-#define RX_MBUF_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
-#define TX_NB_MBUF          (128 * DEFAULT_RING_SIZE)
-#define TX_MBUF_CACHE_SZ    (DEFAULT_RING_SIZE)
+#define RXTX_NB_MBUF        (128 * 2000) /* mbuf per connect * connect num */
+#define RXTX_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
 #define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 2)
 #define KNI_MBUF_CACHE_SZ   (DEFAULT_RING_SIZE)
 
