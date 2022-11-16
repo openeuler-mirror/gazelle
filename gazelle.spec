@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       25
+Release:       26
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -155,6 +155,12 @@ Patch9137:     0137-remove-filename_check-in-gazellectl-to-fix-build-err.patch
 Patch9138:     0138-cancel-kernel-sock-epoll-ctl-when-lwip-sock-connect.patch
 Patch9139:     0139-modify-readv-and-writev-first-buf-is-null.patch
 Patch9140:     0140-fix-pdump-and-mutil-NIC-init-fail.patch
+Patch9141:     0141-modify-duplicate-code.patch
+Patch9142:     0142-merge-lstack-rx-tx-mbuf-pool.patch
+Patch9143:     0143-avoid-send-stop-when-mbuf-pool-empty.patch
+Patch9144:     0144-fix-pcb-snd_buf-flip.patch
+Patch9145:     0145-fix-lwip-send-return-0-add-err-event.patch
+Patch9146:     0146-fix-data-flow-error-when-use-NIC-in-kernel.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -195,6 +201,14 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Wed Nov 16 2022 kircher <majun65@huawei.com> - 1.0.1-26
+- modify duplicate code
+- fix data flow error when use NIC in kernel
+- fix lwip send return 0 add err event
+- fix pcb snd_buf flip
+- avoid send stop when mbuf pool empty
+- merge lstack rx tx mbuf pool
+
 * Tue Nov 15 2022 kircher <majun65@huawei.com> - 1.0.1-25
 - fix pdump and mutil NIC init fail
 
