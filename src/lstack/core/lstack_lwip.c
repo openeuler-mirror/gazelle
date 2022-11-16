@@ -99,7 +99,8 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
     return pbuf;
 }
 
-static void replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
+/* true: need replenish again */
+static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
 {
     void *pbuf[SOCK_SEND_RING_SIZE];
 
@@ -108,7 +109,7 @@ static void replenish_send_idlembuf(struct protocol_stack *stack, struct rte_rin
     uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
     if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
         stack->stats.tx_allocmbuf_fail++;
-        return;
+        return true;
     }
 
     for (uint32_t i = 0; i < alloc_num; i++) {
@@ -119,6 +120,8 @@ static void replenish_send_idlembuf(struct protocol_stack *stack, struct rte_rin
     for (uint32_t i = num; i < alloc_num; i++) {
         pbuf_free(pbuf[i]);
     }
+
+    return false;
 }
 
 void gazelle_init_sock(int32_t fd)
@@ -145,7 +148,7 @@ void gazelle_init_sock(int32_t fd)
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
-    replenish_send_idlembuf(stack, sock->send_ring);
+    (void)replenish_send_idlembuf(stack, sock->send_ring);
 
     sock->stack = stack;
     sock->stack->conn_num++;
@@ -310,7 +313,22 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     return send_len;
 }
 
-static void do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock, int32_t flags)
+static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip_sock *sock)
+{
+    bool replenish_again = false;
+
+    if (gazelle_ring_readable_count(sock->send_ring) < SOCK_SEND_REPLENISH_THRES) {
+        replenish_again = replenish_send_idlembuf(stack, sock->send_ring);
+    }
+
+    if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
+        add_sock_event(sock, EPOLLOUT);
+    }
+
+    return replenish_again;
+}
+
+static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock, int32_t flags)
 {
     /* send all send_ring, so len set lwip send max. */
     ssize_t len = lwip_send(fd, sock, UINT16_MAX, flags);
@@ -320,13 +338,7 @@ static void do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_s
         add_sock_event(sock, EPOLLERR);
     }
 
-    if (gazelle_ring_readable_count(sock->send_ring) < SOCK_SEND_REPLENISH_THRES) {
-        replenish_send_idlembuf(stack, sock->send_ring);
-    }
-
-    if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
-        add_sock_event(sock, EPOLLOUT);
-    }
+    return replenish_send_ring(stack, sock);
 }
 
 void stack_send(struct rpc_msg *msg)
@@ -348,10 +360,10 @@ void stack_send(struct rpc_msg *msg)
         return;
     }
 
-    do_lwip_send(stack, fd, sock, flags);
+    bool replenish_again = do_lwip_send(stack, fd, sock, flags);
 
-    /* have remain data add sendlist */
-    if (NETCONN_IS_DATAOUT(sock)) {
+    /* have remain data or replenish again add sendlist */
+    if (NETCONN_IS_DATAOUT(sock) || replenish_again) {
         if (list_is_null(&sock->send_list)) {
             list_add_node(&stack->send_list, &sock->send_list);
             __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
@@ -365,6 +377,7 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
     struct list_node *node, *temp;
     struct lwip_sock *sock;
     uint32_t read_num = 0;
+    bool replenish_again;
 
     list_for_each_safe(node, temp, &stack->send_list) {
         sock = container_of(node, struct lwip_sock, send_list);
@@ -372,14 +385,24 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
         __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
         rte_mb();
 
-        if (sock->conn == NULL || sock->errevent > 0 || !NETCONN_IS_DATAOUT(sock)) {
+        if (sock->conn == NULL || sock->errevent > 0) {
             list_del_node_null(&sock->send_list);
             continue;
         }
 
-        do_lwip_send(stack, sock->conn->socket, sock, 0);
-
         if (!NETCONN_IS_DATAOUT(sock)) {
+            replenish_again = replenish_send_ring(stack, sock);
+            if (replenish_again) {
+                continue;
+            }
+
+            list_del_node_null(&sock->send_list);
+            continue;
+        }
+
+        replenish_again = do_lwip_send(stack, sock->conn->socket, sock, 0);
+
+        if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
             list_del_node_null(&sock->send_list);
         } else {
             __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
