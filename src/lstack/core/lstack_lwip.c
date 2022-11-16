@@ -336,12 +336,7 @@ static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip
 static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock, int32_t flags)
 {
     /* send all send_ring, so len set lwip send max. */
-    ssize_t len = lwip_send(fd, sock, UINT16_MAX, flags);
-    if (len == 0) {
-        /* FIXME: should use POLLRDHUP, when connection be closed. lwip event-callback no POLLRDHUP */
-        sock->errevent = 1;
-        add_sock_event(sock, EPOLLERR);
-    }
+    (void)lwip_send(fd, sock, UINT16_MAX, flags);
 
     return replenish_send_ring(stack, sock);
 }
