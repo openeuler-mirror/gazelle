@@ -586,7 +586,7 @@ static int32_t thread_register(void)
 {
     int32_t ret;
 
-    struct gazelle_stat_lstack_conn *conn = malloc(sizeof(struct gazelle_stat_lstack_conn));
+    struct gazelle_stat_lstack_conn *conn = calloc(1, sizeof(struct gazelle_stat_lstack_conn));
     if (conn == NULL) {
         LSTACK_LOG(ERR, LSTACK, "malloc fail\n");
         return -1;

@@ -36,7 +36,7 @@ struct gazelle_stack_htable *gazelle_stack_htable_create(uint32_t max_stack_num)
     struct gazelle_stack_htable *stack_htable;
     uint32_t i;
 
-    stack_htable = malloc(sizeof(struct gazelle_stack_htable));
+    stack_htable = calloc(1, sizeof(struct gazelle_stack_htable));
     if (stack_htable == NULL) {
         return NULL;
     }

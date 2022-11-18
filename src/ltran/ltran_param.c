@@ -101,7 +101,7 @@ static int32_t parse_forward_kit_args_single(char *dpdk_str, size_t len, struct 
     (void)len;
     do {
         ltran_config->dpdk.dpdk_argc = 0;
-        ltran_config->dpdk.dpdk_argv = malloc(GAZELLE_MAX_DPDK_ARGS_NUM * sizeof(char *));
+        ltran_config->dpdk.dpdk_argv = calloc(GAZELLE_MAX_DPDK_ARGS_NUM, sizeof(char *));
         if (ltran_config->dpdk.dpdk_argv == NULL) {
             gazelle_set_errno(GAZELLE_ENOMEM);
             break;
