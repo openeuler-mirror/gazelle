@@ -164,26 +164,32 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
         printf("%s:%d memset_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
     }
 
+    ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
+		    strlen(GAZELLE_RUN_DIR) + 1);
+    if (ret != EOK) {
+	printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+    }
+
     if (g_unix_prefix) {
-	ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
-			strlen(GAZELLE_RUN_DIR) + 1);
+	ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), g_unix_prefix,
+			strlen(g_unix_prefix) + 1);
 	if (ret != EOK) {
-	    printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+	    printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
 	}
     }
 
     addr.sun_family = AF_UNIX;
     if (use_ltran) {
-        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_PATHNAME,
-            strlen(GAZELLE_DFX_SOCK_PATHNAME) + 1);
+        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_FILENAME,
+            strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
         if (ret != EOK) {
-            printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
         }
     } else {
-        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_PATHNAME,
-            strlen(GAZELLE_REG_SOCK_PATHNAME) + 1);
+        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_FILENAME,
+            strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
         if (ret != EOK) {
-            printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
         }
     }
 
@@ -915,8 +921,8 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
 static void show_usage(void)
 {
     printf("Usage: gazellectl [-h | help] \n"
-           "  or:  gazellectl ltran  {quit | show | set} [LTRAN_OPTIONS] \n"
-           "  or:  gazellectl lstack {show | set} ip [LSTACK_OPTIONS] \n \n"
+           "  or:  gazellectl ltran  {quit | show | set} [LTRAN_OPTIONS] [-u UNIX_PREFIX]\n"
+           "  or:  gazellectl lstack {show | set} ip [LSTACK_OPTIONS] [-u UNIX_PREFIX]\n \n"
            "  quit            ltran process exit \n \n"
            "  where  LTRAN_OPTIONS := \n"
            "  show: \n"
