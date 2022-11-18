@@ -128,7 +128,24 @@ static uint32_t update_events(struct lwip_sock *sock)
 
 static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *sock)
 {
-    sock->events = update_events(sock);
+    uint32_t event = 0;
+
+    if (NETCONN_IS_DATAIN(sock) || NETCONN_IS_ACCEPTIN(sock)) {
+        event |= EPOLLIN;
+    }
+
+    if (NETCONN_IS_OUTIDLE(sock)) {
+        /* lwip_netconn_do_connected set LIBOS FLAGS when connected */
+        if (sock->conn && CONN_TYPE_IS_LIBOS(sock->conn)) {
+            event |= EPOLLOUT;
+        }
+    }
+
+    if (sock->errevent > 0) {
+        event |= EPOLLERR | EPOLLIN;
+    }
+
+    sock->events = event;
     if (sock->events) {
         pthread_spin_lock(&wakeup->event_list_lock);
         if (wakeup->type == WAKEUP_EPOLL && list_is_null(&sock->event_list)) {
@@ -361,7 +378,7 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
             sock->epoll_events = 0;
         }
 
-        events[event_num].events = sock->events;
+        events[event_num].events = sock->events & sock->epoll_events;
         events[event_num].data = sock->ep_data;
         event_num++;
 
