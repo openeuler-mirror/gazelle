@@ -785,7 +785,7 @@ static int32_t parse_conf_file(const char *path)
 int32_t cfg_init(void)
 {
     int32_t ret;
-    char *config_file = malloc(PATH_MAX * sizeof(char));
+    char *config_file = calloc(PATH_MAX, sizeof(char));
     if (config_file == NULL) {
         return -1;
     }

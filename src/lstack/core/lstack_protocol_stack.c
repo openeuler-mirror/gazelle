@@ -344,7 +344,7 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    struct protocol_stack *stack = malloc(sizeof(*stack));
+    struct protocol_stack *stack = calloc(1, sizeof(*stack));
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
         sem_post(&stack_group->thread_phase1);

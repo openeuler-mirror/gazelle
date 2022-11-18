@@ -40,7 +40,7 @@ struct gazelle_tcp_sock_htable *gazelle_tcp_sock_htable_create(uint32_t max_tcp_
     uint32_t i;
     struct gazelle_tcp_sock_htable *tcp_sock_htable = NULL;
 
-    tcp_sock_htable = malloc(sizeof(struct gazelle_tcp_sock_htable));
+    tcp_sock_htable = calloc(1, sizeof(struct gazelle_tcp_sock_htable));
     if (tcp_sock_htable == NULL) {
         return NULL;
     }
