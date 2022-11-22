@@ -145,9 +145,9 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
         event |= EPOLLERR | EPOLLIN;
     }
 
-    sock->events = event;
-    if (sock->events) {
+    if (event) {
         pthread_spin_lock(&wakeup->event_list_lock);
+	sock->events = event;
         if (wakeup->type == WAKEUP_EPOLL && list_is_null(&sock->event_list)) {
             list_add_node(&wakeup->event_list, &sock->event_list);
         }
