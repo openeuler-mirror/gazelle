@@ -1,0 +1,95 @@
+From 31f0d1f4b5d8617ef15226f7c88156308626da0f Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Fri, 18 Nov 2022 20:51:03 +0800
+Subject: [PATCH] add malloc init zero
+
+---
+ src/lstack/core/lstack_cfg.c            | 2 +-
+ src/lstack/core/lstack_control_plane.c  | 2 +-
+ src/lstack/core/lstack_protocol_stack.c | 2 +-
+ src/ltran/ltran_param.c                 | 2 +-
+ src/ltran/ltran_stack.c                 | 2 +-
+ src/ltran/ltran_tcp_sock.c              | 2 +-
+ 6 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 1ff3794..52ff3f5 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -785,7 +785,7 @@ static int32_t parse_conf_file(const char *path)
+ int32_t cfg_init(void)
+ {
+     int32_t ret;
+-    char *config_file = malloc(PATH_MAX * sizeof(char));
++    char *config_file = calloc(PATH_MAX, sizeof(char));
+     if (config_file == NULL) {
+         return -1;
+     }
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index 0a10d83..bf55df5 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -586,7 +586,7 @@ static int32_t thread_register(void)
+ {
+     int32_t ret;
+ 
+-    struct gazelle_stat_lstack_conn *conn = malloc(sizeof(struct gazelle_stat_lstack_conn));
++    struct gazelle_stat_lstack_conn *conn = calloc(1, sizeof(struct gazelle_stat_lstack_conn));
+     if (conn == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "malloc fail\n");
+         return -1;
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 14c25f5..d5830f1 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -344,7 +344,7 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+ {
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
+-    struct protocol_stack *stack = malloc(sizeof(*stack));
++    struct protocol_stack *stack = calloc(1, sizeof(*stack));
+     if (stack == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
+         sem_post(&stack_group->thread_phase1);
+diff --git a/src/ltran/ltran_param.c b/src/ltran/ltran_param.c
+index 4974085..18854cf 100644
+--- a/src/ltran/ltran_param.c
++++ b/src/ltran/ltran_param.c
+@@ -101,7 +101,7 @@ static int32_t parse_forward_kit_args_single(char *dpdk_str, size_t len, struct
+     (void)len;
+     do {
+         ltran_config->dpdk.dpdk_argc = 0;
+-        ltran_config->dpdk.dpdk_argv = malloc(GAZELLE_MAX_DPDK_ARGS_NUM * sizeof(char *));
++        ltran_config->dpdk.dpdk_argv = calloc(GAZELLE_MAX_DPDK_ARGS_NUM, sizeof(char *));
+         if (ltran_config->dpdk.dpdk_argv == NULL) {
+             gazelle_set_errno(GAZELLE_ENOMEM);
+             break;
+diff --git a/src/ltran/ltran_stack.c b/src/ltran/ltran_stack.c
+index 1c0d4f7..d4e935e 100644
+--- a/src/ltran/ltran_stack.c
++++ b/src/ltran/ltran_stack.c
+@@ -36,7 +36,7 @@ struct gazelle_stack_htable *gazelle_stack_htable_create(uint32_t max_stack_num)
+     struct gazelle_stack_htable *stack_htable;
+     uint32_t i;
+ 
+-    stack_htable = malloc(sizeof(struct gazelle_stack_htable));
++    stack_htable = calloc(1, sizeof(struct gazelle_stack_htable));
+     if (stack_htable == NULL) {
+         return NULL;
+     }
+diff --git a/src/ltran/ltran_tcp_sock.c b/src/ltran/ltran_tcp_sock.c
+index 7ba23f0..d6a0d17 100644
+--- a/src/ltran/ltran_tcp_sock.c
++++ b/src/ltran/ltran_tcp_sock.c
+@@ -40,7 +40,7 @@ struct gazelle_tcp_sock_htable *gazelle_tcp_sock_htable_create(uint32_t max_tcp_
+     uint32_t i;
+     struct gazelle_tcp_sock_htable *tcp_sock_htable = NULL;
+ 
+-    tcp_sock_htable = malloc(sizeof(struct gazelle_tcp_sock_htable));
++    tcp_sock_htable = calloc(1, sizeof(struct gazelle_tcp_sock_htable));
+     if (tcp_sock_htable == NULL) {
+         return NULL;
+     }
+-- 
+2.33.0
+
