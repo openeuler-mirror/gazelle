@@ -58,11 +58,11 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
 
         /* app thread have read/write, event is outdated */
         if (event == EPOLLIN && sock->conn->state != NETCONN_LISTEN && !NETCONN_IS_DATAIN(sock)) {
-	    pthread_spin_unlock(&wakeup->event_list_lock);
+            pthread_spin_unlock(&wakeup->event_list_lock);
             return;
         }
         if (event == EPOLLOUT && !NETCONN_IS_OUTIDLE(sock)) {
-	    pthread_spin_unlock(&wakeup->event_list_lock);
+            pthread_spin_unlock(&wakeup->event_list_lock);
             return;
         }
 
@@ -147,8 +147,9 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
 
     if (event) {
         pthread_spin_lock(&wakeup->event_list_lock);
-	sock->events = event;
-        if (wakeup->type == WAKEUP_EPOLL && list_is_null(&sock->event_list)) {
+        sock->events = event;
+        if (wakeup->type == WAKEUP_EPOLL && (sock->events & sock->epoll_events) &&
+            list_is_null(&sock->event_list)) {
             list_add_node(&wakeup->event_list, &sock->event_list);
         }
         pthread_spin_unlock(&wakeup->event_list_lock);
@@ -362,7 +363,7 @@ static int32_t epoll_lwip_event(struct wakeup_poll *wakeup, struct epoll_event *
     list_for_each_safe(node, temp, &wakeup->event_list) {
         struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
 
-        if (sock->epoll_events == 0) {
+        if ((sock->epoll_events & sock->events) == 0) {
             list_del_node_null(&sock->event_list);
             continue;
         }
@@ -474,9 +475,9 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
 
         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
             kernel_num = posix_api->epoll_wait_fn(epfd, &events[lwip_num], maxevents - lwip_num, 0);
-	    if (!kernel_num) {
+            if (!kernel_num) {
                 __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
-	    }
+            }
         }
 
         if (lwip_num + kernel_num > 0) {
@@ -681,9 +682,9 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
                 uint32_t index = wakeup->events[i].data.u32;
                 fds[index].revents = wakeup->events[i].events;
             }
-	    if (!kernel_num) {
+            if (!kernel_num) {
                 __atomic_store_n(&wakeup->have_kernel_event, false, __ATOMIC_RELEASE);
-	    }
+            }
         }
 
         if (lwip_num + kernel_num > 0) {
