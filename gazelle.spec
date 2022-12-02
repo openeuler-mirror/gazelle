@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       25
+Release:       26
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -159,6 +159,8 @@ Patch9141:     0141-fix-data-flow-error-when-use-NIC-in-kernel.patch
 Patch9142:     0142-fix-write-event-error.patch
 Patch9143:     0143-add-malloc-init-zero.patch
 Patch9144:     0144-modify-event-error.patch
+Patch9145:     0145-add-unix_prefix-in-gazellectl.patch
+Patch9146:     0146-fix-epoll_wait-report-event0.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -199,6 +201,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri Dec 2 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-26
+- fix epoll_wait report events 0
+
 * Thu Dec 1 UTC compile_success <980965867@qq.com> - 1.0.1-25
 - add malloc init zero
 - modify EPOLLOUT event is overwritten.
