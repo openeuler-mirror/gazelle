@@ -29,7 +29,8 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_ethdev.h"
 
-#define PKTMBUF_MALLOC_FLAG     NULL
+/* FRAME_MTU + 14byte header */
+#define MBUF_MAX_LEN    1514
 
 void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
 {
@@ -151,25 +152,58 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
 static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 {
     struct protocol_stack *stack = get_protocol_stack();
-    struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
+    struct rte_mbuf *pre_mbuf = NULL;
+    struct rte_mbuf *first_mbuf = NULL;
+    struct pbuf *first_pbuf = NULL;
 
-    if (mbuf->buf_addr == 0) {
-        stack->stats.tx_drop++;
-        return ERR_BUF;
+    while (likely(pbuf != NULL)) {
+        struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
+
+        mbuf->data_len = pbuf->len;
+        mbuf->pkt_len = pbuf->tot_len;
+        mbuf->ol_flags = pbuf->ol_flags;
+
+        if (first_mbuf == NULL) {
+            first_mbuf = mbuf;
+            first_pbuf = pbuf;
+            first_mbuf->nb_segs = 1;
+            if (pbuf->header_off > 0) {
+                mbuf->data_off -= first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
+                pbuf->header_off = 0;
+            }
+        } else {
+            first_mbuf->nb_segs++;
+            pre_mbuf->next = mbuf;
+            if (pbuf->header_off == 0) {
+                uint16_t header_len = first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
+                mbuf->data_off += header_len;
+                pbuf->header_off = header_len;
+            }
+        }
+
+        if (likely(first_mbuf->pkt_len > MBUF_MAX_LEN)) {
+            mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
+            mbuf->tso_segsz = TCP_MSS;
+        }
+        mbuf->l2_len = first_pbuf->l2_len;
+        mbuf->l3_len = first_pbuf->l3_len;
+        mbuf->l4_len = first_pbuf->l4_len;
+
+        pre_mbuf = mbuf;
+        rte_mbuf_refcnt_update(mbuf, 1);
+        if (pbuf->rexmit) {
+            mbuf->next = NULL;
+            break;
+        }
+        pbuf->rexmit = 1;
+        pbuf = pbuf->next;
     }
 
-    mbuf->data_len = pbuf->len;
-    mbuf->pkt_len = pbuf->tot_len;
-    rte_mbuf_refcnt_update(mbuf, 1);
-    mbuf->ol_flags = pbuf->ol_flags;
-    mbuf->l2_len = pbuf->l2_len;
-    mbuf->l3_len = pbuf->l3_len;
-
-    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &mbuf, 1);
+    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
     stack->stats.tx += sent_pkts;
     if (sent_pkts < 1) {
         stack->stats.tx_drop++;
-        rte_pktmbuf_free(mbuf);
+        rte_pktmbuf_free(first_mbuf);
         return ERR_MEM;
     }
 

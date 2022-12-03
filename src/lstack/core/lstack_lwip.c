@@ -94,6 +94,9 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
         pbuf->ol_flags = 0;
         pbuf->l2_len = 0;
         pbuf->l3_len = 0;
+        pbuf->l4_len = 0;
+        pbuf->header_off = 0;
+        pbuf->rexmit = 0;
     }
 
     return pbuf;
@@ -185,7 +188,8 @@ void gazelle_free_pbuf(struct pbuf *pbuf)
     }
 
     struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
-    rte_pktmbuf_free(mbuf);
+    pbuf->next = NULL;
+    rte_pktmbuf_free_seg(mbuf);
 }
 
 int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
@@ -315,6 +319,9 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         sock->wakeup->stat.app_write_cnt += send_pkt;
     }
 
+    if (send_len == 0) {
+        usleep(100);
+    }
     return send_len;
 }
 
@@ -390,9 +397,15 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
             continue;
         }
 
+        if (tcp_sndbuf(sock->conn->pcb.tcp) < TCP_MSS) {
+            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+            continue;
+        }
+
         if (!NETCONN_IS_DATAOUT(sock)) {
             replenish_again = replenish_send_ring(stack, sock);
             if (replenish_again) {
+                __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
                 continue;
             }
 

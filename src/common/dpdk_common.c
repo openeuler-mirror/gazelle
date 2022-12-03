@@ -118,6 +118,11 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
         COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
     }
 
+    //if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
+    //    tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
+    //    COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
+    //}
+
     if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
         rx_ol = 0;
     }
@@ -195,7 +200,18 @@ void dpdk_kni_release(void)
 
 int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count)
 {
-    uint32_t i = rte_kni_tx_burst(g_pkni, pkts_burst, count);
+    uint32_t i;
+
+    for (i = 0; i < count; ++i) {
+        struct rte_ipv4_hdr * ipv4_hdr = (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(pkts_burst[i], char*)
+            + pkts_burst[i]->l2_len);
+        if (pkts_burst[i]->nb_segs > 1) {
+            ipv4_hdr->hdr_checksum = 0;
+            ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
+        }
+    }
+
+    i = rte_kni_tx_burst(g_pkni, pkts_burst, count);
     for (; i < count; ++i) {
         rte_pktmbuf_free(pkts_burst[i]);
         pkts_burst[i] = NULL;

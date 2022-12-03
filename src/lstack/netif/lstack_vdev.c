@@ -113,6 +113,10 @@ static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkt
 {
     uint32_t sent_pkts = 0;
 
+    if (rte_eth_tx_prepare(stack->port_id, stack->queue_id, pkts, nr_pkts) != nr_pkts) {
+        stack->stats.tx_prepare_fail++;
+    }
+
     do {
         sent_pkts += rte_eth_tx_burst(stack->port_id, stack->queue_id, &pkts[sent_pkts], nr_pkts - sent_pkts);
     } while (sent_pkts < nr_pkts);
