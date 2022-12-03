@@ -16,9 +16,8 @@
 #include "gazelle_opt.h"
 
 #define RXTX_NB_MBUF        (128 * 2000) /* mbuf per connect * connect num */
-#define RXTX_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
-#define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 2)
-#define KNI_MBUF_CACHE_SZ   (DEFAULT_RING_SIZE)
+#define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
+#define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
 
 #define MBUF_HEADER_LEN 64
 
