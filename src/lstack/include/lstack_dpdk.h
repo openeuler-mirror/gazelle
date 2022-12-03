@@ -15,7 +15,7 @@
 
 #include "gazelle_opt.h"
 
-#define RXTX_NB_MBUF        (256 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
+#define RXTX_NB_MBUF        (512 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
 #define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
 #define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
 
