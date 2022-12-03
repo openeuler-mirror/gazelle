@@ -1,0 +1,268 @@
+From 228fdc88fb871692653dc4fd0cde8fa8fe2a54b7 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 3 Dec 2022 21:14:05 +0800
+Subject: [PATCH 1/2] add TSO
+
+---
+ src/common/dpdk_common.c         | 18 +++++++++-
+ src/common/gazelle_dfx_msg.h     |  1 +
+ src/common/gazelle_opt.h         |  2 +-
+ src/lstack/core/lstack_dpdk.c    |  3 +-
+ src/lstack/core/lstack_lwip.c    | 15 +++++++-
+ src/lstack/include/lstack_dpdk.h |  5 ++-
+ src/lstack/netif/lstack_ethdev.c | 62 ++++++++++++++++++++++++--------
+ src/lstack/netif/lstack_vdev.c   |  4 +++
+ 8 files changed, 89 insertions(+), 21 deletions(-)
+
+diff --git a/src/common/dpdk_common.c b/src/common/dpdk_common.c
+index 7298d05..89f7dfa 100644
+--- a/src/common/dpdk_common.c
++++ b/src/common/dpdk_common.c
+@@ -118,6 +118,11 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
+         COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
+     }
+ 
++    //if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
++    //    tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
++    //    COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
++    //}
++
+     if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
+         rx_ol = 0;
+     }
+@@ -195,7 +200,18 @@ void dpdk_kni_release(void)
+ 
+ int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count)
+ {
+-    uint32_t i = rte_kni_tx_burst(g_pkni, pkts_burst, count);
++    uint32_t i;
++
++    for (i = 0; i < count; ++i) {
++        struct rte_ipv4_hdr * ipv4_hdr = (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(pkts_burst[i], char*)
++            + pkts_burst[i]->l2_len);
++        if (pkts_burst[i]->nb_segs > 1) {
++            ipv4_hdr->hdr_checksum = 0;
++            ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
++        }
++    }
++
++    i = rte_kni_tx_burst(g_pkni, pkts_burst, count);
+     for (; i < count; ++i) {
+         rte_pktmbuf_free(pkts_burst[i]);
+         pkts_burst[i] = NULL;
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index 4d838c0..f6f8d0e 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -65,6 +65,7 @@ struct gazelle_stack_stat {
+     uint64_t rx;
+     uint64_t tx_drop;
+     uint64_t tx;
++    uint64_t tx_prepare_fail;
+ };
+ 
+ struct gazelle_wakeup_stat {
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index e9e3676..4262e90 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -44,7 +44,7 @@
+ #define VDEV_TX_QUEUE_SZ            DEFAULT_RING_SIZE
+ #define FREE_RX_QUEUE_SZ            DPDK_PKT_BURST_SIZE
+ 
+-#define RTE_TEST_TX_DESC_DEFAULT    512
++#define RTE_TEST_TX_DESC_DEFAULT    2048
+ #define RTE_TEST_RX_DESC_DEFAULT    4096
+ 
+ #define DPDK_PKT_BURST_SIZE         512
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 535a138..2e8fb45 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -33,6 +33,7 @@
+ #include <lwipopts.h>
+ #include <lwip/pbuf.h>
+ #include <lwip/reg_sock.h>
++#include <lwip/priv/tcp_priv.h>
+ 
+ #include "lstack_log.h"
+ #include "dpdk_common.h"
+@@ -144,7 +145,7 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
+ 
+     /* time stamp before pbuf_custom as priv_data */
+     pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size,
+-        sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE, MBUF_SZ, rte_socket_id());
++        sizeof(struct tcp_seg) + sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE, MBUF_SZ, rte_socket_id());
+     if (pool == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
+     }
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 9271bd6..d30ecdc 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -94,6 +94,9 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
+         pbuf->ol_flags = 0;
+         pbuf->l2_len = 0;
+         pbuf->l3_len = 0;
++        pbuf->l4_len = 0;
++        pbuf->header_off = 0;
++        pbuf->rexmit = 0;
+     }
+ 
+     return pbuf;
+@@ -185,7 +188,8 @@ void gazelle_free_pbuf(struct pbuf *pbuf)
+     }
+ 
+     struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
+-    rte_pktmbuf_free(mbuf);
++    pbuf->next = NULL;
++    rte_pktmbuf_free_seg(mbuf);
+ }
+ 
+ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
+@@ -315,6 +319,9 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+         sock->wakeup->stat.app_write_cnt += send_pkt;
+     }
+ 
++    if (send_len == 0) {
++        usleep(100);
++    }
+     return send_len;
+ }
+ 
+@@ -390,9 +397,15 @@ void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
+             continue;
+         }
+ 
++        if (tcp_sndbuf(sock->conn->pcb.tcp) < TCP_MSS) {
++            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
++            continue;
++        }
++
+         if (!NETCONN_IS_DATAOUT(sock)) {
+             replenish_again = replenish_send_ring(stack, sock);
+             if (replenish_again) {
++                __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+                 continue;
+             }
+ 
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index 9a4fb35..8d68e06 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -16,9 +16,8 @@
+ #include "gazelle_opt.h"
+ 
+ #define RXTX_NB_MBUF        (128 * 2000) /* mbuf per connect * connect num */
+-#define RXTX_CACHE_SZ    (VDEV_RX_QUEUE_SZ)
+-#define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 2)
+-#define KNI_MBUF_CACHE_SZ   (DEFAULT_RING_SIZE)
++#define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
++#define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
+ 
+ #define MBUF_HEADER_LEN 64
+ 
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 62e4ecf..87fe9ae 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -29,7 +29,8 @@
+ #include "lstack_protocol_stack.h"
+ #include "lstack_ethdev.h"
+ 
+-#define PKTMBUF_MALLOC_FLAG     NULL
++/* FRAME_MTU + 14byte header */
++#define MBUF_MAX_LEN    1514
+ 
+ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
+ {
+@@ -151,25 +152,58 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
+ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+ {
+     struct protocol_stack *stack = get_protocol_stack();
+-    struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
++    struct rte_mbuf *pre_mbuf = NULL;
++    struct rte_mbuf *first_mbuf = NULL;
++    struct pbuf *first_pbuf = NULL;
++
++    while (likely(pbuf != NULL)) {
++        struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
++
++        mbuf->data_len = pbuf->len;
++        mbuf->pkt_len = pbuf->tot_len;
++        mbuf->ol_flags = pbuf->ol_flags;
++
++        if (first_mbuf == NULL) {
++            first_mbuf = mbuf;
++            first_pbuf = pbuf;
++            first_mbuf->nb_segs = 1;
++            if (pbuf->header_off > 0) {
++                mbuf->data_off -= first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
++                pbuf->header_off = 0;
++            }
++        } else {
++            first_mbuf->nb_segs++;
++            pre_mbuf->next = mbuf;
++            if (pbuf->header_off == 0) {
++                uint16_t header_len = first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
++                mbuf->data_off += header_len;
++                pbuf->header_off = header_len;
++            }
++        }
+ 
+-    if (mbuf->buf_addr == 0) {
+-        stack->stats.tx_drop++;
+-        return ERR_BUF;
++        if (likely(first_mbuf->pkt_len > MBUF_MAX_LEN)) {
++            mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
++            mbuf->tso_segsz = TCP_MSS;
++        }
++        mbuf->l2_len = first_pbuf->l2_len;
++        mbuf->l3_len = first_pbuf->l3_len;
++        mbuf->l4_len = first_pbuf->l4_len;
++
++        pre_mbuf = mbuf;
++        rte_mbuf_refcnt_update(mbuf, 1);
++        if (pbuf->rexmit) {
++            mbuf->next = NULL;
++            break;
++        }
++        pbuf->rexmit = 1;
++        pbuf = pbuf->next;
+     }
+ 
+-    mbuf->data_len = pbuf->len;
+-    mbuf->pkt_len = pbuf->tot_len;
+-    rte_mbuf_refcnt_update(mbuf, 1);
+-    mbuf->ol_flags = pbuf->ol_flags;
+-    mbuf->l2_len = pbuf->l2_len;
+-    mbuf->l3_len = pbuf->l3_len;
+-
+-    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &mbuf, 1);
++    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
+     stack->stats.tx += sent_pkts;
+     if (sent_pkts < 1) {
+         stack->stats.tx_drop++;
+-        rte_pktmbuf_free(mbuf);
++        rte_pktmbuf_free(first_mbuf);
+         return ERR_MEM;
+     }
+ 
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index 8b0617e..5bdaf63 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -113,6 +113,10 @@ static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkt
+ {
+     uint32_t sent_pkts = 0;
+ 
++    if (rte_eth_tx_prepare(stack->port_id, stack->queue_id, pkts, nr_pkts) != nr_pkts) {
++        stack->stats.tx_prepare_fail++;
++    }
++
+     do {
+         sent_pkts += rte_eth_tx_burst(stack->port_id, stack->queue_id, &pkts[sent_pkts], nr_pkts - sent_pkts);
+     } while (sent_pkts < nr_pkts);
+-- 
+2.23.0
+
