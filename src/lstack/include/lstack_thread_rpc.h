@@ -51,6 +51,7 @@ struct rpc_msg {
 struct protocol_stack;
 struct rte_mbuf;
 struct wakeup_poll;
+struct lwip_sock;
 void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
 void rpc_call_clean_epoll(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
@@ -75,5 +76,6 @@ int32_t rpc_call_getsockopt(int fd, int level, int optname, void *optval, sockle
 int32_t rpc_call_setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
 int32_t rpc_call_fcntl(int fd, int cmd, long val);
 int32_t rpc_call_ioctl(int fd, long cmd, void *argp);
+int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock);
 
 #endif

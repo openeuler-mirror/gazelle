@@ -70,7 +70,7 @@ struct gazelle_stack_stat {
 
 struct gazelle_wakeup_stat {
     uint64_t app_events;
-    uint64_t app_write_idlefail;
+    uint64_t app_write_rpc;
     uint64_t app_write_cnt;
     uint64_t app_read_cnt;
     uint64_t read_null;
@@ -157,8 +157,10 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t send_ring_cnt;
     uint32_t recv_ring_cnt;
     uint32_t tcp_sub_state;
-    int32_t sem_cnt;
+    uint32_t send_back_cnt;
     int32_t fd;
+    uint64_t recv_all;
+    uint64_t send_all;
 };
 
 struct gazelle_stat_lstack_conn {

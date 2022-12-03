@@ -194,6 +194,15 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
     return 0;
 }
 
+int32_t gazelle_alloc_mbuf_with_reserve(struct rte_mempool *pool, struct rte_mbuf **mbufs, unsigned count)
+{
+    if (rte_mempool_avail_count(pool) < RESERVE_NIC_RECV) {
+        return -1;
+    }
+
+    return rte_pktmbuf_alloc_bulk(pool, mbufs, count);
+}
+
 struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id)
 {
     char ring_name[RTE_RING_NAMESIZE] = {0};

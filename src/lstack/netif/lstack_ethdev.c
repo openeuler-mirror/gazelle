@@ -82,7 +82,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
     }
 }
 
-#define READ_PKTS_MAX   32
+#define READ_PKTS_MAX   128
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;
@@ -183,7 +183,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 
         if (likely(first_mbuf->pkt_len > MBUF_MAX_LEN)) {
             mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
-            mbuf->tso_segsz = TCP_MSS;
+            mbuf->tso_segsz = MBUF_MAX_DATA_LEN;
         }
         mbuf->l2_len = first_pbuf->l2_len;
         mbuf->l3_len = first_pbuf->l3_len;

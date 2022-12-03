@@ -13,6 +13,7 @@
 #ifndef __GAZELLE_DPDK_COMMON_H__
 #define __GAZELLE_DPDK_COMMON_H__
 
+#include <stdbool.h>
 #include <rte_mbuf.h>
 #include <rte_ring.h>
 
@@ -24,7 +25,7 @@
 #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
 
 /* Layout:
- * | rte_mbuf | pbuf | custom_free_function | payload |
+ * | rte_mbuf | pbuf | custom_free_function | tcp_seg | payload |
  **/
 struct pbuf;
 static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
@@ -148,7 +149,6 @@ static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, 
         return 0;
     }
 
-
     __rte_ring_enqueue_elems(r, head, obj_table, sizeof(void *), n);
 
     __atomic_store_n(&r->cons.head, head + n, __ATOMIC_RELEASE);
@@ -169,37 +169,11 @@ static __rte_always_inline uint32_t gazelle_ring_sc_dequeue(struct rte_ring *r, 
         return 0;
     }
 
-
     __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
 
-    r->cons.tail = cons + n;
+    __atomic_store_n(&r->cons.tail, cons + n, __ATOMIC_RELEASE);
 
     return n;
-}
-
-/* get ring obj dont dequeue */
-static __rte_always_inline uint32_t gazelle_ring_sc_peek(struct rte_ring *r, void **obj_table, uint32_t n)
-{
-    uint32_t prod = __atomic_load_n(&r->prod.tail, __ATOMIC_ACQUIRE);
-    uint32_t cons = r->cons.tail;
-
-    uint32_t entries = prod - cons;
-    if (n > entries) {
-        n = entries;
-    }
-    if (unlikely(n == 0)) {
-        return 0;
-    }
-
-
-    __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
-
-    return n;
-}
-
-static __rte_always_inline void gazelle_ring_dequeue_over(struct rte_ring *r, uint32_t n)
-{
-    r->cons.tail += n;
 }
 
 static __rte_always_inline uint32_t gazelle_ring_read(struct rte_ring *r, void **obj_table, uint32_t n)
@@ -222,11 +196,6 @@ static __rte_always_inline uint32_t gazelle_ring_read(struct rte_ring *r, void *
     return n;
 }
 
-static __rte_always_inline void gazelle_ring_read_n(struct rte_ring *r, uint32_t n)
-{
-    __atomic_store_n(&r->prod.tail, r->prod.tail + n, __ATOMIC_RELEASE);
-}
-
 static __rte_always_inline void gazelle_ring_read_over(struct rte_ring *r)
 {
     __atomic_store_n(&r->prod.tail, r->prod.head, __ATOMIC_RELEASE);
@@ -240,7 +209,7 @@ static __rte_always_inline uint32_t gazelle_ring_readover_count(struct rte_ring 
 static __rte_always_inline uint32_t gazelle_ring_readable_count(const struct rte_ring *r)
 {
     rte_smp_rmb();
-    return r->cons.head - r->prod.tail;
+    return r->cons.head - r->prod.head;
 }
 
 static __rte_always_inline uint32_t gazelle_ring_count(const struct rte_ring *r)
