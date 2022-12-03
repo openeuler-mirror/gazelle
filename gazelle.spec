@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       29
+Release:       30
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -166,6 +166,9 @@ Patch9148:     0148-add-malloc-init-zero.patch
 Patch9149:     0149-modify-event-error.patch
 Patch9150:     0150-add-unix_prefix-in-gazellectl.patch
 Patch9151:     0151-fix-epoll_wait-report-event0.patch
+Patch9152:     0152-add-TSO.patch
+Patch9153:     0153-optimize-app-thread-write-buff-block.patch
+Patch9154:     0154-expand-rxtx-mbuf-pool.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -206,6 +209,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Dec 3 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-30
+- optimize app thread write buff block
+
 * Fri Dec 2 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-29
 - fix epoll_wait report 0 events
 
