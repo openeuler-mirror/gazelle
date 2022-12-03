@@ -47,6 +47,8 @@
 #define RTE_TEST_TX_DESC_DEFAULT    2048
 #define RTE_TEST_RX_DESC_DEFAULT    4096
 
+#define MBUF_MAX_DATA_LEN           1460
+
 #define DPDK_PKT_BURST_SIZE         512
 
 /* total:33 client, index 32 is invaild client */

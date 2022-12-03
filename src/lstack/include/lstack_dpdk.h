@@ -15,13 +15,15 @@
 
 #include "gazelle_opt.h"
 
-#define RXTX_NB_MBUF        (128 * 2000) /* mbuf per connect * connect num */
+#define RXTX_NB_MBUF        (256 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
 #define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
 #define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
 
-#define MBUF_HEADER_LEN 64
+#define RESERVE_NIC_RECV    (1024)
 
-#define MAX_PACKET_SZ  2048
+#define MBUF_HEADER_LEN     64
+
+#define MAX_PACKET_SZ       2048
 
 #define RING_SIZE(x)         ((x) - 1)
 
@@ -37,6 +39,7 @@ int thread_affinity_init(int cpu_id);
 struct protocol_stack;
 struct rte_mempool;
 struct rte_ring;
+struct rte_mbuf;
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
 int32_t dpdk_eal_init(void);
 int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
@@ -49,5 +52,6 @@ void dpdk_skip_nic_init(void);
 int32_t dpdk_init_lstack_kni(void);
 void dpdk_restore_pci(void);
 bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
+int32_t gazelle_alloc_mbuf_with_reserve(struct rte_mempool *pool, struct rte_mbuf **mbufs, unsigned count);
 
 #endif /* GAZELLE_DPDK_H */

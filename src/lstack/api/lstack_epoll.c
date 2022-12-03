@@ -321,7 +321,7 @@ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_even
     if (CONN_TYPE_HAS_HOST(sock->conn)) {
         int32_t ret = posix_api->epoll_ctl_fn(epfd, op, fd, event);
         if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "fd=%d epfd=%d op=%d\n", fd, epfd, op);
+            LSTACK_LOG(ERR, LSTACK, "fd=%d epfd=%d op=%d errno=%d\n", fd, epfd, op, errno);
         }
     }
 

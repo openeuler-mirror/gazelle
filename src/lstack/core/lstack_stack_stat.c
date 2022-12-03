@@ -106,7 +106,7 @@ static void get_wakeup_stat(struct protocol_stack_group *stack_group, struct pro
             stat->app_events += wakeup->stat.app_events;
             stat->read_null += wakeup->stat.read_null;
             stat->app_write_cnt += wakeup->stat.app_write_cnt;
-            stat->app_write_idlefail += wakeup->stat.app_write_idlefail;
+            stat->app_write_rpc += wakeup->stat.app_write_rpc;
             stat->app_read_cnt += wakeup->stat.app_read_cnt;
         }
     }

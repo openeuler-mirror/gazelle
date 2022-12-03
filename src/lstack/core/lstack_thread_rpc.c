@@ -440,6 +440,19 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
+int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, rpc_replenish);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    msg->args[MSG_ARG_0].p = stack;
+    msg->args[MSG_ARG_1].p = sock;
+
+    return rpc_sync_call(&stack->rpc_queue, msg);
+}
+
 int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
