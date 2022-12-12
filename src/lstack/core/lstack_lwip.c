@@ -125,25 +125,29 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
 }
 
 /* true: need replenish again */
-static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring, uint32_t replenish_cnt)
+static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
 {
     void *pbuf[SOCK_SEND_RING_SIZE];
 
-    uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
-    if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
+    uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+    if (replenish_cnt == 0) {
+        return false;
+    }
+
+    if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, replenish_cnt) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return true;
     }
 
     uint32_t i = 0;
-    for (; i < alloc_num - 1; i++) {
+    for (; i < replenish_cnt - 1; i++) {
         rte_prefetch0(mbuf_to_pbuf((void *)pbuf[i + 1]));
         pbuf[i] = init_mbuf_to_pbuf(pbuf[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
     }
     pbuf[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbuf[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
 
-    uint32_t num = gazelle_ring_sp_enqueue(ring, pbuf, alloc_num);
-    for (uint32_t i = num; i < alloc_num; i++) {
+    uint32_t num = gazelle_ring_sp_enqueue(ring, pbuf, replenish_cnt);
+    for (uint32_t i = num; i < replenish_cnt; i++) {
         pbuf_free(pbuf[i]);
     }
 
@@ -174,7 +178,7 @@ void gazelle_init_sock(int32_t fd)
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
-    (void)replenish_send_idlembuf(stack, sock->send_ring, RING_SIZE(SOCK_SEND_RING_SIZE));
+    (void)replenish_send_idlembuf(stack, sock->send_ring);
 
     sock->stack = stack;
     sock->stack->conn_num++;
@@ -541,10 +545,7 @@ static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip
 {
     bool replenish_again = false;
 
-    uint32_t replenish_cnt = gazelle_ring_free_count(sock->send_ring);
-    if (replenish_cnt >= SOCK_SEND_REPLENISH_THRES) {
-        replenish_again = replenish_send_idlembuf(stack, sock->send_ring, replenish_cnt);
-    }
+    replenish_again = replenish_send_idlembuf(stack, sock->send_ring);
 
     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
         add_sock_event(sock, EPOLLOUT);
