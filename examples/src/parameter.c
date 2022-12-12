@@ -29,6 +29,8 @@ const char prog_short_opts[] = \
     "r"         // ringpmd
     "d"         // debug
     "h"         // help
+    "E"         // epollcreate
+    "C"         // accept
     ;
 
 // program long options
@@ -47,6 +49,8 @@ const struct ProgramOption prog_long_opts[] = \
     {PARAM_NAME_RINGPMD, NO_ARGUMENT, NULL, PARAM_NUM_RINGPMD},
     {PARAM_NAME_DEBUG, NO_ARGUMENT, NULL, PARAM_NUM_DEBUG},
     {PARAM_NAME_HELP, NO_ARGUMENT, NULL, PARAM_NUM_HELP},
+    {PARAM_NAME_EPOLLCREATE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_EPOLLCREATE},
+    {PARAM_NAME_ACCEPT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_ACCEPT},
 };
 
 
@@ -139,7 +143,7 @@ void program_param_parse_domain(struct ProgramParams *params)
 void program_param_parse_api(struct ProgramParams *params)
 {
     printf("aaaaaa %s\n", optarg);
-    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0) {
+    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "readvwritev") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0) {
         params->api = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
@@ -153,6 +157,28 @@ void program_param_parse_pktlen(struct ProgramParams *params)
     int32_t pktlen_arg = strtol(optarg, NULL, 0);
     if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX) == true) {
         params->pktlen = (uint32_t)pktlen_arg;
+    } else {
+        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+}
+
+// set `epollcreate` parameter
+void program_param_parse_epollcreate(struct ProgramParams *params)
+{
+    if (strcmp(optarg, "ec") == 0 || strcmp(optarg, "ec1") == 0) {
+        params->epollcreate = optarg;
+    } else {
+        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+}
+
+// set `accept` parameter
+void program_param_parse_accept(struct ProgramParams *params)
+{
+    if (strcmp(optarg, "ac") == 0 || strcmp(optarg, "ac4") == 0) {
+        params->accept = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
         exit(PROGRAM_ABORT);
@@ -174,6 +200,8 @@ void program_params_init(struct ProgramParams *params)
     params->verify = PARAM_DEFAULT_VERIFY;
     params->ringpmd = PARAM_DEFAULT_RINGPMD;
     params->debug = PARAM_DEFAULT_DEBUG;
+    params->epollcreate = PARAM_DEFAULT_EPOLLCREATE;
+    params->accept = PARAM_DEFAULT_ACCEPT;
 }
 
 // print program helps
@@ -202,6 +230,8 @@ void program_params_help(void)
     printf("-r, --ringpmd: set to use ringpmd. \n");
     printf("-d, --debug: set to print the debug information. \n");
     printf("-h, --help: see helps. \n");
+    printf("-E, --epollcreate [ec | ec1]: epoll_create method. \n");
+    printf("-C, --accept [ac | ac4]: accept method. \n");
     printf("\n");
 }
 
@@ -256,6 +286,12 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
             case (PARAM_NUM_DEBUG):
                 params->debug = true;
                 break;
+            case (PARAM_NUM_EPOLLCREATE):
+                program_param_parse_epollcreate(params);
+                break;
+            case (PARAM_NUM_ACCEPT):
+                program_param_parse_accept(params);
+                break;
             case (PARAM_NUM_HELP):
                 program_params_help();
                 return PROGRAM_ABORT;
@@ -304,5 +340,7 @@ void program_params_print(struct ProgramParams *params)
     printf("--> [verify]:                   %s \n", (params->verify == true) ? "on" : "off");
     printf("--> [ringpmd]:                  %s \n", (params->ringpmd == true) ? "on" : "off");
     printf("--> [debug]:                    %s \n", (params->debug == true) ? "on" : "off");
+    printf("--> [epoll create]:             %s \n", params->epollcreate);
+    printf("--> [accept]:                   %s \n", params->accept);
     printf("\n");
 }

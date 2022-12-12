@@ -40,6 +40,7 @@
 
 #include "securec.h"
 #include "securectype.h"
+#include "sys/uio.h"
 
 
 #define PRINT_ERROR(format, ...)            do \

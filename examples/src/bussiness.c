@@ -25,6 +25,18 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
         return read(fd, buffer_in, length);
     } else if (strcmp(api, "recvsend") == 0) {
         return recv(fd, buffer_in, length, 0);
+    } else if (strcmp(api, "readvwritev") == 0) {
+        struct iovec iov[3];
+        int iovcnt = 3;
+        uint32_t iov_len_size = length/iovcnt;
+
+        iov[0].iov_base=buffer_in;
+        iov[0].iov_len = iov_len_size;
+        iov[1].iov_base= buffer_in + iov_len_size;
+        iov[1].iov_len =  iov_len_size;
+        iov[2].iov_base = buffer_in + iov_len_size + iov_len_size;
+        iov[2].iov_len = length- iov_len_size - iov_len_size;
+        return readv(fd, iov, iovcnt);
     } else {
         struct msghdr msg_recv;
         struct iovec iov;
@@ -50,6 +62,19 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
         return write(fd, buffer_out, length);
     } else if (strcmp(api, "recvsend") == 0) {
         return send(fd, buffer_out, length, 0);
+    } else if (strcmp(api, "readvwritev") == 0) {
+        struct iovec iov[3];
+        int iovcnt = 3;
+        uint32_t iov_len_size = length/iovcnt;
+
+        iov[0].iov_base=buffer_out;
+        iov[0].iov_len = iov_len_size;
+        iov[1].iov_base= buffer_out + iov_len_size;
+        iov[1].iov_len =  iov_len_size;
+        iov[2].iov_base = buffer_out + iov_len_size + iov_len_size;
+        iov[2].iov_len = length- iov_len_size - iov_len_size;
+        
+        return writev(fd, iov, iovcnt);
     } else {
         struct msghdr msg_send;
         struct iovec iov;

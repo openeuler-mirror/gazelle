@@ -13,7 +13,7 @@
 
 #ifndef __EXAMPLES_SERVER_H__
 #define __EXAMPLES_SERVER_H__
-
+#define _GNU_SOURCE 
 
 #include "utilities.h"
 #include "parameter.h"
@@ -37,6 +37,8 @@ struct ServerMumUnit
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
+    char* epollcreate;                      ///< epoll_create method
+    char* accept;                           ///< accept connections method
     struct ServerMumUnit *next;             ///< next pointer
 };
 
@@ -65,6 +67,7 @@ struct ServerMudWorker
     uint16_t port;                          ///< client port
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
+    char* epollcreate;                      ///< epoll_create method
     struct ServerMudWorker *next;           ///< next pointer
 };
 
@@ -85,6 +88,8 @@ struct ServerMud
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
+    char* accept;                           ///< accept connections method
+    char* epollcreate;                      ///< epoll_create method
 };
 
 
