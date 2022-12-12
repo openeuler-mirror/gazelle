@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       30
+Release:       31
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -169,6 +169,7 @@ Patch9151:     0151-fix-epoll_wait-report-event0.patch
 Patch9152:     0152-add-TSO.patch
 Patch9153:     0153-optimize-app-thread-write-buff-block.patch
 Patch9154:     0154-expand-rxtx-mbuf-pool.patch
+Patch9155:     0155-add-pdump-support-in-ltran.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -209,6 +210,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Dec 12 2022 kircher <majun65@huawei.com> - 1.0.1-31
+- add pdump support in ltran
+
 * Sat Dec 3 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-30
 - optimize app thread write buff block
 
