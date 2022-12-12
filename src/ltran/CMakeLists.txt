@@ -53,7 +53,7 @@ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--w
     -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_net_af_packet -Wl,-lrte_net_ark -Wl,-lrte_net_atlantic -Wl,-lrte_net_axgbe \
     -Wl,-lrte_net_bnxt -Wl,-lrte_net_bond -Wl,-lrte_net_cxgbe -Wl,-lrte_net_dpaa -Wl,-lrte_net_dpaa2 -Wl,-lrte_net_e1000 -Wl,-lrte_net_ena \
     -Wl,-lrte_net_enetc -Wl,-lrte_net_enic -Wl,-lrte_net_failsafe -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe -Wl,-lrte_net_kni \
-    -Wl,-lrte_net_nfp -Wl,-lrte_net_null -Wl,-lpcap -Wl,-lrte_net_qede -Wl,-lrte_net_ring -Wl,-lrte_net_softnic \
+    -Wl,-lrte_net_nfp -Wl,-lrte_net_null -Wl,-lpcap -Wl,-lrte_net_qede -Wl,-lrte_net_ring -Wl,-lrte_net_softnic -Wl,-lrte_net_pcap \
     -Wl,-lrte_net_tap -Wl,-lrte_net_vdev_netvsc -Wl,-lrte_net_virtio -Wl,-lrte_net_vhost \
     -Wl,-lrte_bus_vmbus -Wl,-lrte_net_netvsc -Wl,-lrte_mempool_octeontx -Wl,-lrte_net_octeontx \
     -Wl,-lrte_bus_ifpga -Wl,-lrte_stack -Wl,-lrte_telemetry\
