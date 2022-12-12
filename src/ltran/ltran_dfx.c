@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <sys/time.h>
 
 #include <arpa/inet.h>
 #include <getopt.h>
@@ -871,12 +872,14 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     char str_rip[GAZELLE_SUBNET_LENGTH_MAX] = {0};
     struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
     struct gazelle_stat_lstack_conn *conn = &stat->data.conn;
+    struct timeval time = {0};
+    gettimeofday(&time, NULL);
 
     printf("Active Internet connections (servers and established)\n");
     do {
-        printf("\n------ stack tid: %6u ------\n", stat->tid);
-        printf("No.   Proto  lwip_recv  recv_ring  recv_all  in_send  send_ring  send_back_cnt  send_all  "
-            "fd     Local Address        Foreign Address    State\n");
+        printf("\n------ stack tid: %6u ------time=%lu\n", stat->tid, time.tv_sec * 1000000 + time.tv_usec);
+        printf("No.   Proto lwip_recv recv_ring in_send send_ring cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
+            "        lastack        events    epoll_ev  evlist fd     Local Address        Foreign Address    State\n");
         uint32_t unread_pkts = 0;
         uint32_t unsend_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
@@ -885,10 +888,12 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
             rip.s_addr = conn_info->rip;
             lip.s_addr = conn_info->lip;
             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
-                printf("%-6utcp    %-11u%-11u%-10lu%-9u%-11u%-15d%-10lu%-7d%s:%hu   %s:%hu  %s\n", i,
-                    conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->recv_all, conn_info->in_send,
-                    conn_info->send_ring_cnt, conn_info->send_back_cnt, conn_info->send_all,
-                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
+                printf("%-6utcp   %-10u%-10u%-8u%-10u%-9d%-9d%-10d%-10d%-15u%-15u%-10x%-10x%-7d%-7d"
+                    "%s:%hu   %s:%hu  %s\n", i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
+                    conn_info->send_ring_cnt, conn_info->cwn, conn_info->rcv_wnd, conn_info->snd_wnd,
+                    conn_info->snd_buf, conn_info->snd_nxt, conn_info->lastack, conn_info->events,
+                    conn_info->epoll_events, conn_info->eventlist, conn_info->fd,
+                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
                     tcp_state_to_str(conn_info->tcp_sub_state));
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
@@ -899,7 +904,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port, conn_info->state);
             }
             unread_pkts += conn_info->recv_ring_cnt + conn_info->recv_cnt;
-            unsend_pkts += conn_info->send_ring_cnt + conn_info->in_send + conn_info->send_back_cnt;
+            unsend_pkts += conn_info->send_ring_cnt + conn_info->in_send;
         }
         if (conn->conn_num > 0) {
             printf("Total unread pkts:%u  unsend pkts:%u\n", unread_pkts, unsend_pkts);

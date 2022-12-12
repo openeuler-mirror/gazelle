@@ -157,10 +157,16 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t send_ring_cnt;
     uint32_t recv_ring_cnt;
     uint32_t tcp_sub_state;
-    uint32_t send_back_cnt;
+    uint32_t cwn;
+    uint32_t rcv_wnd;
+    uint32_t snd_wnd;
+    uint32_t snd_buf;
+    uint32_t lastack;
+    uint32_t snd_nxt;
     int32_t fd;
-    uint64_t recv_all;
-    uint64_t send_all;
+    uint32_t events;
+    uint32_t epoll_events;
+    uint32_t eventlist;
 };
 
 struct gazelle_stat_lstack_conn {

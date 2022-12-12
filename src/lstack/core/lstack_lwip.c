@@ -125,11 +125,9 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
 }
 
 /* true: need replenish again */
-static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
+static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring, uint32_t replenish_cnt)
 {
     void *pbuf[SOCK_SEND_RING_SIZE];
-
-    uint32_t replenish_cnt = gazelle_ring_free_count(ring);
 
     uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
     if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
@@ -137,9 +135,12 @@ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_rin
         return true;
     }
 
-    for (uint32_t i = 0; i < alloc_num; i++) {
+    uint32_t i = 0;
+    for (; i < alloc_num - 1; i++) {
+        rte_prefetch0(mbuf_to_pbuf((void *)pbuf[i + 1]));
         pbuf[i] = init_mbuf_to_pbuf(pbuf[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
     }
+    pbuf[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbuf[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
 
     uint32_t num = gazelle_ring_sp_enqueue(ring, pbuf, alloc_num);
     for (uint32_t i = num; i < alloc_num; i++) {
@@ -173,7 +174,7 @@ void gazelle_init_sock(int32_t fd)
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
-    (void)replenish_send_idlembuf(stack, sock->send_ring);
+    (void)replenish_send_idlembuf(stack, sock->send_ring, RING_SIZE(SOCK_SEND_RING_SIZE));
 
     sock->stack = stack;
     sock->stack->conn_num++;
@@ -297,7 +298,6 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
 void write_lwip_over(struct lwip_sock *sock)
 {
     sock->send_pre_del = NULL;
-    sock->send_all++;
     sock->stack->stats.write_lwip_cnt++;
 }
 
@@ -363,10 +363,8 @@ static inline ssize_t app_direct_write(struct protocol_stack *stack, struct lwip
         pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
         pbufs[i - 1]->next = pbufs[i];
     }
-    if (write_num > 1) {
-        pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
-        pbufs[i - 1]->next = pbufs[i];
-    }
+    pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
+    pbufs[i - 1]->next = pbufs[i];
 
     ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
 
@@ -543,8 +541,9 @@ static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip
 {
     bool replenish_again = false;
 
-    if (gazelle_ring_readable_count(sock->send_ring) < SOCK_SEND_REPLENISH_THRES) {
-        replenish_again = replenish_send_idlembuf(stack, sock->send_ring);
+    uint32_t replenish_cnt = gazelle_ring_free_count(sock->send_ring);
+    if (replenish_cnt >= SOCK_SEND_REPLENISH_THRES) {
+        replenish_again = replenish_send_idlembuf(stack, sock->send_ring, replenish_cnt);
     }
 
     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
@@ -701,7 +700,6 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
         calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_LWIP);
     }
 
-    sock->recv_all += read_count;
     sock->stack->stats.read_lwip_cnt += read_count;
     if (recv_len == 0) {
         GAZELLE_RETURN(EAGAIN);
@@ -982,19 +980,6 @@ void gazelle_connected_callback(struct netconn *conn)
     add_sock_event(sock, EPOLLOUT);
 }
 
-static uint32_t send_back_count(struct lwip_sock *sock)
-{
-    uint32_t count = 0;
-    struct pbuf *pbuf = sock->send_lastdata;
-
-    while (pbuf) {
-        count++;
-        pbuf = pbuf->next;
-    }
-
-    return count;
-}
-
 static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const struct tcp_pcb *pcb)
 {
     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
@@ -1005,6 +990,12 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
     conn->r_port = pcb->remote_port;
     conn->in_send = pcb->snd_queuelen;
     conn->tcp_sub_state = pcb->state;
+    conn->cwn = pcb->cwnd;
+    conn->rcv_wnd = pcb->rcv_wnd;
+    conn->snd_wnd = pcb->snd_wnd;
+    conn->snd_buf = pcb->snd_buf;
+    conn->lastack = pcb->lastack;
+    conn->snd_nxt = pcb->snd_nxt;
 
     if (netconn != NULL && netconn->recvmbox != NULL) {
         conn->recv_cnt = rte_ring_count(netconn->recvmbox->ring);
@@ -1014,10 +1005,10 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
         if (netconn->socket > 0 && sock != NULL && sock->recv_ring != NULL && sock->send_ring != NULL) {
             conn->recv_ring_cnt = gazelle_ring_readable_count(sock->recv_ring);
             conn->recv_ring_cnt += (sock->recv_lastdata) ? 1 : 0;
-            conn->send_back_cnt = send_back_count(sock);
             conn->send_ring_cnt = gazelle_ring_readover_count(sock->send_ring);
-            conn->recv_all = sock->recv_all;
-            conn->send_all = sock->send_all;
+            conn->events = sock->events;
+            conn->epoll_events = sock->epoll_events;
+            conn->eventlist = !list_is_null(&sock->event_list);
         }
     }
 }
