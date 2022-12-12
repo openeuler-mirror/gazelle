@@ -1,0 +1,25 @@
+From 9fc8d2430138bd7e7de1c4597c50a9dbf87d090d Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Mon, 12 Dec 2022 16:49:50 +0800
+Subject: [PATCH] add pdump support in ltran
+
+---
+ src/ltran/CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/ltran/CMakeLists.txt b/src/ltran/CMakeLists.txt
+index 25c617f..2695f8a 100644
+--- a/src/ltran/CMakeLists.txt
++++ b/src/ltran/CMakeLists.txt
+@@ -55,7 +55,7 @@ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--w
+     -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_pmd_af_packet -Wl,-lrte_pmd_ark -Wl,-lrte_pmd_atlantic -Wl,-lrte_pmd_axgbe \
+     -Wl,-lrte_pmd_bnxt -Wl,-lrte_pmd_bond -Wl,-lrte_pmd_cxgbe -Wl,-lrte_pmd_dpaa -Wl,-lrte_pmd_dpaa2 -Wl,-lrte_pmd_e1000 -Wl,-lrte_pmd_ena \
+     -Wl,-lrte_pmd_enetc -Wl,-lrte_pmd_enic -Wl,-lrte_pmd_failsafe -Wl,-lrte_pmd_i40e -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe -Wl,-lrte_pmd_kni \
+-    -Wl,-lrte_pmd_lio -Wl,-lrte_pmd_nfp -Wl,-lrte_pmd_null -Wl,-lpcap -Wl,-lrte_pmd_qede -Wl,-lrte_pmd_ring -Wl,-lrte_pmd_softnic \
++    -Wl,-lrte_pmd_lio -Wl,-lrte_pmd_nfp -Wl,-lrte_pmd_null -Wl,-lpcap -Wl,-lrte_pmd_qede -Wl,-lrte_pmd_ring -Wl,-lrte_pmd_softnic -Wl,-lrte_pmd_pcap \
+     -Wl,-lrte_pmd_tap -Wl,-lrte_pmd_thunderx_nicvf -Wl,-lrte_pmd_vdev_netvsc -Wl,-lrte_pmd_virtio -Wl,-lrte_pmd_vhost -Wl,-lrte_pmd_ifc \
+     -Wl,-lrte_pmd_vmxnet3_uio -Wl,-lrte_bus_vmbus -Wl,-lrte_pmd_netvsc -Wl,-lrte_pmd_bbdev_null -Wl,-lrte_pmd_null_crypto -Wl,-lrte_pmd_octeontx_crypto \
+     -Wl,-lrte_pmd_crypto_scheduler -Wl,-lrte_pmd_dpaa2_sec -Wl,-lrte_pmd_dpaa_sec -Wl,-lrte_pmd_caam_jr -Wl,-lrte_pmd_virtio_crypto \
+-- 
+2.33.0
+
