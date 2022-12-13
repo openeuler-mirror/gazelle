@@ -73,6 +73,7 @@ struct cfg_params {
     uint16_t lpm_rx_pkts;
     uint32_t lpm_detect_ms;
     uint32_t lpm_pkts_in_detect;
+    uint32_t mbuf_pool_size;
     bool use_ltran; // ture:lstack read from nic false:read form ltran
     bool kni_switch;
     bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.

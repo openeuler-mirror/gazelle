@@ -47,6 +47,8 @@
 #define RTE_TEST_TX_DESC_DEFAULT    2048
 #define RTE_TEST_RX_DESC_DEFAULT    4096
 
+#define RXTX_NB_MBUF_DEFAULT        (128 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
+
 #define MBUF_MAX_DATA_LEN           1460
 
 #define DPDK_PKT_BURST_SIZE         512
