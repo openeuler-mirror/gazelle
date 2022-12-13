@@ -57,6 +57,7 @@ static int32_t parse_kni_switch(void);
 static int32_t parse_listen_shadow(void);
 static int32_t parse_app_bind_numa(void);
 static int32_t parse_unix_prefix(void);
+static int32_t parse_rxtx_pool_size(void);
 
 struct config_vector_t {
     const char *name;
@@ -77,6 +78,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "listen_shadow",  parse_listen_shadow },
     { "app_bind_numa",  parse_app_bind_numa },
     { "unix_prefix",    parse_unix_prefix },
+    { "mbuf_pool_size", parse_rxtx_pool_size },
     { NULL,           NULL }
 };
 
@@ -694,6 +696,22 @@ static int32_t parse_use_ltran(void)
 
     int32_t val = config_setting_get_int(arg);
     g_config_params.use_ltran = (val == 0) ? false : true;
+
+    return 0;
+}
+
+static int32_t parse_rxtx_pool_size(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "mbuf_pool_size");
+    if (arg == NULL) {
+        g_config_params.mbuf_pool_size = RXTX_NB_MBUF_DEFAULT;
+        return 0;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    g_config_params.mbuf_pool_size = val;
 
     return 0;
 }
