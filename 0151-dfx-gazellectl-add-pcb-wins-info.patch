@@ -1,0 +1,222 @@
+From 0a034f7bf644660c09a12af6c5e5d4cc3e1521d2 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Mon, 12 Dec 2022 11:37:45 +0800
+Subject: [PATCH 1/4] dfx:gazellectl add pcb wins info
+
+---
+ src/common/gazelle_dfx_msg.h  | 12 ++++++---
+ src/lstack/core/lstack_lwip.c | 49 ++++++++++++++---------------------
+ src/ltran/ltran_dfx.c         | 21 +++++++++------
+ 3 files changed, 42 insertions(+), 40 deletions(-)
+
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index 0bdd238..d14f1b9 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -157,10 +157,16 @@ struct gazelle_stat_lstack_conn_info {
+     uint32_t send_ring_cnt;
+     uint32_t recv_ring_cnt;
+     uint32_t tcp_sub_state;
+-    uint32_t send_back_cnt;
++    uint32_t cwn;
++    uint32_t rcv_wnd;
++    uint32_t snd_wnd;
++    uint32_t snd_buf;
++    uint32_t lastack;
++    uint32_t snd_nxt;
+     int32_t fd;
+-    uint64_t recv_all;
+-    uint64_t send_all;
++    uint32_t events;
++    uint32_t epoll_events;
++    uint32_t eventlist;
+ };
+ 
+ struct gazelle_stat_lstack_conn {
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 2cda2d9..d4a2861 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -125,21 +125,22 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
+ }
+ 
+ /* true: need replenish again */
+-static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
++static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring, uint32_t replenish_cnt)
+ {
+     void *pbuf[SOCK_SEND_RING_SIZE];
+ 
+-    uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+-
+     uint32_t alloc_num = LWIP_MIN(replenish_cnt, RING_SIZE(SOCK_SEND_RING_SIZE));
+     if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, alloc_num) != 0) {
+         stack->stats.tx_allocmbuf_fail++;
+         return true;
+     }
+ 
+-    for (uint32_t i = 0; i < alloc_num; i++) {
++    uint32_t i = 0;
++    for (; i < alloc_num - 1; i++) {
++        rte_prefetch0(mbuf_to_pbuf((void *)pbuf[i + 1]));
+         pbuf[i] = init_mbuf_to_pbuf(pbuf[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
+     }
++    pbuf[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbuf[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
+ 
+     uint32_t num = gazelle_ring_sp_enqueue(ring, pbuf, alloc_num);
+     for (uint32_t i = num; i < alloc_num; i++) {
+@@ -173,7 +174,7 @@ void gazelle_init_sock(int32_t fd)
+         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
+         return;
+     }
+-    (void)replenish_send_idlembuf(stack, sock->send_ring);
++    (void)replenish_send_idlembuf(stack, sock->send_ring, RING_SIZE(SOCK_SEND_RING_SIZE));
+ 
+     sock->stack = stack;
+     sock->stack->conn_num++;
+@@ -297,7 +298,6 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
+ void write_lwip_over(struct lwip_sock *sock)
+ {
+     sock->send_pre_del = NULL;
+-    sock->send_all++;
+     sock->stack->stats.write_lwip_cnt++;
+ }
+ 
+@@ -363,10 +363,8 @@ static inline ssize_t app_direct_write(struct protocol_stack *stack, struct lwip
+         pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
+         pbufs[i - 1]->next = pbufs[i];
+     }
+-    if (write_num > 1) {
+-        pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
+-        pbufs[i - 1]->next = pbufs[i];
+-    }
++    pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
++    pbufs[i - 1]->next = pbufs[i];
+ 
+     ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
+ 
+@@ -543,8 +541,9 @@ static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip
+ {
+     bool replenish_again = false;
+ 
+-    if (gazelle_ring_readable_count(sock->send_ring) < SOCK_SEND_REPLENISH_THRES) {
+-        replenish_again = replenish_send_idlembuf(stack, sock->send_ring);
++    uint32_t replenish_cnt = gazelle_ring_free_count(sock->send_ring);
++    if (replenish_cnt >= SOCK_SEND_REPLENISH_THRES) {
++        replenish_again = replenish_send_idlembuf(stack, sock->send_ring, replenish_cnt);
+     }
+ 
+     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
+@@ -701,7 +700,6 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
+         calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_LWIP);
+     }
+ 
+-    sock->recv_all += read_count;
+     sock->stack->stats.read_lwip_cnt += read_count;
+     if (recv_len == 0) {
+         GAZELLE_RETURN(EAGAIN);
+@@ -982,19 +980,6 @@ void gazelle_connected_callback(struct netconn *conn)
+     add_sock_event(sock, EPOLLOUT);
+ }
+ 
+-static uint32_t send_back_count(struct lwip_sock *sock)
+-{
+-    uint32_t count = 0;
+-    struct pbuf *pbuf = sock->send_lastdata;
+-
+-    while (pbuf) {
+-        count++;
+-        pbuf = pbuf->next;
+-    }
+-
+-    return count;
+-}
+-
+ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const struct tcp_pcb *pcb)
+ {
+     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
+@@ -1005,6 +990,12 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
+     conn->r_port = pcb->remote_port;
+     conn->in_send = pcb->snd_queuelen;
+     conn->tcp_sub_state = pcb->state;
++    conn->cwn = pcb->cwnd;
++    conn->rcv_wnd = pcb->rcv_wnd;
++    conn->snd_wnd = pcb->snd_wnd;
++    conn->snd_buf = pcb->snd_buf;
++    conn->lastack = pcb->lastack;
++    conn->snd_nxt = pcb->snd_nxt;
+ 
+     if (netconn != NULL && netconn->recvmbox != NULL) {
+         conn->recv_cnt = rte_ring_count(netconn->recvmbox->ring);
+@@ -1014,10 +1005,10 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
+         if (netconn->socket > 0 && sock != NULL && sock->recv_ring != NULL && sock->send_ring != NULL) {
+             conn->recv_ring_cnt = gazelle_ring_readable_count(sock->recv_ring);
+             conn->recv_ring_cnt += (sock->recv_lastdata) ? 1 : 0;
+-            conn->send_back_cnt = send_back_count(sock);
+             conn->send_ring_cnt = gazelle_ring_readover_count(sock->send_ring);
+-            conn->recv_all = sock->recv_all;
+-            conn->send_all = sock->send_all;
++            conn->events = sock->events;
++            conn->epoll_events = sock->epoll_events;
++            conn->eventlist = !list_is_null(&sock->event_list);
+         }
+     }
+ }
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 54839af..3801f19 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -12,6 +12,7 @@
+ 
+ #include <stdio.h>
+ #include <stdint.h>
++#include <sys/time.h>
+ 
+ #include <arpa/inet.h>
+ #include <getopt.h>
+@@ -871,12 +872,14 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
+     char str_rip[GAZELLE_SUBNET_LENGTH_MAX] = {0};
+     struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
+     struct gazelle_stat_lstack_conn *conn = &stat->data.conn;
++    struct timeval time = {0};
++    gettimeofday(&time, NULL);
+ 
+     printf("Active Internet connections (servers and established)\n");
+     do {
+-        printf("\n------ stack tid: %6u ------\n", stat->tid);
+-        printf("No.   Proto  lwip_recv  recv_ring  recv_all  in_send  send_ring  send_back_cnt  send_all  "
+-            "fd     Local Address        Foreign Address    State\n");
++        printf("\n------ stack tid: %6u ------time=%lu\n", stat->tid, time.tv_sec * 1000000 + time.tv_usec);
++        printf("No.   Proto lwip_recv recv_ring in_send send_ring cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
++            "        lastack        events    epoll_ev  evlist fd     Local Address        Foreign Address    State\n");
+         uint32_t unread_pkts = 0;
+         uint32_t unsend_pkts = 0;
+         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
+@@ -885,10 +888,12 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
+             rip.s_addr = conn_info->rip;
+             lip.s_addr = conn_info->lip;
+             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
+-                printf("%-6utcp    %-11u%-11u%-10lu%-9u%-11u%-15d%-10lu%-7d%s:%hu   %s:%hu  %s\n", i,
+-                    conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->recv_all, conn_info->in_send,
+-                    conn_info->send_ring_cnt, conn_info->send_back_cnt, conn_info->send_all,
+-                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
++                printf("%-6utcp   %-10u%-10u%-8u%-10u%-9d%-9d%-10d%-10d%-15u%-15u%-10x%-10x%-7d%-7d"
++                    "%s:%hu   %s:%hu  %s\n", i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
++                    conn_info->send_ring_cnt, conn_info->cwn, conn_info->rcv_wnd, conn_info->snd_wnd,
++                    conn_info->snd_buf, conn_info->snd_nxt, conn_info->lastack, conn_info->events,
++                    conn_info->epoll_events, conn_info->eventlist, conn_info->fd,
++                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
+                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
+                     tcp_state_to_str(conn_info->tcp_sub_state));
+             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
+@@ -899,7 +904,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
+                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port, conn_info->state);
+             }
+             unread_pkts += conn_info->recv_ring_cnt + conn_info->recv_cnt;
+-            unsend_pkts += conn_info->send_ring_cnt + conn_info->in_send + conn_info->send_back_cnt;
++            unsend_pkts += conn_info->send_ring_cnt + conn_info->in_send;
+         }
+         if (conn->conn_num > 0) {
+             printf("Total unread pkts:%u  unsend pkts:%u\n", unread_pkts, unsend_pkts);
+-- 
+2.23.0
+
