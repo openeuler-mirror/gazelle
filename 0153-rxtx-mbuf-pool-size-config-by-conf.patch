@@ -1,0 +1,126 @@
+From 00252d8017d1f58787052b74ec8cd434ea3cacc1 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 13 Dec 2022 22:37:12 +0800
+Subject: [PATCH 4/4] rxtx mbuf pool size config by conf
+
+---
+ src/common/gazelle_opt.h         |  2 ++
+ src/lstack/core/lstack_cfg.c     | 18 ++++++++++++++++++
+ src/lstack/core/lstack_dpdk.c    |  4 ++--
+ src/lstack/include/lstack_cfg.h  |  1 +
+ src/lstack/include/lstack_dpdk.h |  1 -
+ src/lstack/lstack.conf           |  3 +++
+ 6 files changed, 26 insertions(+), 3 deletions(-)
+
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index aac1ec9..a23b329 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -47,6 +47,8 @@
+ #define RTE_TEST_TX_DESC_DEFAULT    2048
+ #define RTE_TEST_RX_DESC_DEFAULT    4096
+ 
++#define RXTX_NB_MBUF_DEFAULT        (128 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
++
+ #define MBUF_MAX_DATA_LEN           1460
+ 
+ #define DPDK_PKT_BURST_SIZE         512
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 52ff3f5..5a6eb2a 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -57,6 +57,7 @@ static int32_t parse_kni_switch(void);
+ static int32_t parse_listen_shadow(void);
+ static int32_t parse_app_bind_numa(void);
+ static int32_t parse_unix_prefix(void);
++static int32_t parse_rxtx_pool_size(void);
+ 
+ struct config_vector_t {
+     const char *name;
+@@ -77,6 +78,7 @@ static struct config_vector_t g_config_tbl[] = {
+     { "listen_shadow",  parse_listen_shadow },
+     { "app_bind_numa",  parse_app_bind_numa },
+     { "unix_prefix",    parse_unix_prefix },
++    { "mbuf_pool_size", parse_rxtx_pool_size },
+     { NULL,           NULL }
+ };
+ 
+@@ -698,6 +700,22 @@ static int32_t parse_use_ltran(void)
+     return 0;
+ }
+ 
++static int32_t parse_rxtx_pool_size(void)
++{
++    const config_setting_t *arg = NULL;
++
++    arg = config_lookup(&g_config, "mbuf_pool_size");
++    if (arg == NULL) {
++        g_config_params.mbuf_pool_size = RXTX_NB_MBUF_DEFAULT;
++        return 0;
++    }
++
++    int32_t val = config_setting_get_int(arg);
++    g_config_params.mbuf_pool_size = val;
++
++    return 0;
++}
++
+ static int32_t parse_listen_shadow(void)
+ {
+     const config_setting_t *arg = NULL;
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index b9f2793..4be31c3 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -178,8 +178,8 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
+         return -1;
+     }
+ 
+-    stack->rxtx_pktmbuf_pool = create_pktmbuf_mempool("rxtx_mbuf", RXTX_NB_MBUF / stack_num, RXTX_CACHE_SZ,
+-        stack->queue_id);
++    stack->rxtx_pktmbuf_pool = create_pktmbuf_mempool("rxtx_mbuf",
++        get_global_cfg_params()->mbuf_pool_size / stack_num, RXTX_CACHE_SZ, stack->queue_id);
+     if (stack->rxtx_pktmbuf_pool == NULL) {
+         return -1;
+     }
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index 3864250..053208b 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -73,6 +73,7 @@ struct cfg_params {
+     uint16_t lpm_rx_pkts;
+     uint32_t lpm_detect_ms;
+     uint32_t lpm_pkts_in_detect;
++    uint32_t mbuf_pool_size;
+     bool use_ltran; // ture:lstack read from nic false:read form ltran
+     bool kni_switch;
+     bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index 54b8fc2..a0f09af 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -15,7 +15,6 @@
+ 
+ #include "gazelle_opt.h"
+ 
+-#define RXTX_NB_MBUF        (512 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
+ #define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
+ #define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
+ 
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index 1a91aee..22d519e 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -15,6 +15,9 @@ kni_switch=0
+ 
+ low_power_mode=0
+ listen_shadow=0
++ 
++#number of mbuf for tx and rx. per mbuf is 2560 Byte.
++#mbuf_pool_size = 256000
+ 
+ num_cpus="2"
+ num_wakeup="3"
+-- 
+2.23.0
+
