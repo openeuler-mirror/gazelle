@@ -352,21 +352,18 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
     }
 
     if (init_stack_value(stack, queue_id) != 0) {
-        sem_post(&stack_group->thread_phase1);
-        free(stack);
-        return NULL;
+        goto END;
     }
 
+    if (init_stack_numa_cpuset(stack) < 0) {
+        goto END;
+    }
     if (create_affiliate_thread(queue_id, stack_group->wakeup_enable) < 0) {
-        sem_post(&stack_group->thread_phase1);
-        free(stack);
-        return NULL;
+        goto END;
     }
 
     if (thread_affinity_init(stack->cpu_id) != 0) {
-        sem_post(&stack_group->thread_phase1);
-        free(stack);
-        return NULL;
+        goto END;
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
@@ -376,9 +373,7 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
 
     if (use_ltran()) {
         if (client_reg_thrd_ring() != 0) {
-            sem_post(&stack_group->thread_phase1);
-            free(stack);
-            return NULL;
+            goto END;
         }
     }
 
@@ -394,6 +389,10 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
     }
 
     return stack;
+END:
+    sem_post(&stack_group->thread_phase1);
+    free(stack);
+    return NULL;
 }
 
 static void wakeup_kernel_event(struct protocol_stack *stack)
@@ -523,11 +522,6 @@ int32_t init_protocol_stack(void)
     wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
 
     if (get_init_fail()) {
-        return -1;
-    }
-
-    ret = init_stack_numa_cpuset();
-    if (ret < 0) {
         return -1;
     }
 

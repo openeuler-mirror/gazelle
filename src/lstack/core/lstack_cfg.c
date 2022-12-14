@@ -328,11 +328,10 @@ static int32_t stack_idle_cpuset(struct protocol_stack *stack, cpu_set_t *exclud
     return 0;
 }
 
-int32_t init_stack_numa_cpuset(void)
+int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
 {
     int32_t ret;
     struct cfg_params *cfg = get_global_cfg_params();
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     cpu_set_t stack_cpuset;
     CPU_ZERO(&stack_cpuset);
@@ -343,12 +342,10 @@ int32_t init_stack_numa_cpuset(void)
         CPU_SET(cfg->wakeup[idx], &stack_cpuset);
     }
 
-    for (int32_t idx = 0; idx < stack_group->stack_num; ++idx) {
-        ret = stack_idle_cpuset(stack_group->stacks[idx], &stack_cpuset);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "thread_get_cpuset stack_%d failed\n", idx);
-            return -1;
-        }
+    ret = stack_idle_cpuset(stack, &stack_cpuset);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "thread_get_cpuset stack(%u) failed\n", stack->tid);
+        return -1;
     }
 
     return 0;
