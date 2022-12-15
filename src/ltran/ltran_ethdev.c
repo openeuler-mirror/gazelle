@@ -78,8 +78,8 @@ static int32_t ltran_log_init(void);
 static int32_t ltran_eal_init(void);
 static int32_t ltran_pdump_init(void);
 static int32_t ltran_log_level_init(void);
-static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index, uint32_t scale);
-static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index, uint32_t scale);
+static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index);
+static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index);
 static int32_t ltran_parse_port(void);
 static int32_t ltran_mbuf_pool_init(void);
 static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempool *pktmbuf_rxpool);
@@ -133,9 +133,9 @@ static int32_t ltran_pdump_init(void)
     return GAZELLE_OK;
 }
 
-static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index, uint32_t scale)
+static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index)
 {
-    uint32_t num_mbufs = GAZELLE_MBUFS_RX_COUNT * scale;
+    uint32_t num_mbufs = get_ltran_config()->rx_mbuf_pool_size;
 
     char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH] = {0};
 
@@ -151,9 +151,9 @@ static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index, u
                                    RTE_MBUF_DEFAULT_BUF_SIZE, (int32_t)rte_socket_id());
 }
 
-static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index, uint32_t scale)
+static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index)
 {
-    const uint32_t num_mbufs = GAZELLE_MBUFS_TX_COUNT * scale;
+    const uint32_t num_mbufs = get_ltran_config()->tx_mbuf_pool_size;
 
     char mbuf_pool_name[GAZELLE_PKT_MBUF_POOL_NAME_LENGTH] = {0};
 
@@ -174,17 +174,15 @@ static int32_t ltran_mbuf_pool_init(void)
     uint32_t bond_num = get_bond_num();
     struct rte_mempool** rxpool = get_pktmbuf_rxpool();
     struct rte_mempool** txpool = get_pktmbuf_txpool();
-    struct ltran_config* ltran_config = get_ltran_config();
-    struct port_info* port_info = get_port_info();
 
     for (uint32_t i = 0; i < bond_num; i++) {
-        rxpool[i] = ltran_create_rx_mbuf_pool(i, 1);
+        rxpool[i] = ltran_create_rx_mbuf_pool(i);
         if (rxpool[i] == NULL) {
             LTRAN_ERR("rxpool[%u] is NULL, pktmbuf_pool init failed. rte_errno: %d. \n", i, rte_errno);
             return GAZELLE_ERR;
         }
 
-        txpool[i] = ltran_create_tx_mbuf_pool(i, port_info[i].num_ports * ltran_config->bond.tx_queue_num);
+        txpool[i] = ltran_create_tx_mbuf_pool(i);
         if (txpool[i] == NULL) {
             LTRAN_ERR("txpool[%u] is NULL, pktmbuf_pool init failed. rte_errno: %d. \n", i, rte_errno);
             return GAZELLE_ERR;

@@ -23,7 +23,7 @@
  * When doing reads from the NIC or the client queues,
  * use this batch size
  */
-#define BACKUP_SIZE_FACTOR   (256)
+#define BACKUP_SIZE_FACTOR   (1024)
 #define RING_MAX_SIZE        (512) /* determined by g_mbuf_ring.rx_ring in func create_shared_ring in file dpdk.c */
 #define PACKET_READ_SIZE     (32)
 #define BACKUP_MBUF_SIZE     (BACKUP_SIZE_FACTOR * PACKET_READ_SIZE)
