@@ -58,6 +58,10 @@ static int32_t parse_listen_shadow(void);
 static int32_t parse_app_bind_numa(void);
 static int32_t parse_unix_prefix(void);
 static int32_t parse_rxtx_pool_size(void);
+static int32_t parse_send_connect_number(void);
+static int32_t parse_read_connect_number(void);
+static int32_t parse_rpc_number(void);
+static int32_t parse_nic_read_number(void);
 
 struct config_vector_t {
     const char *name;
@@ -79,6 +83,10 @@ static struct config_vector_t g_config_tbl[] = {
     { "app_bind_numa",  parse_app_bind_numa },
     { "unix_prefix",    parse_unix_prefix },
     { "mbuf_pool_size", parse_rxtx_pool_size },
+    { "send_connect_number", parse_send_connect_number },
+    { "read_connect_number", parse_read_connect_number },
+    { "rpc_number", parse_rpc_number },
+    { "nic_read_number", parse_nic_read_number },
     { NULL,           NULL }
 };
 
@@ -704,11 +712,97 @@ static int32_t parse_rxtx_pool_size(void)
     arg = config_lookup(&g_config, "mbuf_pool_size");
     if (arg == NULL) {
         g_config_params.mbuf_pool_size = RXTX_NB_MBUF_DEFAULT;
+        LSTACK_PRE_LOG(LSTACK_ERR, "use default mbuf_pool_size %d.\n", RXTX_NB_MBUF_DEFAULT);
         return 0;
     }
 
     int32_t val = config_setting_get_int(arg);
+    if (val <= 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild.\n", val);
+        return -EINVAL;
+    }
+
     g_config_params.mbuf_pool_size = val;
+
+    return 0;
+}
+
+static int32_t parse_send_connect_number(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "send_connect_number");
+    if (arg == NULL) {
+        return -EINVAL;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    if (val <= 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg send_connect_number %d invaild.\n", val);
+        return -EINVAL;
+    }
+
+    g_config_params.send_connect_number = val;
+
+    return 0;
+}
+
+static int32_t parse_read_connect_number(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "read_connect_number");
+    if (arg == NULL) {
+        return -EINVAL;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    if (val <= 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg read_connect_number %d invaild.\n", val);
+        return -EINVAL;
+    }
+
+    g_config_params.read_connect_number = val;
+
+    return 0;
+}
+
+static int32_t parse_rpc_number(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "rpc_number");
+    if (arg == NULL) {
+        return -EINVAL;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    if (val <= 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg rpc_number %d invaild.\n", val);
+        return -EINVAL;
+    }
+
+    g_config_params.rpc_number = val;
+
+    return 0;
+}
+
+static int32_t parse_nic_read_number(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "nic_read_number");
+    if (arg == NULL) {
+        return -EINVAL;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    if (val <= 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg nic_read_number %d invaild.\n", val);
+        return -EINVAL;
+    }
+
+    g_config_params.nic_read_number = val;
 
     return 0;
 }

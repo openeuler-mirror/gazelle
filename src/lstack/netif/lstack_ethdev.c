@@ -82,33 +82,32 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
     }
 }
 
-#define READ_PKTS_MAX   128
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;
-    struct rte_mbuf *pkts[READ_PKTS_MAX];
+    struct cfg_params *cfg = get_global_cfg_params();
     struct protocol_stack *stack = get_protocol_stack();
 
-    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
+    nr_pkts = stack->dev_ops.rx_poll(stack, stack->pkts, cfg->nic_read_number);
     if (nr_pkts == 0) {
         return 0;
     }
 
-    if (!use_ltran() && get_protocol_stack_group()->latency_start) {
+    if (!cfg->use_ltran && get_protocol_stack_group()->latency_start) {
         uint64_t time_stamp = get_current_time();
-        time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
+        time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
     }
 
     for (uint32_t i = 0; i < nr_pkts; i++) {
         /* copy arp into other stack */
-        if (!use_ltran()) {
-            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
+        if (!cfg->use_ltran) {
+            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
-                stack_broadcast_arp(pkts[i], stack);
+                stack_broadcast_arp(stack->pkts[i], stack);
             }
         }
 
-        eth_dev_recv(pkts[i], stack);
+        eth_dev_recv(stack->pkts[i], stack);
     }
 
     stack->stats.rx += nr_pkts;
@@ -117,31 +116,30 @@ int32_t eth_dev_poll(void)
 }
 
 /* optimized eth_dev_poll() in lstack */
-int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
+int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag, uint32_t nic_read_number)
 {
     uint32_t nr_pkts;
-    struct rte_mbuf *pkts[READ_PKTS_MAX];
 
-    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
+    nr_pkts = stack->dev_ops.rx_poll(stack, stack->pkts, nic_read_number);
     if (nr_pkts == 0) {
         return 0;
     }
 
     if (!use_ltran_flag && get_protocol_stack_group()->latency_start) {
         uint64_t time_stamp = get_current_time();
-        time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
+        time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
     }
 
     for (uint32_t i = 0; i < nr_pkts; i++) {
         /* copy arp into other stack */
         if (!use_ltran_flag) {
-            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
+            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
-                stack_broadcast_arp(pkts[i], stack);
+                stack_broadcast_arp(stack->pkts[i], stack);
             }
         }
 
-        eth_dev_recv(pkts[i], stack);
+        eth_dev_recv(stack->pkts[i], stack);
     }
 
     stack->stats.rx += nr_pkts;
