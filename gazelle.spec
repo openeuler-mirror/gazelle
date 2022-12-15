@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       31
+Release:       32
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -170,6 +170,7 @@ Patch9152:     0152-fix-genarate-out-event-untimely.patch
 Patch9153:     0153-rxtx-mbuf-pool-size-config-by-conf.patch
 Patch9154:     0154-fix-kernel-event-thread-bind-numa-failed.patch
 Patch9155:     0155-stack-thread-parms-config-by-conf.patch
+Patch9156:     0156-ltran-rxtx-mbuf-pool-size-config-by-conf.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -210,6 +211,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Thu Dec 15 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-32
+- ltran rxtx mbuf pool size config by conf
+
 * Thu Dec 15 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-31
 - stack thread params config by lstack.conf
 
