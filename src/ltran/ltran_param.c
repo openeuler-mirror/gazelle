@@ -43,6 +43,8 @@
 #define PARAM_BOND_MACS                 "bond_macs"
 #define PARAM_TCP_CONN_SCAN_INTERVAL    "tcp_conn_scan_interval"
 #define PARAM_UNIX_PREFIX               "unix_prefix"
+#define PARAM_RX_MBUF_POOL_SIZE         "rx_mbuf_pool_size"
+#define PARAM_TX_MBUF_POOL_SIZE         "tx_mbuf_pool_size"
 
 static struct ltran_config g_ltran_config = {0};
 struct ltran_config* get_ltran_config(void)
@@ -610,6 +612,34 @@ static int32_t parse_unix_prefix(const config_t *config, const char *key, struct
     return GAZELLE_OK;
 }
 
+static int32_t parse_rx_mbuf_pool_size(const config_t *config, const char *key, struct ltran_config *ltran_config)
+{
+    int32_t ret;
+    int32_t rx_mbuf_pool_size = 0;
+    ret = config_lookup_int(config, key, &rx_mbuf_pool_size);
+    if (ret == 0) {
+        ltran_config->rx_mbuf_pool_size = GAZELLE_MBUFS_RX_COUNT;
+        return GAZELLE_OK;
+    }
+
+    ltran_config->rx_mbuf_pool_size = rx_mbuf_pool_size;
+    return GAZELLE_OK;
+}
+
+static int32_t parse_tx_mbuf_pool_size(const config_t *config, const char *key, struct ltran_config *ltran_config)
+{
+    int32_t ret;
+    int32_t tx_mbuf_pool_size = 0;
+    ret = config_lookup_int(config, key, &tx_mbuf_pool_size);
+    if (ret == 0) {
+        ltran_config->tx_mbuf_pool_size = GAZELLE_MBUFS_TX_COUNT;
+        return GAZELLE_OK;
+    }
+
+    ltran_config->tx_mbuf_pool_size = tx_mbuf_pool_size;
+    return GAZELLE_OK;
+}
+
 struct param_parser g_param_parse_tbl[] = {
     {PARAM_FORWARD_KIT_ARGS,        parse_forward_kit_args},
     {PARAM_DISPATCH_MAX_CLIENT,     parse_dispatch_max_client},
@@ -625,6 +655,8 @@ struct param_parser g_param_parse_tbl[] = {
     {PARAM_TCP_CONN_SCAN_INTERVAL,  parse_tcp_conn_scan_interval},
     {PARAM_KNI_SWITCH,              parse_kni_switch},
     {PARAM_UNIX_PREFIX,             parse_unix_prefix},
+    {PARAM_RX_MBUF_POOL_SIZE,       parse_rx_mbuf_pool_size},
+    {PARAM_TX_MBUF_POOL_SIZE,       parse_tx_mbuf_pool_size},
 };
 
 int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config)

@@ -58,6 +58,8 @@ struct ltran_config {
     } log;
     char unix_socket_filename[NAME_MAX];
     char dfx_socket_filename[NAME_MAX];
+    uint32_t rx_mbuf_pool_size;
+    uint32_t tx_mbuf_pool_size;
 };
 
 int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config);
