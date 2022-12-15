@@ -1,0 +1,375 @@
+From 17b822be314e95aa6e32d019143b606df06545c6 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 15 Dec 2022 17:54:42 +0800
+Subject: [PATCH] aaaa
+
+---
+ src/lstack/core/lstack_cfg.c               | 94 ++++++++++++++++++++++
+ src/lstack/core/lstack_protocol_stack.c    | 33 ++++----
+ src/lstack/include/lstack_cfg.h            |  4 +
+ src/lstack/include/lstack_ethdev.h         |  2 +-
+ src/lstack/include/lstack_protocol_stack.h |  1 +
+ src/lstack/lstack.conf                     | 18 ++++-
+ src/lstack/netif/lstack_ethdev.c           | 34 ++++----
+ 7 files changed, 149 insertions(+), 37 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index dabb74e..52a34a4 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -58,6 +58,10 @@ static int32_t parse_listen_shadow(void);
+ static int32_t parse_app_bind_numa(void);
+ static int32_t parse_unix_prefix(void);
+ static int32_t parse_rxtx_pool_size(void);
++static int32_t parse_send_connect_number(void);
++static int32_t parse_read_connect_number(void);
++static int32_t parse_rpc_number(void);
++static int32_t parse_nic_read_number(void);
+ 
+ struct config_vector_t {
+     const char *name;
+@@ -79,6 +83,10 @@ static struct config_vector_t g_config_tbl[] = {
+     { "app_bind_numa",  parse_app_bind_numa },
+     { "unix_prefix",    parse_unix_prefix },
+     { "mbuf_pool_size", parse_rxtx_pool_size },
++    { "send_connect_number", parse_send_connect_number },
++    { "read_connect_number", parse_read_connect_number },
++    { "rpc_number", parse_rpc_number },
++    { "nic_read_number", parse_nic_read_number },
+     { NULL,           NULL }
+ };
+ 
+@@ -704,15 +712,101 @@ static int32_t parse_rxtx_pool_size(void)
+     arg = config_lookup(&g_config, "mbuf_pool_size");
+     if (arg == NULL) {
+         g_config_params.mbuf_pool_size = RXTX_NB_MBUF_DEFAULT;
++        LSTACK_PRE_LOG(LSTACK_ERR, "use default mbuf_pool_size %d.\n", RXTX_NB_MBUF_DEFAULT);
+         return 0;
+     }
+ 
+     int32_t val = config_setting_get_int(arg);
++    if (val <= 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild.\n", val);
++        return -EINVAL;
++    }
++
+     g_config_params.mbuf_pool_size = val;
+ 
+     return 0;
+ }
+ 
++static int32_t parse_send_connect_number(void)
++{
++    const config_setting_t *arg = NULL;
++
++    arg = config_lookup(&g_config, "send_connect_number");
++    if (arg == NULL) {
++        return -EINVAL;
++    }
++
++    int32_t val = config_setting_get_int(arg);
++    if (val <= 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg send_connect_number %d invaild.\n", val);
++        return -EINVAL;
++    }
++
++    g_config_params.send_connect_number = val;
++
++    return 0;
++}
++
++static int32_t parse_read_connect_number(void)
++{
++    const config_setting_t *arg = NULL;
++
++    arg = config_lookup(&g_config, "read_connect_number");
++    if (arg == NULL) {
++        return -EINVAL;
++    }
++
++    int32_t val = config_setting_get_int(arg);
++    if (val <= 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg read_connect_number %d invaild.\n", val);
++        return -EINVAL;
++    }
++
++    g_config_params.read_connect_number = val;
++
++    return 0;
++}
++
++static int32_t parse_rpc_number(void)
++{
++    const config_setting_t *arg = NULL;
++
++    arg = config_lookup(&g_config, "rpc_number");
++    if (arg == NULL) {
++        return -EINVAL;
++    }
++
++    int32_t val = config_setting_get_int(arg);
++    if (val <= 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg rpc_number %d invaild.\n", val);
++        return -EINVAL;
++    }
++
++    g_config_params.rpc_number = val;
++
++    return 0;
++}
++
++static int32_t parse_nic_read_number(void)
++{
++    const config_setting_t *arg = NULL;
++
++    arg = config_lookup(&g_config, "nic_read_number");
++    if (arg == NULL) {
++        return -EINVAL;
++    }
++
++    int32_t val = config_setting_get_int(arg);
++    if (val <= 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg nic_read_number %d invaild.\n", val);
++        return -EINVAL;
++    }
++
++    g_config_params.nic_read_number = val;
++
++    return 0;
++}
++
+ static int32_t parse_listen_shadow(void)
+ {
+     const config_setting_t *arg = NULL;
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index c0925a1..2a866e0 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -36,9 +36,6 @@
+ #include "posix/lstack_epoll.h"
+ #include "lstack_stack_stat.h"
+ 
+-#define READ_LIST_MAX                   32 
+-#define SEND_LIST_MAX                   32 
+-#define HANDLE_RPC_MSG_MAX              32 
+ #define KERNEL_EVENT_100us              100
+ 
+ static PER_THREAD struct protocol_stack *g_stack_p = NULL;
+@@ -419,8 +416,14 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
+ static void* gazelle_stack_thread(void *arg)
+ {
+     uint16_t queue_id = *(uint16_t *)arg;
+-    bool use_ltran_flag = use_ltran();
+-    bool kni_switch = get_global_cfg_params()->kni_switch;
++    struct cfg_params *cfg = get_global_cfg_params();
++    bool use_ltran_flag = cfg->use_ltran;;
++    bool kni_switch = cfg->kni_switch;
++    uint32_t send_connect_number = cfg->send_connect_number;
++    uint32_t read_connect_number = cfg->read_connect_number;
++    uint32_t rpc_number = cfg->rpc_number;
++    uint32_t nic_read_number = cfg->nic_read_number;
++    uint16_t low_power_mod = cfg->low_power_mod;
+     uint32_t wakeup_tick = 0;
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+     bool wakeup_thread_enable = stack_group->wakeup_enable;
+@@ -438,30 +441,30 @@ static void* gazelle_stack_thread(void *arg)
+     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
+ 
+     for (;;) {
+-        poll_rpc_msg(stack, HANDLE_RPC_MSG_MAX);
++        poll_rpc_msg(stack, rpc_number);
+ 
+-        gazelle_eth_dev_poll(stack, use_ltran_flag);
++        gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
+ 
+-        read_recv_list(stack, READ_LIST_MAX);
++        read_recv_list(stack, read_connect_number);
+ 
+-        send_stack_list(stack, SEND_LIST_MAX);
++        send_stack_list(stack, send_connect_number);
+ 
+         if ((wakeup_tick & 0xf) == 0) {
+             wakeup_kernel_event(stack);
+             wakeup_stack_epoll(stack, wakeup_thread_enable);
+         }
+ 
+-	/* KNI requests are generally low-rate I/Os,
+-	 * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
+-	if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
+-	    rte_kni_handle_request(get_gazelle_kni());
+-	}
++        /* KNI requests are generally low-rate I/Os,
++        * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
++        if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
++            rte_kni_handle_request(get_gazelle_kni());
++        }
+ 
+         wakeup_tick++;
+ 
+         sys_timer_run();
+ 
+-        if (get_global_cfg_params()->low_power_mod != 0) {
++        if (low_power_mod != 0) {
+             low_power_idling(stack);
+         }
+     }
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index e0d488f..e33a484 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -75,6 +75,10 @@ struct cfg_params {
+     uint32_t lpm_detect_ms;
+     uint32_t lpm_pkts_in_detect;
+     uint32_t mbuf_pool_size;
++    uint32_t send_connect_number;
++    uint32_t read_connect_number;
++    uint32_t rpc_number;
++    uint32_t nic_read_number;
+     bool use_ltran; // ture:lstack read from nic false:read form ltran
+     bool kni_switch;
+     bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
+diff --git a/src/lstack/include/lstack_ethdev.h b/src/lstack/include/lstack_ethdev.h
+index c64b4a0..0b53cde 100644
+--- a/src/lstack/include/lstack_ethdev.h
++++ b/src/lstack/include/lstack_ethdev.h
+@@ -22,7 +22,7 @@ struct lstack_dev_ops {
+ 
+ int32_t ethdev_init(struct protocol_stack *stack);
+ int32_t eth_dev_poll(void);
+-int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag);
++int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag, uint32_t nic_read_number);
+ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack);
+ 
+ #endif /* __GAZELLE_ETHDEV_H__ */
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 68cbbfa..4cfa243 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -65,6 +65,7 @@ struct protocol_stack {
+     uint32_t rx_ring_used;
+     uint32_t tx_ring_used;
+ 
++    struct rte_mbuf *pkts[RTE_TEST_RX_DESC_DEFAULT];
+     struct list_node recv_list;
+     struct list_node send_list;
+     struct list_node wakeup_list;
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index 7d536a9..d4e9810 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -16,11 +16,23 @@ kni_switch=0
+ low_power_mode=0
+ listen_shadow=0
+  
+-#number of mbuf for tx and rx. per mbuf is 2560 Byte.
+-#mbuf_pool_size = 256000
++#number of mbuf pool for tx and rx. per mbuf is 2560 Byte.
++mbuf_pool_size = 256000
++ 
++#protocol stack thread per loop params
++#send connect to nic
++send_connect_number = 8
++#read data form protocol stack into recv_ring
++read_connect_number = 8
++#process rpc msg number
++rpc_number = 8
++#read nic pkts number
++nic_read_number = 128
+ 
++#each cpu core start a protocol stack thread.
+ num_cpus="2"
+-num_wakeup="3"
++#each cpu core start a wakeup thread.
++#num_wakeup="3"
+ 
+ host_addr="192.168.1.10"
+ mask_addr="255.255.255.0"
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 965b32f..7f1e48f 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -82,33 +82,32 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
+     }
+ }
+ 
+-#define READ_PKTS_MAX   128
+ int32_t eth_dev_poll(void)
+ {
+     uint32_t nr_pkts;
+-    struct rte_mbuf *pkts[READ_PKTS_MAX];
++    struct cfg_params *cfg = get_global_cfg_params();
+     struct protocol_stack *stack = get_protocol_stack();
+ 
+-    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
+-    if (nr_pkts == 0) {
++    nr_pkts = stack->dev_ops.rx_poll(stack, stack->pkts, cfg->nic_read_number);
++    if (nr_pkts == 0) {
+         return 0;
+     }
+ 
+-    if (!use_ltran() && get_protocol_stack_group()->latency_start) {
++    if (!cfg->use_ltran && get_protocol_stack_group()->latency_start) {
+         uint64_t time_stamp = get_current_time();
+-        time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
+-        }
++        time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
++    }
+ 
+     for (uint32_t i = 0; i < nr_pkts; i++) {
+         /* copy arp into other stack */
+-        if (!use_ltran()) {
+-            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
++        if (!cfg->use_ltran) {
++            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
+             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
+-                stack_broadcast_arp(pkts[i], stack);
++                stack_broadcast_arp(stack->pkts[i], stack);
+             }
+         }
+ 
+-        eth_dev_recv(pkts[i], stack);
++        eth_dev_recv(stack->pkts[i], stack);
+     }
+ 
+     stack->stats.rx += nr_pkts;
+@@ -117,31 +116,30 @@ int32_t eth_dev_poll(void)
+ }
+ 
+ /* optimized eth_dev_poll() in lstack */
+-int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag)
++int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag, uint32_t nic_read_number)
+ {
+     uint32_t nr_pkts;
+-    struct rte_mbuf *pkts[READ_PKTS_MAX];
+ 
+-    nr_pkts = stack->dev_ops.rx_poll(stack, pkts, READ_PKTS_MAX);
++    nr_pkts = stack->dev_ops.rx_poll(stack, stack->pkts, nic_read_number);
+     if (nr_pkts == 0) {
+         return 0;
+     }
+ 
+     if (!use_ltran_flag && get_protocol_stack_group()->latency_start) {
+         uint64_t time_stamp = get_current_time();
+-        time_stamp_into_mbuf(nr_pkts, pkts, time_stamp);
++        time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
+     }
+ 
+     for (uint32_t i = 0; i < nr_pkts; i++) {
+         /* copy arp into other stack */
+         if (!use_ltran_flag) {
+-            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
++            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
+             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
+-                stack_broadcast_arp(pkts[i], stack);
++                stack_broadcast_arp(stack->pkts[i], stack);
+             }
+         }
+ 
+-        eth_dev_recv(pkts[i], stack);
++        eth_dev_recv(stack->pkts[i], stack);
+     }
+ 
+     stack->stats.rx += nr_pkts;
+-- 
+2.23.0
+
