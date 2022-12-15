@@ -36,9 +36,6 @@
 #include "posix/lstack_epoll.h"
 #include "lstack_stack_stat.h"
 
-#define READ_LIST_MAX                   32 
-#define SEND_LIST_MAX                   32 
-#define HANDLE_RPC_MSG_MAX              32 
 #define KERNEL_EVENT_100us              100
 
 static PER_THREAD struct protocol_stack *g_stack_p = NULL;
@@ -419,8 +416,14 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
 static void* gazelle_stack_thread(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
-    bool use_ltran_flag = use_ltran();
-    bool kni_switch = get_global_cfg_params()->kni_switch;
+    struct cfg_params *cfg = get_global_cfg_params();
+    bool use_ltran_flag = cfg->use_ltran;;
+    bool kni_switch = cfg->kni_switch;
+    uint32_t send_connect_number = cfg->send_connect_number;
+    uint32_t read_connect_number = cfg->read_connect_number;
+    uint32_t rpc_number = cfg->rpc_number;
+    uint32_t nic_read_number = cfg->nic_read_number;
+    uint16_t low_power_mod = cfg->low_power_mod;
     uint32_t wakeup_tick = 0;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     bool wakeup_thread_enable = stack_group->wakeup_enable;
@@ -438,30 +441,30 @@ static void* gazelle_stack_thread(void *arg)
     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
 
     for (;;) {
-        poll_rpc_msg(stack, HANDLE_RPC_MSG_MAX);
+        poll_rpc_msg(stack, rpc_number);
 
-        gazelle_eth_dev_poll(stack, use_ltran_flag);
+        gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
 
-        read_recv_list(stack, READ_LIST_MAX);
+        read_recv_list(stack, read_connect_number);
 
-        send_stack_list(stack, SEND_LIST_MAX);
+        send_stack_list(stack, send_connect_number);
 
         if ((wakeup_tick & 0xf) == 0) {
             wakeup_kernel_event(stack);
             wakeup_stack_epoll(stack, wakeup_thread_enable);
         }
 
-	/* KNI requests are generally low-rate I/Os,
-	 * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
-	if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
-	    rte_kni_handle_request(get_gazelle_kni());
-	}
+        /* KNI requests are generally low-rate I/Os,
+        * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
+        if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
+            rte_kni_handle_request(get_gazelle_kni());
+        }
 
         wakeup_tick++;
 
         sys_timer_run();
 
-        if (get_global_cfg_params()->low_power_mod != 0) {
+        if (low_power_mod != 0) {
             low_power_idling(stack);
         }
     }
