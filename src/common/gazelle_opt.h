@@ -49,6 +49,8 @@
 
 #define RXTX_NB_MBUF_DEFAULT        (128 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
 #define RXTX_NB_MBUF_MAX            (2560 * 2000)
+#define STACK_THREAD_DEFAULT        4
+#define STACK_NIC_READ_DEFAULT      128
 
 #define MBUF_MAX_DATA_LEN           1460
 
