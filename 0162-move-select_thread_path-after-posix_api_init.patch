@@ -1,0 +1,43 @@
+From bd238ab678150c216d672409a5ddb4b7dd778fec Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Fri, 16 Dec 2022 16:53:21 +0800
+Subject: [PATCH] move select_thread_path after posix_api_init
+
+---
+ src/lstack/api/lstack_wrap.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 2eeda6b..d976f74 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -50,18 +50,21 @@ bool select_thread_path(void);
+ 
+ static enum KERNEL_LWIP_PATH select_path(int fd)
+ {
+-    if (!select_thread_path()) {
+-        return PATH_KERNEL;
+-    }
+-
+     if (unlikely(posix_api == NULL)) {
+-        /* posix api maybe call before gazelle init */
++        /*
++	 * posix api maybe call before gazelle init
++	 * So, we must call posix_api_init at the head of select_path
++	 */
+         if (posix_api_init() != 0) {
+             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+         }
+         return PATH_KERNEL;
+     }
+ 
++    if (!select_thread_path()) {
++        return PATH_KERNEL;
++    }
++
+     if (unlikely(posix_api->ues_posix)) {
+         return PATH_KERNEL;
+     }
+-- 
+2.33.0
+
