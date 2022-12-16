@@ -50,15 +50,18 @@ bool select_thread_path(void);
 
 static enum KERNEL_LWIP_PATH select_path(int fd)
 {
-    if (!select_thread_path()) {
-        return PATH_KERNEL;
-    }
-
     if (unlikely(posix_api == NULL)) {
-        /* posix api maybe call before gazelle init */
+        /*
+	 * posix api maybe call before gazelle init
+	 * So, we must call posix_api_init at the head of select_path
+	 */
         if (posix_api_init() != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
         }
+        return PATH_KERNEL;
+    }
+
+    if (!select_thread_path()) {
         return PATH_KERNEL;
     }
 
