@@ -204,6 +204,9 @@ int32_t lstack_do_epoll_create(int32_t fd)
     update_epoll_max_stack(wakeup);
     change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, wakeup->max_stack);
     wakeup->bind_stack = wakeup->max_stack;
+    if (get_global_cfg_params()->app_bind_numa) {
+        bind_to_stack_numa(wakeup->bind_stack);
+    }
 
     return fd;
 }
@@ -545,6 +548,9 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
     uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
     change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, stack_group->stacks[bind_id]);
     wakeup->bind_stack = stack_group->stacks[bind_id];
+    if (get_global_cfg_params()->app_bind_numa) {
+        bind_to_stack_numa(wakeup->bind_stack);
+    }
 
     return 0;
 }
