@@ -935,7 +935,7 @@ void read_recv_list(struct protocol_stack *stack, uint32_t max_num)
     list_for_each_safe(node, temp, list) {
         sock = container_of(node, struct lwip_sock, recv_list);
 
-        if (++read_num >= max_num) {
+        if (++read_num > max_num) {
             /* list head move to next send */
             list_del_node(&stack->recv_list);
             list_add_node(&sock->recv_list, &stack->recv_list);

@@ -40,6 +40,11 @@
 #define INUSE_TX_PKTS_WATERMARK         (VDEV_TX_QUEUE_SZ >> 2)
 #define USED_RX_PKTS_WATERMARK          (FREE_RX_QUEUE_SZ >> 2)
 
+#define IPV4_MASK                       (0xf0)
+#define IPV4_VERION                     (0x40)
+
+#define TCP_HDR_LEN(tcp_hdr)            ((tcp_hdr->data_off & 0xf0) >> 2)
+
 static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf)
 {
     uint32_t rcvd_pkts;
@@ -78,11 +83,24 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
     }
 
     for (uint32_t i = 0; i < pkt_num; i++) {
-        struct rte_net_hdr_lens hdr_lens;
-        pkts[i]->packet_type = rte_net_get_ptype(pkts[i], &hdr_lens, RTE_PTYPE_ALL_MASK);
-        pkts[i]->l2_len = hdr_lens.l2_len;
-        pkts[i]->l3_len = hdr_lens.l3_len;
-        pkts[i]->l4_len = hdr_lens.l4_len;
+        struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
+        if (unlikely(RTE_BE16(RTE_ETHER_TYPE_IPV4) != ethh->ether_type)) {
+            continue;
+        }
+        pkts[i]->l2_len = sizeof(struct rte_ether_hdr);
+
+        struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(pkts[i], struct rte_ipv4_hdr *,
+            sizeof(struct rte_ether_hdr));
+        if (unlikely((iph->version_ihl & IPV4_MASK) != IPV4_VERION)) {
+            continue;
+        }
+        pkts[i]->l3_len = sizeof(struct rte_ipv4_hdr);
+
+        struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(pkts[i], struct rte_tcp_hdr *,
+            sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
+        pkts[i]->l4_len = TCP_HDR_LEN(tcp_hdr);
+
+        pkts[i]->packet_type = RTE_PTYPE_L3_IPV4 | RTE_PTYPE_L4_TCP;
     }
     return rte_gro_reassemble_burst(pkts, pkt_num, &gro_param);
 }
