@@ -181,6 +181,7 @@ Patch9163:     0163-add-RXTX_NB_MBUF_MAX-to-limit-mbuf_pool_size-to-its-.patch
 Patch9164:     0164-stack-thread-params-default-val.patch
 Patch9165:     0165-optimite-net-type.patch
 Patch9166:     0166-app-bind-numa-when-epoll-poll-create.patch
+Patch9167:     0167-remove-mbuf-reserve-in-mbuf-alloc.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -221,6 +222,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Dec 17 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-38
+- remove mbuf reserve in mbuf alloc
+
 * Sat Dec 17 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-38
 - optimite net type
   app bind numa when epoll/poll create
