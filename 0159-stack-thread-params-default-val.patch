@@ -1,0 +1,195 @@
+From 850f4dced20b3bcbb838239037ac230d99576e4f Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Fri, 16 Dec 2022 17:31:41 +0800
+Subject: [PATCH] stack thread params default val
+
+---
+ src/common/gazelle_opt.h     |  2 +
+ src/lstack/core/lstack_cfg.c | 82 ++++++++++++++++++++----------------
+ src/lstack/lstack.conf       |  6 +--
+ 3 files changed, 50 insertions(+), 40 deletions(-)
+
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index 7e55422..94f274d 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -49,6 +49,8 @@
+ 
+ #define RXTX_NB_MBUF_DEFAULT        (128 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
+ #define RXTX_NB_MBUF_MAX            (2560 * 2000)
++#define STACK_THREAD_DEFAULT        4
++#define STACK_NIC_READ_DEFAULT      128
+ 
+ #define MBUF_MAX_DATA_LEN           1460
+ 
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 9c23115..55d16f9 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -222,29 +222,29 @@ static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
+ 
+ static bool have_corelist_arg(int32_t argc, char **argv)
+ {
+-	for (uint32_t i  = 0; i < argc; i++) {
+-		if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
+-			return true;
+-		}
+-
+-		if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
+-			return true;
+-		}
++    for (uint32_t i  = 0; i < argc; i++) {
++        if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
++            return true;
++        }
+ 
+-		if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
+-			return true;
+-		}
++        if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
++            return true;
++        }
++        
++        if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
++            return true;
++        }
+ 
+-		if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
+-			return true;
+-		}
++        if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
++            return true;
++        }
+ 
+-		if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
+-			return true;
+-		}
+-	}
++        if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
++            return true;
++        }
++    }
+ 
+-	return false;
++    return false;
+ }
+ 
+ static int32_t parse_stack_cpu_number(void)
+@@ -733,7 +733,9 @@ static int32_t parse_send_connect_number(void)
+ 
+     arg = config_lookup(&g_config, "send_connect_number");
+     if (arg == NULL) {
+-        return -EINVAL;
++        g_config_params.send_connect_number = STACK_THREAD_DEFAULT;
++        LSTACK_PRE_LOG(LSTACK_ERR, "use default send_connect_number %d.\n", STACK_THREAD_DEFAULT);
++        return 0;
+     }
+ 
+     int32_t val = config_setting_get_int(arg);
+@@ -753,7 +755,9 @@ static int32_t parse_read_connect_number(void)
+ 
+     arg = config_lookup(&g_config, "read_connect_number");
+     if (arg == NULL) {
+-        return -EINVAL;
++        g_config_params.read_connect_number = STACK_THREAD_DEFAULT;
++        LSTACK_PRE_LOG(LSTACK_ERR, "use default read_connect_number %d.\n", STACK_THREAD_DEFAULT);
++        return 0;
+     }
+ 
+     int32_t val = config_setting_get_int(arg);
+@@ -773,7 +777,9 @@ static int32_t parse_rpc_number(void)
+ 
+     arg = config_lookup(&g_config, "rpc_number");
+     if (arg == NULL) {
+-        return -EINVAL;
++        g_config_params.rpc_number = STACK_THREAD_DEFAULT;
++        LSTACK_PRE_LOG(LSTACK_ERR, "use default rpc_number %d.\n", STACK_THREAD_DEFAULT);
++        return 0;
+     }
+ 
+     int32_t val = config_setting_get_int(arg);
+@@ -793,7 +799,9 @@ static int32_t parse_nic_read_number(void)
+ 
+     arg = config_lookup(&g_config, "nic_read_number");
+     if (arg == NULL) {
+-        return -EINVAL;
++        g_config_params.nic_read_number = STACK_NIC_READ_DEFAULT;
++        LSTACK_PRE_LOG(LSTACK_ERR, "use default nic_read_number %d.\n", STACK_NIC_READ_DEFAULT);
++        return 0;
+     }
+ 
+     int32_t val = config_setting_get_int(arg);
+@@ -922,15 +930,15 @@ static int32_t parse_unix_prefix(void)
+     int32_t ret = 0;
+ 
+     ret = memset_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+-		   0, sizeof(g_config_params.unix_socket_filename));
++            0, sizeof(g_config_params.unix_socket_filename));
+     if (ret != EOK) {
+-	return ret;
++        return ret;
+     }
+ 
+     ret = strncpy_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+-		   GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
++           GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+     if (ret != EOK) {
+-	return ret;
++        return ret;
+     }
+ 
+     unix_prefix = config_lookup(&g_config, "unix_prefix");
+@@ -938,21 +946,21 @@ static int32_t parse_unix_prefix(void)
+     if (unix_prefix) {
+         args = config_setting_get_string(unix_prefix);
+ 
+-	if (filename_check(args)) {
+-	    return -EINVAL;
+-	}
++        if (filename_check(args)) {
++            return -EINVAL;
++        }
+ 
+-	ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+-			args, strlen(args) + 1);
+-	if (ret != EOK) {
+-	    return ret;
+-	}
++        ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
++            args, strlen(args) + 1);
++        if (ret != EOK) {
++            return ret;
++        }
+     }
+ 
+     ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+-		    GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
++            GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+     if (ret != EOK) {
+-	return ret;
++        return ret;
+     }
+ 
+     return 0;
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index ee96d4d..47140ad 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -21,11 +21,11 @@ mbuf_pool_size = 256000
+  
+ #protocol stack thread per loop params
+ #send connect to nic
+-send_connect_number = 8
++send_connect_number = 4
+ #read data form protocol stack into recv_ring
+-read_connect_number = 8
++read_connect_number = 4
+ #process rpc msg number
+-rpc_number = 8
++rpc_number = 4
+ #read nic pkts number
+ nic_read_number = 128
+ 
+-- 
+2.23.0
+
