@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       35
+Release:       36
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -176,6 +176,7 @@ Patch9158:     0158-add-RXTX_NB_MBUF_MAX-to-limit-mbuf_pool_size-to-its-.patch
 Patch9159:     0159-stack-thread-params-default-val.patch
 Patch9160:     0160-optimite-net-type.patch
 Patch9161:     0161-app-bind-numa-when-epoll-poll-create.patch
+Patch9162:     0162-remove-mbuf-reserve-in-mbuf-alloc.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -216,6 +217,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Dec 17 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-36
+- remove mbuf reserve in mbuf alloc
+
 * Sat Dec 17 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-35
 - optimite net type
   app bind numa when epoll/poll create
