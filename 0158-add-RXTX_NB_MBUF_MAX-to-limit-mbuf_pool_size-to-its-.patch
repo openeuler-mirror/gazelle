@@ -1,0 +1,40 @@
+From 546cde6494913a9d5b1c12578385ca586ee999ef Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Sat, 17 Dec 2022 15:25:26 +0800
+Subject: [PATCH] add RXTX_NB_MBUF_MAX to limit mbuf_pool_size to its range
+
+---
+ src/common/gazelle_opt.h     | 1 +
+ src/lstack/core/lstack_cfg.c | 4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index a23b329..7e55422 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -48,6 +48,7 @@
+ #define RTE_TEST_RX_DESC_DEFAULT    4096
+ 
+ #define RXTX_NB_MBUF_DEFAULT        (128 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
++#define RXTX_NB_MBUF_MAX            (2560 * 2000)
+ 
+ #define MBUF_MAX_DATA_LEN           1460
+ 
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 52a34a4..9c23115 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -717,8 +717,8 @@ static int32_t parse_rxtx_pool_size(void)
+     }
+ 
+     int32_t val = config_setting_get_int(arg);
+-    if (val <= 0) {
+-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild.\n", val);
++    if (val <= 0 || val > RXTX_NB_MBUF_MAX) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild, it should be in (0,%d].\n", val, RXTX_NB_MBUF_MAX);
+         return -EINVAL;
+     }
+ 
+-- 
+2.33.0
+
