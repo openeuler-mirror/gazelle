@@ -134,7 +134,7 @@ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_rin
         return false;
     }
 
-    if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, replenish_cnt) != 0) {
+    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbuf, replenish_cnt) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return true;
     }
@@ -225,7 +225,7 @@ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs,
 {
     struct pbuf_custom *pbuf_custom = NULL;
 
-    int32_t ret = gazelle_alloc_mbuf_with_reserve(pool, mbufs, num);
+    int32_t ret = rte_pktmbuf_alloc_bulk(pool, mbufs, num);
     if (ret != 0) {
         return ret;
     }
@@ -243,7 +243,7 @@ struct pbuf *lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type)
     struct rte_mbuf *mbuf;
     struct protocol_stack *stack = get_protocol_stack();
 
-    if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, &mbuf, 1) != 0) {
+    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, &mbuf, 1) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return NULL;
     }
@@ -353,7 +353,7 @@ static inline ssize_t app_direct_write(struct protocol_stack *stack, struct lwip
     }
 
     /* first pbuf get from send_ring. and malloc pbufs attach to first pbuf */
-    if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)&pbufs[1], write_num - 1) != 0) {
+    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)&pbufs[1], write_num - 1) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         free(pbufs);
         return 0;
@@ -389,7 +389,7 @@ static inline ssize_t app_direct_attach(struct protocol_stack *stack, struct pbu
     }
 
     /* first pbuf get from send_ring. and malloc pbufs attach to first pbuf */
-    if (gazelle_alloc_mbuf_with_reserve(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbufs, write_num) != 0) {
+    if (rte_pktmbuf_alloc_bulk(stack->rxtx_pktmbuf_pool, (struct rte_mbuf **)pbufs, write_num) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         free(pbufs);
         return 0;

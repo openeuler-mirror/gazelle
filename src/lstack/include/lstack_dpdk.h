@@ -51,6 +51,5 @@ void dpdk_skip_nic_init(void);
 int32_t dpdk_init_lstack_kni(void);
 void dpdk_restore_pci(void);
 bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
-int32_t gazelle_alloc_mbuf_with_reserve(struct rte_mempool *pool, struct rte_mbuf **mbufs, unsigned count);
 
 #endif /* GAZELLE_DPDK_H */
