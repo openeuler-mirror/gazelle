@@ -98,6 +98,11 @@ GAZELLE_BIND_PROCNAME环境变量指定进程名，LD_PRELOAD指定Gazelle库路
 ```
 GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 ```
+- 使用GAZELLE_THREAD_NAME指定Gazelle绑定的线程名  
+同一进程中的多个线程中，仅有某个线程满足gazelle的使用条件时，可以使用GAZELLE_THREAD_NAME来指定仅由对应的线程名使用gazelle，而其他线程走内核态协议栈。
+```sh
+GAZELLE_BIND_PROCNAME=test GAZELLE_THREAD_NAME=test_thread LD_PRELOAD=/usr/lib64/liblstack.so ./test
+```
 
 ### 6. 配置文件  
 - lstack.conf用于指定lstack的启动参数，默认路径为/etc/gazelle/lstack.conf, 配置文件参数如下  
@@ -111,11 +116,17 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |num_wakeup|"1,3,5 ..."|wakeup线程绑定的cpu编号，编号的数量为wakeup线程个数，与lstack线程的数量保持一致。与numcpus选择对应NUMA的cpu。不配置则为不使用唤醒线程|
 |low_power_mode|0/1|是否开启低功耗模式，暂不支持|
 |kni_swith|0/1|rte_kni开关，默认为0。只有不使用ltran时才能开启|
+|unix_prefix|"string"|gazelle进程间通信使用的unix socket文件前缀字符串，默认为空，和需要通信的ltran.conf的unix_prefix或gazellectl的-u参数配置一致。不能含有特殊字符，最大长度为128。|
 |host_addr|"192.168.xx.xx"|协议栈的IP地址，必须和redis-server配置<br>文件里的“bind”字段保存一致。|
 |mask_addr|"255.255.xx.xx"|掩码地址|
 |gateway_addr|"192.168.xx.1"|网关地址|
 |devices|"aa:bb:cc:dd:ee:ff"|网卡通信的mac地址，需要与ltran.conf的bond_macs配置一致|
-
+|app_bind_numa|0/1|应用的epoll和poll线程是否绑定到协议栈所在的numa，默认值是1，即绑定|
+|send_connect_number|4|设置为正整数，表示每次协议栈循环中发包处理的连接个数|
+|read_connect_number|4|设置为正整数，表示每次协议栈循环中收包处理的连接个数|
+|rpc_number|4|设置为正整数，表示每次协议栈循环中rpc消息处理的个数|
+|nic_read_num|128|设置为正整数，表示每次协议栈循环中从网卡读取的数据包的个数|
+|mbuf_pool_size|1024000|设置为小于5120000的正整数，表示初始化时申请的mbuf地址池大小，需要根据网卡硬件支持进行合理配置，配置过小会启动失败|
 
 lstack.conf示例：
 ``` conf
@@ -133,6 +144,12 @@ host_addr="192.168.1.10"
 mask_addr="255.255.255.0"
 gateway_addr="192.168.1.1"
 devices="aa:bb:cc:dd:ee:ff"
+
+send_connect_number=4
+read_connect_number=4
+rpc_number=4
+nic_read_num=128
+mbuf_pool_size=1024000
 ```
 
 - ltran.conf用于指定ltran启动的参数，默认路径为/etc/gazelle/ltran.conf。使用ltran时，lstack.conf内配置use_ltran=1,配置参数如下：  
@@ -142,6 +159,7 @@ devices="aa:bb:cc:dd:ee:ff"
 |kit|forward_kit|"dpdk"|指定网卡收发模块。<br>保留字段，目前未使用。|
 ||forward_kit_args|-l<br>--socket-mem(必需)<br>--huge-dir(必需)<br>--proc-TYPE(必需)<br>--legacy-mem(必需)<br>--map-perfect(必需)<br>-d<br>等|dpdk初始化参数，参考dpdk说明。<br>注：--map-perfect为扩展特性，用于防止dpdk占用多余的地址空间，保证ltran有额外的地址空间分配给lstack。<br>对于没有链接到ltran的PMD，必须使用 -d 加载，比如librte_net_mlx5.so。<br>-l绑定的CPU核不要和lstack绑定的CPU重复，否则性能可能会急剧下降。<br>|
 |kni|kni_switch|0/1|rte_kni开关，默认为0|
+|unix|unix_prefix|"string"|gazelle进程间通信使用的unix socket文件前缀字符串，默认为空，和需要通信的lstack.conf的unix_prefix或gazellectl的-u参数配置一致|
 |dispatcher|dispatch_max_clients|n|ltran支持的最大client数。<br>1、多进程单线程场景，支持的lstack实例数不大于32，每lstack实例有1个网络线程<br>2、单进程多线程场景，支持的1个lstack实例，lstack实例的网络线程数不大于32|
 ||dispatch_subnet|192.168.xx.xx|子网掩码，表示ltran能识别的IP所在子网网段。参数为样例，子网按实际值配置。|
 ||dispatch_subnet_length|n|子网长度，表示ltran能识别的子网长度，例如length为4时，192.168.1.1-192.168.1.16|
@@ -191,8 +209,8 @@ Gazelle wrap应用程序POSIX接口，应用程序无需修改代码。
 - 不使用ltran模式时不支持gazellectl ltran xxx命令，以及lstack -r命令
 ```
 Usage: gazellectl [-h | help]
-  or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time]
-  or:  gazellectl lstack show {ip | pid} [LSTACK_OPTIONS] [time]
+  or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time] [-u UNIX_PREFIX]
+  or:  gazellectl lstack show {ip | pid} [LSTACK_OPTIONS] [time] [-u UNIX_PREFIX]
 
   quit            ltran process exit
 
@@ -212,6 +230,15 @@ Usage: gazellectl [-h | help]
 
   [time]          measure latency time default 1S
 ```
+-u参数指定gazelle进程间通信的unix socket前缀，和需要通信的ltran.conf或lstack.conf的unix_prefix配置一致。
+
+**抓包工具**  
+gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle的数据包。作为替代，gazelle使用dpdk-tools软件包中提供的gazelle-pdump作为数据包捕获工具，它使用dpdk的多进程模式和lstack/ltran进程共享内存。在ltran模式下，gazelle-pdump只能抓取和网卡直接通信的ltran的数据包，通过tcpdump的数据包过滤，可以过滤特定lstack的数据包。
+[详细使用方法](https://gitee.com/openeuler/gazelle/blob/master/doc/pdump/pdump.md)
+
+**线程名绑定**  
+lstack启动时可以通过指定环境变量GAZELLE_THREAD_NAME来指定lstack绑定的线程名，在业务进程中有多个不同线程时，可以通过使用此参数来指定需要lstack接管网络接口的线程名，未指定的线程将走内核态协议栈。默认为空，即绑定进程内的所有线程。
+
 
 ### 10. 使用注意
 #### 1. dpdk配置文件的位置
