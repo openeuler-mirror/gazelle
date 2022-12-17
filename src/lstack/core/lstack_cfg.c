@@ -222,29 +222,29 @@ static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
 
 static bool have_corelist_arg(int32_t argc, char **argv)
 {
-	for (uint32_t i  = 0; i < argc; i++) {
-		if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
-			return true;
-		}
+    for (uint32_t i  = 0; i < argc; i++) {
+        if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
+            return true;
+        }
 
-		if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
-			return true;
-		}
+        if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
+            return true;
+        }
+        
+        if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
+            return true;
+        }
 
-		if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
-			return true;
-		}
+        if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
+            return true;
+        }
 
-		if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
-			return true;
-		}
+        if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
+            return true;
+        }
+    }
 
-		if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
-			return true;
-		}
-	}
-
-	return false;
+    return false;
 }
 
 static int32_t parse_stack_cpu_number(void)
@@ -733,7 +733,9 @@ static int32_t parse_send_connect_number(void)
 
     arg = config_lookup(&g_config, "send_connect_number");
     if (arg == NULL) {
-        return -EINVAL;
+        g_config_params.send_connect_number = STACK_THREAD_DEFAULT;
+        LSTACK_PRE_LOG(LSTACK_ERR, "use default send_connect_number %d.\n", STACK_THREAD_DEFAULT);
+        return 0;
     }
 
     int32_t val = config_setting_get_int(arg);
@@ -753,7 +755,9 @@ static int32_t parse_read_connect_number(void)
 
     arg = config_lookup(&g_config, "read_connect_number");
     if (arg == NULL) {
-        return -EINVAL;
+        g_config_params.read_connect_number = STACK_THREAD_DEFAULT;
+        LSTACK_PRE_LOG(LSTACK_ERR, "use default read_connect_number %d.\n", STACK_THREAD_DEFAULT);
+        return 0;
     }
 
     int32_t val = config_setting_get_int(arg);
@@ -773,7 +777,9 @@ static int32_t parse_rpc_number(void)
 
     arg = config_lookup(&g_config, "rpc_number");
     if (arg == NULL) {
-        return -EINVAL;
+        g_config_params.rpc_number = STACK_THREAD_DEFAULT;
+        LSTACK_PRE_LOG(LSTACK_ERR, "use default rpc_number %d.\n", STACK_THREAD_DEFAULT);
+        return 0;
     }
 
     int32_t val = config_setting_get_int(arg);
@@ -793,7 +799,9 @@ static int32_t parse_nic_read_number(void)
 
     arg = config_lookup(&g_config, "nic_read_number");
     if (arg == NULL) {
-        return -EINVAL;
+        g_config_params.nic_read_number = STACK_NIC_READ_DEFAULT;
+        LSTACK_PRE_LOG(LSTACK_ERR, "use default nic_read_number %d.\n", STACK_NIC_READ_DEFAULT);
+        return 0;
     }
 
     int32_t val = config_setting_get_int(arg);
@@ -922,15 +930,15 @@ static int32_t parse_unix_prefix(void)
     int32_t ret = 0;
 
     ret = memset_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-		   0, sizeof(g_config_params.unix_socket_filename));
+            0, sizeof(g_config_params.unix_socket_filename));
     if (ret != EOK) {
-	return ret;
+        return ret;
     }
 
     ret = strncpy_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-		   GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+           GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
     if (ret != EOK) {
-	return ret;
+        return ret;
     }
 
     unix_prefix = config_lookup(&g_config, "unix_prefix");
@@ -938,21 +946,21 @@ static int32_t parse_unix_prefix(void)
     if (unix_prefix) {
         args = config_setting_get_string(unix_prefix);
 
-	if (filename_check(args)) {
-	    return -EINVAL;
-	}
+        if (filename_check(args)) {
+            return -EINVAL;
+        }
 
-	ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-			args, strlen(args) + 1);
-	if (ret != EOK) {
-	    return ret;
-	}
+        ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+            args, strlen(args) + 1);
+        if (ret != EOK) {
+            return ret;
+        }
     }
 
     ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-		    GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+            GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
     if (ret != EOK) {
-	return ret;
+        return ret;
     }
 
     return 0;
