@@ -1,0 +1,36 @@
+From ccfc2e04ee98ee843c1c5365bfa0e0ddfe5bf108 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Sat, 17 Dec 2022 15:09:31 +0800
+Subject: [PATCH] app bind numa when epoll/poll create
+
+---
+ src/lstack/api/lstack_epoll.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 4ea6474..605984f 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -204,6 +204,9 @@ int32_t lstack_do_epoll_create(int32_t fd)
+     update_epoll_max_stack(wakeup);
+     change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, wakeup->max_stack);
+     wakeup->bind_stack = wakeup->max_stack;
++    if (get_global_cfg_params()->app_bind_numa) {
++        bind_to_stack_numa(wakeup->bind_stack);
++    }
+ 
+     return fd;
+ }
+@@ -545,6 +548,9 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
+     uint16_t bind_id = find_max_cnt_stack(stack_count, stack_group->stack_num, wakeup->bind_stack);
+     change_epollfd_kernel_thread(wakeup, wakeup->bind_stack, stack_group->stacks[bind_id]);
+     wakeup->bind_stack = stack_group->stacks[bind_id];
++    if (get_global_cfg_params()->app_bind_numa) {
++        bind_to_stack_numa(wakeup->bind_stack);
++    }
+ 
+     return 0;
+ }
+-- 
+2.23.0
+
