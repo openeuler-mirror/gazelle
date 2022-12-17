@@ -717,8 +717,8 @@ static int32_t parse_rxtx_pool_size(void)
     }
 
     int32_t val = config_setting_get_int(arg);
-    if (val <= 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild.\n", val);
+    if (val <= 0 || val > RXTX_NB_MBUF_MAX) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild, it should be in (0,%d].\n", val, RXTX_NB_MBUF_MAX);
         return -EINVAL;
     }
 
