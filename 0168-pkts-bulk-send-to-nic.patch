@@ -1,0 +1,123 @@
+From dab68f20b3d6d66fe0c400db81c15cc200c22b22 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sun, 18 Dec 2022 19:22:33 +0800
+Subject: [PATCH 1/2] pkts bulk send to nic
+
+---
+ src/lstack/core/lstack_protocol_stack.c    | 19 +++++++++++++++++++
+ src/lstack/include/lstack_protocol_stack.h |  3 +++
+ src/lstack/netif/lstack_ethdev.c           | 16 ++++++++++------
+ src/lstack/netif/lstack_vdev.c             |  8 +-------
+ 4 files changed, 33 insertions(+), 13 deletions(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 2a866e0..870e496 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -413,6 +413,23 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
+     stack->kernel_event_num = 0;
+ }
+ 
++static void stack_send_pkts(struct protocol_stack *stack)
++{
++    if (stack->send_cnt == 0) {
++        return;
++    }
++
++    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, stack->send_pkts, stack->send_cnt);
++    if (sent_pkts < stack->send_cnt && sent_pkts != 0) {
++        for (uint32_t i = sent_pkts; i < stack->send_cnt; i++) {
++            stack->send_pkts[i - sent_pkts] = stack->send_pkts[i];
++        }
++    }
++
++    stack->send_cnt -= sent_pkts;
++    stack->stats.tx += sent_pkts;
++}
++
+ static void* gazelle_stack_thread(void *arg)
+ {
+     uint16_t queue_id = *(uint16_t *)arg;
+@@ -449,6 +466,8 @@ static void* gazelle_stack_thread(void *arg)
+ 
+         send_stack_list(stack, send_connect_number);
+ 
++        stack_send_pkts(stack);
++
+         if ((wakeup_tick & 0xf) == 0) {
+             wakeup_kernel_event(stack);
+             wakeup_stack_epoll(stack, wakeup_thread_enable);
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 4cfa243..9463707 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -29,6 +29,7 @@
+ #define SOCK_SEND_RING_SIZE         (32)
+ #define SOCK_SEND_REPLENISH_THRES   (16)
+ #define WAKEUP_MAX_NUM              (32)
++#define STACK_SEND_MAX              RTE_TEST_TX_DESC_DEFAULT
+ 
+ struct rte_mempool;
+ struct rte_ring;
+@@ -65,6 +66,8 @@ struct protocol_stack {
+     uint32_t rx_ring_used;
+     uint32_t tx_ring_used;
+ 
++    uint16_t send_cnt;
++    struct rte_mbuf *send_pkts[STACK_SEND_MAX];
+     struct rte_mbuf *pkts[RTE_TEST_RX_DESC_DEFAULT];
+     struct list_node recv_list;
+     struct list_node send_list;
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 3958e8d..d870dd3 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -197,12 +197,16 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+         pbuf = pbuf->next;
+     }
+ 
+-    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
+-    stack->stats.tx += sent_pkts;
+-    if (sent_pkts < 1) {
+-        stack->stats.tx_drop++;
+-        rte_pktmbuf_free(first_mbuf);
+-        return ERR_MEM;
++    if (stack->send_cnt + 1 < STACK_SEND_MAX) {
++        stack->send_pkts[stack->send_cnt++] = first_mbuf;
++    } else {
++        uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
++        stack->stats.tx += sent_pkts;
++        if (sent_pkts < 1) {
++            stack->stats.tx_drop++;
++            rte_pktmbuf_free(first_mbuf);
++            return ERR_MEM;
++        }
+     }
+ 
+     return ERR_OK;
+diff --git a/src/lstack/netif/lstack_vdev.c b/src/lstack/netif/lstack_vdev.c
+index f6e7a1a..801edf8 100644
+--- a/src/lstack/netif/lstack_vdev.c
++++ b/src/lstack/netif/lstack_vdev.c
+@@ -129,17 +129,11 @@ static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pk
+ 
+ static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
+ {
+-    uint32_t sent_pkts = 0;
+-
+     if (rte_eth_tx_prepare(stack->port_id, stack->queue_id, pkts, nr_pkts) != nr_pkts) {
+         stack->stats.tx_prepare_fail++;
+     }
+ 
+-    do {
+-        sent_pkts += rte_eth_tx_burst(stack->port_id, stack->queue_id, &pkts[sent_pkts], nr_pkts - sent_pkts);
+-    } while (sent_pkts < nr_pkts);
+-
+-    return sent_pkts;
++    return rte_eth_tx_burst(stack->port_id, stack->queue_id, pkts, nr_pkts);
+ }
+ 
+ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
+-- 
+2.23.0
+
