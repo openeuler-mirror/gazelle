@@ -573,7 +573,6 @@ static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct
 void stack_send(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
-    int32_t flags = msg->args[MSG_ARG_2].i;
     struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
 
     struct lwip_sock *sock = get_socket(fd);
@@ -583,22 +582,13 @@ void stack_send(struct rpc_msg *msg)
     }
 
     __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
-    rte_mb();
-
-    if (!NETCONN_IS_DATAOUT(sock) || sock->errevent > 0) {
-        return;
-    }
-
-    bool replenish_again = do_lwip_send(stack, fd, sock, flags);
 
     /* have remain data or replenish again add sendlist */
-    if (NETCONN_IS_DATAOUT(sock) || replenish_again) {
+    if (sock->errevent == 0 && NETCONN_IS_DATAOUT(sock)) {
         if (list_is_null(&sock->send_list)) {
             list_add_node(&stack->send_list, &sock->send_list);
             __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
         }
-
-        stack->stats.send_self_rpc++;
     }
 }
 
