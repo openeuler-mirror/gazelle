@@ -29,6 +29,7 @@
 #define SOCK_SEND_RING_SIZE         (32)
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
+#define STACK_SEND_MAX              RTE_TEST_TX_DESC_DEFAULT
 
 struct rte_mempool;
 struct rte_ring;
@@ -65,6 +66,8 @@ struct protocol_stack {
     uint32_t rx_ring_used;
     uint32_t tx_ring_used;
 
+    uint16_t send_cnt;
+    struct rte_mbuf *send_pkts[STACK_SEND_MAX];
     struct rte_mbuf *pkts[RTE_TEST_RX_DESC_DEFAULT];
     struct list_node recv_list;
     struct list_node send_list;

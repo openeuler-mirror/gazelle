@@ -197,12 +197,16 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
         pbuf = pbuf->next;
     }
 
-    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
-    stack->stats.tx += sent_pkts;
-    if (sent_pkts < 1) {
-        stack->stats.tx_drop++;
-        rte_pktmbuf_free(first_mbuf);
-        return ERR_MEM;
+    if (stack->send_cnt + 1 < STACK_SEND_MAX) {
+        stack->send_pkts[stack->send_cnt++] = first_mbuf;
+    } else {
+        uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
+        stack->stats.tx += sent_pkts;
+        if (sent_pkts < 1) {
+            stack->stats.tx_drop++;
+            rte_pktmbuf_free(first_mbuf);
+            return ERR_MEM;
+        }
     }
 
     return ERR_OK;

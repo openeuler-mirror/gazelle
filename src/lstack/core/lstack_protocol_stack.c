@@ -413,6 +413,23 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
     stack->kernel_event_num = 0;
 }
 
+static void stack_send_pkts(struct protocol_stack *stack)
+{
+    if (stack->send_cnt == 0) {
+        return;
+    }
+
+    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, stack->send_pkts, stack->send_cnt);
+    if (sent_pkts < stack->send_cnt && sent_pkts != 0) {
+        for (uint32_t i = sent_pkts; i < stack->send_cnt; i++) {
+            stack->send_pkts[i - sent_pkts] = stack->send_pkts[i];
+        }
+    }
+
+    stack->send_cnt -= sent_pkts;
+    stack->stats.tx += sent_pkts;
+}
+
 static void* gazelle_stack_thread(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
@@ -448,6 +465,8 @@ static void* gazelle_stack_thread(void *arg)
         read_recv_list(stack, read_connect_number);
 
         send_stack_list(stack, send_connect_number);
+
+        stack_send_pkts(stack);
 
         if ((wakeup_tick & 0xf) == 0) {
             wakeup_kernel_event(stack);
