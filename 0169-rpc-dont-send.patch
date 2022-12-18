@@ -1,0 +1,64 @@
+From 4b7dd71bd8ab1023b73b2c157719d6a939d75b49 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sun, 18 Dec 2022 19:36:52 +0800
+Subject: [PATCH 2/2] rpc-dont-send
+
+---
+ src/common/dpdk_common.h      |  4 +++-
+ src/lstack/core/lstack_lwip.c | 12 +-----------
+ 2 files changed, 4 insertions(+), 12 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index a0c304c..63d651d 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -25,7 +25,9 @@
+ #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
+ 
+ /* Layout:
+- * | rte_mbuf | pbuf | custom_free_function | tcp_seg | payload |
++ * | rte_mbuf | gazelle_prive | pbuf | custom_free_function | tcp_seg | payload |
++ * rte_prefetch0 in lwip project,tcp_out.c,tcp_output_segment use constants
++        sizeof(struct rte_mbuf) + GAZELLE_MBUFF_PRIV_SIZE = 128 + 16
+  **/
+ struct pbuf;
+ static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index c04ed27..ae6c98d 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -573,7 +573,6 @@ static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct
+ void stack_send(struct rpc_msg *msg)
+ {
+     int32_t fd = msg->args[MSG_ARG_0].i;
+-    int32_t flags = msg->args[MSG_ARG_2].i;
+     struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
+ 
+     struct lwip_sock *sock = get_socket(fd);
+@@ -583,22 +582,13 @@ void stack_send(struct rpc_msg *msg)
+     }
+ 
+     __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+-    rte_mb();
+-
+-    if (!NETCONN_IS_DATAOUT(sock) || sock->errevent > 0) {
+-        return;
+-    }
+-
+-    bool replenish_again = do_lwip_send(stack, fd, sock, flags);
+ 
+     /* have remain data or replenish again add sendlist */
+-    if (NETCONN_IS_DATAOUT(sock) || replenish_again) {
++    if (sock->errevent == 0 && NETCONN_IS_DATAOUT(sock)) {
+         if (list_is_null(&sock->send_list)) {
+             list_add_node(&stack->send_list, &sock->send_list);
+             __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+         }
+-
+-        stack->stats.send_self_rpc++;
+     }
+ }
+ 
+-- 
+2.23.0
+
