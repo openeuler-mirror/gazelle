@@ -1,0 +1,27 @@
+From 90575a74f2a4b50ac5ab89a529c5c4426cdf507c Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sun, 18 Dec 2022 20:18:53 +0800
+Subject: [PATCH] recv pbuf free timely
+
+---
+ src/lstack/core/lstack_lwip.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index ae6c98d..0b9b684 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -642,9 +642,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
+         return 0;
+     }
+ 
+-    if (gazelle_ring_readover_count(sock->recv_ring) >= SOCK_RECV_FREE_THRES) {
+-        free_recv_ring_readover(sock->recv_ring);
+-    }
++    free_recv_ring_readover(sock->recv_ring);
+ 
+     uint32_t free_count = gazelle_ring_free_count(sock->recv_ring);
+     if (free_count == 0) {
+-- 
+2.23.0
+
