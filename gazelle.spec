@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       36
+Release:       37
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -177,6 +177,9 @@ Patch9159:     0159-stack-thread-params-default-val.patch
 Patch9160:     0160-optimite-net-type.patch
 Patch9161:     0161-app-bind-numa-when-epoll-poll-create.patch
 Patch9162:     0162-remove-mbuf-reserve-in-mbuf-alloc.patch
+Patch9163:     0163-pkts-bulk-send-to-nic.patch
+Patch9164:     0164-rpc-dont-send.patch
+Patch9165:     0165-recv-pbuf-free-timely.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -217,6 +220,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sun Dec 18 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-37
+- pkts-bulk-send-to-nic and rpc-dont-send
+
 * Sat Dec 17 2022 jiangheng <jiangheng14@huawei.com> - 1.0.1-36
 - remove mbuf reserve in mbuf alloc
 
