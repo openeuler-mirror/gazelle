@@ -642,9 +642,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
         return 0;
     }
 
-    if (gazelle_ring_readover_count(sock->recv_ring) >= SOCK_RECV_FREE_THRES) {
-        free_recv_ring_readover(sock->recv_ring);
-    }
+    free_recv_ring_readover(sock->recv_ring);
 
     uint32_t free_count = gazelle_ring_free_count(sock->recv_ring);
     if (free_count == 0) {
