@@ -55,7 +55,7 @@ enum GAZELLE_LATENCY_TYPE {
 struct gazelle_stack_stat {
     uint64_t wakeup_events;
     uint64_t write_lwip_cnt;
-    uint64_t send_self_rpc;
+    uint64_t send_pkts_fail;
     uint64_t read_lwip_drop;
     uint64_t read_lwip_cnt;
     uint64_t rx_allocmbuf_fail;

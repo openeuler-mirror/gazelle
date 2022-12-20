@@ -29,7 +29,8 @@
 #define SOCK_SEND_RING_SIZE         (32)
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
-#define STACK_SEND_MAX              RTE_TEST_TX_DESC_DEFAULT
+#define STACK_SEND_MAX              2048
+#define STACK_SEND_MASK             (STACK_SEND_MAX - 1)
 
 struct rte_mempool;
 struct rte_ring;
@@ -66,7 +67,8 @@ struct protocol_stack {
     uint32_t rx_ring_used;
     uint32_t tx_ring_used;
 
-    uint16_t send_cnt;
+    uint32_t send_start;
+    uint32_t send_end;
     struct rte_mbuf *send_pkts[STACK_SEND_MAX];
     struct rte_mbuf *pkts[RTE_TEST_RX_DESC_DEFAULT];
     struct list_node recv_list;
@@ -130,6 +132,8 @@ int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *ad
 
 struct wakeup_poll;
 void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup);
+
+void stack_send_pkts(struct protocol_stack *stack);
 
 struct rpc_msg;
 void stack_clean_epoll(struct rpc_msg *msg);

@@ -413,20 +413,29 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
     stack->kernel_event_num = 0;
 }
 
-static void stack_send_pkts(struct protocol_stack *stack)
+void stack_send_pkts(struct protocol_stack *stack)
 {
-    if (stack->send_cnt == 0) {
+    uint32_t send_num = stack->send_end - stack->send_start;
+
+    if (send_num == 0) {
         return;
     }
 
-    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, stack->send_pkts, stack->send_cnt);
-    if (sent_pkts < stack->send_cnt && sent_pkts != 0) {
-        for (uint32_t i = sent_pkts; i < stack->send_cnt; i++) {
-            stack->send_pkts[i - sent_pkts] = stack->send_pkts[i];
+    uint32_t start = stack->send_start & STACK_SEND_MASK;
+    uint32_t end = stack->send_end & STACK_SEND_MASK;
+    uint32_t sent_pkts = 0;
+
+    if (start < end) {
+        sent_pkts = stack->dev_ops.tx_xmit(stack, &stack->send_pkts[start], send_num);
+    } else {
+        send_num = STACK_SEND_MAX - start;
+        sent_pkts = stack->dev_ops.tx_xmit(stack, &stack->send_pkts[start], send_num);
+        if (sent_pkts == send_num) {
+            sent_pkts += stack->dev_ops.tx_xmit(stack, stack->send_pkts, end);
         }
     }
 
-    stack->send_cnt -= sent_pkts;
+    stack->send_start += sent_pkts;
     stack->stats.tx += sent_pkts;
 }
 
