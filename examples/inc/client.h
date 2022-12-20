@@ -39,6 +39,7 @@ struct ClientUnit
     char* domain;                       ///< the communication domain
     char* api;                          ///< the type of api
     bool debug;                         ///< if we print the debug information
+    char* epollcreate;                  ///< epoll_create method
     struct ClientUnit *next;            ///< next pointer
 };
 

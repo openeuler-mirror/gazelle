@@ -30,6 +30,9 @@
 #define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
 #define PARAM_DEFAULT_DEBUG         (false)                 ///< default flag of debug
 #define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
+#define PARAM_DEFAULT_EPOLLCREATE   ("ec")                  ///< default method of epoll_create
+#define PARAM_DEFAULT_ACCEPT        ("ac")                  ///< default method of accept method
+
 
 enum {
 #define PARAM_NAME_AS               ("as")                  ///< name of parameter type
@@ -58,6 +61,10 @@ enum {
     PARAM_NUM_DEBUG = 'd',
 #define PARAM_NAME_HELP             ("help")                ///< name of parameter help
     PARAM_NUM_HELP = 'h',
+#define PARAM_NAME_EPOLLCREATE      ("epollcreate")         ///< name of parameter epollcreate
+    PARAM_NUM_EPOLLCREATE = 'E',
+#define PARAM_NAME_ACCEPT           ("accept")              ///< name of parameter accept
+    PARAM_NUM_ACCEPT = 'C',
 };
 
 #define NO_ARGUMENT             0                           ///< options takes no arguments
@@ -92,6 +99,8 @@ struct ProgramParams {
     uint32_t            pktlen;             ///< the packet length
     bool                verify;             ///< if we verify the message or not
     bool                debug;              ///< if we print the debug information or not
+    char*               epollcreate;        ///< epoll_create method
+    char*               accept;             ///< accept connections method
     bool                ringpmd;            ///< if we use ring PMD or not
 };
 

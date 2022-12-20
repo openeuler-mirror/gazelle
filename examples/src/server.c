@@ -86,7 +86,12 @@ void sermud_info_print(struct ServerMud *server_mud)
 // the worker thread, unblock, dissymmetric server listens and gets epoll feature descriptors
 int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
 {
-    worker_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    if (strcmp(worker_unit->epollcreate, "ec1") == 0) {
+        worker_unit->epfd = epoll_create1(EPOLL_CLOEXEC);
+    } else {
+        worker_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    }
+    
     if (worker_unit->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", worker_unit->epfd);
        return PROGRAM_FAULT;
@@ -106,7 +111,12 @@ int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
 // the listener thread, unblock, dissymmetric server listens and gets epoll feature descriptors
 int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
 {
-    server_mud->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    if (strcmp(server_mud->epollcreate, "ec1") == 0) {
+        server_mud->epfd = epoll_create1(EPOLL_CLOEXEC);
+    } else {
+        server_mud->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    }
+    
     if (server_mud->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", server_mud->epfd);
        return PROGRAM_FAULT;
@@ -131,7 +141,13 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
     while (true) {
         struct sockaddr_in accept_addr;
         uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
-        int32_t accept_fd = accept(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
+        int32_t accept_fd;
+        if (strcmp(server_mud->accept, "ac4") == 0) {
+            accept_fd = accept4(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
+        } else {
+            accept_fd = accept(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
+        }
+        
         if (accept_fd < 0) {
             break;
         }
@@ -155,6 +171,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
         worker->api = server_mud->api;
         worker->debug = server_mud->debug;
         worker->next = server_mud->workers;
+        worker->epollcreate = server_mud->epollcreate;
 
         server_mud->workers = worker;
 
@@ -308,6 +325,8 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->domain = params->domain;
     server_mud->api = params->api;
     server_mud->debug = params->debug;
+    server_mud->epollcreate = params->epollcreate;
+    server_mud->accept = params->accept;
 
     if (pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud) < 0) {
         PRINT_ERROR("server can't create poisx thread %d! ", errno);
@@ -378,7 +397,12 @@ void sermum_info_print(struct ServerMum *server_mum)
 // the single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors
 int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
 {
-    server_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    if (strcmp(server_unit->epollcreate, "ec1") == 0) {
+        server_unit->epfd = epoll_create1(EPOLL_CLOEXEC);
+    } else {
+        server_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    }
+    
     if (server_unit->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", server_unit->epfd);
        return PROGRAM_FAULT;
@@ -403,7 +427,13 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
     while (true) {
         struct sockaddr_in accept_addr;
         uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
-        int32_t accept_fd = accept(server_unit->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
+        int32_t accept_fd;
+        if (strcmp(server_unit->accept, "ac4") == 0) {
+            accept_fd = accept4(server_unit->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
+        } else {
+            accept_fd = accept(server_unit->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
+        }
+        
         if (accept_fd < 0) {
             break;
         }
@@ -542,6 +572,8 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->domain = params->domain;
         server_unit->api = params->api;
         server_unit->debug = params->debug;
+        server_unit->epollcreate = params->epollcreate;
+        server_unit->accept = params->accept;
         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
 
         if (pthread_create((tids + i), NULL, sersum_create_and_run, server_unit) < 0) {

@@ -155,8 +155,13 @@ int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct Clien
 int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
 {
     const uint32_t connect_num = client_unit->connect_num;
-
-    client_unit->epfd = epoll_create(CLIENT_EPOLL_SIZE_MAX);
+    //jacky modify
+    if (strcmp(client_unit->epollcreate, "ec1") == 0) {
+        client_unit->epfd = epoll_create1(EPOLL_CLOEXEC);
+    } else {
+        client_unit->epfd = epoll_create(CLIENT_EPOLL_SIZE_MAX);
+    }
+    
     if (client_unit->epfd < 0) {
         PRINT_ERROR("client can't create epoll %d! ", errno);
         return PROGRAM_FAULT;
@@ -364,6 +369,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->verify = params->verify;
         client_unit->domain = params->domain;
         client_unit->api = params->api;
+        client_unit->epollcreate = params->epollcreate;
         client_unit->debug = params->debug;
         client_unit->next = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
 

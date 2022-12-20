@@ -113,7 +113,7 @@
 * `-D, --domain [unix | posix]`：通信协议。
   * `unix`：基于 unix 协议实现。
   * `posix`：基于 posix 协议实现。
-* `-A, --api [readwrite | recvsend | recvsendmsg]`：内部实现的接口类型。
+* `-A, --api [readwrite | recvsend | recvsendmsg | readvwritev]`：内部实现的接口类型。
   * `readwrite` ：使用 `read` 和 `write` 接口。
   * `recvsend` ：使用 `recv` 和 `send` 接口。
   * `recvsendmsg` ：使用 `recvmsg` 和 `sendmsg` 接口。
@@ -122,7 +122,12 @@
 * `-r, --ringpmd`：是否基于dpdk ring PMD 收发环回。
 * `-d, --debug`：是否打印调试信息。
 * `-h, --help`：获得帮助信息。
-
+* `-E, --epollcreate`：epoll_create方式。
+  * `ec`：使用epoll_create(int size)生成epoll专用的文件描述符。
+  * `ec1`：使用epoll_create1(int flags)生成epoll专用的文件描述符,flags = EPOLL_CLOEXEC。
+* `-C, --accept`：accept的方式。
+  * `ac`：使用accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)通过套接口接受连接。
+  * `ac4`：使用accept4(int sockfd, struct sockaddr *addr,socklen_t *addrlen, int flags)通过套接口接受连接,flags=SOCK_CLOEXEC。
 ## 使用
 
  * **环境配置**
@@ -165,6 +170,12 @@ make
 -r, --ringpmd: set to use ringpmd. 
 -d, --debug: set to print the debug information. 
 -h, --help: see helps.
+-E, --epollcreate: epoll_create method.
+    ec: use epoll_create(int size) to create epoll fd.
+    ec1:use epoll_create(int flags) to create epoll fd, flags=EPOLL_CLOEXEC.
+-C, --accept: accept method.
+    ac: use accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) to accept a connection on a socket
+    ac4: use accept4(int sockfd, struct sockaddr *addr,socklen_t *addrlen, int flags) to accept a connection on a socket, flags=SOCK_CLOEXEC.
  ```
 
  * 创建服务端
@@ -184,6 +195,8 @@ make
 --> [verify]:                   on 
 --> [ringpmd]:                  off 
 --> [debug]:                    off 
+--> [epoll create]:             ec
+--> [accept]:                   ac
 
 [program informations]: 
 --> <server>: [connect num]: 0, [receive]: 0.000 B/s
@@ -205,7 +218,8 @@ make
 --> [packet length]:            1024 
 --> [verify]:                   on 
 --> [ringpmd]:                  off 
---> [debug]:                    off 
+--> [epoll create]:             ec
+--> [accept]:                   ac
 
 [program informations]: 
 --> <client>: [connect num]: 80, [send]: 357.959 MB/s
