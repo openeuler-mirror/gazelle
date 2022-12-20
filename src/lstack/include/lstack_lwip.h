@@ -47,5 +47,6 @@ ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
 ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags);
 ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags);
 void rpc_replenish(struct rpc_msg *msg);
+void stack_mempool_size(struct rpc_msg *msg);
 
 #endif
