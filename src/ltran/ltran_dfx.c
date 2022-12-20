@@ -579,7 +579,7 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
     printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
     printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.stack_stat.call_null);
-    printf("send_self_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.stack_stat.send_self_rpc);
+    printf("send_pkts_fail: %-13"PRIu64" \n", lstack_stat->data.pkts.stack_stat.send_pkts_fail);
 }
 
 static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lstack_stat,

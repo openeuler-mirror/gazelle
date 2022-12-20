@@ -147,6 +147,25 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag, 
     return nr_pkts;
 }
 
+static void add_send_pkt(struct protocol_stack *stack, struct rte_mbuf *mbuf)
+{
+    if (stack->send_end + 1 != stack->send_start) {
+        stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
+        stack->send_end++;
+        return;
+    }
+
+    stack->stats.send_pkts_fail++;
+    do {
+        stack_send_pkts(stack);
+        if (stack->send_end + 1 != stack->send_start) {
+            stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
+            stack->send_end++;
+            return;
+        }
+    } while (1);
+}
+
 static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 {
     struct protocol_stack *stack = get_protocol_stack();
@@ -197,17 +216,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
         pbuf = pbuf->next;
     }
 
-    if (stack->send_cnt + 1 < STACK_SEND_MAX) {
-        stack->send_pkts[stack->send_cnt++] = first_mbuf;
-    } else {
-        uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
-        stack->stats.tx += sent_pkts;
-        if (sent_pkts < 1) {
-            stack->stats.tx_drop++;
-            rte_pktmbuf_free(first_mbuf);
-            return ERR_MEM;
-        }
-    }
+    add_send_pkt(stack, first_mbuf);
 
     return ERR_OK;
 }
