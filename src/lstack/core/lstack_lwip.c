@@ -1273,12 +1273,23 @@ static uint32_t get_list_count(struct list_node *list)
     return count;
 }
 
+void stack_mempool_size(struct rpc_msg *msg)
+{
+    struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_0].p;
+
+    msg->result = rte_mempool_avail_count(stack->rxtx_pktmbuf_pool);
+}
+
 void stack_sendlist_count(struct rpc_msg *msg)
 {
-    msg->result = get_list_count(&get_protocol_stack()->send_list);
+    struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_0].p;
+
+    msg->result = get_list_count(&stack->send_list);
 }
 
 void stack_recvlist_count(struct rpc_msg *msg)
 {
-    msg->result = get_list_count(&get_protocol_stack()->recv_list);
+    struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_0].p;
+
+    msg->result = get_list_count(&stack->recv_list);
 }

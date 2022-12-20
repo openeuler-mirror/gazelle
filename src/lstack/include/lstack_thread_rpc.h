@@ -77,5 +77,6 @@ int32_t rpc_call_setsockopt(int fd, int level, int optname, const void *optval, 
 int32_t rpc_call_fcntl(int fd, int cmd, long val);
 int32_t rpc_call_ioctl(int fd, long cmd, void *argp);
 int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock);
+int32_t rpc_call_mempoolsize(struct protocol_stack *stack);
 
 #endif

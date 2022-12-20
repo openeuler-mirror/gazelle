@@ -146,6 +146,9 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     int32_t rpc_call_result = rpc_call_msgcnt(stack);
     dfx->data.pkts.call_msg_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
+    rpc_call_result = rpc_call_mempoolsize(stack);
+    dfx->data.pkts.mempool_freecnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
+
     rpc_call_result = rpc_call_recvlistcnt(stack);
     dfx->data.pkts.recv_list_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 

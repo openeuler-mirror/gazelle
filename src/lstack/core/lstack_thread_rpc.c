@@ -205,12 +205,26 @@ int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
+int32_t rpc_call_mempoolsize(struct protocol_stack *stack)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_mempool_size);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    msg->args[MSG_ARG_0].p = stack;
+
+    return rpc_sync_call(&stack->rpc_queue, msg);
+}
+
 int32_t rpc_call_sendlistcnt(struct protocol_stack *stack)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_sendlist_count);
     if (msg == NULL) {
         return -1;
     }
+
+    msg->args[MSG_ARG_0].p = stack;
 
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
@@ -221,6 +235,8 @@ int32_t rpc_call_recvlistcnt(struct protocol_stack *stack)
     if (msg == NULL) {
         return -1;
     }
+
+    msg->args[MSG_ARG_0].p = stack;
 
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
