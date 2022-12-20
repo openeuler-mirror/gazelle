@@ -1,0 +1,165 @@
+From bd6d329cc57086996302fdd46fbd434f945ecd26 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Tue, 20 Dec 2022 15:39:39 +0800
+Subject: [PATCH 1/2] optimite-send-pkts-dul-index
+
+---
+ src/common/gazelle_dfx_msg.h               |  2 +-
+ src/lstack/core/lstack_protocol_stack.c    | 23 +++++++++++-----
+ src/lstack/include/lstack_protocol_stack.h |  8 ++++--
+ src/lstack/netif/lstack_ethdev.c           | 31 ++++++++++++++--------
+ src/ltran/ltran_dfx.c                      |  2 +-
+ 5 files changed, 44 insertions(+), 22 deletions(-)
+
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index d14f1b9..83b6fe9 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -55,7 +55,7 @@ enum GAZELLE_LATENCY_TYPE {
+ struct gazelle_stack_stat {
+     uint64_t wakeup_events;
+     uint64_t write_lwip_cnt;
+-    uint64_t send_self_rpc;
++    uint64_t send_pkts_fail;
+     uint64_t read_lwip_drop;
+     uint64_t read_lwip_cnt;
+     uint64_t rx_allocmbuf_fail;
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 870e496..16b124e 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -413,20 +413,29 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
+     stack->kernel_event_num = 0;
+ }
+ 
+-static void stack_send_pkts(struct protocol_stack *stack)
++void stack_send_pkts(struct protocol_stack *stack)
+ {
+-    if (stack->send_cnt == 0) {
++    uint32_t send_num = stack->send_end - stack->send_start;
++
++    if (send_num == 0) {
+         return;
+     }
+ 
+-    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, stack->send_pkts, stack->send_cnt);
+-    if (sent_pkts < stack->send_cnt && sent_pkts != 0) {
+-        for (uint32_t i = sent_pkts; i < stack->send_cnt; i++) {
+-            stack->send_pkts[i - sent_pkts] = stack->send_pkts[i];
++    uint32_t start = stack->send_start & STACK_SEND_MASK;
++    uint32_t end = stack->send_end & STACK_SEND_MASK;
++    uint32_t sent_pkts = 0;
++
++    if (start < end) {
++        sent_pkts = stack->dev_ops.tx_xmit(stack, &stack->send_pkts[start], send_num);
++    } else {
++        send_num = STACK_SEND_MAX - start;
++        sent_pkts = stack->dev_ops.tx_xmit(stack, &stack->send_pkts[start], send_num);
++        if (sent_pkts == send_num) {
++            sent_pkts += stack->dev_ops.tx_xmit(stack, stack->send_pkts, end);
+         }
+     }
+ 
+-    stack->send_cnt -= sent_pkts;
++    stack->send_start += sent_pkts;
+     stack->stats.tx += sent_pkts;
+ }
+ 
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 9463707..c706afc 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -29,7 +29,8 @@
+ #define SOCK_SEND_RING_SIZE         (32)
+ #define SOCK_SEND_REPLENISH_THRES   (16)
+ #define WAKEUP_MAX_NUM              (32)
+-#define STACK_SEND_MAX              RTE_TEST_TX_DESC_DEFAULT
++#define STACK_SEND_MAX              2048
++#define STACK_SEND_MASK             (STACK_SEND_MAX - 1)
+ 
+ struct rte_mempool;
+ struct rte_ring;
+@@ -66,7 +67,8 @@ struct protocol_stack {
+     uint32_t rx_ring_used;
+     uint32_t tx_ring_used;
+ 
+-    uint16_t send_cnt;
++    uint32_t send_start;
++    uint32_t send_end;
+     struct rte_mbuf *send_pkts[STACK_SEND_MAX];
+     struct rte_mbuf *pkts[RTE_TEST_RX_DESC_DEFAULT];
+     struct list_node recv_list;
+@@ -131,6 +133,8 @@ int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *ad
+ struct wakeup_poll;
+ void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup);
+ 
++void stack_send_pkts(struct protocol_stack *stack);
++
+ struct rpc_msg;
+ void stack_clean_epoll(struct rpc_msg *msg);
+ void stack_arp(struct rpc_msg *msg);
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index d870dd3..5729ebf 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -147,6 +147,25 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag,
+     return nr_pkts;
+ }
+ 
++static void add_send_pkt(struct protocol_stack *stack, struct rte_mbuf *mbuf)
++{
++    if (stack->send_end + 1 != stack->send_start) {
++        stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
++        stack->send_end++;
++        return;
++    }
++
++    stack->stats.send_pkts_fail++;
++    do {
++        stack_send_pkts(stack);
++        if (stack->send_end + 1 != stack->send_start) {
++            stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
++            stack->send_end++;
++            return;
++        }
++    } while (1);
++}
++
+ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+ {
+     struct protocol_stack *stack = get_protocol_stack();
+@@ -197,17 +216,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+         pbuf = pbuf->next;
+     }
+ 
+-    if (stack->send_cnt + 1 < STACK_SEND_MAX) {
+-        stack->send_pkts[stack->send_cnt++] = first_mbuf;
+-    } else {
+-        uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
+-        stack->stats.tx += sent_pkts;
+-        if (sent_pkts < 1) {
+-            stack->stats.tx_drop++;
+-            rte_pktmbuf_free(first_mbuf);
+-            return ERR_MEM;
+-        }
+-    }
++    add_send_pkt(stack, first_mbuf);
+ 
+     return ERR_OK;
+ }
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 3801f19..651f279 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -579,7 +579,7 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
+     printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
+     printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
+     printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.stack_stat.call_null);
+-    printf("send_self_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.stack_stat.send_self_rpc);
++    printf("send_pkts_fail: %-13"PRIu64" \n", lstack_stat->data.pkts.stack_stat.send_pkts_fail);
+ }
+ 
+ static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lstack_stat,
+-- 
+2.23.0
+
