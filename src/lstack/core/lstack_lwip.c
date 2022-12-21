@@ -500,8 +500,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     }
 
     struct protocol_stack *stack = sock->stack;
-    struct wakeup_poll *wakeup = sock->wakeup;
-    if (!stack|| len == 0 || !wakeup) {
+    if (!stack|| len == 0) {
         return 0;
     }
 
@@ -517,6 +516,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 
     uint32_t write_num = (len - send_len + MBUF_MAX_DATA_LEN - 1) / MBUF_MAX_DATA_LEN;
     uint32_t write_avail = gazelle_ring_readable_count(sock->send_ring);
+    struct wakeup_poll *wakeup = sock->wakeup;
 
     /* send_ring is full, data attach last pbuf */
     if (write_avail == 0) {
@@ -524,10 +524,14 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         if (last_pbuf) {
             send_len += app_direct_attach(stack, last_pbuf, (char *)buf + send_len, len - send_len, write_num);
              gazelle_ring_lastover(last_pbuf);
-             wakeup->stat.app_write_cnt += write_num;
+             if (wakeup) {
+                wakeup->stat.app_write_cnt += write_num;
+             }
         } else {
             (void)rpc_call_replenish(stack, sock);
-            wakeup->stat.app_write_rpc++;
+            if (wakeup) {
+                wakeup->stat.app_write_rpc++;
+            }
         }
         sock->remain_len = 0;
         return send_len;
@@ -536,9 +540,11 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     /* send_ring have idle */
     send_len += (write_num <= write_avail) ? app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num) :
         app_direct_write(stack, sock, (char *)buf + send_len, len - send_len, write_num);
-    wakeup->stat.app_write_cnt += write_num;
+    if (wakeup) {
+        wakeup->stat.app_write_cnt += write_num;
+    }
 
-    if (wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLOUT)) {
+    if (wakeup && wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLOUT)) {
         del_data_out_event(sock);
     }
 
