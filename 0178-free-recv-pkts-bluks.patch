@@ -1,0 +1,94 @@
+From 7edbb73f77c64706e9bf35ccfc8454f706c3b553 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Thu, 22 Dec 2022 23:26:54 +0800
+Subject: [PATCH 4/4] free-recv-pkts-bluks
+
+---
+ src/lstack/core/lstack_lwip.c              | 10 ++++++++--
+ src/lstack/core/lstack_protocol_stack.c    | 16 ++++++++++++++++
+ src/lstack/include/lstack_protocol_stack.h |  7 +++++++
+ 3 files changed, 31 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index bb6fe44..31f87cf 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -221,8 +221,14 @@ void gazelle_free_pbuf(struct pbuf *pbuf)
+     }
+ 
+     struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
+-    pbuf->next = NULL;
+-    rte_pktmbuf_free_seg(mbuf);
++    struct protocol_stack *stack = get_protocol_stack();
++
++    if (STACK_FREE_INDEX(stack->free_end + 1) != STACK_FREE_INDEX(stack->free_start)) {
++        stack->free_pkts[STACK_FREE_INDEX(stack->free_end)] = mbuf;
++        stack->free_end++;
++    } else {
++        rte_pktmbuf_free_seg(mbuf);
++    }
+ }
+ 
+ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 16b124e..7b53b91 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -439,6 +439,20 @@ void stack_send_pkts(struct protocol_stack *stack)
+     stack->stats.tx += sent_pkts;
+ }
+ 
++void stack_free_recv_pkts(struct protocol_stack *stack, uint32_t free_num)
++{
++    if (stack->free_end == stack->free_start) {
++        return;
++    }
++
++    uint32_t num = 0;
++    for (uint32_t i = stack->free_start; num < free_num && i < stack->free_end; i++) {
++        rte_pktmbuf_free_seg(stack->free_pkts[STACK_FREE_INDEX(i)]);
++        num++;
++    }
++    stack->free_start += num;
++}
++
+ static void* gazelle_stack_thread(void *arg)
+ {
+     uint16_t queue_id = *(uint16_t *)arg;
+@@ -469,6 +483,8 @@ static void* gazelle_stack_thread(void *arg)
+     for (;;) {
+         poll_rpc_msg(stack, rpc_number);
+ 
++        stack_free_recv_pkts(stack, nic_read_number);
++
+         gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
+ 
+         read_recv_list(stack, read_connect_number);
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index de3d312..4fe06cd 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -34,6 +34,10 @@
+ #define STACK_SEND_MASK             (STACK_SEND_MAX - 1)
+ #define STACK_SEND_INDEX(index)     ((index) & STACK_SEND_MASK)
+ 
++#define STACK_FREE_MAX              4096
++#define STACK_FREE_MASK             (STACK_FREE_MAX - 1)
++#define STACK_FREE_INDEX(index)     ((index) & STACK_FREE_MASK)
++
+ struct rte_mempool;
+ struct rte_ring;
+ struct rte_mbuf;
+@@ -69,6 +73,9 @@ struct protocol_stack {
+     uint32_t rx_ring_used;
+     uint32_t tx_ring_used;
+ 
++    uint32_t free_start;
++    uint32_t free_end;
++    struct rte_mbuf *free_pkts[STACK_FREE_MAX];
+     uint32_t send_start;
+     uint32_t send_end;
+     struct rte_mbuf *send_pkts[STACK_SEND_MAX];
+-- 
+2.23.0
+
