@@ -21,11 +21,12 @@ OPTIMIZATION = -O2 -g
 RM = rm -f
 LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
 
-ifeq ($(CC),gcc)
+ifneq ($(CC),clang)
 	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
-else ifeq($(CC),clang)
+else
 	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -fPIC
 endif
+$(info $(CC):$(SEC_FLAGS))
 
 INC = -I$(LSTACK_DIR)/include   \
       -I$(LSTACK_DIR)/../common \
