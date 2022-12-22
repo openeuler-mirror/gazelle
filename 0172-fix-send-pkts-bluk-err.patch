@@ -1,0 +1,59 @@
+From 24754f47cefc0284aeea0d122698789c51ff050d Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Thu, 22 Dec 2022 23:19:09 +0800
+Subject: [PATCH 3/4] fix-send-pkts-bluk-err
+
+---
+ src/lstack/include/lstack_protocol_stack.h |  2 ++
+ src/lstack/netif/lstack_ethdev.c           | 16 ++++++----------
+ 2 files changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index c706afc..de3d312 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -29,8 +29,10 @@
+ #define SOCK_SEND_RING_SIZE         (32)
+ #define SOCK_SEND_REPLENISH_THRES   (16)
+ #define WAKEUP_MAX_NUM              (32)
++
+ #define STACK_SEND_MAX              2048
+ #define STACK_SEND_MASK             (STACK_SEND_MAX - 1)
++#define STACK_SEND_INDEX(index)     ((index) & STACK_SEND_MASK)
+ 
+ struct rte_mempool;
+ struct rte_ring;
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 5729ebf..4426b1a 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -149,20 +149,16 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag,
+ 
+ static void add_send_pkt(struct protocol_stack *stack, struct rte_mbuf *mbuf)
+ {
+-    if (stack->send_end + 1 != stack->send_start) {
+-        stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
+-        stack->send_end++;
+-        return;
+-    }
+-
+-    stack->stats.send_pkts_fail++;
+     do {
+-        stack_send_pkts(stack);
+-        if (stack->send_end + 1 != stack->send_start) {
+-            stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
++        if (STACK_SEND_INDEX(stack->send_end + 1) != STACK_SEND_INDEX(stack->send_start)) {
++            stack->send_pkts[STACK_SEND_INDEX(stack->send_end)] = mbuf;
+             stack->send_end++;
+             return;
+         }
++
++        stack_send_pkts(stack);
++
++        stack->stats.send_pkts_fail++;
+     } while (1);
+ }
+ 
+-- 
+2.23.0
+
