@@ -221,8 +221,14 @@ void gazelle_free_pbuf(struct pbuf *pbuf)
     }
 
     struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
-    pbuf->next = NULL;
-    rte_pktmbuf_free_seg(mbuf);
+    struct protocol_stack *stack = get_protocol_stack();
+
+    if (STACK_FREE_INDEX(stack->free_end + 1) != STACK_FREE_INDEX(stack->free_start)) {
+        stack->free_pkts[STACK_FREE_INDEX(stack->free_end)] = mbuf;
+        stack->free_end++;
+    } else {
+        rte_pktmbuf_free_seg(mbuf);
+    }
 }
 
 int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)

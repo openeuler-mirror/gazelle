@@ -439,6 +439,20 @@ void stack_send_pkts(struct protocol_stack *stack)
     stack->stats.tx += sent_pkts;
 }
 
+void stack_free_recv_pkts(struct protocol_stack *stack, uint32_t free_num)
+{
+    if (stack->free_end == stack->free_start) {
+        return;
+    }
+
+    uint32_t num = 0;
+    for (uint32_t i = stack->free_start; num < free_num && i < stack->free_end; i++) {
+        rte_pktmbuf_free_seg(stack->free_pkts[STACK_FREE_INDEX(i)]);
+        num++;
+    }
+    stack->free_start += num;
+}
+
 static void* gazelle_stack_thread(void *arg)
 {
     uint16_t queue_id = *(uint16_t *)arg;
@@ -468,6 +482,8 @@ static void* gazelle_stack_thread(void *arg)
 
     for (;;) {
         poll_rpc_msg(stack, rpc_number);
+
+        stack_free_recv_pkts(stack, nic_read_number);
 
         gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
 
