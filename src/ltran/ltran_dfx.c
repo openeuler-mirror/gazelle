@@ -880,7 +880,8 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     do {
         printf("\n------ stack tid: %6u ------time=%lu\n", stat->tid, time.tv_sec * 1000000 + time.tv_usec);
         printf("No.   Proto lwip_recv recv_ring in_send send_ring cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
-            "        lastack        events    epoll_ev  evlist fd     Local Address        Foreign Address    State\n");
+            "        lastack        rcv_nxt        events    epoll_ev  evlist fd     Local Address        "
+            "Foreign Address    State\n");
         uint32_t unread_pkts = 0;
         uint32_t unsend_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
@@ -889,16 +890,16 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
             rip.s_addr = conn_info->rip;
             lip.s_addr = conn_info->lip;
             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
-                printf("%-6utcp   %-10u%-10u%-8u%-10u%-9d%-9d%-10d%-10d%-15u%-15u%-10x%-10x%-7d%-7d"
+                printf("%-6utcp   %-10u%-10u%-8u%-10u%-9d%-9d%-10d%-10d%-15u%-15u%-15u%-10x%-10x%-7d%-7d"
                     "%s:%hu   %s:%hu  %s\n", i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
                     conn_info->send_ring_cnt, conn_info->cwn, conn_info->rcv_wnd, conn_info->snd_wnd,
-                    conn_info->snd_buf, conn_info->snd_nxt, conn_info->lastack, conn_info->events,
+                    conn_info->snd_buf, conn_info->snd_nxt, conn_info->lastack, conn_info->rcv_nxt, conn_info->events,
                     conn_info->epoll_events, conn_info->eventlist, conn_info->fd,
                     inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
                     inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
                     tcp_state_to_str(conn_info->tcp_sub_state));
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
-                printf("%-6utcp    %-57u%-7d%s:%hu   0.0.0.0:*          LISTEN\n", i, conn_info->recv_cnt,
+                printf("%-6utcp    %-147u%-7d%s:%hu   0.0.0.0:*          LISTEN\n", i, conn_info->recv_cnt,
                     conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
             } else {
                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
