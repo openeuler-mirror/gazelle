@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       39
+Release:       40
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -184,6 +184,10 @@ Patch9166:     0166-optimite-send-pkts-dul-index.patch
 Patch9167:     0167-expand-data-recv-buff.patch
 Patch9168:     0168-dfx-add-mempool-count-info.patch
 Patch9169:     0169--write-support-without-epoll-poll.patch
+Patch9170:     0170-add-rcv-nxt-dfx-info.patch
+Patch9171:     0171-mbuf-private-data-size-align-cache-line.patch
+Patch9172:     0172-fix-send-pkts-bluk-err.patch
+Patch9173:     0173-free-recv-pkts-bluks.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -224,6 +228,12 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Thu Dec 22 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-40
+- add dfx rcv_nxt info
+  mbuf private cache line align
+  send pkts index bug fix
+  free recv pkts in main loop
+
 * Wed Dec 21 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-39
 - add mempool dfx info
   write support without epoll/poll
