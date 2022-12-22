@@ -149,20 +149,16 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, bool use_ltran_flag, 
 
 static void add_send_pkt(struct protocol_stack *stack, struct rte_mbuf *mbuf)
 {
-    if (stack->send_end + 1 != stack->send_start) {
-        stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
-        stack->send_end++;
-        return;
-    }
-
-    stack->stats.send_pkts_fail++;
     do {
-        stack_send_pkts(stack);
-        if (stack->send_end + 1 != stack->send_start) {
-            stack->send_pkts[stack->send_end & STACK_SEND_MASK] = mbuf;
+        if (STACK_SEND_INDEX(stack->send_end + 1) != STACK_SEND_INDEX(stack->send_start)) {
+            stack->send_pkts[STACK_SEND_INDEX(stack->send_end)] = mbuf;
             stack->send_end++;
             return;
         }
+
+        stack_send_pkts(stack);
+
+        stack->stats.send_pkts_fail++;
     } while (1);
 }
 

@@ -29,8 +29,10 @@
 #define SOCK_SEND_RING_SIZE         (32)
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
+
 #define STACK_SEND_MAX              2048
 #define STACK_SEND_MASK             (STACK_SEND_MAX - 1)
+#define STACK_SEND_INDEX(index)     ((index) & STACK_SEND_MASK)
 
 struct rte_mempool;
 struct rte_ring;
