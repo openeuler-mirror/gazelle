@@ -24,8 +24,6 @@
 
 #define MAX_PACKET_SZ       2048
 
-#define SOCK_READ_MAXLEN    0x200000
-
 #define RING_SIZE(x)         ((x) - 1)
 
 #define MBUF_SZ (MAX_PACKET_SZ + RTE_PKTMBUF_HEADROOM)

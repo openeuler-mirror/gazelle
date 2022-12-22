@@ -755,7 +755,7 @@ static void put_pbufs_into_recv_ring(struct lwip_sock *sock, struct pbuf *pbufs[
     last_pbuf->last = new_pbuf->last;
     gazelle_ring_lastover(last_pbuf);
 
-    if (last_pbuf->tot_len > SOCK_READ_MAXLEN) {
+    if (last_pbuf->tot_len > TCP_WND) {
         sock->read_wait = true;
     }
 }
@@ -1111,6 +1111,7 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
     conn->snd_buf = pcb->snd_buf;
     conn->lastack = pcb->lastack;
     conn->snd_nxt = pcb->snd_nxt;
+    conn->rcv_nxt = pcb->rcv_nxt;
 
     if (netconn != NULL && netconn->recvmbox != NULL) {
         conn->recv_cnt = rte_ring_count(netconn->recvmbox->ring);

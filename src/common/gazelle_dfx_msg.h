@@ -164,6 +164,7 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t snd_buf;
     uint32_t lastack;
     uint32_t snd_nxt;
+    uint32_t rcv_nxt;
     int32_t fd;
     uint32_t events;
     uint32_t epoll_events;
