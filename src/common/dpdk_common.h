@@ -25,8 +25,8 @@
 #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
 
 /* Layout:
- * | rte_mbuf | gazelle_prive | custom_free_function | tcp_seg | payload |
- * |   128    |    16         |        56            |   32    |
+ * | rte_mbuf | gazelle_prive | pbuf_custom | tcp_seg | payload |
+ * |   128    |    16         |     64      |   32    |
  * rte_prefetch0 in lwip project,tcp_out.c,tcp_output_segment use constants
  **/
 struct pbuf;
