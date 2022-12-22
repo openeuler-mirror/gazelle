@@ -1,0 +1,44 @@
+From d6428e24a2024f8583d0747abb832fe73393f82b Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Thu, 22 Dec 2022 23:15:38 +0800
+Subject: [PATCH 2/4] mbuf-private-data-size-align-cache-line
+
+---
+ src/common/dpdk_common.h      | 4 ++--
+ src/lstack/core/lstack_dpdk.c | 5 +++--
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index e4a447a..08ce4a1 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -25,8 +25,8 @@
+ #define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
+ 
+ /* Layout:
+- * | rte_mbuf | gazelle_prive | custom_free_function | tcp_seg | payload |
+- * |   128    |    16         |        56            |   32    |
++ * | rte_mbuf | gazelle_prive | pbuf_custom | tcp_seg | payload |
++ * |   128    |    16         |     64      |   32    |
+  * rte_prefetch0 in lwip project,tcp_out.c,tcp_output_segment use constants
+  **/
+ struct pbuf;
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 76ebe96..de87d48 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -144,8 +144,9 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
+     }
+ 
+     /* time stamp before pbuf_custom as priv_data */
+-    pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size,
+-        sizeof(struct tcp_seg) + sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE, MBUF_SZ, rte_socket_id());
++    uint16_t private_size = sizeof(struct tcp_seg) + sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE;
++    private_size = RTE_ALIGN(private_size, RTE_CACHE_LINE_SIZE);
++    pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size, private_size, MBUF_SZ, rte_socket_id());
+     if (pool == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
+     }
+-- 
+2.23.0
+
