@@ -1,0 +1,31 @@
+From 3564b6cc6405b75864c133f419cf8c3771810f22 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Thu, 22 Dec 2022 10:31:32 +0800
+Subject: [PATCH] fix lstack Makefile warning
+
+---
+ src/lstack/Makefile | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index b6cbd32..d56fd65 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -21,11 +21,12 @@ OPTIMIZATION = -O2 -g
+ RM = rm -f
+ LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
+ 
+-ifeq ($(CC),gcc)
++ifneq ($(CC),clang)
+ 	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
+-else ifeq($(CC),clang)
++else
+ 	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -fPIC
+ endif
++$(info $(CC):$(SEC_FLAGS))
+ 
+ INC = -I$(LSTACK_DIR)/include   \
+       -I$(LSTACK_DIR)/../common \
+-- 
+2.33.0
+
