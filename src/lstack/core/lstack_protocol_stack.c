@@ -783,7 +783,7 @@ int32_t stack_broadcast_close(int32_t fd)
             ret = -1;
         }
 
-        if (sock == NULL) {
+        if (sock == NULL || sock->conn == NULL) {
             break;
         }
         fd = sock->conn->socket;
