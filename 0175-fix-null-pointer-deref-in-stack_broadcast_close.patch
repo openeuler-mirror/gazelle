@@ -1,0 +1,25 @@
+From 09c62a8577c340c0254c42bc57c0d193704aa169 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Fri, 23 Dec 2022 11:50:05 +0800
+Subject: [PATCH] fix null pointer deref in stack_broadcast_close
+
+---
+ src/lstack/core/lstack_protocol_stack.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 7b53b91..9cc8946 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -783,7 +783,7 @@ int32_t stack_broadcast_close(int32_t fd)
+             ret = -1;
+         }
+ 
+-        if (sock == NULL) {
++        if (sock == NULL || sock->conn == NULL) {
+             break;
+         }
+         fd = sock->conn->socket;
+-- 
+2.33.0
+
