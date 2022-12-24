@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       40
+Release:       41
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -188,6 +188,8 @@ Patch9170:     0170-add-rcv-nxt-dfx-info.patch
 Patch9171:     0171-mbuf-private-data-size-align-cache-line.patch
 Patch9172:     0172-fix-send-pkts-bluk-err.patch
 Patch9173:     0173-free-recv-pkts-bluks.patch
+Patch9174:     0174-fix-lstack-Makefile-warning.patch
+Patch9175:     0175-fix-null-pointer-deref-in-stack_broadcast_close.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -228,6 +230,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri Dec 23 2022 kircher <majun65@huawei.com> - 1.0.1-41
+- fix null pointer deref in stack_broadcast_close
+- fix lstack Makefile warning
+
 * Thu Dec 22 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-40
 - add dfx rcv_nxt info
   mbuf private cache line align
