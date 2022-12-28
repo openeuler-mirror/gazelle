@@ -186,7 +186,7 @@ int32_t lstack_do_epoll_create(int32_t fd)
         GAZELLE_RETURN(EINVAL);
     }
     pthread_mutex_trylock(&wakeup->wait);
-    __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
+    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     init_list_node_null(&wakeup->poll_list);
@@ -473,6 +473,7 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
     }
 
     do {
+        __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
         lwip_num = epoll_lwip_event(wakeup, events, maxevents);
         wakeup->stat.app_events += lwip_num;
 
@@ -484,11 +485,11 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
         }
 
         if (lwip_num + kernel_num > 0) {
-            return lwip_num + kernel_num;
+            break;
         }
 
         if (timeout == 0) {
-            return 0;
+            break;
         }
 
         if (timeout < 0) {
@@ -498,13 +499,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
             ms_to_timespec(&epoll_time, timeout);
             ret = pthread_mutex_timedlock(&wakeup->wait, &epoll_time);
         }
-
-        if (ret == 0) {
-            __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
-        }
     } while (ret == 0);
 
-    return 0;
+    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+    return lwip_num + kernel_num;
 }
 
 static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
@@ -513,7 +511,7 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
         GAZELLE_RETURN(EINVAL);
     }
     pthread_mutex_trylock(&wakeup->wait);
-    __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
+    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
 
     for (uint32_t i = 0; i < PROTOCOL_STACK_MAX; i++) {
         init_list_node_null(&wakeup->wakeup_list[i]);
@@ -680,6 +678,7 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
     int32_t ret;
 
     do {
+        __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
         lwip_num = poll_lwip_event(fds, nfds);
 
         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
@@ -694,11 +693,11 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         }
 
         if (lwip_num + kernel_num > 0) {
-            return lwip_num + kernel_num;
+            break;
         }
 
         if (timeout == 0) {
-            return 0;
+            break;
         }
 
         if (timeout < 0) {
@@ -708,11 +707,8 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
             ms_to_timespec(&epoll_time, timeout);
             ret = pthread_mutex_timedlock(&wakeup->wait, &epoll_time);
         }
-
-        if (ret == 0) {
-            __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
-        }
     } while (ret == 0);
 
-    return 0;
+    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+    return lwip_num + kernel_num;
 }

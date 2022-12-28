@@ -598,6 +598,7 @@ void stack_send(struct rpc_msg *msg)
     }
 
     __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+    rte_mb();
 
     /* have remain data or replenish again add sendlist */
     if (sock->errevent == 0 && NETCONN_IS_DATAOUT(sock)) {
