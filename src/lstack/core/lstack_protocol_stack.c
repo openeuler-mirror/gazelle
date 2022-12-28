@@ -481,15 +481,15 @@ static void* gazelle_stack_thread(void *arg)
     for (;;) {
         poll_rpc_msg(stack, rpc_number);
 
+        send_stack_list(stack, send_connect_number);
+
+        stack_send_pkts(stack);
+
         stack_free_recv_pkts(stack, nic_read_number);
 
         gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
 
         read_recv_list(stack, read_connect_number);
-
-        send_stack_list(stack, send_connect_number);
-
-        stack_send_pkts(stack);
 
         if ((wakeup_tick & 0xf) == 0) {
             wakeup_kernel_event(stack);
