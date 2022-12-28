@@ -21,22 +21,27 @@
 
 #define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
 
-/* time_stamp time_stamp_vaid_check . align 8 */
-#define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
-
 /* Layout:
- * | rte_mbuf | gazelle_prive | pbuf_custom | tcp_seg | payload |
- * |   128    |    16         |     64      |   32    |
+ * | rte_mbuf | pbuf_custom| tcp_seg | gazelle_prive  | payload |
+ * |   128    |     64     |   32    |       16       |
  * rte_prefetch0 in lwip project,tcp_out.c,tcp_output_segment use constants
+ * cacheline is 64, make sure pbuf_custom in same cacheline
  **/
 struct pbuf;
-static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
+#define LATENCY_TIMESTAMP_SIZE  (sizeof(uint64_t) * 2)
+#define MBUF_PRIVATE_SIZE       128
+#define LATENCY_OFFSET          96
+static __rte_always_inline uint64_t *mbuf_to_private(struct rte_mbuf *mbuf)
 {
-    return ((struct rte_mbuf *)(void *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
+    return (uint64_t *)((uint8_t *)(mbuf) - sizeof(struct rte_mbuf) - LATENCY_OFFSET);
 }
-static inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
+static __rte_always_inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
 {
-    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf) + GAZELLE_MBUFF_PRIV_SIZE));
+    return ((struct rte_mbuf *)(void *)((uint8_t *)(p) - sizeof(struct rte_mbuf)));
+}
+static __rte_always_inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
+{
+    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf)));
 }
 
 /* NOTE!!! magic code, even the order.
@@ -62,15 +67,15 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf 
     rte_memcpy(dst_data, src_data, data_len);
 
     // copy private date.
-    dst_data = (uint8_t *)PTR_TO_PRIVATE(dst);
-    src_data = (uint8_t *)PTR_TO_PRIVATE(src);
-    rte_memcpy(dst_data, src_data, GAZELLE_MBUFF_PRIV_SIZE);
+    dst_data = (uint8_t *)mbuf_to_private(dst);
+    src_data = (uint8_t *)mbuf_to_private(src);
+    rte_memcpy(dst_data, src_data, LATENCY_TIMESTAMP_SIZE);
 }
 
 static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)
 {
     for (uint32_t i = 0; i < rx_count; i++) {
-        uint64_t *priv = (uint64_t *)PTR_TO_PRIVATE(buf[i]);
+        uint64_t *priv = mbuf_to_private(buf[i]);
         *priv = time_stamp; // time stamp
         *(priv + 1) = ~(*priv); // just for later vaid check
     }

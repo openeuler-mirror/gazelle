@@ -144,8 +144,7 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
     }
 
     /* time stamp before pbuf_custom as priv_data */
-    uint16_t private_size = sizeof(struct tcp_seg) + sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE;
-    private_size = RTE_ALIGN(private_size, RTE_CACHE_LINE_SIZE);
+    uint16_t private_size = RTE_ALIGN(MBUF_PRIVATE_SIZE, RTE_CACHE_LINE_SIZE);
     pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size, private_size, MBUF_SZ, rte_socket_id());
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
