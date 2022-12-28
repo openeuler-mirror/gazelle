@@ -50,7 +50,7 @@ uint64_t get_current_time(void)
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
     enum GAZELLE_LATENCY_TYPE type)
 {
-    const uint64_t *priv = (uint64_t *)((uint8_t *)(pbuf) - GAZELLE_MBUFF_PRIV_SIZE);
+    const uint64_t *priv = (uint64_t *)((uint8_t *)(pbuf) - LATENCY_OFFSET);
     if (*priv != ~(*(priv + 1)) || *priv < stack_latency->start_time) {
         return;
     }
