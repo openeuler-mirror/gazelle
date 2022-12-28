@@ -56,6 +56,7 @@ static int32_t parse_gateway_addr(void);
 static int32_t parse_kni_switch(void);
 static int32_t parse_listen_shadow(void);
 static int32_t parse_app_bind_numa(void);
+static int32_t parse_main_thread_affinity(void);
 static int32_t parse_unix_prefix(void);
 static int32_t parse_rxtx_pool_size(void);
 static int32_t parse_send_connect_number(void);
@@ -81,6 +82,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
     { "app_bind_numa",  parse_app_bind_numa },
+    { "main_thread_affinity",  parse_main_thread_affinity },
     { "unix_prefix",    parse_unix_prefix },
     { "mbuf_pool_size", parse_rxtx_pool_size },
     { "send_connect_number", parse_send_connect_number },
@@ -843,6 +845,22 @@ static int32_t parse_app_bind_numa(void)
 
     int32_t val = config_setting_get_int(arg);
     g_config_params.app_bind_numa = (val == 0) ? false : true;
+
+    return 0;
+}
+
+static int32_t parse_main_thread_affinity(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "main_thread_affinity");
+    if (arg == NULL) {
+        g_config_params.main_thread_affinity = false;
+        return 0;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    g_config_params.main_thread_affinity = (val == 0) ? false : true;
 
     return 0;
 }

@@ -223,18 +223,18 @@ static void create_control_thread(void)
 
     pthread_t tid;
     if (use_ltran()) {
+        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
         dpdk_skip_nic_init();
         if (control_init_client(false) != 0) {
             LSTACK_EXIT(1, "control_init_client failed\n");
         }
-        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
     } else {
+        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
         ret = dpdk_eal_init();
         if (ret < 0) {
             LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
         }
 
-        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
     }
     if (ret != 0) {
         LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
@@ -295,9 +295,11 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     /*
     * save initial affinity */
-    if (thread_affinity_default() < 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
-        LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
+    if (!get_global_cfg_params()->main_thread_affinity) {
+        if (thread_affinity_default() < 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
+            LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
+        }
     }
 
     gazelle_signal_init();
@@ -309,8 +311,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     /*
     * cancel the core binding from DPDK initialization */
-    if (thread_affinity_default() < 0) {
-        LSTACK_EXIT(1, "pthread_setaffinity_np failed\n");
+    if (!get_global_cfg_params()->main_thread_affinity) {
+        if (thread_affinity_default() < 0) {
+            LSTACK_EXIT(1, "pthread_setaffinity_np failed\n");
+        }
     }
 
     lstack_log_level_init();
