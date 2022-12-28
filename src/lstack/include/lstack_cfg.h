@@ -83,6 +83,7 @@ struct cfg_params {
     bool kni_switch;
     bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
     bool app_bind_numa;
+    bool main_thread_affinity;
     int dpdk_argc;
     char **dpdk_argv;
     struct secondary_attach_arg sec_attach_arg;

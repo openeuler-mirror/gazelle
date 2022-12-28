@@ -255,9 +255,7 @@ static void* gazelle_kernelevent_thread(void *arg)
     uint16_t queue_id = *(uint16_t *)arg;
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
 
-    if (get_global_cfg_params()->app_bind_numa) {
-        bind_to_stack_numa(stack);
-    }
+    bind_to_stack_numa(stack);
 
     LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", queue_id);
 
