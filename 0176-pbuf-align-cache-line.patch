@@ -1,0 +1,141 @@
+From 2f907cc7c537ed857c23fb183bb5d5751c1e4d3a Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Wed, 28 Dec 2022 16:50:48 +0800
+Subject: [PATCH 1/3] pbuf-align-cache-line
+
+---
+ src/common/dpdk_common.h            | 31 +++++++++++++++++------------
+ src/common/gazelle_opt.h            |  2 --
+ src/lstack/core/lstack_dpdk.c       |  3 +--
+ src/lstack/core/lstack_stack_stat.c |  2 +-
+ src/ltran/ltran_ethdev.c            |  6 ++++--
+ 5 files changed, 24 insertions(+), 20 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 08ce4a1..49e03a7 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -21,22 +21,27 @@
+ 
+ #define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
+ 
+-/* time_stamp time_stamp_vaid_check . align 8 */
+-#define PTR_TO_PRIVATE(mbuf)    RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf))
+-
+ /* Layout:
+- * | rte_mbuf | gazelle_prive | pbuf_custom | tcp_seg | payload |
+- * |   128    |    16         |     64      |   32    |
++ * | rte_mbuf | pbuf_custom| tcp_seg | gazelle_prive  | payload |
++ * |   128    |     64     |   32    |       16       |
+  * rte_prefetch0 in lwip project,tcp_out.c,tcp_output_segment use constants
++ * cacheline is 64, make sure pbuf_custom in same cacheline
+  **/
+ struct pbuf;
+-static inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
++#define LATENCY_TIMESTAMP_SIZE  (sizeof(uint64_t) * 2)
++#define MBUF_PRIVATE_SIZE       128
++#define LATENCY_OFFSET          96
++static __rte_always_inline uint64_t *mbuf_to_private(struct rte_mbuf *mbuf)
++{
++    return (uint64_t *)((uint8_t *)(mbuf) - sizeof(struct rte_mbuf) - LATENCY_OFFSET);
++}
++static __rte_always_inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
+ {
+-    return ((struct rte_mbuf *)(void *)((uint8_t *)(p) - sizeof(struct rte_mbuf) - GAZELLE_MBUFF_PRIV_SIZE));
++    return ((struct rte_mbuf *)(void *)((uint8_t *)(p) - sizeof(struct rte_mbuf)));
+ }
+-static inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
++static __rte_always_inline struct pbuf_custom *mbuf_to_pbuf(struct rte_mbuf *m)
+ {
+-    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf) + GAZELLE_MBUFF_PRIV_SIZE));
++    return ((struct pbuf_custom *)((uint8_t *)(m) + sizeof(struct rte_mbuf)));
+ }
+ 
+ /* NOTE!!! magic code, even the order.
+@@ -62,15 +67,15 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf
+     rte_memcpy(dst_data, src_data, data_len);
+ 
+     // copy private date.
+-    dst_data = (uint8_t *)PTR_TO_PRIVATE(dst);
+-    src_data = (uint8_t *)PTR_TO_PRIVATE(src);
+-    rte_memcpy(dst_data, src_data, GAZELLE_MBUFF_PRIV_SIZE);
++    dst_data = (uint8_t *)mbuf_to_private(dst);
++    src_data = (uint8_t *)mbuf_to_private(src);
++    rte_memcpy(dst_data, src_data, LATENCY_TIMESTAMP_SIZE);
+ }
+ 
+ static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)
+ {
+     for (uint32_t i = 0; i < rx_count; i++) {
+-        uint64_t *priv = (uint64_t *)PTR_TO_PRIVATE(buf[i]);
++        uint64_t *priv = mbuf_to_private(buf[i]);
+         *priv = time_stamp; // time stamp
+         *(priv + 1) = ~(*priv); // just for later vaid check
+     }
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index 94f274d..012997c 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -28,8 +28,6 @@
+ 
+ #define ETHER_ADDR_LEN              6
+ 
+-#define GAZELLE_MBUFF_PRIV_SIZE     (sizeof(uint64_t) * 2)
+-
+ #define DEFAULT_RING_SIZE           (512)
+ #define DEFAULT_RING_MASK           (511)
+ #define DEFAULT_BACKUP_RING_SIZE_FACTOR   (16)
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index de87d48..560162f 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -144,8 +144,7 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
+     }
+ 
+     /* time stamp before pbuf_custom as priv_data */
+-    uint16_t private_size = sizeof(struct tcp_seg) + sizeof(struct pbuf_custom) + GAZELLE_MBUFF_PRIV_SIZE;
+-    private_size = RTE_ALIGN(private_size, RTE_CACHE_LINE_SIZE);
++    uint16_t private_size = RTE_ALIGN(MBUF_PRIVATE_SIZE, RTE_CACHE_LINE_SIZE);
+     pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size, private_size, MBUF_SZ, rte_socket_id());
+     if (pool == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index 59c8e66..7243e82 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -50,7 +50,7 @@ uint64_t get_current_time(void)
+ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+     enum GAZELLE_LATENCY_TYPE type)
+ {
+-    const uint64_t *priv = (uint64_t *)((uint8_t *)(pbuf) - GAZELLE_MBUFF_PRIV_SIZE);
++    const uint64_t *priv = (uint64_t *)((uint8_t *)(pbuf) - LATENCY_OFFSET);
+     if (*priv != ~(*(priv + 1)) || *priv < stack_latency->start_time) {
+         return;
+     }
+diff --git a/src/ltran/ltran_ethdev.c b/src/ltran/ltran_ethdev.c
+index 62a662d..e0c824a 100644
+--- a/src/ltran/ltran_ethdev.c
++++ b/src/ltran/ltran_ethdev.c
+@@ -147,7 +147,8 @@ static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index)
+         return NULL;
+     }
+ 
+-    return rte_pktmbuf_pool_create(mbuf_pool_name, num_mbufs, GAZELLE_MBUFS_CACHE_SIZE, GAZELLE_MBUFF_PRIV_SIZE,
++    uint16_t private_size = RTE_ALIGN(MBUF_PRIVATE_SIZE, RTE_CACHE_LINE_SIZE);
++    return rte_pktmbuf_pool_create(mbuf_pool_name, num_mbufs, GAZELLE_MBUFS_CACHE_SIZE, private_size,
+                                    RTE_MBUF_DEFAULT_BUF_SIZE, (int32_t)rte_socket_id());
+ }
+ 
+@@ -165,7 +166,8 @@ static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index)
+         return NULL;
+     }
+ 
+-    return rte_pktmbuf_pool_create(mbuf_pool_name, num_mbufs, GAZELLE_MBUFS_CACHE_SIZE, GAZELLE_MBUFF_PRIV_SIZE,
++    uint16_t private_size = RTE_ALIGN(MBUF_PRIVATE_SIZE, RTE_CACHE_LINE_SIZE);
++    return rte_pktmbuf_pool_create(mbuf_pool_name, num_mbufs, GAZELLE_MBUFS_CACHE_SIZE, private_size,
+                                    RTE_MBUF_DEFAULT_BUF_SIZE, (int32_t)rte_socket_id());
+ }
+ 
+-- 
+2.23.0
+
