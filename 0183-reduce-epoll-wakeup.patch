@@ -1,0 +1,147 @@
+From 99f46a3e20d44ec8736becee896ed519971aab52 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Wed, 28 Dec 2022 18:26:14 +0800
+Subject: [PATCH 3/3] reduce epoll wakeup
+
+---
+ src/lstack/api/lstack_epoll.c           | 28 +++++++++++--------------
+ src/lstack/core/lstack_lwip.c           |  1 +
+ src/lstack/core/lstack_protocol_stack.c |  8 +++----
+ 3 files changed, 17 insertions(+), 20 deletions(-)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 605984f..7860163 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -186,7 +186,7 @@ int32_t lstack_do_epoll_create(int32_t fd)
+         GAZELLE_RETURN(EINVAL);
+     }
+     pthread_mutex_trylock(&wakeup->wait);
+-    __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
++    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+ 
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+     init_list_node_null(&wakeup->poll_list);
+@@ -473,6 +473,7 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
+     }
+ 
+     do {
++        __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
+         lwip_num = epoll_lwip_event(wakeup, events, maxevents);
+         wakeup->stat.app_events += lwip_num;
+ 
+@@ -484,11 +485,11 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
+         }
+ 
+         if (lwip_num + kernel_num > 0) {
+-            return lwip_num + kernel_num;
++            break;
+         }
+ 
+         if (timeout == 0) {
+-            return 0;
++            break;
+         }
+ 
+         if (timeout < 0) {
+@@ -498,13 +499,10 @@ int32_t lstack_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
+             ms_to_timespec(&epoll_time, timeout);
+             ret = pthread_mutex_timedlock(&wakeup->wait, &epoll_time);
+         }
+-
+-        if (ret == 0) {
+-            __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
+-        }
+     } while (ret == 0);
+ 
+-    return 0;
++    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
++    return lwip_num + kernel_num;
+ }
+ 
+ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
+@@ -513,7 +511,7 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
+         GAZELLE_RETURN(EINVAL);
+     }
+     pthread_mutex_trylock(&wakeup->wait);
+-    __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
++    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+ 
+     for (uint32_t i = 0; i < PROTOCOL_STACK_MAX; i++) {
+         init_list_node_null(&wakeup->wakeup_list[i]);
+@@ -680,6 +678,7 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+     int32_t ret;
+ 
+     do {
++        __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
+         lwip_num = poll_lwip_event(fds, nfds);
+ 
+         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
+@@ -694,11 +693,11 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+         }
+ 
+         if (lwip_num + kernel_num > 0) {
+-            return lwip_num + kernel_num;
++            break;
+         }
+ 
+         if (timeout == 0) {
+-            return 0;
++            break;
+         }
+ 
+         if (timeout < 0) {
+@@ -708,11 +707,8 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+             ms_to_timespec(&epoll_time, timeout);
+             ret = pthread_mutex_timedlock(&wakeup->wait, &epoll_time);
+         }
+-
+-        if (ret == 0) {
+-            __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
+-        }
+     } while (ret == 0);
+ 
+-    return 0;
++    __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
++    return lwip_num + kernel_num;
+ }
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 31f87cf..01c7280 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -598,6 +598,7 @@ void stack_send(struct rpc_msg *msg)
+     }
+ 
+     __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
++    rte_mb();
+ 
+     /* have remain data or replenish again add sendlist */
+     if (sock->errevent == 0 && NETCONN_IS_DATAOUT(sock)) {
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index ad9d026..93204d1 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -481,16 +481,16 @@ static void* gazelle_stack_thread(void *arg)
+     for (;;) {
+         poll_rpc_msg(stack, rpc_number);
+ 
++        send_stack_list(stack, send_connect_number);
++
++        stack_send_pkts(stack);
++
+         stack_free_recv_pkts(stack, nic_read_number);
+ 
+         gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
+ 
+         read_recv_list(stack, read_connect_number);
+ 
+-        send_stack_list(stack, send_connect_number);
+-
+-        stack_send_pkts(stack);
+-
+         if ((wakeup_tick & 0xf) == 0) {
+             wakeup_kernel_event(stack);
+             wakeup_stack_epoll(stack, wakeup_thread_enable);
+-- 
+2.23.0
+
