@@ -1,0 +1,155 @@
+From c6d8e28b70d6ac86c1f8df6b94c179be4f8109f0 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Wed, 28 Dec 2022 17:05:57 +0800
+Subject: [PATCH 2/3] support-set-main-thread-affinity
+
+---
+ src/lstack/core/lstack_cfg.c            | 18 ++++++++++++++++++
+ src/lstack/core/lstack_init.c           | 18 +++++++++++-------
+ src/lstack/core/lstack_protocol_stack.c |  4 +---
+ src/lstack/include/lstack_cfg.h         |  1 +
+ src/lstack/lstack.conf                  |  5 +++++
+ 5 files changed, 36 insertions(+), 10 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 55d16f9..4912fdd 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -56,6 +56,7 @@ static int32_t parse_gateway_addr(void);
+ static int32_t parse_kni_switch(void);
+ static int32_t parse_listen_shadow(void);
+ static int32_t parse_app_bind_numa(void);
++static int32_t parse_main_thread_affinity(void);
+ static int32_t parse_unix_prefix(void);
+ static int32_t parse_rxtx_pool_size(void);
+ static int32_t parse_send_connect_number(void);
+@@ -81,6 +82,7 @@ static struct config_vector_t g_config_tbl[] = {
+     { "kni_switch",     parse_kni_switch },
+     { "listen_shadow",  parse_listen_shadow },
+     { "app_bind_numa",  parse_app_bind_numa },
++    { "main_thread_affinity",  parse_main_thread_affinity },
+     { "unix_prefix",    parse_unix_prefix },
+     { "mbuf_pool_size", parse_rxtx_pool_size },
+     { "send_connect_number", parse_send_connect_number },
+@@ -847,6 +849,22 @@ static int32_t parse_app_bind_numa(void)
+     return 0;
+ }
+ 
++static int32_t parse_main_thread_affinity(void)
++{
++    const config_setting_t *arg = NULL;
++
++    arg = config_lookup(&g_config, "main_thread_affinity");
++    if (arg == NULL) {
++        g_config_params.main_thread_affinity = false;
++        return 0;
++    }
++
++    int32_t val = config_setting_get_int(arg);
++    g_config_params.main_thread_affinity = (val == 0) ? false : true;
++
++    return 0;
++}
++
+ static int32_t parse_kni_switch(void)
+ {
+     const config_setting_t *arg = NULL;
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index f647b8e..6347ab1 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -223,18 +223,18 @@ static void create_control_thread(void)
+ 
+     pthread_t tid;
+     if (use_ltran()) {
++        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
+         dpdk_skip_nic_init();
+         if (control_init_client(false) != 0) {
+             LSTACK_EXIT(1, "control_init_client failed\n");
+         }
+-        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
+     } else {
++        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
+         ret = dpdk_eal_init();
+         if (ret < 0) {
+             LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
+         }
+ 
+-        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
+     }
+     if (ret != 0) {
+         LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
+@@ -295,9 +295,11 @@ __attribute__((constructor)) void gazelle_network_init(void)
+ 
+     /*
+     * save initial affinity */
+-    if (thread_affinity_default() < 0) {
+-        LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
+-        LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
++    if (!get_global_cfg_params()->main_thread_affinity) {
++        if (thread_affinity_default() < 0) {
++            LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
++            LSTACK_EXIT(1, "pthread_getaffinity_np failed\n");
++        }
+     }
+ 
+     gazelle_signal_init();
+@@ -309,8 +311,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
+ 
+     /*
+     * cancel the core binding from DPDK initialization */
+-    if (thread_affinity_default() < 0) {
+-        LSTACK_EXIT(1, "pthread_setaffinity_np failed\n");
++    if (!get_global_cfg_params()->main_thread_affinity) {
++        if (thread_affinity_default() < 0) {
++            LSTACK_EXIT(1, "pthread_setaffinity_np failed\n");
++        }
+     }
+ 
+     lstack_log_level_init();
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 9cc8946..ad9d026 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -255,9 +255,7 @@ static void* gazelle_kernelevent_thread(void *arg)
+     uint16_t queue_id = *(uint16_t *)arg;
+     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+ 
+-    if (get_global_cfg_params()->app_bind_numa) {
+-        bind_to_stack_numa(stack);
+-    }
++    bind_to_stack_numa(stack);
+ 
+     LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", queue_id);
+ 
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index e33a484..bdaa083 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -83,6 +83,7 @@ struct cfg_params {
+     bool kni_switch;
+     bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
+     bool app_bind_numa;
++    bool main_thread_affinity;
+     int dpdk_argc;
+     char **dpdk_argv;
+     struct secondary_attach_arg sec_attach_arg;
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index 47140ad..c27db22 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -34,6 +34,11 @@ num_cpus="2"
+ #each cpu core start a wakeup thread.
+ #num_wakeup="3"
+ 
++#app worker thread bind to numa in epoll/poll.
++app_bind_numa=1
++#app main thread affinity set by dpdk.
++main_thread_affinity=0
++
+ host_addr="192.168.1.10"
+ mask_addr="255.255.255.0"
+ gateway_addr="192.168.1.1"
+-- 
+2.23.0
+
