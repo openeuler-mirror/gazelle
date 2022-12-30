@@ -198,7 +198,7 @@ static __rte_always_inline uint32_t gazelle_ring_read(struct rte_ring *r, void *
 
     __rte_ring_dequeue_elems(r, prod, obj_table, sizeof(void *), n);
 
-    __atomic_store_n(&r->prod.head, prod + n, __ATOMIC_RELEASE);
+    r->prod.head = prod + n;
 
     return n;
 }

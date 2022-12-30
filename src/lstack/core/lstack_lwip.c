@@ -83,11 +83,6 @@ static void reset_sock_data(struct lwip_sock *sock)
         sock->send_lastdata = NULL;
     }
 
-    if (sock->lwip_lastdata) {
-        free_list_pbuf(sock->lwip_lastdata);
-        sock->lwip_lastdata = NULL;
-    }
-
     if (sock->send_pre_del) {
         pbuf_free(sock->send_pre_del);
         sock->send_pre_del = NULL;
@@ -100,7 +95,6 @@ static void reset_sock_data(struct lwip_sock *sock)
     sock->events = 0;
     sock->in_send = 0;
     sock->remain_len = 0;
-    sock->read_wait = false;
 
     if (sock->recv_lastdata) {
         pbuf_free(sock->recv_lastdata);
@@ -684,89 +678,6 @@ static inline struct pbuf *pbuf_last(struct pbuf *pbuf)
     return pbuf;
 }
 
-static struct pbuf *merge_pbufs(struct pbuf *pbufs[], uint32_t data_count, uint32_t data_len)
-{
-    struct pbuf *pre_last = (pbufs[0]->last) ? pbufs[0]->last : pbuf_last(pbufs[0]);
-
-    if (data_count <= 1) {
-        pbufs[0]->last = pre_last;
-        return pbufs[0];
-    }
-
-    for (uint32_t i = 1; i < data_count; i++) {
-        pre_last->next = pbufs[i];
-        pre_last = pbuf_last(pbufs[i]);
-    }
-
-    pbufs[0]->tot_len = data_len;
-    pbufs[0]->last = pre_last;
-
-    return pbufs[0];
-}
-
-static int32_t get_lwip_pbufs(struct lwip_sock *sock, struct pbuf *pbufs[], uint32_t *data_count, u8_t apiflags)
-{
-    uint32_t data_len = 0;
-
-    for (uint32_t i = 0; i < *data_count; i++) {
-        err_t err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
-        if (err != ERR_OK) {
-            *data_count = i;
-            if (data_len > 0) {
-                /* already received data, return that (this trusts in getting the same error from
-                   netconn layer again next time netconn_recv is called) */
-                break;
-            }
-            return (err == ERR_CLSD) ? -1 : 0;
-        }
-
-        pbufs[i]->last = NULL;
-        pbufs[i]->in_write = 0;
-        data_len += pbufs[i]->tot_len;
-
-        /* once we have some data to return, only add more if we don't need to wait */
-        apiflags |= NETCONN_DONTBLOCK | NETCONN_NOFIN;
-    }
-
-    return (int32_t)data_len;
-}
-
-static void put_pbufs_into_recv_ring(struct lwip_sock *sock, struct pbuf *pbufs[],
-    uint32_t data_count, uint32_t data_len)
-{
-    uint32_t free_count = gazelle_ring_free_count(sock->recv_ring);
-
-    if (data_count <= free_count) {
-        (void)gazelle_ring_sp_enqueue(sock->recv_ring, (void **)pbufs, data_count);
-        return;
-    }
-
-    struct pbuf *new_pbuf = merge_pbufs(pbufs, data_count, data_len);
-
-    if (free_count) {
-        (void)gazelle_ring_sp_enqueue(sock->recv_ring, (void **)&new_pbuf, 1);
-        return;
-    }
-
-    struct pbuf *last_pbuf = gazelle_ring_enqueuelast(sock->recv_ring);
-    if (last_pbuf == NULL) {
-        sock->lwip_lastdata = new_pbuf;
-        return;
-    }
-
-    if (last_pbuf->last == NULL) {
-        last_pbuf->last = pbuf_last(last_pbuf);
-    }
-    last_pbuf->last->next = new_pbuf;
-    last_pbuf->tot_len += new_pbuf->tot_len;
-    last_pbuf->last = new_pbuf->last;
-    gazelle_ring_lastover(last_pbuf);
-
-    if (last_pbuf->tot_len > TCP_WND) {
-        sock->read_wait = true;
-    }
-}
-
 ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
 {
     if (sock->conn->recvmbox == NULL) {
@@ -775,44 +686,52 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
 
     free_recv_ring_readover(sock->recv_ring);
 
-    if (sock->read_wait) {
+    uint32_t free_count = gazelle_ring_free_count(sock->recv_ring);
+    if (free_count == 0) {
         GAZELLE_RETURN(EAGAIN);
     }
 
-    struct pbuf *pbufs[SOCK_RECV_RING_SIZE];
     uint32_t data_count = rte_ring_count(sock->conn->recvmbox->ring);
-    int32_t data_len = get_lwip_pbufs(sock, pbufs, &data_count, apiflags);
-    if (unlikely(data_len < 0)) {
-        /* ERR_CLSD */
-        return 0;
-    } else if (unlikely(data_len == 0) && !sock->lwip_lastdata) {
-        GAZELLE_RETURN(EAGAIN);
-    }
+    uint32_t read_num = LWIP_MIN(free_count, data_count);
+    struct pbuf *pbufs[SOCK_RECV_RING_SIZE];
+    uint32_t read_count = 0;
+    ssize_t recv_len = 0;
 
-    if (get_protocol_stack_group()->latency_start) {
-        for (uint32_t i = 0; i < data_count; i++) {
-            calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_LWIP);
+    for (uint32_t i = 0; i < read_num; i++) {
+        err_t err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
+        if (err != ERR_OK) {
+            if (recv_len > 0) {
+                /* already received data, return that (this trusts in getting the same error from
+                   netconn layer again next time netconn_recv is called) */
+                break;
+            }
+            return (err == ERR_CLSD) ? 0 : -1;
         }
+
+        recv_len += pbufs[i]->tot_len;
+        read_count++;
+
+        /* once we have some data to return, only add more if we don't need to wait */
+        apiflags |= NETCONN_DONTBLOCK | NETCONN_NOFIN;
     }
 
-    if (data_count) {
-        uint32_t last_len = 0;
-        if (sock->lwip_lastdata) {
-            last_len = sock->lwip_lastdata->tot_len;
-            sock->lwip_lastdata->last->next = pbufs[0];
-            sock->lwip_lastdata->tot_len += pbufs[0]->tot_len;
-            sock->lwip_lastdata->last = pbuf_last(pbufs[0]);
-            pbufs[0] = sock->lwip_lastdata;
-            sock->lwip_lastdata = NULL;
-        }
-        put_pbufs_into_recv_ring(sock, pbufs, data_count, data_len + last_len);
-    } else {
-        put_pbufs_into_recv_ring(sock, &sock->lwip_lastdata, 1, sock->lwip_lastdata->tot_len);
-        sock->lwip_lastdata = NULL;
+    uint32_t enqueue_num = gazelle_ring_sp_enqueue(sock->recv_ring, (void **)pbufs, read_count);
+    for (uint32_t i = enqueue_num; i < read_count; i++) {
+        /* update receive window */
+        tcp_recved(sock->conn->pcb.tcp, pbufs[i]->tot_len);
+        pbuf_free(pbufs[i]);
+        sock->stack->stats.read_lwip_drop++;
     }
-    sock->stack->stats.read_lwip_cnt += data_count;
 
-    return data_len;
+    for (uint32_t i = 0; get_protocol_stack_group()->latency_start && i < read_count; i++) {
+        calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_LWIP);
+    }
+
+    sock->stack->stats.read_lwip_cnt += read_count;
+    if (recv_len == 0) {
+         GAZELLE_RETURN(EAGAIN);
+    }
+    return recv_len;
 }
 
 static int32_t check_msg_vaild(const struct msghdr *message)
@@ -978,10 +897,6 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
         return 0;
     }
 
-    if (recv_left > UINT16_MAX) {
-        recv_left = UINT16_MAX;
-    }
-
     while (recv_left > 0) {
         if (sock->recv_lastdata) {
             pbuf = sock->recv_lastdata;
@@ -990,10 +905,6 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
             if (gazelle_ring_read(sock->recv_ring, (void **)&pbuf, 1) != 1) {
                 break;
             }
-        }
-        if (__atomic_load_n(&pbuf->in_write, __ATOMIC_ACQUIRE)) {
-            sock->recv_lastdata = pbuf;
-            break;
         }
 
         copy_len = (recv_left > pbuf->tot_len) ? pbuf->tot_len : recv_left;
@@ -1017,10 +928,6 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
             }
             gazelle_ring_read_over(sock->recv_ring);
         }
-    }
-
-    if (sock->read_wait) {
-        sock->read_wait = false;
     }
 
     /* rte_ring_count reduce lock */
