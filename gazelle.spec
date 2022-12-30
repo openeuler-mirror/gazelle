@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       44
+Release:       45
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -198,6 +198,7 @@ Patch9180:     0180-fix-null-pointer-deref-in-stack_broadcast_close.patch
 Patch9181:     0181-pbuf-align-cache-line.patch
 Patch9182:     0182-support-set-main-thread-affinity.patch
 Patch9183:     0183-reduce-epoll-wakeup.patch
+Patch9184:     0184-revert-expand-recv-data-buff.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -238,7 +239,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
-* Wed Dec 28 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-42
+* Fri Dec 30 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-45
+- revert expand recv data buff
+
+* Wed Dec 28 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-44
 - pbuf cacheline align
   support main thread affinity
   reduce epoll wakeup
