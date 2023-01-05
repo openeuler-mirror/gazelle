@@ -198,6 +198,7 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
     if (ret == -1) {
         if (!probe) {
             printf("connect ltran failed. errno: %d ret=%d\n", errno, ret);
+            printf("You may need to use the -u parameter to specify the UNIX_PREFIX that matches the configuration.\n");
         }
         close(fd);
         return GAZELLE_ERR;
@@ -1220,6 +1221,7 @@ static int32_t check_cmd_support(struct gazelle_stat_msg_request *req_msg, int32
             }
             /* keep output consistency */
             printf("connect ltran failed. errno: 111 ret=-1\n");
+            printf("You may need to use the -u parameter to specify the UNIX_PREFIX that matches the configuration.\n");
             return -1;
     }
 }
