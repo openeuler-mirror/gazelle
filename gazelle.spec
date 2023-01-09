@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       43
+Release:       44
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -194,6 +194,7 @@ Patch9176:     0176-pbuf-align-cache-line.patch
 Patch9177:     0177-support-set-main-thread-affinity.patch
 Patch9178:     0178-reduce-epoll-wakeup.patch
 Patch9179:     0179-revert-expand-recv-data-buff.patch
+Patch9180:     0180-add-the-suggestion-of-using-the-u-parameter-when-the.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -234,6 +235,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri Jan 6 2023 kircher <majun65@huawei.com> - 1.0.1-44
+- add the suggestion of using the -u parameter when the connection to unix socket fails
+
 * Fri Dec 30 2022 wuchangsheng <wuchangsheng2@huawei.com> - 1.0.1-43
 - revert expand recv data buff
 
