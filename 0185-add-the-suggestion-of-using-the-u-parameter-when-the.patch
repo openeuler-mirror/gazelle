@@ -1,0 +1,33 @@
+From 224d243532c2ebcfd6a03df6d4e90208c9d1b3de Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Thu, 5 Jan 2023 19:39:39 +0800
+Subject: [PATCH] add the suggestion of using the -u parameter when the
+ connection to unix socket fails
+
+---
+ src/ltran/ltran_dfx.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 53d1b47..1c9d4fa 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -198,6 +198,7 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
+     if (ret == -1) {
+         if (!probe) {
+             printf("connect ltran failed. errno: %d ret=%d\n", errno, ret);
++            printf("You may need to use the -u parameter to specify the UNIX_PREFIX that matches the configuration.\n");
+         }
+         close(fd);
+         return GAZELLE_ERR;
+@@ -1220,6 +1221,7 @@ static int32_t check_cmd_support(struct gazelle_stat_msg_request *req_msg, int32
+             }
+             /* keep output consistency */
+             printf("connect ltran failed. errno: 111 ret=-1\n");
++            printf("You may need to use the -u parameter to specify the UNIX_PREFIX that matches the configuration.\n");
+             return -1;
+     }
+ }
+-- 
+2.33.0
+
