@@ -223,11 +223,14 @@ static void create_control_thread(void)
 
     pthread_t tid;
     if (use_ltran()) {
-        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
+	/* 
+	 * The function call here should be in strict order. 
+	 */
         dpdk_skip_nic_init();
         if (control_init_client(false) != 0) {
             LSTACK_EXIT(1, "control_init_client failed\n");
         }
+        ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
     } else {
         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
         ret = dpdk_eal_init();
