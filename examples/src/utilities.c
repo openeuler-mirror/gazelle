@@ -124,5 +124,19 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
 // set the socket to unblock
 int32_t set_socket_unblock(int32_t socket_fd)
 {
-    return fcntl(socket_fd, F_SETFL, fcntl(socket_fd, F_GETFD, 0) | O_NONBLOCK);
+    int flags = -1;
+    
+    flags = fcntl(socket_fd, F_GETFL, 0);
+    if (flags == -1) {
+        printf("get socket flag error, fd:[%d], errno: %d\n", socket_fd, errno);
+	return -1;
+    }
+
+    flags |= O_NONBLOCK;
+    if (fcntl(socket_fd, F_SETFL, flags) == -1) {
+        printf("set socket flag error, fd:[%d], errno: %d\n", socket_fd, errno);
+	return -1;
+    }
+
+    return 0;
 }

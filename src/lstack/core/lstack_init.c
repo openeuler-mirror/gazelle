@@ -231,16 +231,18 @@ static void create_control_thread(void)
             LSTACK_EXIT(1, "control_init_client failed\n");
         }
         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
+        if (ret != 0) {
+            LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
+        }
     } else {
         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
+        if (ret != 0) {
+            LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
+        }
         ret = dpdk_eal_init();
         if (ret < 0) {
             LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
         }
-
-    }
-    if (ret != 0) {
-        LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
     }
 
     if (pthread_setname_np(tid, CONTROL_THREAD_NAME) != 0) {
