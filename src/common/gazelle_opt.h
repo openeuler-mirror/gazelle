@@ -45,8 +45,9 @@
 #define RTE_TEST_TX_DESC_DEFAULT    2048
 #define RTE_TEST_RX_DESC_DEFAULT    4096
 
-#define RXTX_NB_MBUF_DEFAULT        (128 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
-#define RXTX_NB_MBUF_MAX            (2560 * 2000)
+#define TCP_CONN_COUNT              1500
+#define MBUF_COUNT_PER_CONN         170
+#define RXTX_NB_MBUF_DEFAULT        (MBUF_COUNT_PER_CONN * TCP_CONN_COUNT) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
 #define STACK_THREAD_DEFAULT        4
 #define STACK_NIC_READ_DEFAULT      128
 
