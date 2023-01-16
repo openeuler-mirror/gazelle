@@ -1,0 +1,65 @@
+From 627773adfafefdf295e680691c3d5b99c6b52c8c Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Tue, 10 Jan 2023 20:35:11 +0800
+Subject: [PATCH] add ret check in pthread_create and fix example bug
+
+---
+ examples/src/utilities.c      | 16 +++++++++++++++-
+ src/lstack/core/lstack_init.c | 10 ++++++----
+ 2 files changed, 21 insertions(+), 5 deletions(-)
+
+diff --git a/examples/src/utilities.c b/examples/src/utilities.c
+index b6ed269..38a0d3e 100644
+--- a/examples/src/utilities.c
++++ b/examples/src/utilities.c
+@@ -124,5 +124,19 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
+ // set the socket to unblock
+ int32_t set_socket_unblock(int32_t socket_fd)
+ {
+-    return fcntl(socket_fd, F_SETFL, fcntl(socket_fd, F_GETFD, 0) | O_NONBLOCK);
++    int flags = -1;
++    
++    flags = fcntl(socket_fd, F_GETFL, 0);
++    if (flags == -1) {
++        printf("get socket flag error, fd:[%d], errno: %d\n", socket_fd, errno);
++	return -1;
++    }
++
++    flags |= O_NONBLOCK;
++    if (fcntl(socket_fd, F_SETFL, flags) == -1) {
++        printf("set socket flag error, fd:[%d], errno: %d\n", socket_fd, errno);
++	return -1;
++    }
++
++    return 0;
+ }
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index 477c5e2..6309d1d 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -231,16 +231,18 @@ static void create_control_thread(void)
+             LSTACK_EXIT(1, "control_init_client failed\n");
+         }
+         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_client_thread, NULL);
++        if (ret != 0) {
++            LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
++        }
+     } else {
+         ret = pthread_create(&tid, NULL, (void *(*)(void *))control_server_thread, NULL);
++        if (ret != 0) {
++            LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
++        }
+         ret = dpdk_eal_init();
+         if (ret < 0) {
+             LSTACK_EXIT(1, "dpdk_eal_init failed ret=%d errno=%d\n", ret, errno);
+         }
+-
+-    }
+-    if (ret != 0) {
+-        LSTACK_EXIT(1, "pthread_create failed ret=%d errno=%d\n", ret, errno);
+     }
+ 
+     if (pthread_setname_np(tid, CONTROL_THREAD_NAME) != 0) {
+-- 
+2.33.0
+
