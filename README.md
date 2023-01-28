@@ -15,10 +15,16 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 <img src="doc/test/mysql_kernel.png"> 
 <img src="doc/test/mysql_gazelle.png"> 
 
-使用内核协议栈跑分为54.84万，使用Gazelle跑分为66.85万，Gazelle提升20%+。详见[实践系列(一):Gazelle加速mysql 20%](doc/%E5%AE%9E%E8%B7%B5%E7%B3%BB%E5%88%97(%E4%B8%80)Gazelle%E5%8A%A0%E9%80%9Fmysql%2020%25.md)
+使用内核协议栈跑分为54.84万，使用Gazelle跑分为66.85万，Gazelle提升20%+  
+详见[实践系列(一):Gazelle加速mysql 20%](doc/%E5%AE%9E%E8%B7%B5%E7%B3%BB%E5%88%97(%E4%B8%80)Gazelle%E5%8A%A0%E9%80%9Fmysql%2020%25.md)
+
+### ceph 14.2.8
+<img src="doc/test/ceph_client_testdata.png"> 
+
+4k整机场景，Gazelle提升20%+  
+部署及测试详见 [高性能云盘](https://www.hikunpeng.com/document/detail/zh/kunpengcpfs/basicAccelFeatures/storageAccel/kunpengcpfs_hpcd_0002.html)
 
 ### 后续应用……
-- ceph客户端 2022/11/30
 - redis 2022/12/30
 - openGauss 2022/12/30
 
@@ -30,7 +36,7 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 |Gazelle介绍| 1，介绍背景<br>2，简介技术方案<br>3，性能效果|2022/11/30|
 |[实践系列(一):Gazelle加速mysql 20%](doc/%E5%AE%9E%E8%B7%B5%E7%B3%BB%E5%88%97(%E4%B8%80)Gazelle%E5%8A%A0%E9%80%9Fmysql%2020%25.md)|1，详细测试步骤<br>2，性能效果|已发布|
 |实践系列(二):Gazelle加速redis xx|1，详细测试步骤<br>2，性能效果|2022/12/31|
-|实践系列(三):Gazelle加速ceph client xx|1，详细测试步骤<br>2，性能效果|2022/11/30|
+|[实践系列(三):Gazelle加速ceph client 20%](https://www.hikunpeng.com/document/detail/zh/kunpengcpfs/basicAccelFeatures/storageAccel/kunpengcpfs_hpcd_0002.html)|1，详细测试步骤<br>2，性能效果|已发布|
 |实践系列(四):Gazelle加速openGauss xx|1，详细测试步骤<br>2，性能效果|2022/12/31|
 |解读系列(一):Gazelle总体方案介绍|1，支持场景、特性、规格<br>2，与dpdk、lwip关系<br>3，总体框架<br>4，替换posix接口|2022/11/25|
 |解读系列(二):Gazelle为什么能提升xx|介绍提关键技术点：减少拷贝、亲和性、减少上下文切换|2022/12/2|
