@@ -97,6 +97,7 @@ static int32_t connect_to_ltran(int32_t times, int32_t interval)
             return sockfd;
         }
 
+        LSTACK_LOG(INFO, LSTACK, "wait for connecting to ltran\n");
         int32_t ret = posix_api->connect_fn(sockfd, (struct sockaddr*)&address, sizeof(address));
         if (ret == 0) {
             return sockfd;
