@@ -15,6 +15,7 @@
 
 #include <semaphore.h>
 #include <sys/epoll.h>
+#include <stdbool.h>
 
 #include <lwip/list.h>
 #include <lwip/netif.h>
