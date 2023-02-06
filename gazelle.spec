@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       46
+Release:       47
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -199,6 +199,8 @@ Patch9181:     0181-move-control_client_thread-creation-after-control_in.patch
 Patch9182:     0182-add-ret-check-in-pthread_create-and-fix-example-bug.patch
 Patch9183:     0183-add-log-message-when-wait-for-connecting-to-ltran.patch
 Patch9184:     0184-add-gazelle-fuzz.patch
+Patch9185:     0185-add-unitest.patch
+Patch9186:     0186-add-gazelle-setup-tools.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -239,6 +241,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Feb 6 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-47
+- add gazelle setup tools
+- add unitest
+
 * Tue Jan 31 2023 kircher <majun65@huawei.com> - 1.0.1-46
 - add gazelle fuzz
 - add log message when wait for connecting to ltran
