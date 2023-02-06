@@ -1,0 +1,1277 @@
+From 74577a6fdb5da8f4db20dbbec5b91895e2985c3a Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 2 Feb 2023 14:50:33 +0800
+Subject: [PATCH] add gazelle setup tools
+
+Signed-off-by: jinag12 <jiangheng14@huawei.com>
+---
+ tools/gazelle_common.sh  | 506 ++++++++++++++++++++++++++++++++++++
+ tools/gazelle_crontab.sh |  95 +++++++
+ tools/gazelle_exit.sh    |  64 +++++
+ tools/gazelle_setup.sh   | 539 +++++++++++++++++++++++++++++++++++++++
+ tools/readme.md          |  21 ++
+ 5 files changed, 1225 insertions(+)
+ create mode 100644 tools/gazelle_common.sh
+ create mode 100644 tools/gazelle_crontab.sh
+ create mode 100644 tools/gazelle_exit.sh
+ create mode 100644 tools/gazelle_setup.sh
+ create mode 100644 tools/readme.md
+
+diff --git a/tools/gazelle_common.sh b/tools/gazelle_common.sh
+new file mode 100644
+index 0000000..b4c011a
+--- /dev/null
++++ b/tools/gazelle_common.sh
+@@ -0,0 +1,506 @@
++#!/bin/bash
++# Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
++# Description: the common functions of gazelle_env_prepare script
++
++PROJ_ROOT=$(
++    cd $(dirname $0)/
++    pwd
++)
++DPDK_KMOD_DIR=$(dirname $(rpm -ql dpdk | grep igb_uio.ko))
++DPDK_DEVBIND=$(rpm -ql dpdk | grep dpdk-devbind.py)
++PARAM_PATH="/var/run/gazelle/run_param"
++CRONTAB_LOCK=$(dirname $PARAM_PATH)/crond.lock
++CONF_DIR=/etc/gazelle
++
++# ip and nic for communication
++g_conn_my_ip=""
++g_conn_if=""
++g_conn_if_kni="kni"
++
++# subnet configure
++g_subnet=""
++g_subnet_mask=""
++g_prefix=""
++g_subnet_len=""
++g_gateway=""
++g_premask=""
++
++# globla varibles initialized when run
++g_netcard_mac=""
++g_kni_mac=""
++g_default_route="$(sudo ip route | grep default)"
++
++# port of dpdk
++g_dpdk_port=""
++
++msg_show() {
++    echo -e "$(date '+[%Y-%m-%d %H:%M:%S]') [INFO] $*"
++}
++
++msg_err() {
++    echo -e "\033[1;31m$(date '+[%Y-%m-%d %H:%M:%S]') [ERROR] $*\033[0m"
++}
++
++check_dependence() {
++    if [ $(sudo rpm -qa | grep -w $1 | wc -l) -ne 0 ]; then
++        msg_show "check $1 succeeded!"
++        return 0
++    else
++        msg_err "check $1 failed, try to install $1"
++        sudo yum install $1 -y
++        if [ $? -ne 0 ]; then
++            msg_err "install $1 failed, please try it yourself..."
++            return 1
++        else
++            msg_show "try to install $1 succeeded."
++            return 0
++        fi
++    fi
++}
++
++setup_global_variables() {
++    msg_show "setting up the key value for prepare..."
++    g_conn_if=$1
++    g_conn_my_ip=$(/usr/sbin/ifconfig $g_conn_if | grep -w "inet" | awk '{print $2}')
++    if [ -z ${g_conn_my_ip} ]; then
++        msg_err "The specified network adapter does not have an IP address!"
++        return 1
++    fi
++    g_subnet_mask=$(/usr/sbin/ifconfig $g_conn_if | grep -w "inet" | awk '{print $4}')
++    g_netcard_mac=$(/usr/sbin/ifconfig $g_conn_if | grep -w "ether" | awk '{print $2}')
++    local route_info=$(/usr/sbin/ip route | grep $g_conn_if | grep default)
++    if [ -z "$route_info" ]; then
++        g_gateway=$(/usr/sbin/ip route | grep -w "$g_conn_if" | head -n 1 | awk '{print $1}' | awk '-F[/]' '{print $1}')
++        g_prefix=$(/usr/sbin/ip route | grep -w "$g_conn_if" | head -n 1 | awk '{print $1}' | awk '-F[/]' '{print $2}')
++    else
++        g_gateway=$(echo $route_info | awk '{print $3}')
++        g_prefix=$(/usr/sbin/ip route | grep -w $g_conn_if | grep -v default | head -n 1 | awk '{print $1}' | awk '-F[/]' '{print $2}')
++    fi
++    if [ -z $g_prefix ]; then
++        msg_err "The route information is incomplete. Please check."
++        return 1
++    fi
++    # calculate the subnet configure
++    myip=(${g_conn_my_ip//\./ })
++    mymask=(${g_subnet_mask//\./ })
++    local i
++    for ((i = 0; i < 4; i++)); do
++        g_subnet=${g_subnet}$((${mymask[i]} & ${myip[i]})).
++        g_premask=${g_premask}$(($((mymask[i] ^ 255)) | ${myip[i]})).
++    done
++    g_subnet=${g_subnet%?}
++    g_premask=${g_premask%?}
++    g_subnet_len=$((32 - $g_prefix))
++    g_kni_mac=$g_netcard_mac
++    return 0
++}
++
++remove_igb_uio_module() {
++    msg_show "Unloading any existing DPDK UIO module"
++    /sbin/lsmod | grep -s igb_uio > /dev/null
++    if [ $? -eq 0 ]; then
++        sudo /sbin/rmmod igb_uio
++    fi
++    /sbin/lsmod | grep -s uio > /dev/null
++    if [ $? -eq 0 ]; then
++        sudo /sbin/rmmod uio
++    fi
++}
++
++load_igb_uio_module() {
++    /sbin/lsmod | grep -w uio > /dev/null
++    if [ $? -ne 0 ]; then
++        sudo modinfo uio > /dev/null
++        if [ $? -eq 0 ]; then
++            msg_show "Loading uio module"
++            sudo /sbin/modprobe uio
++        fi
++    fi
++
++    # UIO may be compiled into kernel, so it may not be an error if it can't be loaded.
++    if [ ! -f $DPDK_KMOD_DIR/igb_uio.ko ]; then
++        msg_err "## ERROR: Target does not have the DPDK UIO Kernel Module."
++        msg_err "       To fix, please try to rebuild target."
++        return 1
++    fi
++
++    /sbin/lsmod | grep -w igb_uio > /dev/null
++    if [ $? -ne 0 ]; then
++        if [ -f $DPDK_KMOD_DIR/igb_uio.ko ]; then
++            msg_show "Loading igb_uio module"
++            sudo /sbin/insmod $DPDK_KMOD_DIR/igb_uio.ko
++            if [ $? -ne 0 ]; then
++                msg_err "## ERROR: Could not load igb_uio.ko."
++                return 1
++            fi
++        else
++            msg_err "$DPDK_KMOD_DIR/igb_uio.ko does not exist"
++            return 1
++        fi
++    fi
++}
++
++load_vfio_module() {
++    /sbin/lsmod | grep -w vfio-pci > /dev/null
++    if [ $? -ne 0 ]; then
++        sudo modinfo vfio > /dev/null
++        if [ $? -eq 0 ]; then
++            msg_show "Loading vfio module"
++            sudo /sbin/modprobe vfio enable_unsafe_noiommu_mode=1
++        else
++            msg_err "the vfio mudule is not exist"
++            return 1
++        fi
++        sudo modinfo vfio-pci > /dev/null
++        if [ $? -eq 0 ]; then
++            msg_show "Loading vfio-pci module"
++            sudo /sbin/modprobe vfio-pci
++        else
++            msg_err "the vfio-pci mudule is not exist"
++            return 1
++        fi
++    fi
++}
++
++remove_vfio_module() {
++    msg_show "Unloading any existing DPDK vfio module"
++    /sbin/lsmod | grep -sw vfio_pci > /dev/null
++    if [ $? -eq 0 ]; then
++        sudo /sbin/rmmod vfio_pci
++    fi
++}
++
++remove_kni_module() {
++    msg_show "Unloading any existing DPDK KNI module"
++    /sbin/lsmod | grep -sw rte_kni > /dev/null
++    if [ $? -eq 0 ]; then
++        sudo /sbin/rmmod rte_kni
++    fi
++}
++
++load_libos_kni_module() {
++    # Check that the KNI module is already built.
++    if [ ! -f $DPDK_KMOD_DIR/rte_kni.ko ]; then
++        msg_err "## ERROR: Target does not have the DPDK KNI Module."
++        msg_err "       To fix, please try to rebuild target."
++        return 1
++    fi
++
++    # Now try load the KNI module.
++    /sbin/lsmod | grep -sw rte_kni > /dev/null
++    if [ $? -ne 0 ]; then
++        if [ -f $DPDK_KMOD_DIR/igb_uio.ko ]; then
++            msg_show "Loading rte_kni module"
++            sudo /sbin/insmod $DPDK_KMOD_DIR/rte_kni.ko kthread_mode="single" carrier="on"
++            if [ $? -ne 0 ]; then
++                msg_err "## ERROR: Could not load rte_kni.ko."
++                return 1
++            fi
++        else
++            msg_err "$DPDK_KMOD_DIR/rte_kni.ko does not exist"
++        fi
++    fi
++}
++
++check_nic_type() {
++    local nic_type=$($DPDK_DEVBIND --status-dev net | grep $1 | awk '{print $7}' | awk '-F[=]' '{print $2}')
++    if [ "$nic_type" = "virtio-pci" ]; then
++        return 0
++    else
++        return 1
++    fi
++}
++
++install_nic_mod() {
++    check_nic_type $g_conn_if
++    if [ $? -eq 0 ]; then
++        msg_show "Selected nic is virtual net card"
++        load_igb_uio_module
++        if [ $? -ne 0 ]; then
++            remove_igb_uio_module
++            return 1
++        fi
++    else
++        msg_show "Selected nic is physical net card"
++        load_vfio_module
++        if [ $? -ne 0 ]; then
++            remove_vfio_module
++            return 1
++        fi
++    fi
++}
++
++create_mnt_huge() {
++    msg_show "Creating /mnt/hugepages and mounting as hugetlbfs"
++    sudo mkdir -p /mnt/hugepages
++    sudo mkdir -p /mnt/hugepages-2M
++
++    grep -s "/mnt/hugepages " /proc/mounts > /dev/null
++    if [ $? -ne 0 ]; then
++        sudo mount -t hugetlbfs nodev /mnt/hugepages
++    fi
++
++    grep -s "/mnt/hugepages-2M " /proc/mounts > /dev/null
++    if [ $? -ne 0 ]; then
++        sudo mount -t hugetlbfs nodev /mnt/hugepages-2M
++    fi
++}
++
++set_numa_pages() {
++    HUGEPGSZ=$(cat /proc/meminfo | grep Hugepagesize | cut -d : -f 2 | awk '{printf $1}')
++    HUGEPGSZ_NAME=$(cat /proc/meminfo | grep Hugepagesize | cut -d : -f 2 | tr -d ' ')
++    HUGEPGS_NUM_NUMA=(${g_hugepages//\,/ })
++    local ltran_numa
++    # Unit is kB
++    ltran_numa=$(( (1024 * 1024 + ${HUGEPGSZ} - 1) / ${HUGEPGSZ}))
++    msg_show "Reserving hugepages"
++    msg_show "If the shell is stuck, check whether the huge page is correct."
++
++    numa_num=$(lscpu | grep "NUMA node(s)" | awk '{print $3}')
++    local i
++    for ((i = 0; i < $numa_num; i++)); do
++        # Unit is kB
++        HUGEPGS_NUM_NUMA[i]=$(( (${HUGEPGS_NUM_NUMA[i]} * 1024  + ${HUGEPGSZ} - 1) / ${HUGEPGSZ}))
++        if [ $i -eq 0 ]; then
++            HUGEPGS_NUM_NUMA[i]=$((${HUGEPGS_NUM_NUMA[i]} + ${ltran_numa}))
++        fi
++        echo > .echo_tmp
++        msg_show "${HUGEPGS_NUM_NUMA[i]} of pages for node$i: "
++        echo "echo ${HUGEPGS_NUM_NUMA[i]} > /sys/devices/system/node/node${i}/hugepages/hugepages-${HUGEPGSZ_NAME}/nr_hugepages" >> .echo_tmp
++        sudo sh .echo_tmp
++        if [ $? -ne 0 ]; then
++            msg_err "sudo echo ${HUGEPGS_NUM_NUMA[i]} > /sys/devices/system/node/node${i}/hugepages/hugepages-${HUGEPGSZ_NAME}/nr_hugepages failed!"
++            return 1
++        fi
++        rm -f .echo_tmp
++        pages=$(cat /sys/devices/system/node/node${i}/hugepages/hugepages-${HUGEPGSZ_NAME}/nr_hugepages)
++        if [ $pages -ne ${HUGEPGS_NUM_NUMA[i]} ]; then
++            msg_err "sudo echo ${HUGEPGS_NUM_NUMA[i]} > /sys/devices/system/node/node${i}/hugepages/hugepages-${HUGEPGSZ_NAME}/nr_hugepages failed!"
++            return 1
++        fi
++    done
++
++    create_mnt_huge
++}
++
++# Removes all reserved hugepages.
++clear_huge_pages() {
++    msg_show "Unmounting /mnt/hugepages and removing directory"
++    grep -s "/mnt/hugepages " /proc/mounts > /dev/null
++    if [ $? -eq 0 ]; then
++        sudo umount /mnt/hugepages
++        if [ $? -ne 0 ]; then
++            msg_err "sudo umount /mnt/hugepages failed!"
++            return 1
++        fi
++    fi
++
++    grep -s "/mnt/hugepages-2M " /proc/mounts > /dev/null
++    if [ $? -eq 0 ]; then
++        sudo umount /mnt/hugepages-2M
++        if [ $? -ne 0 ]; then
++            msg_err "sudo umount /mnt/hugepages-2M failed!"
++            return 1
++        fi
++    fi
++    HUGEPGSZ_NAME=$(cat /proc/meminfo | grep Hugepagesize | cut -d : -f 2 | tr -d ' ')
++    echo > .echo_tmp
++    for d in /sys/devices/system/node/node?; do
++        echo "echo 0 > $d/hugepages/hugepages-${HUGEPGSZ_NAME}/nr_hugepages" >> .echo_tmp
++    done
++    msg_show "Removing currently reserved hugepages"
++    sudo sh .echo_tmp
++    rm -f .echo_tmp
++
++    if [ -d /mnt/hugepages ]; then
++        sudo rm -R /mnt/hugepages
++        if [ $? -ne 0 ]; then
++            msg_err "sudo rm -R /mnt/hugepages failed!"
++            return 1
++        fi
++    fi
++    if [ -d /mnt/hugepages-2M ]; then
++        sudo rm -R /mnt/hugepages-2M
++        if [ $? -ne 0 ]; then
++            msg_err "sudo rm -R /mnt/hugepages failed!"
++            return 1
++        fi
++    fi
++    return 0
++}
++
++# Uses $DPDK_DEVBIND to move devices to work with dpdk
++bind_devices_to_dpdk() {
++    dev=$($DPDK_DEVBIND --status-dev net | grep "$g_conn_if" | awk '{print $1}')
++    #sudo nmcli connection down $g_conn_if > /dev/null 2>&1
++    sudo /usr/sbin/ifconfig $g_conn_if down > /dev/null 2>&1
++    local mod_type
++    local mod_dir
++    check_nic_type $g_conn_if
++    if [ $? -eq 0 ]; then
++        mod_type="igb_uio"
++        mod_dir="igb_uio"
++    else
++        mod_type="vfio-pci"
++        mod_dir="vfio_pci"
++    fi
++    if [ -d /sys/module/$mod_dir ]; then
++        sudo $DPDK_DEVBIND -b $mod_type $dev && msg_show "bind_devices_to_dpdk OK"
++    else
++        msg_err "# Please load the $mod_type kernel module before querying or "
++        msg_err "# adjusting device bindings"
++        return 1
++    fi
++}
++
++bind_nic_to_kernel() {
++    msg_show "Bind nic to kernel"
++    drv=$(sudo grep ker_drv $PARAM_PATH | awk '-F[=]' '{print $2}')
++    pci_id=$(sudo grep pci_num $PARAM_PATH | awk '-F[=]' '{print $2}')
++    sudo $DPDK_DEVBIND -b $drv $pci_id || msg_err "$DPDK_DEVBIND -b $drv $pci_id fail"
++    nic_num=$(sudo $DPDK_DEVBIND -s | grep "if=" | grep $pci_id | wc -l)
++    if [ $nic_num -ne 1 ]; then
++        msg_err "$pci_id drv=$drv not bind to virtio_pci as expect"
++        sudo $DPDK_DEVBIND -s
++        return 1
++    fi
++}
++
++rm_kni_igb_uio() {
++    msg_show "remove igb_uio.ko & rte_kni.ko"
++    sudo ifconfig $g_conn_if_kni down
++
++    /sbin/lsmod | grep -w rte_kni && sudo /sbin/rmmod rte_kni
++    /sbin/lsmod | grep -w rte_kni
++    if [ $? -eq 0 ]; then
++        msg_err "rmmod rte_kni failed!"
++        return 1
++    fi
++
++    /sbin/lsmod | grep -w igb_uio && sudo /sbin/rmmod igb_uio
++    /sbin/lsmod | grep -w igb_uio
++    if [ $? -eq 0 ]; then
++        msg_err "rmmod igb_uio failed!"
++        return 1
++    fi
++}
++
++configure_nic() {
++    local default_route=
++    if [ ! -f $PARAM_PATH ]; then
++        msg_err "no target param file found to config net_card"
++        return 1
++    fi
++
++    if [ $1 = "usr" ]; then
++        msg_show "use vitual kni card"
++        net_card=$g_conn_if_kni
++        default_route="$(echo $g_default_route | grep $g_conn_if)"
++    fi
++    if [ $1 = "ker" ]; then
++        msg_show "use normal kernel card"
++        net_card=$(sudo grep -w nic $PARAM_PATH | awk '-F[=]' '{print $2}')
++        default_route="$(echo $g_default_route | grep $g_conn_if_kni)"
++    fi
++
++    local i
++    for ((i = 0; i < 5; i++)); do
++        sudo /usr/sbin/ifconfig $net_card up
++        if [ -n "$(sudo ip addr | grep -w $net_card | grep -w "UP")" ]; then
++            break;
++        fi
++        sleep 1
++    done
++    if [ $i -ge 5 ]; then
++        msg_err "The nic does not up, please check the args"
++        return 1
++    fi
++
++    local local_ipAddr=$(sudo grep ipAddr $PARAM_PATH | awk '-F[=]' '{print $2}')
++    local local_mac=$(sudo grep mac $PARAM_PATH | awk '-F[=]' '{print $2}')
++    local local_prefix=$(sudo grep prefix $PARAM_PATH | awk '-F[=]' '{print $2}')
++    local local_subnet=$(sudo grep subnet $PARAM_PATH | awk '-F[=]' '{print $2}')
++    local local_gateway=$(sudo grep gateway $PARAM_PATH | awk '-F[=]' '{print $2}')
++
++    sudo ifconfig $net_card hw ether ${local_mac}
++    if [ $? -ne 0 ]; then
++        msg_err "config mac failed"
++        return 1
++    fi
++    # todo : check if "metric 10" is needed
++    # ip addr add probability of failure
++    for ((i = 0; i < 3; i++)); do
++        sudo ip addr add ${local_ipAddr}/${local_prefix} dev $net_card
++        if [ -n "$(sudo ip addr | grep -w $net_card | grep -w $local_ipAddr)" ]; then
++            break
++        fi
++        sleep 1
++    done
++    if [ $i -ge 3 ]; then
++        msg_err "config ip failed"
++        return 1
++    fi
++
++    # Use columns as arguments, need to check
++    if [ -n "$default_route" ]; then
++        tmpvia=$(echo $default_route | awk '{print $3}')
++        tmpdev=$(echo $default_route | awk '{print $5}')
++        default_route=${default_route/${tmpvia}/${local_gateway}}
++        default_route=${default_route/${tmpdev}/${net_card}}
++
++        for ((i = 0; i < 3; i++)); do
++            sudo ip route add $default_route
++            if [ -n "$(sudo ip route | grep "default" | grep -w $net_card | grep -w $local_gateway)" ]; then
++                break
++            fi
++            sleep 1
++        done
++        if [ $i -ge 3 ];then
++            msg_err "config gateway failed"
++            return 1
++        fi
++    fi
++
++    msg_show "Configure the nic successfully!"
++}
++
++nic_recover() {
++    msg_show "Trying to recover a possible network card!"
++    bind_nic_to_kernel
++    if [ $? -ne 0 ]; then
++        msg_err "recover the nic failed!"
++    else
++        configure_nic "ker"
++        if [ $? -eq 0 ]; then
++            msg_show "Successfully configured the selected nic"
++        else
++            msg_err "Configure nic failed"
++            return 1
++        fi
++    fi
++}
++
++kill_ltran() {
++    msg_show "quit ltran"
++    gazellectl ltran quit
++    sleep 3
++    local ltran_pid=$(ps -ef | grep ltran | grep -v grep | awk '{print $2}')
++    if [ -n "$ltran_pid" ]; then
++        echo "$ltran_pid"
++        msg_show "kill ltran"
++        sudo kill -9 $(pidof ltran)
++    fi
++}
++
++check_ltran() {
++    times=${1-1}
++    local i
++    for i in $(seq $times); do
++        gazellectl ltran show > /dev/null 2>&1
++        if [ $? -eq 0 ]; then
++            return 0
++        fi
++        sleep 1
++    done
++    return 1
++}
+diff --git a/tools/gazelle_crontab.sh b/tools/gazelle_crontab.sh
+new file mode 100644
+index 0000000..a20a3b5
+--- /dev/null
++++ b/tools/gazelle_crontab.sh
+@@ -0,0 +1,95 @@
++#!/bin/bash
++# Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
++# Description: make ltran daemon when fail resume nic and del crontab task
++
++PROJ_ROOT=$(
++    cd $(dirname $0)/
++    pwd
++)
++source $PROJ_ROOT/gazelle_common.sh
++
++if [ "$1"x != 1x ] && [ "$1"x != 0x ]; then
++    echo "input param error, please use gazelle_setup.sh or gazelle_exit.sh"
++    exit 0
++fi
++
++ltran_conf=$(sudo grep ltran $PARAM_PATH | awk '{print $2}')
++cron_cmd="gazelle_crontab.sh"
++daemon_on="1"
++check_interval=1
++min_sec=$(date +%-S)
++
++del_gazelle_crontab_task() {
++    cron_num=$(crontab -l | wc -l)
++    if [ ${cron_num} == 1 ]; then
++        crontab -l | grep ${cron_cmd} > /dev/null
++        if [ $? == 0 ]; then
++            msg_show "del crontab"
++            crontab -r
++            return 0
++        fi
++    fi
++
++    msg_show "del gazelle crontab task"
++    crontab -l > ./gazelle_crontab_tmp && sed -i "/${cron_cmd}/d" ./gazelle_crontab_tmp && crontab ./gazelle_crontab_tmp && rm -fr ./gazelle_crontab_tmp
++    return 0
++}
++
++check_daemon_ltran() {
++    if [ -z $ltran_conf ]; then
++        return 1
++    fi
++
++    local kni_switch=$(sudo grep -w kni_switch $CONF_DIR/ltran.conf | awk '{print $3}')
++    check_ltran && return 0
++    pkill -9 ltran
++    local i
++    for ((i = 0; i < 3; i++)); do
++        XDG_RUNTIME_DIR=/tmp nohup /usr/bin/ltran ${ltran_conf} > /dev/null 2>&1 &
++        sleep 3
++        check_ltran
++        if [ $? -eq 0 ]; then
++            if [ $kni_switch = 1 ]; then
++                configure_nic "usr"
++                if [ $? -eq 0 ]; then
++                    msg_show "configure the kni successfully"
++                    return 0
++                else
++                    return 1
++                fi
++            else
++                return 0
++            fi
++        else
++            msg_show "start ltran failed!"
++        fi
++    done
++    sleep 3
++    return 1
++}
++
++# check if another daemon task is running
++min_sec=$((60 - $min_sec))
++mindiv=$(($min_sec / $check_interval))
++
++for ((i = 0; i < ${mindiv}; i++)); do
++    if [[ $# == 1 && $1 == ${daemon_on} ]]; then
++        check_daemon_ltran
++    else
++        check_ltran
++    fi
++    if [ $? -eq 1 ]; then
++        del_gazelle_crontab_task
++        nic_recover
++        clear_huge_pages
++        remove_kni_module
++        remove_igb_uio_module
++        self_pid=$$
++        crond_pid=$(ps -ef | grep gazelle_crontab.sh | grep -v grep | grep -v $self_pid | awk '{print $2}')
++        if [ -n "$crond_pid" ]; then
++            kill -9 $crond_pid
++        fi
++        break
++    fi
++    sleep $check_interval
++done
+diff --git a/tools/gazelle_exit.sh b/tools/gazelle_exit.sh
+new file mode 100644
+index 0000000..53ae363
+--- /dev/null
++++ b/tools/gazelle_exit.sh
+@@ -0,0 +1,64 @@
++#!/bin/bash
++#Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
++#Description: ltran quit and clear the environment
++
++PROJ_ROOT=$(
++    cd $(dirname $0)/
++    pwd
++)
++source $PROJ_ROOT/gazelle_common.sh
++
++if [ "$1"x = "-hx" ] || [ "$1"x = "--helpx" ]; then
++    echo "$0 :uninstall gazelle deployment!"
++    exit 0
++fi
++
++cron_cmd="gazelle_crontab.sh"
++
++del_gazelle_crontab_task() {
++    cron_num=$(crontab -l | wc -l)
++    if [ ${cron_num=} == 1 ]; then
++        crontab -l | grep ${cron_cmd} > /dev/null
++        if [ $? == 0 ]; then
++            msg_show "del crontab"
++            crontab -r
++            return 0
++        fi
++    fi
++
++    msg_show "del gazelle crontab task"
++    crontab -l > ./gazelle_crontab_tmp && sed -i "/${cron_cmd}/d" ./gazelle_crontab_tmp && crontab ./gazelle_crontab_tmp && rm -fr ./gazelle_crontab_tmp
++    return 0
++}
++
++del_gazelle_crontab_task
++crond_pid=$(ps -ef | grep gazelle_crontab.sh | grep -v grep | awk '{print $2}')
++if [ -n "$crond_pid" ]; then
++    msg_show "kill crond task"
++    kill -9 $crond_pid
++fi
++kill_ltran
++nic_recover
++if [ $? -ne 0 ]; then
++    msg_err "recover failed, check the nic name or config file!"
++    exit 1
++else
++    msg_show "successfully recover the nic"
++fi
++clear_huge_pages
++if [ $? -ne 0 ]; then
++    msg_err "clear env failed, exit gazelle..."
++else
++    msg_show "clear env successfully, exit gazelle..."
++fi
++remove_kni_module
++remove_igb_uio_module
++
++local_ipAddr=$(sudo grep ipAddr $PARAM_PATH | awk '-F[=]' '{print $2}')
++dpdk_path="gazelle_${local_ipAddr}"
++sudo rm -fr /etc/NetworkManager/conf.d/gazelle.conf
++sudo rm -fr /var/run/dpdk/${dpdk_path}
++sudo rm -fr /var/run/dpdk/rte
++sudo rm -fr /tmp/dpdk/${dpdk_path}
++sudo rm -fr /tmp/dpdk/rte
++sudo rm -fr /var/run/gazelle
+diff --git a/tools/gazelle_setup.sh b/tools/gazelle_setup.sh
+new file mode 100644
+index 0000000..014d333
+--- /dev/null
++++ b/tools/gazelle_setup.sh
+@@ -0,0 +1,539 @@
++#!/bin/bash
++#Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
++#Description: Prepare the environment for gazelle and start the ltran process!
++
++PROJ_ROOT=$(
++    cd $(dirname $0)/
++    pwd
++)
++source $PROJ_ROOT/gazelle_common.sh
++crontab_cmd=$PROJ_ROOT/gazelle_crontab.sh
++
++# input global args
++g_conn_if=""
++g_hugepages=""
++g_daemon_mod=""
++g_kni_switch=""
++g_low_power=""
++g_ltrancore=""
++g_lstackcore=""
++g_wakeupcpus=""
++g_useltran=""
++g_listen_shadow=""
++
++cur_user=""
++cur_group=""
++
++# os arch
++uname_M=$(uname -m 2> /dev/null || echo not)
++
++function __rm {
++    sudo rm -rf $@
++}
++
++function __chown {
++    sudo chown -R ${cur_user}:${cur_group} $@
++}
++
++function __mkdir {
++    if [ -d $@ ]; then
++        msg_show $@ "existed."
++    else
++        sudo mkdir -p $@
++    fi
++    __chown $@
++}
++
++function __sysctl {
++    sudo sysctl -w "$@"
++}
++
++function __ifconfig {
++    sudo ifconfig $@
++}
++
++function die {
++    msg_err "$@"
++    exit 1
++}
++
++show_usage() {
++    echo "Usage: $0 {-h|--help}"
++    echo "       $0 {-i=<nic name>|--nic=<nic name>}"
++    echo "          [-n|--numa=<numa mem (M)(lstack)>]"
++    echo "          [-d|--daemon=<daemon mode>]"
++    echo "          [-k|--kni=<kni switch>]"
++    echo "          [-l|--lowpower=<low power mode>]"
++    echo "          [--ltrancore=<ltran core>]"
++    echo "          [--lstackcore=<ltran core>]"
++    echo "examples:"
++    echo "       $0 -i eth0 -n 1024,1024 -d 1/0 -k 1/0 -l 1/0 --ltrancore 0,1 --lstackcore 2-3"
++}
++
++check_init() {
++    msg_show "starting check the dependence..."
++    local ret=0
++    check_dependence numactl
++    ret=$(($? + ret))
++    check_dependence libpcap
++    ret=$(($? + ret))
++    check_dependence libconfig
++    ret=$(($? + ret))
++    check_dependence libsecurec
++    ret=$(($? + ret))
++    check_dependence pciutils
++    ret=$(($? + ret))
++    check_dependence gazelle
++    ret=$(($? + ret))
++    check_dependence dpdk
++    ret=$(($? + ret))
++
++    if [ $ret -eq 0 ]; then
++        msg_show "check & init devDependencies succeeded!"
++    else
++        msg_err "check devDependencies failed! please check it yourself!"
++        exit 1
++    fi
++}
++
++check_nic_name() {
++    if [ -z $g_conn_if ]; then
++        msg_err "please enter the nic name at least"
++        show_usage
++        return 1
++    fi
++    echo $g_conn_if | grep -E "^[A-Za-z0-9_\.]+$" > /dev/null 2>&1
++    if [ $? -ne 0 ]; then
++        msg_err "The network adapter parameters are incorrect"
++        return 1
++    fi
++    sudo /usr/sbin/ifconfig $g_conn_if > /dev/null 2>&1
++    if [ $? -ne 0 ]; then
++        msg_show "there is no nic exits bind to kernel!"
++    fi
++}
++
++check_numa_pages() {
++    numa_num=$(lscpu | grep "NUMA node(s)" | awk '{print $3}')
++    # todo : check the maxmum and minmum of the page numbers, make sure the system available mem support
++    g_hugepages=${g_hugepages:-1024}
++    msg_show "make sure the huge mem is large enough & not extend the maximum of system mem!"
++    myPage=(${g_hugepages//\,/ })
++    g_hugepages=""
++    local i
++    for ((i = 0; i < $numa_num; i++)); do
++        if [ -z $(echo ${myPage[i]} | grep -E '^[0-9]+$') ]; then
++            g_hugepages=${g_hugepages}0,
++        else
++            g_hugepages=${g_hugepages}${myPage[i]},
++        fi
++    done
++    g_hugepages=${g_hugepages%?}
++}
++
++check_switch_param() {
++    if [ $1 != 1 ] && [ $1 != 0 ]; then
++        msg_err "the switch_param to set is error, please use 1/0 instead!"
++        return 1
++    else
++        return 0
++    fi
++}
++
++check_args() {
++    local ret=0
++    check_nic_name
++    ret=$(($? + ret))
++    check_numa_pages
++    ret=$(($? + ret))
++    g_daemon_mod=${g_daemon_mod:-1}
++    check_switch_param $g_daemon_mod
++    ret=$(($? + ret))
++    g_kni_switch=${g_kni_switch:-0}
++    check_switch_param $g_kni_switch
++    ret=$(($? + ret))
++    g_low_power=${g_low_power:-0}
++    check_switch_param $g_low_power
++    ret=$(($? + ret))
++    g_useltran=${g_useltran:-1}
++    check_switch_param $g_useltran
++    g_listen_shadow=${g_listen_shadow:-0}
++    check_switch_param $g_listen_shadow
++    ret=$(($? + ret))
++    g_ltrancore=${g_ltrancore:-0,1}
++    g_lstackcore=${g_lstackcore:-2}
++    g_wakeupcpus=${g_lstackcore}
++    if [ $ret -eq 0 ]; then
++        msg_show "the args is reasonable..."
++    else
++        msg_err "the args is unreasonalble..."
++        exit 1
++    fi
++}
++
++get_current_user_group() {
++    cur_user=$USER
++    cur_group=$(groups)
++}
++
++change_file_permissions() {
++    get_current_user_group
++
++    __mkdir /var/run/gazelle
++    __chown $PROJ_ROOT/gazelle_setup.sh
++    __chown $PROJ_ROOT/gazelle_crontab.sh
++    __chown $PROJ_ROOT/gazelle_exit.sh
++    __chown $PROJ_ROOT/gazelle_common.sh
++    sudo chmod u+x $PROJ_ROOT/gazelle_setup.sh
++    sudo chmod u+x $PROJ_ROOT/gazelle_crontab.sh
++    sudo chmod u+x $PROJ_ROOT/gazelle_exit.sh
++    sudo chmod u+x $PROJ_ROOT/gazelle_common.sh
++
++    __chown /usr/bin/ltran > /dev/null
++    __chown /usr/bin/gazellectl > /dev/null
++    __chown $CONF_DIR
++    __chown /lib64/liblstack.so
++    __chown $DPDK_DEVBIND
++
++    sudo setcap 'CAP_DAC_OVERRIDE,CAP_SYS_RAWIO,CAP_SYS_ADMIN+ep' /usr/bin/ltran
++    sudo setcap 'CAP_DAC_OVERRIDE+ep' /usr/bin/gazellectl
++
++    msg_show "set ${cur_user}:${cur_group} success"
++}
++
++setup_dpdk() {
++    install_nic_mod
++    if [ $? -ne 0 ]; then
++        msg_err "load nic module failed..."
++        exit 1
++    fi
++
++    load_libos_kni_module
++    if [ $? -ne 0 ]; then
++        remove_kni_module
++        msg_err "load kni module failed..."
++        exit 1
++    fi
++
++    bind_devices_to_dpdk
++    if [ $? -ne 0 ]; then
++        nic_recover
++        msg_err "bind nic to modules failed, try to recover the nic..."
++        exit 1
++    fi
++
++    set_numa_pages $g_hugepages
++    if [ $? -ne 0 ]; then
++        clear_huge_pages
++        nic_recover
++        msg_err "set numa failed"
++        exit 1
++    fi
++}
++
++gen_ltran_conf() {
++    if [ ! -f $CONF_DIR/ltran.conf ]; then
++        msg_err "the default ltran conf does not exits"
++        return 1
++    fi
++
++    sed -i "/^dispatch_subnet[^_]/c dispatch_subnet=\"$g_subnet\"" $CONF_DIR/ltran.conf
++    sed -i "/^dispatch_subnet_length/c dispatch_subnet_length=$g_subnet_len" $CONF_DIR/ltran.conf
++    sed -i "/^bond_macs/c bond_macs=\"$g_netcard_mac\"" $CONF_DIR/ltran.conf
++    sed -i "/^kni_switch/c kni_switch = $g_kni_switch" $CONF_DIR/ltran.conf
++
++    local old_ltrancore=$(grep forward_kit_args $CONF_DIR/ltran.conf | awk -F '-l' '{print $2}' | awk '{print $1}')
++    sed -i "/^forward_kit_args/s/-l ${old_ltrancore}/-l ${g_ltrancore}/" $CONF_DIR/ltran.conf
++
++    return 0
++}
++
++function parse_cpu_count() {
++    cpu_nums=$1
++    cpu_count=0
++    for cpu_list in $(echo ${cpu_nums} | awk -F, '{for (i=1;i<=NF;i++)printf("%s\n", $i)}'); do
++        pre=$(echo $cpu_list | awk -F- '{print $1}')
++        next=$(echo $cpu_list | awk -F- '{print $2}')
++        if [ -z $next ]; then
++            ((cpu_count++))
++            continue
++        fi
++        for ((i = $pre; i <= $next; i++)); do
++            ((cpu_count++))
++        done
++    done
++    echo "$cpu_count"
++}
++
++gen_lstack_conf() {
++    if [ ! -f $CONF_DIR/lstack.conf ]; then
++        msg_err "the default lstack conf does not exits"
++        return 1
++    fi
++
++    sed -i "/^low_power_mode/c low_power_mode = $g_low_power" $CONF_DIR/lstack.conf
++    sed -i "/^use_ltran/c use_ltran = $g_useltran" $CONF_DIR/lstack.conf
++    sed -i "/^mask_addr/c mask_addr=\"$g_subnet_mask\"" $CONF_DIR/lstack.conf
++    sed -i "/^host_addr/c host_addr=\"$g_conn_my_ip\"" $CONF_DIR/lstack.conf
++    sed -i "/^gateway_addr/c gateway_addr=\"$g_gateway\"" $CONF_DIR/lstack.conf
++    sed -i "/^devices/c devices=\"$g_kni_mac\"" $CONF_DIR/lstack.conf
++
++    shadow_exist=$(grep listen_shadow $CONF_DIR/lstack.conf)
++    if [ -n "${shadow_exist}" ];then
++        sed -i "/^listen_shadow/c listen_shadow = $g_listen_shadow" $CONF_DIR/lstack.conf
++    else
++        sed -i "/^use_ltran/a\listen_shadow = $g_listen_shadow" $CONF_DIR/lstack.conf
++    fi
++
++    # num_cpus
++    local old_lstackcore=$(grep num_cpus $CONF_DIR/lstack.conf | awk -F= '{print $2}' | awk -F "\"" '{print $2}')
++    sed -i "/^num_cpus/s/${old_lstackcore}/${g_lstackcore}/" $CONF_DIR/lstack.conf
++
++    # wakeup_cpus
++    local old_wakeupcpus=$(grep wakeup_cpus $CONF_DIR/lstack.conf | awk -F= '{print $2}' | awk -F "\"" '{print $2}')
++    if [ -n "${g_wakeupcpus}" ]; then
++        sed -i "/^wakeup_cpus/s/${old_wakeupcpus}/${g_wakeupcpus}/" $CONF_DIR/lstack.conf
++    fi
++
++    local old_numa=$(grep dpdk_args $CONF_DIR/lstack.conf | awk -F "-socket-mem" '{print $2}' | awk '{print $2}' | awk -F "\"" '{print $2}')
++    old_numa="\"${old_numa}\","
++    sed -i "/^dpdk_args/s/${old_numa}/\"${g_hugepages}\",/" $CONF_DIR/lstack.conf
++    local cpu_count=$(parse_cpu_count ${g_lstackcore})
++    local mbuf_pool_size=$(expr 200000 \* ${cpu_count} + 8192)
++    sed -i "/^mbuf_pool_size/c mbuf_pool_size=${mbuf_pool_size}" $CONF_DIR/lstack.conf
++
++    # export LSTACK_CONF_PATH=$CONF_DIR/lstack.conf
++}
++
++gen_run_param() {
++    msg_show "start recording the key data!"
++    if [ ! -d /var/run/gazelle/ ]; then
++        sudo mkdir -p /var/run/gazelle/
++    fi
++    if [ -f $PARAM_PATH ]; then
++        sudo rm -f $PARAM_PATH
++    fi
++    sudo touch $PARAM_PATH
++    __chown $PARAM_PATH
++    echo "nic=$g_conn_if" >> $PARAM_PATH
++    echo "ipAddr=$g_conn_my_ip" >> $PARAM_PATH
++    echo "mac=$g_kni_mac" >> $PARAM_PATH
++    echo "prefix=$g_prefix" >> $PARAM_PATH
++    echo "subnet=$g_subnet" >> $PARAM_PATH
++    echo "gateway=$g_gateway" >> $PARAM_PATH
++    echo "ltran= --config-file=$CONF_DIR/ltran.conf" >> $PARAM_PATH
++
++    pci_num=$($DPDK_DEVBIND -s | grep $g_conn_if | awk '{print $1}')
++    ker_drv=$($DPDK_DEVBIND -s | grep $g_conn_if | awk '{print $7}' | awk '-F[=]' '{print $2}')
++    echo "pci_num=$pci_num" >> $PARAM_PATH
++    echo "ker_drv=$ker_drv" >> $PARAM_PATH
++}
++
++set_crontab() {
++    sudo cat /etc/cron.allow | grep ${cur_user} > /dev/null
++    if [ $? != 0 ]; then
++        msg_show "add gazelle into cron.allow"
++        sudo sh -c "echo ${cur_user} >> /etc/cron.allow"
++    fi
++
++    crontab -l 2> /dev/null | grep ${crontab_cmd} > /dev/null
++    if [ $? == 0 ]; then
++        return 0
++    fi
++
++    msg_show "add gazelle crontab task"
++    crontab -l > /dev/null 2>&1
++    if [ $? != 0 ]; then
++        echo "* * * * * flock -w 60 -o -x $CRONTAB_LOCK -c \"${crontab_cmd} ${g_daemon_mod}\" " > ./gazelle_crontab_tmp && crontab ./gazelle_crontab_tmp && rm -fr ./gazelle_crontab_tmp
++    else
++        crontab -l > ./gazelle_crontab_tmp && echo "* * * * * flock -w 60 -o -x $CRONTAB_LOCK -c \"${crontab_cmd} ${g_daemon_mod}\" " >> ./gazelle_crontab_tmp && crontab ./gazelle_crontab_tmp && rm -fr ./gazelle_crontab_tmp
++    fi
++    # Start the task immediately instead of waiting for a full minute
++    flock -w 60 -o -x $CRONTAB_LOCK -c "${crontab_cmd} ${g_daemon_mod}" &> /dev/null &
++}
++
++##############################################
++#starting the env prepare
++ARGS=$(getopt -o i:n:d:k:l:h --long nic:,numa:,useltran:,listenshadow:,daemon:,kni:,lowpower:,lstackcore:,ltrancore:,help -n "$0" -- "$@")
++if [ $? != 0 ]; then
++    echo "Terminating..."
++    exit 1
++fi
++eval set -- "${ARGS}"
++
++while true; do
++    case "$1" in
++        -i | --nic)
++            g_conn_if=$2
++            shift 2
++            ;;
++        -n | --numa)
++            g_hugepages=$2
++            shift 2
++            ;;
++        -d | --daemon)
++            g_daemon_mod=$2
++            shift 2
++            ;;
++        -k | --kni)
++            g_kni_switch=$2
++            shift 2
++            ;;
++        -l | --lowpower)
++            g_low_power=$2
++            shift 2
++            ;;
++        --useltran)
++            g_useltran=$2
++            shift 2
++            ;;
++        --listenshadow)
++            g_listen_shadow=$2
++            shift 2
++            ;;
++        --ltrancore)
++            g_ltrancore=$2
++            shift 2
++            ;;
++        --lstackcore)
++            g_lstackcore=$2
++            shift 2
++            ;;
++        --wakeupcpus)
++            g_wakeupcpus=$2
++            shift 2
++            ;;
++        -h | --help)
++            show_usage
++            shift 1
++            exit 0
++            ;;
++        --)
++            break
++            ;;
++        *)
++            echo "command format error"
++            show_usage
++            exit 1
++            ;;
++    esac
++done
++
++check_args $@
++
++##############################################
++if [ $uname_M == "aarch64" ]; then
++    msg_show "CPU: ARM"
++elif [ $uname_M == "x86_64" ]; then
++    msg_show "CPU: x86"
++else
++    msg_err "CPU type $uname_M error"
++    exit 1
++fi
++
++# check ltran
++check_ltran
++if [ $? -eq 0 ]; then
++    msg_show "ltran started"
++    exit 1
++fi
++
++##############################################
++#check_init $@
++change_file_permissions
++setup_global_variables $g_conn_if
++if [ $? -ne 0 ]; then
++    msg_err "set up global variables failed..."
++    exit 1
++fi
++
++##############################################
++# generate the info need to record
++# path=$PARAM_PATH
++msg_show "generate the run param in $PARAM_PATH"
++gen_run_param
++
++##############################################
++# dpdk initialize
++msg_show "-----------------"
++msg_show "start dpdk"
++setup_dpdk
++__chown /mnt/hugepages
++__chown /mnt/hugepages-2M
++
++##############################################
++# generate the conf file
++# path : /etc/gazelle/
++msg_show "generate the conf file in the path $CONF_DIR"
++if [ ! -d $CONF_DIR ]; then
++    nic_recover
++    msg_err "the default conf path does not exits"
++    exit 1
++fi
++gen_ltran_conf
++if [ $? -ne 0 ]; then
++    nic_recover
++    msg_err "modify the ltran.conf failed!"
++    exit 1
++fi
++gen_lstack_conf
++if [ $? -ne 0 ]; then
++    nic_recover
++    msg_err "modify the lstack.conf failed!"
++    exit 1
++fi
++
++##############################################
++# unmanage kni
++unmanage_kni() {
++    sudo sh -c "echo '[main]' > /etc/NetworkManager/conf.d/gazelle.conf"
++    sudo sh -c "echo 'plugins=keyfile' >> /etc/NetworkManager/conf.d/gazelle.conf"
++    sudo sh -c "echo '[keyfile]' >> /etc/NetworkManager/conf.d/gazelle.conf"
++    sudo sh -c "echo 'unmanaged-devices=interface-name:kni' >> /etc/NetworkManager/conf.d/gazelle.conf"
++
++    sudo systemctl status NetworkManager | grep -w active > /dev/null 2>&1
++    if [ $? -eq 0 ]; then
++        sudo systemctl reload NetworkManager
++        sleep 1
++    fi
++}
++if [ $g_kni_switch = 1 ]; then
++    unmanage_kni
++fi
++
++##############################################
++# start ltran
++if [ $g_useltran -eq 0 ];then
++    msg_show "only gen lstack conf"
++    exit 0
++fi
++msg_show "start ltran on $g_conn_if"
++msg_show "start ltran by $cur_user"
++XDG_RUNTIME_DIR=/tmp nohup /usr/bin/ltran --config-file=$CONF_DIR/ltran.conf > /dev/null 2>&1 &
++
++check_ltran 120
++if [ $? -ne 0 ]; then
++    msg_err "ltran start faild! Please check ltran's log for the reason of the problem."
++    nic_recover
++    exit 1
++else
++    msg_show "successfully started ltran"
++    if [ $g_kni_switch = 1 ]; then
++        configure_nic "usr"
++    fi
++    if [ $? -ne 0 ]; then
++        msg_err "config kni failed!"
++        nic_recover
++        exit 1
++    else
++        msg_show "config kni success"
++    fi
++fi
++
++##############################################
++# start the daemon task, use crontab
++msg_show "starting the ltran crontab!"
++set_crontab
++
++##############################################
++msg_show "successfully started the ltran..."
+diff --git a/tools/readme.md b/tools/readme.md
+new file mode 100644
+index 0000000..ee4ded8
+--- /dev/null
++++ b/tools/readme.md
+@@ -0,0 +1,21 @@
++# 一键部署脚本使用
++提供gazelle_setup脚本，用于快速自动化部署gazelle运行环境，需要gazelle_setup.sh、gazelle_common.sh、gazelle_exit.sh、gazelle_crontab.sh 拷贝到/usr/bin 目录下。
++
++## 一键部署脚本执行示例：
++gazelle_setup.sh –i/--nic eth0 –n/--numa 1024,1024 –d/--daemon 1/0 –k/--kni 1/0 –l/--lowpower 1/0 --ltrancore 0,1 --lstackcore 2-3
++参数描述：
+++ -i/--nic：设置待绑定网卡，此参数必须配置，且网卡需要有ip、路由和网关等必须参数，否则会读取配置失败，必选。
+++ -n/--numa：lstack大页内存（不包括ltran的，ltran默认为1024M，setup脚本不对其做修改），根据numa节点配置，并用","(英文的逗号)分离，这里需要根据系统环境内存配置对应的大小，默认为1024， 可选。
+++ -d/--daemon：是否开启deamon模式，开启为1，关闭为0；默认为1，可选。
+++ -k/--kni：是否开启kni，开启为1，关闭为0；默认为0，可选。
+++ -l/--lowpower：是否开启低功耗模式，开启为1，关闭为0；默认为0，可选。
+++ --ltrancore：ltran的绑核参数，参考dpdk的参数配置，此处不做参数校验；默认为0,1，可选。
+++ --lstackcore：lstack的绑核参数，同--ltrancore，默认为2，可选。
++
++## 一键退出脚本执行实例：
++gazelle_exit.sh
++
++## 说明
+++ 默认配置文件的目录为：/etc/gazelle
+++ 部署脚本会启动ltran进程
+++ 若启动了ltran的守护任务（gazelle_setup.sh指定了 -d/--daemon 1），那么在杀死ltran之后，守护任务仍会将ltran拉起，所以此时若要完全退出ltran，需要执行gazelle_exit.sh。
+-- 
+2.23.0
+
