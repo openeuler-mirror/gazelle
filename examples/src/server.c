@@ -575,6 +575,9 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->epollcreate = params->epollcreate;
         server_unit->accept = params->accept;
         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
+        if (server_unit->next) {
+            memset_s(server_unit->next, sizeof(struct ServerMumUnit), 0, sizeof(struct ServerMumUnit));
+        }
 
         if (pthread_create((tids + i), NULL, sersum_create_and_run, server_unit) < 0) {
             PRINT_ERROR("server can't create poisx thread %d! ", errno);
