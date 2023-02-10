@@ -523,32 +523,6 @@ int32_t dpdk_ethdev_start(void)
     return 0;
 }
 
-static void set_kni_ip_mac(uint16_t port_id)
-{
-    struct cfg_params *cfg = get_global_cfg_params();
-
-    int32_t fd = posix_api->socket_fn(AF_INET, SOCK_DGRAM, 0);
-    struct ifreq set_ifr = {0};
-    struct sockaddr_in *sin = (struct sockaddr_in *)&set_ifr.ifr_addr;
-
-    sin->sin_family = AF_INET;
-    sin->sin_addr.s_addr = cfg->host_addr.addr;
-    if (strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME) != 0) {
-        LSTACK_LOG(ERR, LSTACK, "strcpy_s fail \n");
-    }
-
-    if (posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr) < 0) {
-        LSTACK_LOG(ERR, LSTACK, "set kni ip=%u fail\n", cfg->host_addr.addr);
-    }
-
-    sin->sin_addr.s_addr = cfg->netmask.addr;
-    if (posix_api->ioctl_fn(fd, SIOCSIFNETMASK, &set_ifr) < 0) {
-        LSTACK_LOG(ERR, LSTACK, "set kni netmask=%u fail\n", cfg->netmask.addr);
-    }
-
-    posix_api->close_fn(fd);
-}
-
 int32_t dpdk_init_lstack_kni(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
@@ -562,8 +536,6 @@ int32_t dpdk_init_lstack_kni(void)
     if (ret < 0) {
         return -1;
     }
-
-    set_kni_ip_mac(stack_group->port_id);
 
     return 0;
 }

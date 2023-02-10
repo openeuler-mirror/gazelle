@@ -16,13 +16,16 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <semaphore.h>
-#include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/file.h>
 #include <securec.h>
 #include <numa.h>
 #include <pthread.h>
 #include <rte_pdump.h>
 #include <unistd.h>
+#include <net/if.h>
+#include <net/if_arp.h>
+#include <netinet/in.h>
 
 #include <lwip/def.h>
 #include <lwip/init.h>
@@ -264,6 +267,52 @@ static void gazelle_signal_init(void)
     lstack_signal_init();
 }
 
+static void set_kni_ip_mac() {
+    struct cfg_params *cfg = get_global_cfg_params();
+
+    int32_t fd = posix_api->socket_fn(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    struct ifreq set_ifr = {0};
+    struct sockaddr_in *sin = (struct sockaddr_in *)&set_ifr.ifr_addr;
+
+    sin->sin_family = AF_INET;
+    sin->sin_addr.s_addr = cfg->host_addr.addr;
+    if (strcpy_s(set_ifr.ifr_name, sizeof(set_ifr.ifr_name), GAZELLE_KNI_NAME) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "strcpy_s fail \n");
+    }
+
+    if (posix_api->ioctl_fn(fd, SIOCSIFADDR, &set_ifr) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "set kni ip=%u fail\n", cfg->host_addr.addr);
+    }
+
+    sin->sin_addr.s_addr = cfg->netmask.addr;
+    if (posix_api->ioctl_fn(fd, SIOCSIFNETMASK, &set_ifr) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "set kni netmask=%u fail\n", cfg->netmask.addr);
+    }
+
+    set_ifr.ifr_hwaddr.sa_family = ARPHRD_ETHER;
+    for (int i = 0; i < 6; i++) {
+        set_ifr.ifr_hwaddr.sa_data[i] = cfg->mac_addr[i];
+    }
+
+    if (posix_api->ioctl_fn(fd, SIOCSIFHWADDR, &set_ifr) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "set kni macaddr=%hhx:%hhx:%hhx:%hhx:%hhx:%hhx fail\n",
+                    cfg->mac_addr[0], cfg->mac_addr[1],
+                    cfg->mac_addr[2], cfg->mac_addr[3],
+                    cfg->mac_addr[4], cfg->mac_addr[5]);
+    }
+
+    if (posix_api->ioctl_fn(fd, SIOCGIFFLAGS, &set_ifr) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "get kni state fail\n");
+    }
+
+    set_ifr.ifr_flags |= (IFF_RUNNING | IFF_UP);
+    if (posix_api->ioctl_fn(fd, SIOCSIFFLAGS, &set_ifr) < 0){
+        LSTACK_LOG(ERR, LSTACK, "set kni state fail\n");
+    }
+
+    posix_api->close_fn(fd);
+}
+
 __attribute__((constructor)) void gazelle_network_init(void)
 {
     /*
@@ -345,6 +394,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
     wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
     if (g_init_fail) {
         LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
+    }
+
+    if (get_global_cfg_params()->kni_switch) {
+        set_kni_ip_mac();
     }
 
     posix_api->ues_posix = 0;
