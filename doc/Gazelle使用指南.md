@@ -126,7 +126,8 @@ GAZELLE_BIND_PROCNAME=test GAZELLE_THREAD_NAME=test_thread LD_PRELOAD=/usr/lib64
 |read_connect_number|4|设置为正整数，表示每次协议栈循环中收包处理的连接个数|
 |rpc_number|4|设置为正整数，表示每次协议栈循环中rpc消息处理的个数|
 |nic_read_num|128|设置为正整数，表示每次协议栈循环中从网卡读取的数据包的个数|
-|mbuf_pool_size|1024000|设置为小于5120000的正整数，表示初始化时申请的mbuf地址池大小，需要根据网卡硬件支持进行合理配置，配置过小会启动失败|
+|tcp_conn_count|1500|tcp的最大连接数，该参数乘以mbuf_count_per_conn是初始化时申请的mbuf池大小，配置过小会启动失败|
+|mbuf_count_per_conn|170|每个tcp连接需要的mbuf个数，该参数乘以tcp_conn_count是初始化时申请的mbuf地址池大小，配置过小会启动失败|
 
 lstack.conf示例：
 ``` conf
@@ -149,7 +150,8 @@ send_connect_number=4
 read_connect_number=4
 rpc_number=4
 nic_read_num=128
-mbuf_pool_size=1024000
+tcp_conn_count=1500
+mbuf_count_per_conn=170
 ```
 
 - ltran.conf用于指定ltran启动的参数，默认路径为/etc/gazelle/ltran.conf。使用ltran时，lstack.conf内配置use_ltran=1,配置参数如下：  
