@@ -1,0 +1,145 @@
+From 276036e11c3988de869fb6c0397bbecbd81bbb4c Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Fri, 13 Jan 2023 11:53:47 +0800
+Subject: [PATCH] change mbuf_pool_size in lstack.conf to tcp_conn_count *
+ mbuf_count_per_conn
+
+---
+ src/common/gazelle_opt.h        |  5 +++--
+ src/lstack/core/lstack_cfg.c    | 37 ++++++++++++++++++++++++++-------
+ src/lstack/core/lstack_dpdk.c   |  4 +++-
+ src/lstack/include/lstack_cfg.h |  3 ++-
+ src/lstack/lstack.conf          |  6 ++++--
+ 5 files changed, 41 insertions(+), 14 deletions(-)
+
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index 012997c..76b89ce 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -45,8 +45,9 @@
+ #define RTE_TEST_TX_DESC_DEFAULT    2048
+ #define RTE_TEST_RX_DESC_DEFAULT    4096
+ 
+-#define RXTX_NB_MBUF_DEFAULT        (128 * 2000) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
+-#define RXTX_NB_MBUF_MAX            (2560 * 2000)
++#define TCP_CONN_COUNT              1500
++#define MBUF_COUNT_PER_CONN         170
++#define RXTX_NB_MBUF_DEFAULT        (MBUF_COUNT_PER_CONN * TCP_CONN_COUNT) /* mbuf per connect * connect num. size of mbuf is 2536 Byte */
+ #define STACK_THREAD_DEFAULT        4
+ #define STACK_NIC_READ_DEFAULT      128
+ 
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 4912fdd..0da5085 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -84,7 +84,8 @@ static struct config_vector_t g_config_tbl[] = {
+     { "app_bind_numa",  parse_app_bind_numa },
+     { "main_thread_affinity",  parse_main_thread_affinity },
+     { "unix_prefix",    parse_unix_prefix },
+-    { "mbuf_pool_size", parse_rxtx_pool_size },
++    { "tcp_conn_count", parse_tcp_conn_count },
++    { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
+     { "send_connect_number", parse_send_connect_number },
+     { "read_connect_number", parse_read_connect_number },
+     { "rpc_number", parse_rpc_number },
+@@ -707,24 +708,44 @@ static int32_t parse_use_ltran(void)
+     return 0;
+ }
+ 
+-static int32_t parse_rxtx_pool_size(void)
++static int32_t parse_tcp_conn_count(void)
+ {
+     const config_setting_t *arg = NULL;
+ 
+-    arg = config_lookup(&g_config, "mbuf_pool_size");
++    arg = config_lookup(&g_config, "tcp_conn_count");
+     if (arg == NULL) {
+-        g_config_params.mbuf_pool_size = RXTX_NB_MBUF_DEFAULT;
+-        LSTACK_PRE_LOG(LSTACK_ERR, "use default mbuf_pool_size %d.\n", RXTX_NB_MBUF_DEFAULT);
++        g_config_params.tcp_conn_count = TCP_CONN_COUNT;
+         return 0;
+     }
+ 
+     int32_t val = config_setting_get_int(arg);
+-    if (val <= 0 || val > RXTX_NB_MBUF_MAX) {
+-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild, it should be in (0,%d].\n", val, RXTX_NB_MBUF_MAX);
++    if (val <= 0 || val > TCP_CONN_COUNT) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg tcp_conn_count %d invaild, it should be in (0,%d].\n", val, TCP_CONN_COUNT);
+         return -EINVAL;
+     }
+ 
+-    g_config_params.mbuf_pool_size = val;
++    g_config_params.tcp_conn_count = val;
++
++    return 0;
++}
++
++static int32_t parse_mbuf_count_per_conn(void)
++{
++    const config_setting_t *arg = NULL;
++
++    arg = config_lookup(&g_config, "mbuf_count_per_conn");
++    if (arg == NULL) {
++        g_config_params.tcp_conn_count = MBUF_COUNT_PER_CONN;
++        return 0;
++    }
++
++    int32_t val = config_setting_get_int(arg);
++    if (val <= 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_count_per_conn %d invaild, it should be > 0.\n", val);
++        return -EINVAL;
++    }
++
++    g_config_params.mbuf_count_per_conn = val;
+ 
+     return 0;
+ }
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 5475f31..f60963f 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -179,7 +179,9 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
+     }
+ 
+     stack->rxtx_pktmbuf_pool = create_pktmbuf_mempool("rxtx_mbuf",
+-        get_global_cfg_params()->mbuf_pool_size / stack_num, RXTX_CACHE_SZ, stack->queue_id);
++        get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_num,
++        RXTX_CACHE_SZ,
++        stack->queue_id);
+     if (stack->rxtx_pktmbuf_pool == NULL) {
+         return -1;
+     }
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index bdaa083..0b89e28 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -74,7 +74,8 @@ struct cfg_params {
+     uint16_t lpm_rx_pkts;
+     uint32_t lpm_detect_ms;
+     uint32_t lpm_pkts_in_detect;
+-    uint32_t mbuf_pool_size;
++    uint32_t tcp_conn_count;
++    uint32_t mbuf_count_per_conn;
+     uint32_t send_connect_number;
+     uint32_t read_connect_number;
+     uint32_t rpc_number;
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index c27db22..b7a4ede 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -16,8 +16,10 @@ kni_switch=0
+ low_power_mode=0
+ listen_shadow=0
+  
+-#number of mbuf pool for tx and rx. per mbuf is 2560 Byte.
+-mbuf_pool_size = 256000
++#needed mbuf count = tcp_conn_count * mbuf_count_per_conn
++tcp_conn_count = 1500
++mbuf_count_per_conn = 170
++
+  
+ #protocol stack thread per loop params
+ #send connect to nic
+-- 
+2.23.0
+

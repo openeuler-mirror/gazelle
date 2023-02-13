@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       47
+Release:       48
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -201,6 +201,12 @@ Patch9183:     0183-add-log-message-when-wait-for-connecting-to-ltran.patch
 Patch9184:     0184-add-gazelle-fuzz.patch
 Patch9185:     0185-add-unitest.patch
 Patch9186:     0186-add-gazelle-setup-tools.patch
+Patch9187:     0187-test-readv-writev-epoll_create1-accept4.patch
+Patch9188:     0188-add-fucntest.patch
+Patch9189:     0189-fix-coredump-in-example-server-mum-mode.patch
+Patch9190:     0190-bring-up-kni-when-init.patch
+Patch9191:     0191-change-mbuf_pool_size-in-lstack.conf-to-tcp_conn_cou.patch
+Patch9192:     0192-fix-build-error-in-lstack.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -241,6 +247,13 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Feb 13 2023 net <jiangheng14@huawei.com> - 1.0.1-48
+- change mbuf_pool_size in lstack.conf to tcp_conn_count * mbuf_count_per_conn
+- bring up kni when init
+- fix coredump in example server mum mode
+- add fucntest
+- test readv writev epoll_create1 accept4
+
 * Mon Feb 6 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-47
 - add gazelle setup tools
 - add unitest

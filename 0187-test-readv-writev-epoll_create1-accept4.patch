@@ -1,0 +1,448 @@
+From 9ff6edf1f5a9140831d03b4ce3bcf35ee5cf710e Mon Sep 17 00:00:00 2001
+From: jackyfan <1376762675@qq.com>
+Date: Mon, 12 Dec 2022 16:06:10 +0800
+Subject: [PATCH] test readv writev epoll_create1 accept4
+
+---
+ examples/README.md       | 20 ++++++++++++++++---
+ examples/inc/client.h    |  1 +
+ examples/inc/parameter.h |  9 +++++++++
+ examples/inc/server.h    |  7 ++++++-
+ examples/inc/utilities.h |  1 +
+ examples/src/bussiness.c | 25 ++++++++++++++++++++++++
+ examples/src/client.c    | 10 ++++++++--
+ examples/src/parameter.c | 40 +++++++++++++++++++++++++++++++++++++-
+ examples/src/server.c    | 42 +++++++++++++++++++++++++++++++++++-----
+ 9 files changed, 143 insertions(+), 12 deletions(-)
+
+diff --git a/examples/README.md b/examples/README.md
+index cf2f26f..06a725b 100644
+--- a/examples/README.md
++++ b/examples/README.md
+@@ -113,7 +113,7 @@
+ * `-D, --domain [unix | posix]`：通信协议。
+   * `unix`：基于 unix 协议实现。
+   * `posix`：基于 posix 协议实现。
+-* `-A, --api [readwrite | recvsend | recvsendmsg]`：内部实现的接口类型。
++* `-A, --api [readwrite | recvsend | recvsendmsg | readvwritev]`：内部实现的接口类型。
+   * `readwrite` ：使用 `read` 和 `write` 接口。
+   * `recvsend` ：使用 `recv` 和 `send` 接口。
+   * `recvsendmsg` ：使用 `recvmsg` 和 `sendmsg` 接口。
+@@ -122,7 +122,12 @@
+ * `-r, --ringpmd`：是否基于dpdk ring PMD 收发环回。
+ * `-d, --debug`：是否打印调试信息。
+ * `-h, --help`：获得帮助信息。
+-
++* `-E, --epollcreate`：epoll_create方式。
++  * `ec`：使用epoll_create(int size)生成epoll专用的文件描述符。
++  * `ec1`：使用epoll_create1(int flags)生成epoll专用的文件描述符,flags = EPOLL_CLOEXEC。
++* `-C, --accept`：accept的方式。
++  * `ac`：使用accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)通过套接口接受连接。
++  * `ac4`：使用accept4(int sockfd, struct sockaddr *addr,socklen_t *addrlen, int flags)通过套接口接受连接,flags=SOCK_CLOEXEC。
+ ## 使用
+ 
+  * **环境配置**
+@@ -165,6 +170,12 @@ make
+ -r, --ringpmd: set to use ringpmd. 
+ -d, --debug: set to print the debug information. 
+ -h, --help: see helps.
++-E, --epollcreate: epoll_create method.
++    ec: use epoll_create(int size) to create epoll fd.
++    ec1:use epoll_create(int flags) to create epoll fd, flags=EPOLL_CLOEXEC.
++-C, --accept: accept method.
++    ac: use accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) to accept a connection on a socket
++    ac4: use accept4(int sockfd, struct sockaddr *addr,socklen_t *addrlen, int flags) to accept a connection on a socket, flags=SOCK_CLOEXEC.
+  ```
+ 
+  * 创建服务端
+@@ -184,6 +195,8 @@ make
+ --> [verify]:                   on 
+ --> [ringpmd]:                  off 
+ --> [debug]:                    off 
++--> [epoll create]:             ec
++--> [accept]:                   ac
+ 
+ [program informations]: 
+ --> <server>: [connect num]: 0, [receive]: 0.000 B/s
+@@ -205,7 +218,8 @@ make
+ --> [packet length]:            1024 
+ --> [verify]:                   on 
+ --> [ringpmd]:                  off 
+---> [debug]:                    off 
++--> [epoll create]:             ec
++--> [accept]:                   ac
+ 
+ [program informations]: 
+ --> <client>: [connect num]: 80, [send]: 357.959 MB/s
+diff --git a/examples/inc/client.h b/examples/inc/client.h
+index d3ae017..ad824c7 100644
+--- a/examples/inc/client.h
++++ b/examples/inc/client.h
+@@ -39,6 +39,7 @@ struct ClientUnit
+     char* domain;                       ///< the communication domain
+     char* api;                          ///< the type of api
+     bool debug;                         ///< if we print the debug information
++    char* epollcreate;                  ///< epoll_create method
+     struct ClientUnit *next;            ///< next pointer
+ };
+ 
+diff --git a/examples/inc/parameter.h b/examples/inc/parameter.h
+index ee8fe4e..0683822 100644
+--- a/examples/inc/parameter.h
++++ b/examples/inc/parameter.h
+@@ -30,6 +30,9 @@
+ #define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
+ #define PARAM_DEFAULT_DEBUG         (false)                 ///< default flag of debug
+ #define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
++#define PARAM_DEFAULT_EPOLLCREATE   ("ec")                  ///< default method of epoll_create
++#define PARAM_DEFAULT_ACCEPT        ("ac")                  ///< default method of accept method
++
+ 
+ enum {
+ #define PARAM_NAME_AS               ("as")                  ///< name of parameter type
+@@ -58,6 +61,10 @@ enum {
+     PARAM_NUM_DEBUG = 'd',
+ #define PARAM_NAME_HELP             ("help")                ///< name of parameter help
+     PARAM_NUM_HELP = 'h',
++#define PARAM_NAME_EPOLLCREATE      ("epollcreate")         ///< name of parameter epollcreate
++    PARAM_NUM_EPOLLCREATE = 'E',
++#define PARAM_NAME_ACCEPT           ("accept")              ///< name of parameter accept
++    PARAM_NUM_ACCEPT = 'C',
+ };
+ 
+ #define NO_ARGUMENT             0                           ///< options takes no arguments
+@@ -92,6 +99,8 @@ struct ProgramParams {
+     uint32_t            pktlen;             ///< the packet length
+     bool                verify;             ///< if we verify the message or not
+     bool                debug;              ///< if we print the debug information or not
++    char*               epollcreate;        ///< epoll_create method
++    char*               accept;             ///< accept connections method
+     bool                ringpmd;            ///< if we use ring PMD or not
+ };
+ 
+diff --git a/examples/inc/server.h b/examples/inc/server.h
+index fa9096b..45ca895 100644
+--- a/examples/inc/server.h
++++ b/examples/inc/server.h
+@@ -13,7 +13,7 @@
+ 
+ #ifndef __EXAMPLES_SERVER_H__
+ #define __EXAMPLES_SERVER_H__
+-
++#define _GNU_SOURCE 
+ 
+ #include "utilities.h"
+ #include "parameter.h"
+@@ -37,6 +37,8 @@ struct ServerMumUnit
+     char* domain;                           ///< communication domain
+     char* api;                              ///< the type of api
+     bool debug;                             ///< if we print the debug information
++    char* epollcreate;                      ///< epoll_create method
++    char* accept;                           ///< accept connections method
+     struct ServerMumUnit *next;             ///< next pointer
+ };
+ 
+@@ -65,6 +67,7 @@ struct ServerMudWorker
+     uint16_t port;                          ///< client port
+     char* api;                              ///< the type of api
+     bool debug;                             ///< if we print the debug information
++    char* epollcreate;                      ///< epoll_create method
+     struct ServerMudWorker *next;           ///< next pointer
+ };
+ 
+@@ -85,6 +88,8 @@ struct ServerMud
+     char* domain;                           ///< communication domain
+     char* api;                              ///< the type of api
+     bool debug;                             ///< if we print the debug information
++    char* accept;                           ///< accept connections method
++    char* epollcreate;                      ///< epoll_create method
+ };
+ 
+ 
+diff --git a/examples/inc/utilities.h b/examples/inc/utilities.h
+index a684d35..a083f57 100644
+--- a/examples/inc/utilities.h
++++ b/examples/inc/utilities.h
+@@ -40,6 +40,7 @@
+ 
+ #include "securec.h"
+ #include "securectype.h"
++#include "sys/uio.h"
+ 
+ 
+ #define PRINT_ERROR(format, ...)            do \
+diff --git a/examples/src/bussiness.c b/examples/src/bussiness.c
+index f55a37b..b084b37 100644
+--- a/examples/src/bussiness.c
++++ b/examples/src/bussiness.c
+@@ -25,6 +25,18 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
+         return read(fd, buffer_in, length);
+     } else if (strcmp(api, "recvsend") == 0) {
+         return recv(fd, buffer_in, length, 0);
++    } else if (strcmp(api, "readvwritev") == 0) {
++        struct iovec iov[3];
++        int iovcnt = 3;
++        uint32_t iov_len_size = length/iovcnt;
++
++        iov[0].iov_base=buffer_in;
++        iov[0].iov_len = iov_len_size;
++        iov[1].iov_base= buffer_in + iov_len_size;
++        iov[1].iov_len =  iov_len_size;
++        iov[2].iov_base = buffer_in + iov_len_size + iov_len_size;
++        iov[2].iov_len = length- iov_len_size - iov_len_size;
++        return readv(fd, iov, iovcnt);
+     } else {
+         struct msghdr msg_recv;
+         struct iovec iov;
+@@ -50,6 +62,19 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
+         return write(fd, buffer_out, length);
+     } else if (strcmp(api, "recvsend") == 0) {
+         return send(fd, buffer_out, length, 0);
++    } else if (strcmp(api, "readvwritev") == 0) {
++        struct iovec iov[3];
++        int iovcnt = 3;
++        uint32_t iov_len_size = length/iovcnt;
++
++        iov[0].iov_base=buffer_out;
++        iov[0].iov_len = iov_len_size;
++        iov[1].iov_base= buffer_out + iov_len_size;
++        iov[1].iov_len =  iov_len_size;
++        iov[2].iov_base = buffer_out + iov_len_size + iov_len_size;
++        iov[2].iov_len = length- iov_len_size - iov_len_size;
++        
++        return writev(fd, iov, iovcnt);
+     } else {
+         struct msghdr msg_send;
+         struct iovec iov;
+diff --git a/examples/src/client.c b/examples/src/client.c
+index aafcd00..46dd039 100644
+--- a/examples/src/client.c
++++ b/examples/src/client.c
+@@ -155,8 +155,13 @@ int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct Clien
+ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
+ {
+     const uint32_t connect_num = client_unit->connect_num;
+-
+-    client_unit->epfd = epoll_create(CLIENT_EPOLL_SIZE_MAX);
++    //jacky modify
++    if (strcmp(client_unit->epollcreate, "ec1") == 0) {
++        client_unit->epfd = epoll_create1(EPOLL_CLOEXEC);
++    } else {
++        client_unit->epfd = epoll_create(CLIENT_EPOLL_SIZE_MAX);
++    }
++    
+     if (client_unit->epfd < 0) {
+         PRINT_ERROR("client can't create epoll %d! ", errno);
+         return PROGRAM_FAULT;
+@@ -364,6 +369,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
+         client_unit->verify = params->verify;
+         client_unit->domain = params->domain;
+         client_unit->api = params->api;
++        client_unit->epollcreate = params->epollcreate;
+         client_unit->debug = params->debug;
+         client_unit->next = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
+ 
+diff --git a/examples/src/parameter.c b/examples/src/parameter.c
+index 100ee11..3116a18 100644
+--- a/examples/src/parameter.c
++++ b/examples/src/parameter.c
+@@ -29,6 +29,8 @@ const char prog_short_opts[] = \
+     "r"         // ringpmd
+     "d"         // debug
+     "h"         // help
++    "E"         // epollcreate
++    "C"         // accept
+     ;
+ 
+ // program long options
+@@ -47,6 +49,8 @@ const struct ProgramOption prog_long_opts[] = \
+     {PARAM_NAME_RINGPMD, NO_ARGUMENT, NULL, PARAM_NUM_RINGPMD},
+     {PARAM_NAME_DEBUG, NO_ARGUMENT, NULL, PARAM_NUM_DEBUG},
+     {PARAM_NAME_HELP, NO_ARGUMENT, NULL, PARAM_NUM_HELP},
++    {PARAM_NAME_EPOLLCREATE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_EPOLLCREATE},
++    {PARAM_NAME_ACCEPT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_ACCEPT},
+ };
+ 
+ 
+@@ -139,7 +143,7 @@ void program_param_parse_domain(struct ProgramParams *params)
+ void program_param_parse_api(struct ProgramParams *params)
+ {
+     printf("aaaaaa %s\n", optarg);
+-    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0) {
++    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "readvwritev") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0) {
+         params->api = optarg;
+     } else {
+         PRINT_ERROR("illigal argument -- %s \n", optarg);
+@@ -159,6 +163,28 @@ void program_param_parse_pktlen(struct ProgramParams *params)
+     }
+ }
+ 
++// set `epollcreate` parameter
++void program_param_parse_epollcreate(struct ProgramParams *params)
++{
++    if (strcmp(optarg, "ec") == 0 || strcmp(optarg, "ec1") == 0) {
++        params->epollcreate = optarg;
++    } else {
++        PRINT_ERROR("illigal argument -- %s \n", optarg);
++        exit(PROGRAM_ABORT);
++    }
++}
++
++// set `accept` parameter
++void program_param_parse_accept(struct ProgramParams *params)
++{
++    if (strcmp(optarg, "ac") == 0 || strcmp(optarg, "ac4") == 0) {
++        params->accept = optarg;
++    } else {
++        PRINT_ERROR("illigal argument -- %s \n", optarg);
++        exit(PROGRAM_ABORT);
++    }
++}
++
+ // initialize the parameters
+ void program_params_init(struct ProgramParams *params)
+ {
+@@ -174,6 +200,8 @@ void program_params_init(struct ProgramParams *params)
+     params->verify = PARAM_DEFAULT_VERIFY;
+     params->ringpmd = PARAM_DEFAULT_RINGPMD;
+     params->debug = PARAM_DEFAULT_DEBUG;
++    params->epollcreate = PARAM_DEFAULT_EPOLLCREATE;
++    params->accept = PARAM_DEFAULT_ACCEPT;
+ }
+ 
+ // print program helps
+@@ -202,6 +230,8 @@ void program_params_help(void)
+     printf("-r, --ringpmd: set to use ringpmd. \n");
+     printf("-d, --debug: set to print the debug information. \n");
+     printf("-h, --help: see helps. \n");
++    printf("-E, --epollcreate [ec | ec1]: epoll_create method. \n");
++    printf("-C, --accept [ac | ac4]: accept method. \n");
+     printf("\n");
+ }
+ 
+@@ -256,6 +286,12 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
+             case (PARAM_NUM_DEBUG):
+                 params->debug = true;
+                 break;
++            case (PARAM_NUM_EPOLLCREATE):
++                program_param_parse_epollcreate(params);
++                break;
++            case (PARAM_NUM_ACCEPT):
++                program_param_parse_accept(params);
++                break;
+             case (PARAM_NUM_HELP):
+                 program_params_help();
+                 return PROGRAM_ABORT;
+@@ -304,5 +340,7 @@ void program_params_print(struct ProgramParams *params)
+     printf("--> [verify]:                   %s \n", (params->verify == true) ? "on" : "off");
+     printf("--> [ringpmd]:                  %s \n", (params->ringpmd == true) ? "on" : "off");
+     printf("--> [debug]:                    %s \n", (params->debug == true) ? "on" : "off");
++    printf("--> [epoll create]:             %s \n", params->epollcreate);
++    printf("--> [accept]:                   %s \n", params->accept);
+     printf("\n");
+ }
+diff --git a/examples/src/server.c b/examples/src/server.c
+index d1dab72..27572f0 100644
+--- a/examples/src/server.c
++++ b/examples/src/server.c
+@@ -86,7 +86,12 @@ void sermud_info_print(struct ServerMud *server_mud)
+ // the worker thread, unblock, dissymmetric server listens and gets epoll feature descriptors
+ int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
+ {
+-    worker_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
++    if (strcmp(worker_unit->epollcreate, "ec1") == 0) {
++        worker_unit->epfd = epoll_create1(EPOLL_CLOEXEC);
++    } else {
++        worker_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
++    }
++    
+     if (worker_unit->epfd < 0) {
+        PRINT_ERROR("server can't create epoll %d! ", worker_unit->epfd);
+        return PROGRAM_FAULT;
+@@ -106,7 +111,12 @@ int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
+ // the listener thread, unblock, dissymmetric server listens and gets epoll feature descriptors
+ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
+ {
+-    server_mud->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
++    if (strcmp(server_mud->epollcreate, "ec1") == 0) {
++        server_mud->epfd = epoll_create1(EPOLL_CLOEXEC);
++    } else {
++        server_mud->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
++    }
++    
+     if (server_mud->epfd < 0) {
+        PRINT_ERROR("server can't create epoll %d! ", server_mud->epfd);
+        return PROGRAM_FAULT;
+@@ -131,7 +141,13 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
+     while (true) {
+         struct sockaddr_in accept_addr;
+         uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
+-        int32_t accept_fd = accept(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
++        int32_t accept_fd;
++        if (strcmp(server_mud->accept, "ac4") == 0) {
++            accept_fd = accept4(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
++        } else {
++            accept_fd = accept(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
++        }
++        
+         if (accept_fd < 0) {
+             break;
+         }
+@@ -155,6 +171,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
+         worker->api = server_mud->api;
+         worker->debug = server_mud->debug;
+         worker->next = server_mud->workers;
++        worker->epollcreate = server_mud->epollcreate;
+ 
+         server_mud->workers = worker;
+ 
+@@ -308,6 +325,8 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
+     server_mud->domain = params->domain;
+     server_mud->api = params->api;
+     server_mud->debug = params->debug;
++    server_mud->epollcreate = params->epollcreate;
++    server_mud->accept = params->accept;
+ 
+     if (pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud) < 0) {
+         PRINT_ERROR("server can't create poisx thread %d! ", errno);
+@@ -378,7 +397,12 @@ void sermum_info_print(struct ServerMum *server_mum)
+ // the single thread, unblock, mutliplexing IO server listens and gets epoll feature descriptors
+ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
+ {
+-    server_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
++    if (strcmp(server_unit->epollcreate, "ec1") == 0) {
++        server_unit->epfd = epoll_create1(EPOLL_CLOEXEC);
++    } else {
++        server_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
++    }
++    
+     if (server_unit->epfd < 0) {
+        PRINT_ERROR("server can't create epoll %d! ", server_unit->epfd);
+        return PROGRAM_FAULT;
+@@ -403,7 +427,13 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
+     while (true) {
+         struct sockaddr_in accept_addr;
+         uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
+-        int32_t accept_fd = accept(server_unit->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
++        int32_t accept_fd;
++        if (strcmp(server_unit->accept, "ac4") == 0) {
++            accept_fd = accept4(server_unit->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
++        } else {
++            accept_fd = accept(server_unit->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
++        }
++        
+         if (accept_fd < 0) {
+             break;
+         }
+@@ -542,6 +572,8 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
+         server_unit->domain = params->domain;
+         server_unit->api = params->api;
+         server_unit->debug = params->debug;
++        server_unit->epollcreate = params->epollcreate;
++        server_unit->accept = params->accept;
+         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
+ 
+         if (pthread_create((tids + i), NULL, sersum_create_and_run, server_unit) < 0) {
+-- 
+2.23.0
+
