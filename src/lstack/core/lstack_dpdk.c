@@ -179,7 +179,9 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
     }
 
     stack->rxtx_pktmbuf_pool = create_pktmbuf_mempool("rxtx_mbuf",
-        get_global_cfg_params()->mbuf_pool_size / stack_num, RXTX_CACHE_SZ, stack->queue_id);
+        get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_num,
+        RXTX_CACHE_SZ,
+        stack->queue_id);
     if (stack->rxtx_pktmbuf_pool == NULL) {
         return -1;
     }

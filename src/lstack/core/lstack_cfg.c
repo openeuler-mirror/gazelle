@@ -84,7 +84,8 @@ static struct config_vector_t g_config_tbl[] = {
     { "app_bind_numa",  parse_app_bind_numa },
     { "main_thread_affinity",  parse_main_thread_affinity },
     { "unix_prefix",    parse_unix_prefix },
-    { "mbuf_pool_size", parse_rxtx_pool_size },
+    { "tcp_conn_count", parse_tcp_conn_count },
+    { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
     { "send_connect_number", parse_send_connect_number },
     { "read_connect_number", parse_read_connect_number },
     { "rpc_number", parse_rpc_number },
@@ -707,24 +708,44 @@ static int32_t parse_use_ltran(void)
     return 0;
 }
 
-static int32_t parse_rxtx_pool_size(void)
+static int32_t parse_tcp_conn_count(void)
 {
     const config_setting_t *arg = NULL;
 
-    arg = config_lookup(&g_config, "mbuf_pool_size");
+    arg = config_lookup(&g_config, "tcp_conn_count");
     if (arg == NULL) {
-        g_config_params.mbuf_pool_size = RXTX_NB_MBUF_DEFAULT;
-        LSTACK_PRE_LOG(LSTACK_ERR, "use default mbuf_pool_size %d.\n", RXTX_NB_MBUF_DEFAULT);
+        g_config_params.tcp_conn_count = TCP_CONN_COUNT;
         return 0;
     }
 
     int32_t val = config_setting_get_int(arg);
-    if (val <= 0 || val > RXTX_NB_MBUF_MAX) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_pool_size %d invaild, it should be in (0,%d].\n", val, RXTX_NB_MBUF_MAX);
+    if (val <= 0 || val > TCP_CONN_COUNT) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg tcp_conn_count %d invaild, it should be in (0,%d].\n", val, TCP_CONN_COUNT);
         return -EINVAL;
     }
 
-    g_config_params.mbuf_pool_size = val;
+    g_config_params.tcp_conn_count = val;
+
+    return 0;
+}
+
+static int32_t parse_mbuf_count_per_conn(void)
+{
+    const config_setting_t *arg = NULL;
+
+    arg = config_lookup(&g_config, "mbuf_count_per_conn");
+    if (arg == NULL) {
+        g_config_params.tcp_conn_count = MBUF_COUNT_PER_CONN;
+        return 0;
+    }
+
+    int32_t val = config_setting_get_int(arg);
+    if (val <= 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_count_per_conn %d invaild, it should be > 0.\n", val);
+        return -EINVAL;
+    }
+
+    g_config_params.mbuf_count_per_conn = val;
 
     return 0;
 }

@@ -74,7 +74,8 @@ struct cfg_params {
     uint16_t lpm_rx_pkts;
     uint32_t lpm_detect_ms;
     uint32_t lpm_pkts_in_detect;
-    uint32_t mbuf_pool_size;
+    uint32_t tcp_conn_count;
+    uint32_t mbuf_count_per_conn;
     uint32_t send_connect_number;
     uint32_t read_connect_number;
     uint32_t rpc_number;
