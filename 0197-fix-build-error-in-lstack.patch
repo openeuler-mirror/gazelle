@@ -1,0 +1,30 @@
+From f259ff5f8850c7f1567b0c4b02b79e29ceee48c4 Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Mon, 13 Feb 2023 20:36:22 +0800
+Subject: [PATCH] fix build error in lstack
+
+---
+ src/lstack/core/lstack_cfg.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 0da5085..0c4b55b 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -58,11 +58,12 @@ static int32_t parse_listen_shadow(void);
+ static int32_t parse_app_bind_numa(void);
+ static int32_t parse_main_thread_affinity(void);
+ static int32_t parse_unix_prefix(void);
+-static int32_t parse_rxtx_pool_size(void);
+ static int32_t parse_send_connect_number(void);
+ static int32_t parse_read_connect_number(void);
+ static int32_t parse_rpc_number(void);
+ static int32_t parse_nic_read_number(void);
++static int32_t parse_tcp_conn_count(void);
++static int32_t parse_mbuf_count_per_conn(void);
+ 
+ struct config_vector_t {
+     const char *name;
+-- 
+2.23.0
+
