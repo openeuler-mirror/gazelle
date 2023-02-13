@@ -58,11 +58,12 @@ static int32_t parse_listen_shadow(void);
 static int32_t parse_app_bind_numa(void);
 static int32_t parse_main_thread_affinity(void);
 static int32_t parse_unix_prefix(void);
-static int32_t parse_rxtx_pool_size(void);
 static int32_t parse_send_connect_number(void);
 static int32_t parse_read_connect_number(void);
 static int32_t parse_rpc_number(void);
 static int32_t parse_nic_read_number(void);
+static int32_t parse_tcp_conn_count(void);
+static int32_t parse_mbuf_count_per_conn(void);
 
 struct config_vector_t {
     const char *name;
