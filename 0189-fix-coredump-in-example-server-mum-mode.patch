@@ -1,0 +1,26 @@
+From c8024efb3849aa44a1539017da4db77d46d5a5c2 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Tue, 7 Feb 2023 20:01:29 +0800
+Subject: [PATCH] fix coredump in example server mum mode
+
+---
+ examples/src/server.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/examples/src/server.c b/examples/src/server.c
+index 27572f0..7ee73db 100644
+--- a/examples/src/server.c
++++ b/examples/src/server.c
+@@ -575,6 +575,9 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
+         server_unit->epollcreate = params->epollcreate;
+         server_unit->accept = params->accept;
+         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
++        if (server_unit->next) {
++            memset_s(server_unit->next, sizeof(struct ServerMumUnit), 0, sizeof(struct ServerMumUnit));
++        }
+ 
+         if (pthread_create((tids + i), NULL, sersum_create_and_run, server_unit) < 0) {
+             PRINT_ERROR("server can't create poisx thread %d! ", errno);
+-- 
+2.23.0
+
