@@ -167,7 +167,11 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
     struct protocol_stack *stack = get_protocol_stack();
     struct rte_mbuf *pre_mbuf = NULL;
     struct rte_mbuf *first_mbuf = NULL;
-    struct pbuf *first_pbuf = NULL;
+    struct pbuf *first_pbuf = pbuf;
+    uint16_t header_len = 0;
+    if (likely(first_pbuf != NULL)) {
+        header_len = first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
+    }
 
     while (likely(pbuf != NULL)) {
         struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
@@ -175,20 +179,20 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
         mbuf->data_len = pbuf->len;
         mbuf->pkt_len = pbuf->tot_len;
         mbuf->ol_flags = pbuf->ol_flags;
+        mbuf->next = NULL;
 
         if (first_mbuf == NULL) {
             first_mbuf = mbuf;
             first_pbuf = pbuf;
             first_mbuf->nb_segs = 1;
             if (pbuf->header_off > 0) {
-                mbuf->data_off -= first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
+                mbuf->data_off -= header_len;
                 pbuf->header_off = 0;
             }
         } else {
             first_mbuf->nb_segs++;
             pre_mbuf->next = mbuf;
             if (pbuf->header_off == 0) {
-                uint16_t header_len = first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
                 mbuf->data_off += header_len;
                 pbuf->header_off = header_len;
             }
@@ -204,10 +208,6 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 
         pre_mbuf = mbuf;
         rte_mbuf_refcnt_update(mbuf, 1);
-        if (pbuf->rexmit) {
-            mbuf->next = NULL;
-            break;
-        }
         pbuf->rexmit = 1;
         pbuf = pbuf->next;
     }
