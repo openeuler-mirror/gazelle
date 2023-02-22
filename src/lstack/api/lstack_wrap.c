@@ -19,11 +19,11 @@
 #include <sys/socket.h>
 #include <stdarg.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 
 #include <lwip/posix_api.h>
-#include <lwip/api.h>
 #include <lwip/lwipsock.h>
 
 #include "posix/lstack_epoll.h"
@@ -273,9 +273,21 @@ static inline int32_t do_getsockname(int32_t s, struct sockaddr *name, socklen_t
     return posix_api->getsockname_fn(s, name, namelen);
 }
 
+static bool unsupport_optname(int32_t optname)
+{
+    if (optname == SO_BROADCAST ||
+        optname == SO_PROTOCOL  ||
+        optname == TCP_QUICKACK ||
+        optname == SO_SNDTIMEO  ||
+        optname == SO_RCVTIMEO) {
+        return true;
+    }
+    return false;
+}
+
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
-    if (select_path(s) == PATH_LWIP) {
+    if (select_path(s) == PATH_LWIP && !unsupport_optname(optname)) {
         return rpc_call_getsockopt(s, level, optname, optval, optlen);
     }
 
@@ -284,7 +296,7 @@ static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, v
 
 static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, const void *optval, socklen_t optlen)
 {
-    if (select_path(s) == PATH_KERNEL) {
+    if (select_path(s) == PATH_KERNEL || unsupport_optname(optname)) {
         return posix_api->setsockopt_fn(s, level, optname, optval, optlen);
     }
 
