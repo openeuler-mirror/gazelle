@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       48
+Release:       49
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -207,6 +207,8 @@ Patch9189:     0189-fix-coredump-in-example-server-mum-mode.patch
 Patch9190:     0190-bring-up-kni-when-init.patch
 Patch9191:     0191-change-mbuf_pool_size-in-lstack.conf-to-tcp_conn_cou.patch
 Patch9192:     0192-fix-build-error-in-lstack.patch
+Patch9193:     0193-check-and-fix-wakeup_list-when-null-appears.patch
+Patch9194:     0194-eneble-TSO-and-fix-TSO-mbuf-pktlen-error.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -247,6 +249,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Wed Feb 22 2023 kircher <majun65@huawei.com> - 1.0.1-49
+- eneble TSO and fix TSO mbuf pktlen error
+- check and fix wakeup_list when null appears
+
 * Mon Feb 13 2023 net <jiangheng14@huawei.com> - 1.0.1-48
 - change mbuf_pool_size in lstack.conf to tcp_conn_count * mbuf_count_per_conn
 - bring up kni when init
