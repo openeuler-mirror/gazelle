@@ -1,0 +1,34 @@
+From 9fd7ce8ede4f5fcb730137d2593bfb8f470fad56 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Tue, 21 Feb 2023 17:08:29 +0800
+Subject: [PATCH] check and fix wakeup_list when null appears
+
+---
+ src/lstack/api/lstack_epoll.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/lstack/api/lstack_epoll.c b/src/lstack/api/lstack_epoll.c
+index 7860163..da29590 100644
+--- a/src/lstack/api/lstack_epoll.c
++++ b/src/lstack/api/lstack_epoll.c
+@@ -84,6 +84,17 @@ void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable)
+     struct list_node *node, *temp;
+ 
+     list_for_each_safe(node, temp, &stack->wakeup_list) {
++        /* When temp is NULL, find the tail node in the wekeup_list and connect it to the back of the node */
++        if (unlikely(temp == NULL)) {
++            struct list_node *nod = &stack->wakeup_list;
++            while (nod->prev && nod->prev != node) {
++                nod = nod->prev;
++            }
++            nod->prev = node;
++            node->next = nod;
++            temp = nod;
++        }
++
+         struct wakeup_poll *wakeup = container_of((node - stack->queue_id), struct wakeup_poll, wakeup_list);
+ 
+         if (!wakeup_thread_enable) {
+-- 
+2.33.0
+
