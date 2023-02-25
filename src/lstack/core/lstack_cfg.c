@@ -65,6 +65,25 @@ static int32_t parse_nic_read_number(void);
 static int32_t parse_tcp_conn_count(void);
 static int32_t parse_mbuf_count_per_conn(void);
 
+static inline int32_t parse_int(void *arg, char * arg_string, int32_t default_val,
+                             int32_t min_val, int32_t max_val)
+{
+    const config_setting_t *config_arg = NULL;
+    config_arg = config_lookup(&g_config, arg_string);
+    if (config_arg == NULL) {
+        *(int32_t *)arg = default_val;
+        return 0;
+    }
+    int32_t val = config_setting_get_int(config_arg);
+    if (val < min_val || val > max_val) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg %s %d invaild, range is [%d, %d].\n",
+                       arg_string, val, min_val, max_val);
+        return -EINVAL;
+    }
+    *(int32_t *)arg = val;
+    return 0;
+}
+
 struct config_vector_t {
     const char *name;
     int32_t (*f)(void);
@@ -642,21 +661,12 @@ free_dpdk_args:
 
 static int32_t parse_low_power_mode(void)
 {
-    const config_setting_t *setting = NULL;
-
     /* Set parameter default value */
     g_config_params.lpm_detect_ms = LSTACK_LPM_DETECT_MS;
     g_config_params.lpm_rx_pkts = LSTACK_LPM_RX_PKTS;
     g_config_params.lpm_pkts_in_detect = LSTACK_LPM_PKTS_IN_DETECT;
 
-    setting = config_lookup(&g_config, "low_power_mode");
-    if (setting == NULL) {
-        g_config_params.low_power_mod = 0;
-        return 0;
-    }
-    g_config_params.low_power_mod = (uint16_t)config_setting_get_int(setting);
-
-    return 0;
+    return parse_int(&g_config_params.low_power_mod, "low_power_mode", 0, 0, 1);
 }
 
 static int32_t parse_wakeup_cpu_number(void)
@@ -695,210 +705,65 @@ static int32_t parse_wakeup_cpu_number(void)
 
 static int32_t parse_use_ltran(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "use_ltran");
-    if (arg == NULL) {
-        g_config_params.use_ltran = true;
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    g_config_params.use_ltran = (val == 0) ? false : true;
-
-    return 0;
+    return parse_int(&g_config_params.use_ltran, "use_ltran", 1, 0, 1);
 }
 
 static int32_t parse_tcp_conn_count(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "tcp_conn_count");
-    if (arg == NULL) {
-        g_config_params.tcp_conn_count = TCP_CONN_COUNT;
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    if (val <= 0 || val > TCP_CONN_COUNT) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg tcp_conn_count %d invaild, it should be in (0,%d].\n", val, TCP_CONN_COUNT);
-        return -EINVAL;
-    }
-
-    g_config_params.tcp_conn_count = val;
-
-    return 0;
+    return parse_int(&g_config_params.tcp_conn_count, "tcp_conn_count", TCP_CONN_COUNT, 1, TCP_CONN_COUNT);
 }
 
 static int32_t parse_mbuf_count_per_conn(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "mbuf_count_per_conn");
-    if (arg == NULL) {
-        g_config_params.tcp_conn_count = MBUF_COUNT_PER_CONN;
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    if (val <= 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg mbuf_count_per_conn %d invaild, it should be > 0.\n", val);
-        return -EINVAL;
-    }
-
-    g_config_params.mbuf_count_per_conn = val;
-
-    return 0;
+    return parse_int(&g_config_params.mbuf_count_per_conn, "mbuf_count_per_conn",
+                     MBUF_COUNT_PER_CONN, 1, INT32_MAX);
 }
 
 static int32_t parse_send_connect_number(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "send_connect_number");
-    if (arg == NULL) {
-        g_config_params.send_connect_number = STACK_THREAD_DEFAULT;
-        LSTACK_PRE_LOG(LSTACK_ERR, "use default send_connect_number %d.\n", STACK_THREAD_DEFAULT);
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    if (val <= 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg send_connect_number %d invaild.\n", val);
-        return -EINVAL;
-    }
-
-    g_config_params.send_connect_number = val;
-
-    return 0;
+    return parse_int(&g_config_params.send_connect_number, "send_connect_number",
+                     STACK_THREAD_DEFAULT, 1, INT32_MAX);
 }
 
 static int32_t parse_read_connect_number(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "read_connect_number");
-    if (arg == NULL) {
-        g_config_params.read_connect_number = STACK_THREAD_DEFAULT;
-        LSTACK_PRE_LOG(LSTACK_ERR, "use default read_connect_number %d.\n", STACK_THREAD_DEFAULT);
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    if (val <= 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg read_connect_number %d invaild.\n", val);
-        return -EINVAL;
-    }
-
-    g_config_params.read_connect_number = val;
-
-    return 0;
+    return parse_int(&g_config_params.read_connect_number, "read_connect_number",
+              STACK_THREAD_DEFAULT, 1, INT32_MAX);
 }
 
 static int32_t parse_rpc_number(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "rpc_number");
-    if (arg == NULL) {
-        g_config_params.rpc_number = STACK_THREAD_DEFAULT;
-        LSTACK_PRE_LOG(LSTACK_ERR, "use default rpc_number %d.\n", STACK_THREAD_DEFAULT);
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    if (val <= 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg rpc_number %d invaild.\n", val);
-        return -EINVAL;
-    }
-
-    g_config_params.rpc_number = val;
-
-    return 0;
+    return parse_int(&g_config_params.rpc_number, "rpc_number",
+              STACK_THREAD_DEFAULT, 1, INT32_MAX);
 }
 
 static int32_t parse_nic_read_number(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "nic_read_number");
-    if (arg == NULL) {
-        g_config_params.nic_read_number = STACK_NIC_READ_DEFAULT;
-        LSTACK_PRE_LOG(LSTACK_ERR, "use default nic_read_number %d.\n", STACK_NIC_READ_DEFAULT);
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    if (val <= 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg nic_read_number %d invaild.\n", val);
-        return -EINVAL;
-    }
-
-    g_config_params.nic_read_number = val;
-
-    return 0;
+    return parse_int(&g_config_params.nic_read_number, "nic_read_number",
+              STACK_NIC_READ_DEFAULT, 1, INT32_MAX);
 }
 
 static int32_t parse_listen_shadow(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "listen_shadow");
-    if (arg == NULL) {
-        g_config_params.listen_shadow = false;
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    g_config_params.listen_shadow = (val == 0) ? false : true;
-
-    return 0;
+    return parse_int(&g_config_params.listen_shadow, "listen_shadow", 0, 0, 1);
 }
+
 
 static int32_t parse_app_bind_numa(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "app_bind_numa");
-    if (arg == NULL) {
-        g_config_params.app_bind_numa = true;
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    g_config_params.app_bind_numa = (val == 0) ? false : true;
-
-    return 0;
+    return parse_int(&g_config_params.app_bind_numa, "app_bind_numa", 1, 0, 1);
 }
 
 static int32_t parse_main_thread_affinity(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "main_thread_affinity");
-    if (arg == NULL) {
-        g_config_params.main_thread_affinity = false;
-        return 0;
-    }
-
-    int32_t val = config_setting_get_int(arg);
-    g_config_params.main_thread_affinity = (val == 0) ? false : true;
-
-    return 0;
+    return parse_int(&g_config_params.main_thread_affinity, "main_thread_affinity", 0, 0, 1);
 }
 
 static int32_t parse_kni_switch(void)
 {
-    const config_setting_t *arg = NULL;
-
-    arg = config_lookup(&g_config, "kni_switch");
-    if (arg == NULL) {
-        g_config_params.kni_switch = false;
-        return 0;
+    if (parse_int(&g_config_params.kni_switch, "kni_switch", 0, 0, 1) != 0) {
+        return -1;
     }
-
-    int32_t val = config_setting_get_int(arg);
-    g_config_params.kni_switch = (val == 0) ? false : true;
 
     if (g_config_params.use_ltran && g_config_params.kni_switch) {
         LSTACK_PRE_LOG(LSTACK_ERR, "kni_switch=1 when use_ltran=1, invaild.\n");
