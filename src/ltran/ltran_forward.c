@@ -53,7 +53,7 @@ static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rt
     uint64_t latency;
     uint64_t *priv = NULL;
 
-    priv = (uint64_t *)RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf));
+    priv = (uint64_t *)RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf) + LATENCY_OFFSET);
     // priv--time stamp   priv+1 --- vaild check
     if (*priv != ~(*(priv + 1))) {
         return;
