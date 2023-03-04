@@ -33,7 +33,7 @@ struct pbuf;
 #define LATENCY_OFFSET          96
 static __rte_always_inline uint64_t *mbuf_to_private(struct rte_mbuf *mbuf)
 {
-    return (uint64_t *)((uint8_t *)(mbuf) - sizeof(struct rte_mbuf) - LATENCY_OFFSET);
+    return (uint64_t *)((uint8_t *)(mbuf) + sizeof(struct rte_mbuf) + LATENCY_OFFSET);
 }
 static __rte_always_inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
 {
