@@ -440,7 +440,7 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
 static inline int32_t do_close(int32_t s)
 {
     struct lwip_sock *sock = get_socket_by_fd(s);
-    if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
+    if (likely(posix_api->ues_posix == 0) && sock && sock->wakeup && sock->wakeup->epollfd == s) {
         return lstack_epoll_close(s);
     }
 
