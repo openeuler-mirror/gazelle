@@ -507,7 +507,8 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     if (sock->remain_len) {
         send_len = merge_data_lastpbuf(sock, (char *)buf, len);
         if (send_len >= len) {
-            return len;
+            send_len = len;
+            goto END;
         }
     }
 
@@ -531,7 +532,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
             }
         }
         sock->remain_len = 0;
-        return send_len;
+        goto END;
     }
 
     /* send_ring have idle */
@@ -545,6 +546,11 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         del_data_out_event(sock);
     }
 
+END:
+    if (send_len == 0) {
+        errno = EAGAIN;
+        return -1;
+    }
     return send_len;
 }
 
