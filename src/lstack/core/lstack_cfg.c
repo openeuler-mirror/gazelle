@@ -65,6 +65,7 @@ static int32_t parse_nic_read_number(void);
 static int32_t parse_tcp_conn_count(void);
 static int32_t parse_mbuf_count_per_conn(void);
 static int32_t parse_send_ring_size(void);
+static int32_t parse_expand_send_ring(void);
 
 static inline int32_t parse_int(void *arg, char * arg_string, int32_t default_val,
                              int32_t min_val, int32_t max_val)
@@ -112,6 +113,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "rpc_number", parse_rpc_number },
     { "nic_read_number", parse_nic_read_number },
     { "send_ring_size", parse_send_ring_size },
+    { "expand_send_ring", parse_expand_send_ring },
     { NULL,           NULL }
 };
 
@@ -719,6 +721,11 @@ static int32_t parse_send_ring_size(void)
 {
     /* send ring size default value is 32 */
     return parse_int(&g_config_params.send_ring_size, "send_ring_size", 32, 1, SOCK_SEND_RING_SIZE_MAX);
+}
+
+static int32_t parse_expand_send_ring(void)
+{
+    return parse_int(&g_config_params.expand_send_ring, "expand_send_ring", 0, 0, 1);
 }
 
 static int32_t parse_mbuf_count_per_conn(void)

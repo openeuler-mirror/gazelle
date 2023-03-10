@@ -87,4 +87,7 @@
 #define GAZELLE_RUN_DIR                  "/var/run/gazelle/"
 #define GAZELLE_FILE_PERMISSION          0700
 
+#define SEND_TIME_WAIT_NS 20000
+#define SECOND_NSECOND 1000000000
+
 #endif /* _GAZELLE_OPT_H_ */
