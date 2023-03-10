@@ -31,14 +31,6 @@
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
 
-#define STACK_SEND_MAX              2048
-#define STACK_SEND_MASK             (STACK_SEND_MAX - 1)
-#define STACK_SEND_INDEX(index)     ((index) & STACK_SEND_MASK)
-
-#define STACK_FREE_MAX              4096
-#define STACK_FREE_MASK             (STACK_FREE_MAX - 1)
-#define STACK_FREE_INDEX(index)     ((index) & STACK_FREE_MASK)
-
 struct rte_mempool;
 struct rte_ring;
 struct rte_mbuf;
@@ -74,12 +66,6 @@ struct protocol_stack {
     uint32_t rx_ring_used;
     uint32_t tx_ring_used;
 
-    uint32_t free_start;
-    uint32_t free_end;
-    struct rte_mbuf *free_pkts[STACK_FREE_MAX];
-    uint32_t send_start;
-    uint32_t send_end;
-    struct rte_mbuf *send_pkts[STACK_SEND_MAX];
     struct rte_mbuf *pkts[RTE_TEST_RX_DESC_DEFAULT];
     struct list_node recv_list;
     struct list_node send_list;

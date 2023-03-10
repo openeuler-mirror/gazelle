@@ -129,11 +129,18 @@ static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pk
 
 static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
 {
+    uint32_t sent_pkts = 0;
+
     if (rte_eth_tx_prepare(stack->port_id, stack->queue_id, pkts, nr_pkts) != nr_pkts) {
         stack->stats.tx_prepare_fail++;
+        LSTACK_LOG(INFO, LSTACK, "rte_eth_tx_prepare failed\n");
     }
 
-    return rte_eth_tx_burst(stack->port_id, stack->queue_id, pkts, nr_pkts);
+    do {
+        sent_pkts += rte_eth_tx_burst(stack->port_id, stack->queue_id, &pkts[sent_pkts], nr_pkts - sent_pkts);
+    } while (sent_pkts < nr_pkts);
+
+    return sent_pkts;
 }
 
 int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
