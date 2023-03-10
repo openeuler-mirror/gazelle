@@ -27,7 +27,7 @@
 
 #define SOCK_RECV_RING_SIZE         (128)
 #define SOCK_RECV_FREE_THRES        (32)
-#define SOCK_SEND_RING_SIZE         (32)
+#define SOCK_SEND_RING_SIZE_MAX     (2048)
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
 

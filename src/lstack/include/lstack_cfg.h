@@ -89,6 +89,7 @@ struct cfg_params {
     char **dpdk_argv;
     struct secondary_attach_arg sec_attach_arg;
     char unix_socket_filename[NAME_MAX];
+    uint16_t send_ring_size;
 };
 
 struct cfg_params *get_global_cfg_params(void);

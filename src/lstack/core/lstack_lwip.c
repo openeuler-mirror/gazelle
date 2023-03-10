@@ -33,6 +33,7 @@
 #include "lstack_thread_rpc.h"
 #include "dpdk_common.h"
 #include "lstack_lwip.h"
+#include "lstack_cfg.h"
 
 static void free_ring_pbuf(struct rte_ring *ring)
 {
@@ -127,7 +128,7 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
 /* true: need replenish again */
 static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
 {
-    void *pbuf[SOCK_SEND_RING_SIZE];
+    void *pbuf[SOCK_SEND_RING_SIZE_MAX];
 
     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
     if (replenish_cnt == 0) {
@@ -172,7 +173,9 @@ void gazelle_init_sock(int32_t fd)
         return;
     }
 
-    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ,
+    sock->send_ring = create_ring("sock_send",
+        get_global_cfg_params()->send_ring_size,
+        RING_F_SP_ENQ | RING_F_SC_DEQ,
         atomic_fetch_add(&name_tick, 1));
     if (sock->send_ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
@@ -416,7 +419,7 @@ static inline ssize_t app_direct_attach(struct protocol_stack *stack, struct pbu
 
 static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t len, uint32_t write_num)
 {
-    struct pbuf *pbufs[SOCK_SEND_RING_SIZE];
+    struct pbuf *pbufs[SOCK_SEND_RING_SIZE_MAX];
 
     (void)gazelle_ring_read(sock->send_ring, (void **)pbufs, write_num);
 
@@ -517,10 +520,10 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
         struct pbuf *last_pbuf = gazelle_ring_readlast(sock->send_ring);
         if (last_pbuf) {
             send_len += app_direct_attach(stack, last_pbuf, (char *)buf + send_len, len - send_len, write_num);
-             gazelle_ring_lastover(last_pbuf);
-             if (wakeup) {
+            gazelle_ring_lastover(last_pbuf);
+            if (wakeup) {
                 wakeup->stat.app_write_cnt += write_num;
-             }
+            }
         } else {
             (void)rpc_call_replenish(stack, sock);
             if (wakeup) {
