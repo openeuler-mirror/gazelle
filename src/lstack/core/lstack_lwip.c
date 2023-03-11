@@ -126,9 +126,11 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
 }
 
 /* true: need replenish again */
-static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
+static bool replenish_send_idlembuf(struct protocol_stack *stack, struct lwip_sock *sock)
 {
     void *pbuf[SOCK_SEND_RING_SIZE_MAX];
+
+    struct rte_ring *ring = sock->send_ring;
 
     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
     if (replenish_cnt == 0) {
@@ -150,6 +152,10 @@ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_rin
     uint32_t num = gazelle_ring_sp_enqueue(ring, pbuf, replenish_cnt);
     for (uint32_t i = num; i < replenish_cnt; i++) {
         pbuf_free(pbuf[i]);
+    }
+
+    if (!get_global_cfg_params()->expand_send_ring) {
+        sem_post(&sock->snd_ring_sem);
     }
 
     return false;
@@ -181,7 +187,7 @@ void gazelle_init_sock(int32_t fd)
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
-    (void)replenish_send_idlembuf(stack, sock->send_ring);
+    (void)replenish_send_idlembuf(stack, sock);
 
     sock->stack = stack;
     sock->stack->conn_num++;
@@ -490,6 +496,17 @@ static inline size_t merge_data_lastpbuf(struct lwip_sock *sock, void *buf, size
     return send_len;
 }
 
+int sem_timedwait_nsecs(sem_t *sem)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    long long wait_nsec = ts.tv_nsec + SEND_TIME_WAIT_NS;
+    ts.tv_nsec = wait_nsec % SECOND_NSECOND;
+    long add = wait_nsec / SECOND_NSECOND;
+    ts.tv_sec += add;
+    return sem_timedwait(sem, &ts);
+}
+
 ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 {
     if (sock->errevent > 0) {
@@ -518,6 +535,16 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 
     /* send_ring is full, data attach last pbuf */
     if (write_avail == 0) {
+        if (!get_global_cfg_params()->expand_send_ring) {
+            sem_timedwait_nsecs(&sock->snd_ring_sem);
+            if (likely(sock->send_ring != NULL)) {
+                write_avail = gazelle_ring_readable_count(sock->send_ring);
+            }
+            goto END;
+        }
+        if (unlikely(sock->send_ring == NULL)) {
+            goto END;
+        }
         struct pbuf *last_pbuf = gazelle_ring_readlast(sock->send_ring);
         if (last_pbuf) {
             send_len += app_direct_attach(stack, last_pbuf, (char *)buf + send_len, len - send_len, write_num);
@@ -536,8 +563,17 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     }
 
     /* send_ring have idle */
-    send_len += (write_num <= write_avail) ? app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num) :
-        app_direct_write(stack, sock, (char *)buf + send_len, len - send_len, write_num);
+    if (get_global_cfg_params()->expand_send_ring) {
+        send_len += (write_num <= write_avail) ? app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num) :
+            app_direct_write(stack, sock, (char *)buf + send_len, len - send_len, write_num);
+    } else {
+        if (write_num > write_avail) {
+            write_num = write_avail;
+            len = write_num * MBUF_MAX_DATA_LEN;
+        }
+        send_len += app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num);
+    }
+
     if (wakeup) {
         wakeup->stat.app_write_cnt += write_num;
     }
@@ -558,7 +594,7 @@ static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip
 {
     bool replenish_again = false;
 
-    replenish_again = replenish_send_idlembuf(stack, sock->send_ring);
+    replenish_again = replenish_send_idlembuf(stack, sock);
 
     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
         add_sock_event(sock, EPOLLOUT);
