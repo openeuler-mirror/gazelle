@@ -90,4 +90,8 @@
 #define SEND_TIME_WAIT_NS 20000
 #define SECOND_NSECOND 1000000000
 
+#define LSTACK_SEND_THREAD_NAME "lstack_send"
+#define LSTACK_RECV_THREAD_NAME "lstack_recv"
+#define LSTACK_THREAD_NAME "gazellelstack"
+
 #endif /* _GAZELLE_OPT_H_ */

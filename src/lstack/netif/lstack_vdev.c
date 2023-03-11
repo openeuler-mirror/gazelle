@@ -102,7 +102,9 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
 
         pkts[i]->packet_type = RTE_PTYPE_L3_IPV4 | RTE_PTYPE_L4_TCP;
     }
-    return rte_gro_reassemble_burst(pkts, pkt_num, &gro_param);
+    pkt_num =  rte_gro_reassemble_burst(pkts, pkt_num, &gro_param);
+
+    return pkt_num;
 }
 
 static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
@@ -145,13 +147,50 @@ static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkt
 
 int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
 {
-    if (!use_ltran()) {
-        return 0;
-    }
-
     if (qtuple == NULL) {
         return -1;
     }
+
+    if (!use_ltran()) {
+        if(type == REG_RING_TCP_LISTEN_CLOSE){
+            if (get_global_cfg_params()->is_primary) {
+                delete_user_process_port(qtuple->src_port, PORT_LISTEN);
+            }else{
+                transfer_add_or_delete_listen_port_to_process0(qtuple->src_port,get_global_cfg_params()->process_idx, 0);
+            }
+        }
+
+        if (type == REG_RING_TCP_CONNECT_CLOSE) {
+            if (get_global_cfg_params()->is_primary) {
+                delete_user_process_port(qtuple->src_port, PORT_CONNECT);
+                delete_flow_director(qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+            }else{
+                transfer_delete_rule_info_to_process0(qtuple->dst_ip,qtuple->src_port,qtuple->dst_port);
+            }
+        }
+
+        if (type == REG_RING_TCP_CONNECT) {
+            uint16_t queue_id = get_protocol_stack()->queue_id;
+            if (get_global_cfg_params()->is_primary){
+                add_user_process_port(qtuple->src_port, get_global_cfg_params()->process_idx, PORT_CONNECT);
+                if (queue_id != 0) {
+                    config_flow_director(queue_id, qtuple->dst_ip, qtuple->src_ip, qtuple->dst_port, qtuple->src_port);
+                }
+            }else {
+                transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip, qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+            }
+        }
+
+        if (type == REG_RING_TCP_LISTEN){
+            if (get_global_cfg_params()->is_primary) {
+                add_user_process_port(qtuple->src_port, get_global_cfg_params()->process_idx, PORT_LISTEN);
+            }else { 
+                transfer_add_or_delete_listen_port_to_process0(qtuple->src_port,get_global_cfg_params()->process_idx, 1);
+            }
+        }
+        return 0;
+    }
+    
 
     int32_t ret;
     uint32_t sent_pkts = 0;
