@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       50
+Release:       51
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -211,6 +211,12 @@ Patch9193:     0193-check-and-fix-wakeup_list-when-null-appears.patch
 Patch9194:     0194-eneble-TSO-and-fix-TSO-mbuf-pktlen-error.patch
 Patch9195:     0195-adapt-unsupport-sock-optname.patch
 Patch9196:     0196-reduce-duplicate-code-in-lstack_cfg.c.patch
+Patch9197:     0197-fix-private-data-offset-error.patch
+Patch9198:     0198-fix-do_close-core-dump.patch
+Patch9199:     0199-remove-rxtx-driver-cache.patch
+Patch9200:     0200-send-ring-size-is-configure.patch
+Patch9201:     0201-send-should-return-1-errno-EAGAIN-when-ring-full.patch
+Patch9202:     0202-when-send-ring-full-whether-dynamic-alloc-mbuf-is-co.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -251,6 +257,14 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Mar 11 2023 kircher <majun65@huawei.com> - 1.0.1-51
+- when send ring full whether dynamic alloc mbuf is configurable reduce cpu usage when send ring full
+- send should return -1, errno EAGAIN when ring full
+- send ring size is configure
+- remove rxtx driver cache
+- fix do_close core dump
+- fix private data offset error
+
 * Mon Feb 27 2023 wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-50
 - reduce duplicate code in lstack_cfg.c
 - adapt unsupport sock optname
