@@ -1,0 +1,53 @@
+From 0db52001b7e08a243c450ec1c73d4317dc9881b8 Mon Sep 17 00:00:00 2001
+From: wu-changsheng <wuchangsheng2@huawei.com>
+Date: Sat, 4 Mar 2023 16:03:56 +0800
+Subject: [PATCH] fix private data offset error
+
+---
+ src/common/dpdk_common.h            | 2 +-
+ src/lstack/core/lstack_stack_stat.c | 2 +-
+ src/ltran/ltran_forward.c           | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/common/dpdk_common.h b/src/common/dpdk_common.h
+index 4053a2c..1305819 100644
+--- a/src/common/dpdk_common.h
++++ b/src/common/dpdk_common.h
+@@ -33,7 +33,7 @@ struct pbuf;
+ #define LATENCY_OFFSET          96
+ static __rte_always_inline uint64_t *mbuf_to_private(struct rte_mbuf *mbuf)
+ {
+-    return (uint64_t *)((uint8_t *)(mbuf) - sizeof(struct rte_mbuf) - LATENCY_OFFSET);
++    return (uint64_t *)((uint8_t *)(mbuf) + sizeof(struct rte_mbuf) + LATENCY_OFFSET);
+ }
+ static __rte_always_inline struct rte_mbuf *pbuf_to_mbuf(struct pbuf *p)
+ {
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index 7243e82..75322d5 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -50,7 +50,7 @@ uint64_t get_current_time(void)
+ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+     enum GAZELLE_LATENCY_TYPE type)
+ {
+-    const uint64_t *priv = (uint64_t *)((uint8_t *)(pbuf) - LATENCY_OFFSET);
++    const uint64_t *priv = (uint64_t *)((uint8_t *)(pbuf) + LATENCY_OFFSET);
+     if (*priv != ~(*(priv + 1)) || *priv < stack_latency->start_time) {
+         return;
+     }
+diff --git a/src/ltran/ltran_forward.c b/src/ltran/ltran_forward.c
+index b73c983..4d9c1bb 100644
+--- a/src/ltran/ltran_forward.c
++++ b/src/ltran/ltran_forward.c
+@@ -53,7 +53,7 @@ static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rt
+     uint64_t latency;
+     uint64_t *priv = NULL;
+ 
+-    priv = (uint64_t *)RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf));
++    priv = (uint64_t *)RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf) + LATENCY_OFFSET);
+     // priv--time stamp   priv+1 --- vaild check
+     if (*priv != ~(*(priv + 1))) {
+         return;
+-- 
+2.33.0
+

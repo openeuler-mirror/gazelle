@@ -1,0 +1,47 @@
+From 97641d17e754daf5bc2745ebd2d311b5dbf89d05 Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Fri, 10 Mar 2023 17:39:03 +0800
+Subject: [PATCH] send should return -1, errno EAGAIN when ring full
+
+---
+ src/lstack/core/lstack_lwip.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index baaa18b..b9f97e0 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -507,7 +507,8 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+     if (sock->remain_len) {
+         send_len = merge_data_lastpbuf(sock, (char *)buf, len);
+         if (send_len >= len) {
+-            return len;
++            send_len = len;
++            goto END;
+         }
+     }
+ 
+@@ -531,7 +532,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+             }
+         }
+         sock->remain_len = 0;
+-        return send_len;
++        goto END;
+     }
+ 
+     /* send_ring have idle */
+@@ -545,6 +546,11 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+         del_data_out_event(sock);
+     }
+ 
++END:
++    if (send_len == 0) {
++        errno = EAGAIN;
++        return -1;
++    }
+     return send_len;
+ }
+ 
+-- 
+2.33.0
+
