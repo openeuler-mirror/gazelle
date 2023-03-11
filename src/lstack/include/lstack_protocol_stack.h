@@ -68,7 +68,6 @@ struct protocol_stack {
 
     struct rte_mbuf *pkts[RTE_TEST_RX_DESC_DEFAULT];
     struct list_node recv_list;
-    struct list_node send_list;
     struct list_node wakeup_list;
 
     volatile uint16_t conn_num;

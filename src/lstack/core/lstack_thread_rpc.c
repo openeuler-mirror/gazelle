@@ -23,14 +23,6 @@
 #include "lstack_dpdk.h"
 #include "lstack_thread_rpc.h"
 
-#define RPC_MSG_MAX            512
-#define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
-struct rpc_msg_pool {
-    struct rpc_msg msgs[RPC_MSG_MAX];
-    uint32_t prod __rte_cache_aligned;
-    uint32_t cons __rte_cache_aligned;
-};
-
 static PER_THREAD struct rpc_msg_pool *g_rpc_pool = NULL;
 
 static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct rpc_msg_pool *rpc_pool)
@@ -76,21 +68,6 @@ static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func 
     return msg;
 }
 
-static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *msg)
-{
-    pthread_spin_destroy(&msg->lock);
-
-    msg->self_release = 0;
-    msg->func = NULL;
-
-    atomic_fetch_add((_Atomic uint32_t *)&msg->pool->cons, 1);
-}
-
-static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
-{
-    lockless_queue_mpsc_push(queue, &msg->queue_node);
-}
-
 static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queue *queue, struct rpc_msg *msg)
 {
     int32_t ret;
@@ -124,10 +101,13 @@ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
             stack->stats.call_null++;
         }
 
-        if (msg->self_release) {
-            pthread_spin_unlock(&msg->lock);
-        } else {
-            rpc_msg_free(msg);
+        /* stack_send free msg in stack_send */
+        if (msg->func != stack_send) {
+            if (msg->self_release) {
+                pthread_spin_unlock(&msg->lock);
+            } else {
+                rpc_msg_free(msg);
+            }
         }
     }
 }
@@ -208,18 +188,6 @@ int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn)
 int32_t rpc_call_mempoolsize(struct protocol_stack *stack)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_mempool_size);
-    if (msg == NULL) {
-        return -1;
-    }
-
-    msg->args[MSG_ARG_0].p = stack;
-
-    return rpc_sync_call(&stack->rpc_queue, msg);
-}
-
-int32_t rpc_call_sendlistcnt(struct protocol_stack *stack)
-{
-    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_sendlist_count);
     if (msg == NULL) {
         return -1;
     }

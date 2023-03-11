@@ -572,7 +572,6 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("write_lwip: %-17"PRIu64" ", lstack_stat->data.pkts.stack_stat.write_lwip_cnt);
     printf("app_write_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.app_write_rpc);
     printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list_cnt);
-    printf("send_list: %-18"PRIu64" ", lstack_stat->data.pkts.send_list_cnt);
     printf("conn_num: %-19hu \n", lstack_stat->data.pkts.conn_num);
     printf("wakeup_events: %-14"PRIu64" ", lstack_stat->data.pkts.stack_stat.wakeup_events);
     printf("app_events: %-17"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_events);
