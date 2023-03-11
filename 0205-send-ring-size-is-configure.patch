@@ -1,0 +1,150 @@
+From 153b54c15eb7c70b137f3df7a37a59d423691ae4 Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Fri, 10 Mar 2023 11:29:02 +0800
+Subject: [PATCH] send ring size is configure
+
+---
+ src/lstack/core/lstack_cfg.c               |  9 ++++++++-
+ src/lstack/core/lstack_lwip.c              | 15 +++++++++------
+ src/lstack/include/lstack_cfg.h            |  1 +
+ src/lstack/include/lstack_protocol_stack.h |  2 +-
+ src/lstack/lstack.conf                     |  2 ++
+ 5 files changed, 21 insertions(+), 8 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index e1ea38d..1f7dda1 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -64,6 +64,7 @@ static int32_t parse_rpc_number(void);
+ static int32_t parse_nic_read_number(void);
+ static int32_t parse_tcp_conn_count(void);
+ static int32_t parse_mbuf_count_per_conn(void);
++static int32_t parse_send_ring_size(void);
+ 
+ static inline int32_t parse_int(void *arg, char * arg_string, int32_t default_val,
+                              int32_t min_val, int32_t max_val)
+@@ -110,6 +111,7 @@ static struct config_vector_t g_config_tbl[] = {
+     { "read_connect_number", parse_read_connect_number },
+     { "rpc_number", parse_rpc_number },
+     { "nic_read_number", parse_nic_read_number },
++    { "send_ring_size", parse_send_ring_size },
+     { NULL,           NULL }
+ };
+ 
+@@ -713,6 +715,12 @@ static int32_t parse_tcp_conn_count(void)
+     return parse_int(&g_config_params.tcp_conn_count, "tcp_conn_count", TCP_CONN_COUNT, 1, TCP_CONN_COUNT);
+ }
+ 
++static int32_t parse_send_ring_size(void)
++{
++    /* send ring size default value is 32 */
++    return parse_int(&g_config_params.send_ring_size, "send_ring_size", 32, 1, SOCK_SEND_RING_SIZE_MAX);
++}
++
+ static int32_t parse_mbuf_count_per_conn(void)
+ {
+     return parse_int(&g_config_params.mbuf_count_per_conn, "mbuf_count_per_conn",
+@@ -748,7 +756,6 @@ static int32_t parse_listen_shadow(void)
+     return parse_int(&g_config_params.listen_shadow, "listen_shadow", 0, 0, 1);
+ }
+ 
+-
+ static int32_t parse_app_bind_numa(void)
+ {
+     return parse_int(&g_config_params.app_bind_numa, "app_bind_numa", 1, 0, 1);
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 51cc9d1..baaa18b 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -33,6 +33,7 @@
+ #include "lstack_thread_rpc.h"
+ #include "dpdk_common.h"
+ #include "lstack_lwip.h"
++#include "lstack_cfg.h"
+ 
+ static void free_ring_pbuf(struct rte_ring *ring)
+ {
+@@ -127,7 +128,7 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
+ /* true: need replenish again */
+ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct rte_ring *ring)
+ {
+-    void *pbuf[SOCK_SEND_RING_SIZE];
++    void *pbuf[SOCK_SEND_RING_SIZE_MAX];
+ 
+     uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+     if (replenish_cnt == 0) {
+@@ -172,7 +173,9 @@ void gazelle_init_sock(int32_t fd)
+         return;
+     }
+ 
+-    sock->send_ring = create_ring("sock_send", SOCK_SEND_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ,
++    sock->send_ring = create_ring("sock_send",
++        get_global_cfg_params()->send_ring_size,
++        RING_F_SP_ENQ | RING_F_SC_DEQ,
+         atomic_fetch_add(&name_tick, 1));
+     if (sock->send_ring == NULL) {
+         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
+@@ -416,7 +419,7 @@ static inline ssize_t app_direct_attach(struct protocol_stack *stack, struct pbu
+ 
+ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t len, uint32_t write_num)
+ {
+-    struct pbuf *pbufs[SOCK_SEND_RING_SIZE];
++    struct pbuf *pbufs[SOCK_SEND_RING_SIZE_MAX];
+ 
+     (void)gazelle_ring_read(sock->send_ring, (void **)pbufs, write_num);
+ 
+@@ -517,10 +520,10 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+         struct pbuf *last_pbuf = gazelle_ring_readlast(sock->send_ring);
+         if (last_pbuf) {
+             send_len += app_direct_attach(stack, last_pbuf, (char *)buf + send_len, len - send_len, write_num);
+-             gazelle_ring_lastover(last_pbuf);
+-             if (wakeup) {
++            gazelle_ring_lastover(last_pbuf);
++            if (wakeup) {
+                 wakeup->stat.app_write_cnt += write_num;
+-             }
++            }
+         } else {
+             (void)rpc_call_replenish(stack, sock);
+             if (wakeup) {
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index 0b89e28..6af081d 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -89,6 +89,7 @@ struct cfg_params {
+     char **dpdk_argv;
+     struct secondary_attach_arg sec_attach_arg;
+     char unix_socket_filename[NAME_MAX];
++    uint16_t send_ring_size;
+ };
+ 
+ struct cfg_params *get_global_cfg_params(void);
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 1fac220..795db39 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -27,7 +27,7 @@
+ 
+ #define SOCK_RECV_RING_SIZE         (128)
+ #define SOCK_RECV_FREE_THRES        (32)
+-#define SOCK_SEND_RING_SIZE         (32)
++#define SOCK_SEND_RING_SIZE_MAX     (2048)
+ #define SOCK_SEND_REPLENISH_THRES   (16)
+ #define WAKEUP_MAX_NUM              (32)
+ 
+diff --git a/src/lstack/lstack.conf b/src/lstack/lstack.conf
+index b7a4ede..fb68c32 100644
+--- a/src/lstack/lstack.conf
++++ b/src/lstack/lstack.conf
+@@ -20,6 +20,8 @@ listen_shadow=0
+ tcp_conn_count = 1500
+ mbuf_count_per_conn = 170
+ 
++# send ring size, default is 32, max is 2048
++send_ring_size = 256
+  
+ #protocol stack thread per loop params
+ #send connect to nic
+-- 
+2.33.0
+
