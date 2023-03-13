@@ -76,7 +76,6 @@ struct cfg_params {
     uint32_t lpm_pkts_in_detect;
     uint32_t tcp_conn_count;
     uint32_t mbuf_count_per_conn;
-    uint32_t send_connect_number;
     uint32_t read_connect_number;
     uint32_t rpc_number;
     uint32_t nic_read_number;

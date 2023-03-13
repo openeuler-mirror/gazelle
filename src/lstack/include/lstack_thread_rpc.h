@@ -24,6 +24,10 @@
 #define MSG_ARG_3                      (3)
 #define MSG_ARG_4                      (4)
 #define RPM_MSG_ARG_SIZE               (5)
+
+#define RPC_MSG_MAX            512
+#define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
+
 struct rpc_msg;
 typedef void (*rpc_msg_func)(struct rpc_msg *msg);
 union rpc_msg_arg {
@@ -48,6 +52,12 @@ struct rpc_msg {
     union rpc_msg_arg args[RPM_MSG_ARG_SIZE]; /* resolve by type */
 };
 
+struct rpc_msg_pool {
+    struct rpc_msg msgs[RPC_MSG_MAX];
+    uint32_t prod __rte_cache_aligned;
+    uint32_t cons __rte_cache_aligned;
+};
+
 struct protocol_stack;
 struct rte_mbuf;
 struct wakeup_poll;
@@ -57,7 +67,6 @@ void rpc_call_clean_epoll(struct protocol_stack *stack, struct wakeup_poll *wake
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t rpc_call_recvlistcnt(struct protocol_stack *stack);
-int32_t rpc_call_sendlistcnt(struct protocol_stack *stack);
 int32_t rpc_call_thread_regphase1(struct protocol_stack *stack, void *conn);
 int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn);
 int32_t rpc_call_conntable(struct protocol_stack *stack, void *conn_table, uint32_t max_conn);
@@ -78,5 +87,19 @@ int32_t rpc_call_fcntl(int fd, int cmd, long val);
 int32_t rpc_call_ioctl(int fd, long cmd, void *argp);
 int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock);
 int32_t rpc_call_mempoolsize(struct protocol_stack *stack);
+
+static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
+{
+    lockless_queue_mpsc_push(queue, &msg->queue_node);
+}
+
+static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *msg)
+{
+    pthread_spin_destroy(&msg->lock);
+
+    msg->self_release = 0;
+
+    __atomic_fetch_add((_Atomic uint32_t *)&msg->pool->cons, 1, __ATOMIC_SEQ_CST);
+}
 
 #endif

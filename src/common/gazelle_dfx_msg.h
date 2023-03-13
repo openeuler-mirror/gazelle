@@ -81,7 +81,6 @@ struct gazelle_stat_pkts {
     uint16_t conn_num;
     uint64_t recv_list_cnt;
     uint64_t call_alloc_fail;
-    uint64_t send_list_cnt;
     uint32_t mempool_freecnt;
     struct gazelle_stack_stat stack_stat;
     struct gazelle_wakeup_stat wakeup_stat;

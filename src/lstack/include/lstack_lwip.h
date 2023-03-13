@@ -35,7 +35,6 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);
 void read_recv_list(struct protocol_stack *stack, uint32_t max_num);
 void send_stack_list(struct protocol_stack *stack, uint32_t send_max);
 void add_recv_list(int32_t fd);
-void stack_sendlist_count(struct rpc_msg *msg);
 void get_lwip_conntable(struct rpc_msg *msg);
 void get_lwip_connnum(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);

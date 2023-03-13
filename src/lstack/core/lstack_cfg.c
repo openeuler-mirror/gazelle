@@ -58,7 +58,6 @@ static int32_t parse_listen_shadow(void);
 static int32_t parse_app_bind_numa(void);
 static int32_t parse_main_thread_affinity(void);
 static int32_t parse_unix_prefix(void);
-static int32_t parse_send_connect_number(void);
 static int32_t parse_read_connect_number(void);
 static int32_t parse_rpc_number(void);
 static int32_t parse_nic_read_number(void);
@@ -108,7 +107,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "unix_prefix",    parse_unix_prefix },
     { "tcp_conn_count", parse_tcp_conn_count },
     { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
-    { "send_connect_number", parse_send_connect_number },
     { "read_connect_number", parse_read_connect_number },
     { "rpc_number", parse_rpc_number },
     { "nic_read_number", parse_nic_read_number },
@@ -732,12 +730,6 @@ static int32_t parse_mbuf_count_per_conn(void)
 {
     return parse_int(&g_config_params.mbuf_count_per_conn, "mbuf_count_per_conn",
                      MBUF_COUNT_PER_CONN, 1, INT32_MAX);
-}
-
-static int32_t parse_send_connect_number(void)
-{
-    return parse_int(&g_config_params.send_connect_number, "send_connect_number",
-                     STACK_THREAD_DEFAULT, 1, INT32_MAX);
 }
 
 static int32_t parse_read_connect_number(void)

@@ -94,7 +94,7 @@ static void reset_sock_data(struct lwip_sock *sock)
     sock->listen_next = NULL;
     sock->epoll_events = 0;
     sock->events = 0;
-    sock->in_send = 0;
+    sock->call_num = 0;
     sock->remain_len = 0;
 
     if (sock->recv_lastdata) {
@@ -117,9 +117,10 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
         pbuf->l4_len = 0;
         pbuf->header_off = 0;
         pbuf->rexmit = 0;
-        pbuf->in_write = 0;
+        pbuf->allow_in = 1;
         pbuf->head = 0;
         pbuf->last = pbuf;
+        pthread_spin_init(&pbuf->pbuf_lock, PTHREAD_PROCESS_SHARED);
     }
 
     return pbuf;
@@ -193,7 +194,6 @@ void gazelle_init_sock(int32_t fd)
     sock->stack->conn_num++;
     init_list_node_null(&sock->recv_list);
     init_list_node_null(&sock->event_list);
-    init_list_node_null(&sock->send_list);
 }
 
 void gazelle_clean_sock(int32_t fd)
@@ -214,7 +214,6 @@ void gazelle_clean_sock(int32_t fd)
     reset_sock_data(sock);
 
     list_del_node_null(&sock->recv_list);
-    list_del_node_null(&sock->send_list);
 }
 
 void gazelle_free_pbuf(struct pbuf *pbuf)
@@ -264,11 +263,16 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
 
     if (unlikely(sock->send_pre_del)) {
         pbuf = sock->send_pre_del;
-        if (pbuf->tot_len > remain_size ||
-            (pbuf->head && __atomic_load_n(&pbuf->in_write, __ATOMIC_ACQUIRE))) {
+        pthread_spin_lock(&pbuf->pbuf_lock);
+        if (pbuf->tot_len > remain_size) {
+            pthread_spin_unlock(&pbuf->pbuf_lock);
             *apiflags &= ~TCP_WRITE_FLAG_MORE;
             return NULL;
         }
+        if (pbuf->allow_in == 1) {
+             __sync_fetch_and_sub(&pbuf->allow_in, 1);
+        }
+        pthread_spin_unlock(&pbuf->pbuf_lock);
 
         if (pbuf->next) {
             sock->send_lastdata = pbuf->next;
@@ -295,10 +299,24 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
     }
     sock->send_pre_del = pbuf;
 
-    if (pbuf->tot_len > remain_size || __atomic_load_n(&pbuf->in_write, __ATOMIC_ACQUIRE)) {
-        *apiflags &= ~TCP_WRITE_FLAG_MORE;
-        pbuf->head = 1;
-        return NULL;
+    if (!gazelle_ring_readover_count(sock->send_ring)) {
+        pthread_spin_lock(&pbuf->pbuf_lock);
+        if (pbuf->tot_len > remain_size) {
+            pthread_spin_unlock(&pbuf->pbuf_lock);
+            *apiflags &= ~TCP_WRITE_FLAG_MORE;
+            pbuf->head = 1;
+            return NULL;
+        }
+        if(pbuf->allow_in == 1){
+            __sync_fetch_and_sub(&pbuf->allow_in, 1);
+        }
+        pthread_spin_unlock(&pbuf->pbuf_lock);
+    } else {
+        if (pbuf->tot_len > remain_size) {
+            *apiflags &= ~TCP_WRITE_FLAG_MORE;
+            pbuf->head = 1;
+            return NULL;
+        }
     }
 
     sock->send_lastdata = pbuf->next;
@@ -442,18 +460,17 @@ static inline struct pbuf *gazelle_ring_readlast(struct rte_ring *r)
     struct pbuf *last_pbuf = NULL;
     volatile uint32_t tail = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
     uint32_t last = r->prod.tail - 1;
-    if (last == tail || last - tail > r->capacity) {
+    if (last + 1 == tail || last + 1 - tail > r->capacity) {
         return NULL;
     }
     
     __rte_ring_dequeue_elems(r, last, (void **)&last_pbuf, sizeof(void *), 1);
-    __atomic_store_n(&last_pbuf->in_write, 1, __ATOMIC_RELEASE);
 
-    rte_mb();
-
-    tail = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
-    if (last == tail || last - tail > r->capacity) {
-        __atomic_store_n(&last_pbuf->in_write, 0, __ATOMIC_RELEASE);
+    if (pthread_spin_trylock(&last_pbuf->pbuf_lock) != 0) {
+       return NULL;
+    }
+    if (last_pbuf->allow_in != 1) {
+        pthread_spin_unlock(&last_pbuf->pbuf_lock);
         return NULL;
     }
 
@@ -462,7 +479,7 @@ static inline struct pbuf *gazelle_ring_readlast(struct rte_ring *r)
 
 static inline void gazelle_ring_lastover(struct pbuf *last_pbuf)
 {
-    __atomic_store_n(&last_pbuf->in_write, 0, __ATOMIC_RELEASE);
+    pthread_spin_unlock(&last_pbuf->pbuf_lock);
 }
 
 static inline size_t merge_data_lastpbuf(struct lwip_sock *sock, void *buf, size_t len)
@@ -623,56 +640,28 @@ void stack_send(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
     struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
+    bool replenish_again;
 
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
+        LSTACK_LOG(ERR, LSTACK, "stack_send: sock error!\n");
+        rpc_msg_free(msg);
         return;
     }
 
-    __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
-    rte_mb();
-
-    /* have remain data or replenish again add sendlist */
-    if (sock->errevent == 0 && NETCONN_IS_DATAOUT(sock)) {
-        if (list_is_null(&sock->send_list)) {
-            list_add_node(&stack->send_list, &sock->send_list);
-            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
-        }
-    }
-}
-
-void send_stack_list(struct protocol_stack *stack, uint32_t send_max)
-{
-    struct list_node *node, *temp;
-    struct lwip_sock *sock;
-    uint32_t read_num = 0;
-    bool replenish_again;
-
-    list_for_each_safe(node, temp, &stack->send_list) {
-        sock = container_of(node, struct lwip_sock, send_list);
-
-        if (++read_num > send_max) {
-            /* list head move to next send */
-            list_del_node(&stack->send_list);
-            list_add_node(&sock->send_list, &stack->send_list);
-            break;
-        }
-
-        __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
-        rte_mb();
-
-        if (sock->conn == NULL || sock->errevent > 0) {
-            list_del_node_null(&sock->send_list);
-            continue;
-        }
-
-        replenish_again = do_lwip_send(stack, sock->conn->socket, sock, 0);
-
-        if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
-            list_del_node_null(&sock->send_list);
+    replenish_again = do_lwip_send(stack, sock->conn->socket, sock, 0);
+    __sync_fetch_and_sub(&sock->call_num, 1);
+    if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
+        rpc_msg_free(msg);
+        return;
+    } else {
+        if(__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 0){
+            rpc_call(&stack->rpc_queue, msg);
+             __sync_fetch_and_add(&sock->call_num, 1);
         } else {
-            __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
+            rpc_msg_free(msg);
+            return;
         }
     }
 }
@@ -684,29 +673,6 @@ static inline void free_recv_ring_readover(struct rte_ring *ring)
     for (uint32_t i = 0; i < num; i++) {
         pbuf_free(pbufs[i]);
     }
-}
-
-static inline struct pbuf *gazelle_ring_enqueuelast(struct rte_ring *r)
-{
-    struct pbuf *last_pbuf = NULL;
-    volatile uint32_t head = __atomic_load_n(&r->prod.head, __ATOMIC_ACQUIRE);
-    uint32_t last = r->cons.head - 1;
-    if (last == head || last - head > r->capacity) {
-        return NULL;
-    }
-
-    __rte_ring_dequeue_elems(r, last, (void **)&last_pbuf, sizeof(void *), 1);
-    __atomic_store_n(&last_pbuf->in_write, 1, __ATOMIC_RELEASE);
-
-    rte_mb();
-
-    head = __atomic_load_n(&r->prod.head, __ATOMIC_ACQUIRE);
-    if (last == head || last - head > r->capacity) {
-        __atomic_store_n(&last_pbuf->in_write, 0, __ATOMIC_RELEASE);
-        return NULL;
-    }
-
-    return last_pbuf;
 }
 
 static inline struct pbuf *pbuf_last(struct pbuf *pbuf)
@@ -824,11 +790,14 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
 
 static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
 {
-    if (__atomic_load_n(&sock->in_send, __ATOMIC_ACQUIRE) == 0) {
-        __atomic_store_n(&sock->in_send, 1, __ATOMIC_RELEASE);
-        if (rpc_call_send(fd, NULL, len, flags) != 0) {
-            __atomic_store_n(&sock->in_send, 0, __ATOMIC_RELEASE);
+    if(__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) >= 2){
+        ;;
+    } else {
+        while (rpc_call_send(fd, NULL, len, flags) < 0) {
+            usleep(1000); // wait 1ms to exec again
+            LSTACK_LOG(INFO, LSTACK, "rpc_call_send failed, try again\n");
         }
+        __sync_fetch_and_add(&sock->call_num, 1);
     }
 }
 
@@ -1238,13 +1207,6 @@ void stack_mempool_size(struct rpc_msg *msg)
     struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_0].p;
 
     msg->result = rte_mempool_avail_count(stack->rxtx_pktmbuf_pool);
-}
-
-void stack_sendlist_count(struct rpc_msg *msg)
-{
-    struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_0].p;
-
-    msg->result = get_list_count(&stack->send_list);
 }
 
 void stack_recvlist_count(struct rpc_msg *msg)

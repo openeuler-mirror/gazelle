@@ -279,7 +279,6 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     stack->lwip_stats = &lwip_stats;
 
     init_list_node(&stack->recv_list);
-    init_list_node(&stack->send_list);
     init_list_node(&stack->wakeup_list);
 
     sys_calibrate_tsc();
@@ -417,7 +416,6 @@ static void* gazelle_stack_thread(void *arg)
     struct cfg_params *cfg = get_global_cfg_params();
     bool use_ltran_flag = cfg->use_ltran;;
     bool kni_switch = cfg->kni_switch;
-    uint32_t send_connect_number = cfg->send_connect_number;
     uint32_t read_connect_number = cfg->read_connect_number;
     uint32_t rpc_number = cfg->rpc_number;
     uint32_t nic_read_number = cfg->nic_read_number;
@@ -440,8 +438,6 @@ static void* gazelle_stack_thread(void *arg)
 
     for (;;) {
         poll_rpc_msg(stack, rpc_number);
-
-        send_stack_list(stack, send_connect_number);
 
         gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
 
