@@ -65,6 +65,8 @@ struct cfg_params {
     uint8_t mac_addr[ETHER_ADDR_LEN];
     uint16_t num_cpu;
     uint32_t cpus[CFG_MAX_CPUS];
+    uint32_t send_cpus[CFG_MAX_CPUS];
+    uint32_t recv_cpus[CFG_MAX_CPUS];
     uint16_t num_wakeup;
     uint32_t wakeup[CFG_MAX_CPUS];
     uint8_t num_ports;
@@ -79,11 +81,22 @@ struct cfg_params {
     uint32_t read_connect_number;
     uint32_t rpc_number;
     uint32_t nic_read_number;
-    bool use_ltran; // ture:lstack read from nic false:read form ltran
+    uint8_t use_ltran; // ture:lstack read from nic false:read form ltran
+
+    uint16_t num_process;
+    uint16_t num_listen_port;
+    uint16_t port_id;
+    uint16_t is_primary;
+    uint16_t num_queue;
+    uint16_t tot_queue_num;
+    uint8_t process_idx;
+    uint32_t process_numa[PROTOCOL_STACK_MAX];
+
     bool kni_switch;
     bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
     bool app_bind_numa;
     bool main_thread_affinity;
+    bool seperate_send_recv;
     int dpdk_argc;
     char **dpdk_argv;
     struct secondary_attach_arg sec_attach_arg;
@@ -94,7 +107,7 @@ struct cfg_params {
 
 struct cfg_params *get_global_cfg_params(void);
 
-static inline bool use_ltran(void)
+static inline uint8_t use_ltran(void)
 {
     return get_global_cfg_params()->use_ltran;
 }

@@ -356,6 +356,8 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
+    // @todo, check process 2 dumped, resorce need to release. 
+
     gazelle_signal_init();
 
     /*

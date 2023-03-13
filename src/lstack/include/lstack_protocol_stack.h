@@ -41,6 +41,7 @@ struct protocol_stack {
     uint16_t port_id;
     uint16_t socket_id;
     uint16_t cpu_id;
+    uint32_t stack_idx;
     cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
     int32_t epollfd; /* kernel event thread epoll fd */
 
@@ -53,6 +54,8 @@ struct protocol_stack {
     uint32_t reg_head;
 
     volatile bool low_power;
+    bool is_send_thread;
+
     lockless_queue rpc_queue __rte_cache_aligned;
     char pad __rte_cache_aligned;
 
@@ -93,6 +96,8 @@ struct protocol_stack_group {
     bool wakeup_enable;
     struct list_node  poll_list;
     pthread_spinlock_t poll_list_lock;
+    sem_t sem_listen_thread;
+    struct rte_mempool *total_rxtx_pktmbuf_pool[PROTOCOL_STACK_MAX];
 
     /* dfx stats */
     bool latency_start;
@@ -131,6 +136,10 @@ void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup);
 void stack_send_pkts(struct protocol_stack *stack);
 
 struct rpc_msg;
+struct thread_params{
+    uint16_t queue_id;
+    uint16_t idx;
+};
 void stack_clean_epoll(struct rpc_msg *msg);
 void stack_arp(struct rpc_msg *msg);
 void stack_socket(struct rpc_msg *msg);
@@ -146,4 +155,5 @@ void stack_getsockopt(struct rpc_msg *msg);
 void stack_setsockopt(struct rpc_msg *msg);
 void stack_fcntl(struct rpc_msg *msg);
 void stack_ioctl(struct rpc_msg *msg);
+void kni_handle_tx(struct rte_mbuf *mbuf);
 #endif

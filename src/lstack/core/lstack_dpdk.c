@@ -19,6 +19,7 @@
 #include <sys/socket.h>
 #include <net/if.h>
 #include <net/if_arp.h>
+#include <numa.h>
 
 #include <rte_eal.h>
 #include <rte_lcore.h>
@@ -131,7 +132,7 @@ int32_t dpdk_eal_init(void)
     return ret;
 }
 
-static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
+struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
     uint32_t mbuf_cache_size, uint16_t queue_id)
 {
     int32_t ret;
@@ -149,7 +150,27 @@ static struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
     }
+
     return pool;
+}
+
+static struct rte_mempool* get_pktmbuf_mempool(const char *name, uint16_t queue_id){
+    int32_t ret;
+    char pool_name[PATH_MAX];
+    struct rte_mempool *pool;
+
+    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
+    if (ret < 0) {
+        return NULL;
+    }
+    pool = rte_mempool_lookup(pool_name);
+    if (pool == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "look up %s pool rte_err=%d\n", pool_name, rte_errno);
+    }
+
+    // rte_mempool_dump(stdout, pool) ;
+    return pool;
+
 }
 
 static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_id)
@@ -178,10 +199,7 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
         return -1;
     }
 
-    stack->rxtx_pktmbuf_pool = create_pktmbuf_mempool("rxtx_mbuf",
-        get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_num,
-        RXTX_CACHE_SZ,
-        stack->queue_id);
+    stack->rxtx_pktmbuf_pool = get_pktmbuf_mempool("rxtx_mbuf", stack->queue_id);
     if (stack->rxtx_pktmbuf_pool == NULL) {
         return -1;
     }
@@ -201,7 +219,7 @@ struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, i
     char ring_name[RTE_RING_NAMESIZE] = {0};
     struct rte_ring *ring;
 
-    int32_t ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1, "%s_%d", name, queue_id);
+    int32_t ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1, "%s_%d_%d", name, get_global_cfg_params()->process_idx,  queue_id);
     if (ret < 0) {
         return NULL;
     }
@@ -284,6 +302,12 @@ void lstack_log_level_init(void)
     if (ret != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "rte_log_set_level failed  RTE_LOGTYPE_LSTACK RTE_LOG_INFO ret=%d\n", ret);
     }
+}
+
+// get port id
+inline uint16_t get_port_id(){
+    uint16_t port_id = get_global_cfg_params()->port_id;
+    return port_id;
 }
 
 static int32_t ethdev_port_id(uint8_t *mac)
@@ -412,89 +436,111 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
 int32_t dpdk_ethdev_init(void)
 {
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-
-    int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
-    if (port_id < 0) {
-        return port_id;
+    if (get_global_cfg_params()->seperate_send_recv) {
+        nb_queues = get_global_cfg_params()->num_cpu * 2;
     }
 
-    struct rte_eth_dev_info dev_info;
-    int32_t ret = rte_eth_dev_info_get(port_id, &dev_info);
-    if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "get dev info ret=%d\n", ret);
-        return ret;
+    if (!use_ltran()) {
+        nb_queues = get_global_cfg_params()->tot_queue_num;
     }
 
-    int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
-    if (max_queues < nb_queues) {
-        LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
-        return -EINVAL;
-    }
+        struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    struct eth_params *eth_params = alloc_eth_params(port_id, nb_queues);
-    if (eth_params == NULL) {
-        return -ENOMEM;
-    }
-    eth_params_checksum(&eth_params->conf, &dev_info);
-    int32_t rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
-    stack_group->eth_params = eth_params;
-    stack_group->port_id = eth_params->port_id;
-    stack_group->rx_offload = eth_params->conf.rxmode.offloads;
-    stack_group->tx_offload = eth_params->conf.txmode.offloads;
+        int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
+        if (port_id < 0) {
+            return port_id;
+        }
 
-    for (uint32_t i = 0; i < stack_group->stack_num; i++) {
-	struct protocol_stack *stack = stack_group->stacks[i];
-	if (likely(stack)) {
-            stack->port_id = stack_group->port_id;
-	} else {
-            LSTACK_LOG(ERR, LSTACK, "empty stack at stack_num %d\n", i);
-	    stack_group->eth_params = NULL;
-	    free(eth_params);
-	    return -EINVAL;
-	}
-    }
+        struct rte_eth_dev_info dev_info;
+        int32_t ret = rte_eth_dev_info_get(port_id, &dev_info);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "get dev info ret=%d\n", ret);
+            return ret;
+        }
 
-    ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
-        stack_group->eth_params = NULL;
-        free(eth_params);
-        return ret;
-    }
+        int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
+        if (max_queues < nb_queues) {
+            LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
+            return -EINVAL;
+        }
 
-    ret = dpdk_ethdev_start();
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
-        stack_group->eth_params = NULL;
-        free(eth_params);
-        return ret;
-    }
+        struct eth_params *eth_params = alloc_eth_params(port_id, nb_queues);
+        if (eth_params == NULL) {
+            return -ENOMEM;
+        }
+        eth_params_checksum(&eth_params->conf, &dev_info);
+        int32_t rss_enable = 0;
+        if (use_ltran()) {
+            rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
+        }
+        stack_group->eth_params = eth_params;
+        stack_group->port_id = eth_params->port_id;
+        stack_group->rx_offload = eth_params->conf.rxmode.offloads;
+        stack_group->tx_offload = eth_params->conf.txmode.offloads;
+        
+    if (get_global_cfg_params()->is_primary) {
+        for (uint32_t i = 0; i < stack_group->stack_num; i++) {
+            struct protocol_stack *stack = stack_group->stacks[i];
+            if (likely(stack)) {
+                    stack->port_id = stack_group->port_id;
+            } else {
+                LSTACK_LOG(ERR, LSTACK, "empty stack at stack_num %d\n", i);
+                stack_group->eth_params = NULL;
+                free(eth_params);
+                return -EINVAL;
+            }
+        }
 
-    if (rss_enable) {
-        rss_setup(port_id, nb_queues);
-        stack_group->reta_mask = dev_info.reta_size - 1;
+        ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
+        if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
+            stack_group->eth_params = NULL;
+            free(eth_params);
+            return ret;
+        }
+
+        ret = dpdk_ethdev_start();
+        if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
+            stack_group->eth_params = NULL;
+            free(eth_params);
+            return ret;
+        }
+
+        if (rss_enable && use_ltran()) {
+            rss_setup(port_id, nb_queues);
+            stack_group->reta_mask = dev_info.reta_size - 1;
+        }
+        stack_group->nb_queues = nb_queues;
     }
-    stack_group->nb_queues = nb_queues;
 
     return 0;
 }
 
-static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, const struct protocol_stack *stack)
+static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t idx)
 {
     int32_t ret;
 
-    ret = rte_eth_rx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_rx_desc, stack->socket_id,
-        &eth_params->rx_conf, stack->rxtx_pktmbuf_pool);
+    struct rte_mempool *rxtx_pktmbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx];
+    
+    uint16_t socket_id = 0;
+    struct cfg_params * cfg = get_global_cfg_params();
+    if (!cfg->use_ltran && cfg->num_process == 1) {
+        socket_id = numa_node_of_cpu(cfg->cpus[idx]);
+    }else {
+        socket_id = cfg->process_numa[idx];
+    }
+    ret = rte_eth_rx_queue_setup(eth_params->port_id, idx, eth_params->nb_rx_desc, socket_id,
+        &eth_params->rx_conf, rxtx_pktmbuf_pool);
     if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
+        LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", idx, rte_strerror(-ret));
         return -1;
     }
 
-    ret = rte_eth_tx_queue_setup(eth_params->port_id, stack->queue_id, eth_params->nb_tx_desc, stack->socket_id,
+    ret = rte_eth_tx_queue_setup(eth_params->port_id, idx, eth_params->nb_tx_desc, socket_id,
         &eth_params->tx_conf);
     if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "cannot setup tx_queue %hu: %s\n", stack->queue_id, rte_strerror(-ret));
+        LSTACK_LOG(ERR, LSTACK, "cannot setup tx_queue %hu: %s\n", idx, rte_strerror(-ret));
         return -1;
     }
 
@@ -505,12 +551,9 @@ int32_t dpdk_ethdev_start(void)
 {
     int32_t ret;
     const struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    const struct protocol_stack *stack = NULL;
 
-    for (int32_t i = 0; i < stack_group->stack_num; i++) {
-        stack = stack_group->stacks[i];
-
-        ret = dpdk_ethdev_setup(stack_group->eth_params, stack);
+    for (int32_t i = 0; i < get_global_cfg_params()->tot_queue_num; i++) {
+        ret = dpdk_ethdev_setup(stack_group->eth_params, i);
         if (ret < 0) {
             return ret;
         }
@@ -528,6 +571,7 @@ int32_t dpdk_ethdev_start(void)
 int32_t dpdk_init_lstack_kni(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+
 
     stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, 0, 0);
     if (stack_group->kni_pktmbuf_pool == NULL) {
@@ -568,7 +612,7 @@ int32_t init_dpdk_ethdev(void)
         return -1;
     }
 
-    if (get_global_cfg_params()->kni_switch) {
+    if (get_global_cfg_params()->kni_switch && get_global_cfg_params()->is_primary) {
         ret = dpdk_init_lstack_kni();
         if (ret < 0) {
             return -1;

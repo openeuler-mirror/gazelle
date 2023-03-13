@@ -238,8 +238,7 @@ static inline int32_t do_listen(int32_t s, int32_t backlog)
         return posix_api->listen_fn(s, backlog);
     }
 
-    int32_t ret = get_global_cfg_params()->listen_shadow ? stack_broadcast_listen(s, backlog) :
-        stack_single_listen(s, backlog);
+    int32_t ret = stack_broadcast_listen(s, backlog);
     if (ret != 0) {
         return ret;
     }

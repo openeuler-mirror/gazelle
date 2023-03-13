@@ -74,8 +74,8 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
     }
 
     struct protocol_stack *stack = sock->stack;
-    if (list_is_null(&wakeup->wakeup_list[stack->queue_id])) {
-        list_add_node(&stack->wakeup_list, &wakeup->wakeup_list[stack->queue_id]);
+    if (list_is_null(&wakeup->wakeup_list[stack->stack_idx])) {
+        list_add_node(&stack->wakeup_list, &wakeup->wakeup_list[stack->stack_idx]);
     }
 }
 
@@ -95,7 +95,7 @@ void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable)
             temp = nod;
         }
 
-        struct wakeup_poll *wakeup = container_of((node - stack->queue_id), struct wakeup_poll, wakeup_list);
+        struct wakeup_poll *wakeup = container_of((node - stack->stack_idx), struct wakeup_poll, wakeup_list);
 
         if (!wakeup_thread_enable) {
             if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
@@ -109,7 +109,7 @@ void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable)
             stack->stats.wakeup_events++;
         }
 
-        list_del_node_null(&wakeup->wakeup_list[stack->queue_id]);
+        list_del_node_null(&wakeup->wakeup_list[stack->stack_idx]);
     }
 }
 
@@ -291,7 +291,7 @@ static uint16_t find_max_cnt_stack(int32_t *stack_count, uint16_t stack_num, str
 
     /* all stack same, don't change */
     if (all_same_cnt && last_stack) {
-        return last_stack->queue_id;
+        return last_stack->stack_idx;
     }
 
     /* first bind and all stack same. choice tick as queue_id, avoid all bind to statck_0. */
@@ -343,7 +343,7 @@ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_even
         switch (op) {
             case EPOLL_CTL_ADD:
                 sock->wakeup = wakeup;
-                wakeup->stack_fd_cnt[sock->stack->queue_id]++;
+                wakeup->stack_fd_cnt[sock->stack->stack_idx]++;
                 /* fall through */
             case EPOLL_CTL_MOD:
                 sock->epoll_events = event->events | EPOLLERR | EPOLLHUP;
@@ -352,7 +352,7 @@ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_even
                 break;
             case EPOLL_CTL_DEL:
                 sock->epoll_events = 0;
-                wakeup->stack_fd_cnt[sock->stack->queue_id]--;
+                wakeup->stack_fd_cnt[sock->stack->stack_idx]--;
                 pthread_spin_lock(&wakeup->event_list_lock);
                 list_del_node_null(&sock->event_list);
                 pthread_spin_unlock(&wakeup->event_list_lock);
@@ -652,7 +652,7 @@ static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfd
         while (sock && sock->conn) {
             sock->epoll_events = fds[i].events | POLLERR;
             sock->wakeup = wakeup;
-            stack_count[sock->stack->queue_id]++;
+            stack_count[sock->stack->stack_idx]++;
             sock = sock->listen_next;
         }
     }

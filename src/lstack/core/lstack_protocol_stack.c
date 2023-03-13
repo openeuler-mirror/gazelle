@@ -13,13 +13,14 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
+#include <rte_kni.h>
+
 #include <lwip/sockets.h>
 #include <lwip/tcpip.h>
 #include <lwip/tcp.h>
 #include <lwip/memp_def.h>
 #include <lwipsock.h>
 #include <lwip/posix_api.h>
-#include <rte_kni.h>
 #include <securec.h>
 #include <numa.h>
 
@@ -29,6 +30,7 @@
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_ethdev.h"
+#include "lstack_vdev.h"
 #include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
@@ -79,6 +81,28 @@ struct protocol_stack_group *get_protocol_stack_group(void)
     return &g_stack_group;
 }
 
+int get_min_conn_stack(struct protocol_stack_group *stack_group){
+    int min_conn_stk_idx = 0;
+    int min_conn_num = GAZELLE_MAX_CLIENTS;
+    for (int i = 0; i < stack_group->stack_num; i++) {
+        struct protocol_stack* stack = stack_group->stacks[i];
+        if (get_global_cfg_params()->seperate_send_recv) {
+            if (!stack->is_send_thread && stack->conn_num < min_conn_num) {
+                min_conn_stk_idx = i;
+                min_conn_num = stack->conn_num;
+            }
+        }else {
+            if (stack->conn_num < min_conn_num) {
+                min_conn_stk_idx = i;
+                min_conn_num = stack->conn_num;
+            }
+        }
+
+    }
+    return min_conn_stk_idx;
+
+}
+
 struct protocol_stack *get_protocol_stack(void)
 {
     return g_stack_p;
@@ -105,22 +129,23 @@ struct protocol_stack *get_bind_protocol_stack(void)
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     uint16_t index = 0;
+    int min_conn_num = GAZELLE_MAX_CLIENTS;
 
     /* close listen shadow, per app communication thread select only one stack */
-    if (get_global_cfg_params()->listen_shadow == false) {
-        static _Atomic uint16_t stack_index = 0;
-        index = atomic_fetch_add(&stack_index, 1);
-        if (index >= stack_group->stack_num) {
-            LSTACK_LOG(ERR, LSTACK, "thread =%hu larger than stack num = %hu\n", index, stack_group->stack_num);
-            return NULL;
-        }
-    /* use listen shadow, app communication thread maybe more than stack num, select the least load stack */
-    } else {
-        for (uint16_t i = 1; i < stack_group->stack_num; i++) {
-            if (stack_group->stacks[i]->conn_num < stack_group->stacks[index]->conn_num) {
+    for (uint16_t i = 0; i < stack_group->stack_num; i++) {
+        struct protocol_stack* stack = stack_group->stacks[i];
+        if (get_global_cfg_params()->seperate_send_recv) {
+            if (stack->is_send_thread && stack->conn_num < min_conn_num) {
                 index = i;
+                min_conn_num = stack->conn_num;
+            }
+        }else {
+            if (stack->conn_num < min_conn_num) {
+                index = i;
+                min_conn_num = stack->conn_num;
             }
         }
+
     }
 
     bind_stack = stack_group->stacks[index];
@@ -180,27 +205,35 @@ void low_power_idling(struct protocol_stack *stack)
     }
 }
 
-static int32_t create_thread(uint16_t queue_id, char *thread_name, stack_thread_func func)
+static int32_t create_thread(void *arg, char *thread_name, stack_thread_func func)
 {
     /* thread may run slow, if arg is temp var maybe have relese */
-    static uint16_t queue[PROTOCOL_STACK_MAX];
     char name[PATH_MAX];
     pthread_t tid;
     int32_t ret;
+    struct thread_params *t_params = (struct thread_params*) arg;
 
-    if (queue_id >= PROTOCOL_STACK_MAX) {
-        LSTACK_LOG(ERR, LSTACK, "queue_id is %hu exceed max=%d\n", queue_id, PROTOCOL_STACK_MAX);
-        return -1;
-    }
-    queue[queue_id] = queue_id;
-
-    ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, queue[queue_id]);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "set name failed\n");
+    if (t_params->queue_id >= PROTOCOL_STACK_MAX) {
+        LSTACK_LOG(ERR, LSTACK, "queue_id is %hu exceed max=%d\n", t_params->queue_id, PROTOCOL_STACK_MAX);
         return -1;
     }
 
-    ret = pthread_create(&tid, NULL, func, &queue[queue_id]);
+    if (get_global_cfg_params()->seperate_send_recv){
+        ret = sprintf_s(name, sizeof(name), "%s", thread_name);
+        if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "set name failed\n");
+            return -1;
+        }
+
+    }else {
+        ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, t_params->queue_id);
+        if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "set name failed\n");
+            return -1;
+        }
+    }
+
+    ret = pthread_create(&tid, NULL, func, arg);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "pthread_create ret=%d\n", ret);
         return -1;
@@ -221,7 +254,7 @@ static void* gazelle_wakeup_thread(void *arg)
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
 
     struct cfg_params *cfg = get_global_cfg_params();
-    int32_t lcore_id = cfg->wakeup[stack->queue_id];
+    int32_t lcore_id = cfg->wakeup[stack->stack_idx];
     thread_affinity_init(lcore_id);
 
     struct timespec st = {
@@ -252,12 +285,13 @@ static void* gazelle_wakeup_thread(void *arg)
 
 static void* gazelle_kernelevent_thread(void *arg)
 {
-    uint16_t queue_id = *(uint16_t *)arg;
-    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
+    struct thread_params *t_params = (struct thread_params*) arg;
+    uint16_t idx = t_params->idx;
+    struct protocol_stack *stack = get_protocol_stack_group()->stacks[idx];
 
     bind_to_stack_numa(stack);
 
-    LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", queue_id);
+    LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", idx);
 
     for (;;) {
         stack->kernel_event_num = posix_api->epoll_wait_fn(stack->epollfd, stack->kernel_events, KERNEL_EPOLL_MAX, -1);
@@ -269,13 +303,14 @@ static void* gazelle_kernelevent_thread(void *arg)
     return NULL;
 }
 
-static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
+static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
 {
+    struct thread_params *t_params = (struct thread_params*) arg;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     stack->tid = rte_gettid();
-    stack->queue_id = queue_id;
-    stack->cpu_id = get_global_cfg_params()->cpus[queue_id];
+    stack->queue_id = t_params->queue_id;
+    stack->stack_idx = t_params->idx;
     stack->lwip_stats = &lwip_stats;
 
     init_list_node(&stack->recv_list);
@@ -284,12 +319,25 @@ static int32_t init_stack_value(struct protocol_stack *stack, uint16_t queue_id)
     sys_calibrate_tsc();
     stack_stat_init();
 
-    stack_group->stacks[queue_id] = stack;
-    set_stack_idx(queue_id);
+    stack_group->stacks[t_params->idx] = stack;
+    set_stack_idx(t_params->idx);
 
     stack->epollfd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
     if (stack->epollfd < 0) {
         return -1;
+    }
+
+    int idx = t_params->idx;
+    if (get_global_cfg_params()->seperate_send_recv) {
+        if (idx % 2 == 0) {
+            stack->cpu_id = get_global_cfg_params()->recv_cpus[idx/2];
+            stack->is_send_thread = 0;
+        }else {
+            stack->cpu_id = get_global_cfg_params()->send_cpus[idx/2];
+            stack->is_send_thread = 1;
+        }
+    }else {
+         stack->cpu_id = get_global_cfg_params()->cpus[idx];
     }
 
     stack->socket_id = numa_node_of_cpu(stack->cpu_id);
@@ -317,16 +365,17 @@ void wait_sem_value(sem_t *sem, int32_t wait_value)
     } while (sem_val < wait_value);
 }
 
-static int32_t create_affiliate_thread(uint16_t queue_id, bool wakeup_enable)
+static int32_t create_affiliate_thread(void *arg, bool wakeup_enable)
 {
+
     if (wakeup_enable) {
-        if (create_thread(queue_id, "gazelleweakup", gazelle_wakeup_thread) != 0) {
+        if (create_thread(arg, "gazelleweakup", gazelle_wakeup_thread) != 0) {
             LSTACK_LOG(ERR, LSTACK, "gazelleweakup errno=%d\n", errno);
             return -1;
         }
     }
 
-    if (create_thread(queue_id, "gazellekernel", gazelle_kernelevent_thread) != 0) {
+    if (create_thread(arg, "gazellekernel", gazelle_kernelevent_thread) != 0) {
         LSTACK_LOG(ERR, LSTACK, "gazellekernel errno=%d\n", errno);
         return -1;
     }
@@ -334,10 +383,9 @@ static int32_t create_affiliate_thread(uint16_t queue_id, bool wakeup_enable)
     return 0;
 }
 
-static struct protocol_stack *stack_thread_init(uint16_t queue_id)
+static struct protocol_stack *stack_thread_init(void *arg)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();    
     struct protocol_stack *stack = calloc(1, sizeof(*stack));
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
@@ -345,14 +393,14 @@ static struct protocol_stack *stack_thread_init(uint16_t queue_id)
         return NULL;
     }
 
-    if (init_stack_value(stack, queue_id) != 0) {
+    if (init_stack_value(stack, arg) != 0) {
         goto END;
     }
 
     if (init_stack_numa_cpuset(stack) < 0) {
         goto END;
     }
-    if (create_affiliate_thread(queue_id, stack_group->wakeup_enable) < 0) {
+    if (create_affiliate_thread(arg, stack_group->wakeup_enable) < 0) {
         goto END;
     }
 
@@ -402,19 +450,22 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
         }
 
         __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
-        if (list_is_null(&wakeup->wakeup_list[stack->queue_id])) {
-            list_add_node(&stack->wakeup_list, &wakeup->wakeup_list[stack->queue_id]);
+        if (list_is_null(&wakeup->wakeup_list[stack->stack_idx])) {
+            list_add_node(&stack->wakeup_list, &wakeup->wakeup_list[stack->stack_idx]);
         }
     }
 
     stack->kernel_event_num = 0;
 }
 
+
 static void* gazelle_stack_thread(void *arg)
 {
-    uint16_t queue_id = *(uint16_t *)arg;
+    struct thread_params *t_params = (struct thread_params*) arg;
+
+    uint16_t queue_id = t_params->queue_id;
     struct cfg_params *cfg = get_global_cfg_params();
-    bool use_ltran_flag = cfg->use_ltran;;
+    uint8_t use_ltran_flag = cfg->use_ltran;;
     bool kni_switch = cfg->kni_switch;
     uint32_t read_connect_number = cfg->read_connect_number;
     uint32_t rpc_number = cfg->rpc_number;
@@ -424,7 +475,8 @@ static void* gazelle_stack_thread(void *arg)
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     bool wakeup_thread_enable = stack_group->wakeup_enable;
 
-    struct protocol_stack *stack = stack_thread_init(queue_id);
+    struct protocol_stack *stack = stack_thread_init(arg);
+
     if (stack == NULL) {
         /* exit in main thread, avoid create mempool and exit at the same time */
         set_init_fail();
@@ -432,8 +484,12 @@ static void* gazelle_stack_thread(void *arg)
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
         return NULL;
     }
+    if (!use_ltran() && queue_id == 0) {
+        init_listen_and_user_ports();
+    }
 
     sem_post(&stack_group->all_init);
+
     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
 
     for (;;) {
@@ -452,6 +508,7 @@ static void* gazelle_stack_thread(void *arg)
         * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
         if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
             rte_kni_handle_request(get_gazelle_kni());
+            kni_handle_rx(get_port_id());
         }
 
         wakeup_tick++;
@@ -464,6 +521,11 @@ static void* gazelle_stack_thread(void *arg)
     }
 
     return NULL;
+}
+
+static void libnet_listen_thread(void *arg){
+    struct cfg_params * cfg_param = get_global_cfg_params();
+    recv_pkts_from_other_process(cfg_param->process_idx, arg);
 }
 
 static int32_t init_protocol_sem(void)
@@ -498,8 +560,14 @@ int32_t init_protocol_stack(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     int32_t ret;
+    char name[PATH_MAX];
 
-    stack_group->stack_num = get_global_cfg_params()->num_cpu;
+    if (!get_global_cfg_params()->seperate_send_recv) {
+        stack_group->stack_num = get_global_cfg_params()->num_cpu;
+    }else {
+        stack_group->stack_num = get_global_cfg_params()->num_cpu * 2;
+    }
+
     stack_group->wakeup_enable = (get_global_cfg_params()->num_wakeup > 0) ? true : false;
     init_list_node(&stack_group->poll_list);
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
@@ -508,15 +576,63 @@ int32_t init_protocol_stack(void)
     if (init_protocol_sem() != 0) {
         return -1;
     }
+    int queue_num = get_global_cfg_params()->num_queue;
+    struct thread_params *t_params[queue_num];
+    int process_index = get_global_cfg_params()->process_idx;
 
-    for (uint32_t i = 0; i < stack_group->stack_num; i++) {
-        ret = create_thread(i, "gazellestack", gazelle_stack_thread);
+    if (get_global_cfg_params()->is_primary) {
+        for (uint16_t idx = 0; idx < get_global_cfg_params()->tot_queue_num; idx++) {
+           struct rte_mempool* rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf",
+                               get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_group->stack_num, RXTX_CACHE_SZ, idx);
+           get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx] = rxtx_mbuf;    
+        }
+    }
+
+    for (uint32_t i = 0; i < queue_num; i++) {
+        if (get_global_cfg_params()->seperate_send_recv) {
+            if (i % 2 == 0) {
+                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_RECV_THREAD_NAME, process_index, i/2);
+                if (ret < 0) {
+                    return -1;
+                }
+            }else {
+                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_SEND_THREAD_NAME, process_index, i/2);
+                if (ret < 0) {
+                    return -1;
+                }
+            }
+        }else {
+            ret = sprintf_s(name, sizeof(name), "%s", LSTACK_THREAD_NAME);
+            if (ret < 0) {
+                return -1;
+            }
+        }
+
+        t_params[i] = malloc(sizeof(struct thread_params));
+        t_params[i]->idx = i;
+        t_params[i]->queue_id = process_index * queue_num + i;
+
+        ret = create_thread((void *)t_params[i], name, gazelle_stack_thread);
         if (ret != 0) {
             return ret;
         }
     }
 
     wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
+
+    for(int idx = 0; idx < queue_num; idx++){
+        free(t_params[idx]);
+    }
+
+   if (!use_ltran()) {
+        ret = sem_init(&stack_group->sem_listen_thread, 0, 0);
+        ret = sprintf_s(name, sizeof(name), "%s", "listen_thread");
+        struct sys_thread *thread = sys_thread_new(name, libnet_listen_thread, (void*)(&stack_group->sem_listen_thread), 0, 0);
+        free(thread);
+        sem_wait(&stack_group->sem_listen_thread);
+
+        create_flow_rule_map();
+   }
 
     if (get_init_fail()) {
         return -1;
@@ -684,7 +800,7 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
 
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
-        if (cur_stack == stack) {
+        if (cur_stack == stack && use_ltran()) {
             continue;
         }
 
@@ -718,7 +834,7 @@ void stack_clean_epoll(struct rpc_msg *msg)
     struct protocol_stack *stack = get_protocol_stack();
     struct wakeup_poll *wakeup = (struct wakeup_poll *)msg->args[MSG_ARG_0].p;
 
-    list_del_node_null(&wakeup->wakeup_list[stack->queue_id]);
+    list_del_node_null(&wakeup->wakeup_list[stack->stack_idx]);
 }
 
 /* when fd is listenfd, listenfd of all protocol stack thread will be closed */
@@ -769,8 +885,13 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
     }
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    int min_conn_stk_idx = get_min_conn_stack(stack_group);
+
     for (int32_t i = 0; i < stack_group->stack_num; ++i) {
         stack = stack_group->stacks[i];
+        if (get_global_cfg_params()->seperate_send_recv && stack->is_send_thread) {
+            continue;
+        }
         if (stack != cur_stack) {
             clone_fd = rpc_call_shadow_fd(stack, fd, &addr, sizeof(addr));
             if (clone_fd < 0) {
@@ -779,6 +900,12 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
             }
         } else {
             clone_fd = fd;
+        }
+
+        if (min_conn_stk_idx == i) {
+            get_socket_by_fd(clone_fd)->conn->is_master_fd = 1;
+        }else {
+            get_socket_by_fd(clone_fd)->conn->is_master_fd = 0;
         }
 
         ret = rpc_call_listen(clone_fd, backlog);

@@ -65,6 +65,10 @@ static int32_t parse_tcp_conn_count(void);
 static int32_t parse_mbuf_count_per_conn(void);
 static int32_t parse_send_ring_size(void);
 static int32_t parse_expand_send_ring(void);
+static int32_t parse_num_process(void);
+static int32_t parse_process_numa(void);
+static int32_t parse_process_index(void);
+static int32_t parse_seperate_sendrecv_args(void);
 
 static inline int32_t parse_int(void *arg, char * arg_string, int32_t default_val,
                              int32_t min_val, int32_t max_val)
@@ -97,6 +101,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "use_ltran",    parse_use_ltran },
     { "devices",      parse_devices },
     { "dpdk_args",    parse_dpdk_args },
+    { "seperate_send_recv",    parse_seperate_sendrecv_args },
     { "num_cpus",     parse_stack_cpu_number },
     { "num_wakeup",   parse_wakeup_cpu_number },
     { "low_power_mode", parse_low_power_mode },
@@ -112,6 +117,9 @@ static struct config_vector_t g_config_tbl[] = {
     { "nic_read_number", parse_nic_read_number },
     { "send_ring_size", parse_send_ring_size },
     { "expand_send_ring", parse_expand_send_ring },
+    { "num_process",  parse_num_process },
+    { "process_numa", parse_process_numa },
+    { "process_idx", parse_process_index },
     { NULL,           NULL }
 };
 
@@ -277,35 +285,99 @@ static int32_t parse_stack_cpu_number(void)
     const config_setting_t *num_cpus = NULL;
     const char *args = NULL;
 
-    num_cpus = config_lookup(&g_config, "num_cpus");
-    if (num_cpus == NULL) {
-        return -EINVAL;
-    }
-
-    args = config_setting_get_string(num_cpus);
-    if (args == NULL) {
-        return -EINVAL;
-    }
-
-    if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
-        int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
-        if (idx < 0) {
-            g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
-            g_config_params.dpdk_argc++;
-
-            g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
-            g_config_params.dpdk_argc++;
+    if (!g_config_params.seperate_send_recv) {
+        num_cpus = config_lookup(&g_config, "num_cpus");
+        if (num_cpus == NULL) {
+            return -EINVAL;
         }
-    }
 
-    char *tmp_arg = strdup(args);
-    int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS);
-    free(tmp_arg);
-    if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
-        return -EINVAL;
-    }
+        args = config_setting_get_string(num_cpus);
+        if (args == NULL) {
+            return -EINVAL;
+        }
 
-    g_config_params.num_cpu = cnt;
+        if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
+            int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
+            if (idx < 0) {
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+                g_config_params.dpdk_argc++;
+
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+                g_config_params.dpdk_argc++;
+            }
+        }
+
+        char *tmp_arg = strdup(args);
+        int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS);
+        free(tmp_arg);
+        if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
+            return -EINVAL;
+        }
+
+        g_config_params.num_cpu = cnt;
+        g_config_params.num_queue = (uint16_t)cnt;
+        g_config_params.tot_queue_num = g_config_params.num_queue;
+    } else {
+        // send_num_cpus
+        num_cpus = config_lookup(&g_config, "send_num_cpus");
+        if (num_cpus == NULL) {
+            return -EINVAL;
+        }
+
+        args = config_setting_get_string(num_cpus);
+        if (args == NULL) {
+            return -EINVAL;
+        }
+
+        if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
+            int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
+            if (idx < 0) {
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+                g_config_params.dpdk_argc++;
+
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+                g_config_params.dpdk_argc++;
+            }
+        }
+
+        char *tmp_arg_send = strdup(args);
+        int32_t cnt = separate_str_to_array(tmp_arg_send, g_config_params.send_cpus, CFG_MAX_CPUS);
+        free(tmp_arg_send);
+
+        // recv_num_cpus
+        num_cpus = config_lookup(&g_config, "recv_num_cpus");
+        if (num_cpus == NULL) {
+            return -EINVAL;
+        }
+
+        args = config_setting_get_string(num_cpus);
+        if (args == NULL) {
+            return -EINVAL;
+        }
+
+        if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
+            int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
+            if (idx < 0) {
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+                g_config_params.dpdk_argc++;
+
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+                g_config_params.dpdk_argc++;
+            }
+        }
+
+        char *tmp_arg_recv = strdup(args);
+        cnt = separate_str_to_array(tmp_arg_recv, g_config_params.recv_cpus, CFG_MAX_CPUS);
+        free(tmp_arg_recv);
+
+        if (cnt <= 0 || cnt > CFG_MAX_CPUS / 2) {
+            return -EINVAL;
+        }
+
+        g_config_params.num_cpu = cnt;
+        g_config_params.num_queue = (uint16_t)cnt * 2;
+        g_config_params.tot_queue_num = g_config_params.num_queue;
+    }
 
     return 0;
 }
@@ -369,7 +441,12 @@ int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
     cpu_set_t stack_cpuset;
     CPU_ZERO(&stack_cpuset);
     for (int32_t idx = 0; idx < cfg->num_cpu; ++idx) {
-        CPU_SET(cfg->cpus[idx], &stack_cpuset);
+        if (!cfg->seperate_send_recv) {
+            CPU_SET(cfg->cpus[idx], &stack_cpuset);
+        }else {
+            CPU_SET(cfg->send_cpus[idx], &stack_cpuset);
+            CPU_SET(cfg->recv_cpus[idx], &stack_cpuset);
+        }
     }
     for (int32_t idx = 0; idx < cfg->num_wakeup; ++idx) {
         CPU_SET(cfg->wakeup[idx], &stack_cpuset);
@@ -643,6 +720,13 @@ static int32_t parse_dpdk_args(void)
             goto free_dpdk_args;
         }
         g_config_params.dpdk_argv[start_index + i] = p;
+
+        const char *primary = "primary";
+        if(strcmp(p, primary) == 0){
+            struct cfg_params *global_params = get_global_cfg_params();
+            global_params->is_primary = 1;
+        }
+
         (void)fprintf(stderr, "%s ", g_config_params.dpdk_argv[start_index + i]);
     }
     (void)fprintf(stderr, "\n");
@@ -872,6 +956,75 @@ static int32_t parse_unix_prefix(void)
             GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
     if (ret != EOK) {
         return ret;
+    }
+
+    return 0;
+}
+
+static int32_t parse_seperate_sendrecv_args(void)
+{
+    return parse_int(&g_config_params.seperate_send_recv, "seperate_send_recv", 0, 0, 1);
+}
+
+static int32_t parse_num_process(void)
+{
+    if (g_config_params.use_ltran) {
+        return 0;
+    }
+
+    const config_setting_t *num_process = NULL;
+
+    num_process = config_lookup(&g_config, "num_process");
+    if (num_process == NULL) {
+        g_config_params.num_process = 1;
+    }else {
+        g_config_params.num_process = (uint8_t)config_setting_get_int(num_process);
+    }
+
+    g_config_params.tot_queue_num = g_config_params.num_queue * g_config_params.num_process;
+
+    return 0;
+}
+
+static int32_t parse_process_numa(void)
+{
+    const config_setting_t *cfg_args = NULL;
+    const char *args = NULL;
+
+    int ret;
+    cfg_args = config_lookup(&g_config, "process_numa");
+    if (cfg_args == NULL)
+        return 0;
+
+    args = config_setting_get_string(cfg_args);
+    if (cfg_args == NULL) {
+        return 0;
+    }
+
+    ret = separate_str_to_array((char *)args, g_config_params.process_numa, PROTOCOL_STACK_MAX);
+    if (ret <= 0) {
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
+static int parse_process_index(void)
+{
+    if (g_config_params.use_ltran) {
+        return 0;
+    }
+
+    const config_setting_t *process_idx = NULL;
+    process_idx = config_lookup(&g_config, "process_idx");
+    if (process_idx == NULL) {
+        if (g_config_params.num_process == 1) {
+            g_config_params.process_idx = 0;
+        }else {
+            return -EINVAL;
+        }
+    } else {
+        g_config_params.process_idx = (uint8_t)config_setting_get_int(process_idx);
     }
 
     return 0;
