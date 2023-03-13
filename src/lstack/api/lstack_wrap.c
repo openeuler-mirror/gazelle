@@ -200,6 +200,16 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
     return rpc_call_bind(s, name, namelen);
 }
 
+bool is_dst_ip_localhost(const struct sockaddr *addr)
+{
+    struct cfg_params *global_params = get_global_cfg_params();
+    struct sockaddr_in *servaddr = (struct sockaddr_in *) addr;
+    if(global_params->host_addr.addr == servaddr->sin_addr.s_addr){
+        return true;
+    }
+    return false;
+}
+
 static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
 {
     if (name == NULL) {
@@ -224,9 +234,14 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         return ret;
     }
 
-    ret = posix_api->connect_fn(s, name, namelen);
-    if (ret == 0) {
-        return ret;
+    char listen_ring_name[RING_NAME_LEN];
+    int remote_port = htons(((struct sockaddr_in *)name)->sin_port);
+    snprintf(listen_ring_name, sizeof(listen_ring_name), "listen_rx_ring_%u", remote_port);
+    if (!is_dst_ip_localhost(name) || rte_ring_lookup(listen_ring_name) == NULL) {
+        ret = posix_api->connect_fn(s, name, namelen);
+        if (ret == 0) {
+            return ret;
+        }
     }
 
     return -1;
