@@ -77,6 +77,7 @@ struct protocol_stack {
     struct stats_ *lwip_stats;
     struct gazelle_stack_latency latency;
     struct gazelle_stack_stat stats;
+    struct gazelle_stack_aggregate_stats aggregate_stats;
 };
 
 struct eth_params;

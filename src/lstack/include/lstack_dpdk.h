@@ -14,6 +14,7 @@
 #define _GAZELLE_DPDK_H_
 
 #include "gazelle_opt.h"
+#include "gazelle_dfx_msg.h"
 
 #define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
 #define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
@@ -53,4 +54,6 @@ void dpdk_restore_pci(void);
 bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
 uint16_t get_port_id();
 struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,uint32_t mbuf_cache_size, uint16_t queue_id);
+
+void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
 #endif /* GAZELLE_DPDK_H */
