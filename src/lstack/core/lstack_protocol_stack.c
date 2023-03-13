@@ -132,20 +132,28 @@ struct protocol_stack *get_bind_protocol_stack(void)
     int min_conn_num = GAZELLE_MAX_CLIENTS;
 
     /* close listen shadow, per app communication thread select only one stack */
-    for (uint16_t i = 0; i < stack_group->stack_num; i++) {
-        struct protocol_stack* stack = stack_group->stacks[i];
-        if (get_global_cfg_params()->seperate_send_recv) {
-            if (stack->is_send_thread && stack->conn_num < min_conn_num) {
-                index = i;
-                min_conn_num = stack->conn_num;
-            }
-        }else {
-            if (stack->conn_num < min_conn_num) {
-                index = i;
-                min_conn_num = stack->conn_num;
+    if (use_ltran() && get_global_cfg_params()->listen_shadow == 0) {
+        static _Atomic uint16_t stack_index = 0;
+	index = atomic_fetch_add(&stack_index, 1);
+	if (index >= stack_group->stack_num) {
+            LSTACK_LOG(ERR, LSTACK, "thread =%hu larger than stack num = %hu\n", index, stack_group->stack_num);
+            return NULL;
+        }
+    } else {
+        for (uint16_t i = 0; i < stack_group->stack_num; i++) {
+            struct protocol_stack* stack = stack_group->stacks[i];
+            if (get_global_cfg_params()->seperate_send_recv) {
+                if (stack->is_send_thread && stack->conn_num < min_conn_num) {
+                    index = i;
+                    min_conn_num = stack->conn_num;
+                }
+            }else {
+                if (stack->conn_num < min_conn_num) {
+                    index = i;
+                    min_conn_num = stack->conn_num;
+                }
             }
         }
-
     }
 
     bind_stack = stack_group->stacks[index];
@@ -425,6 +433,8 @@ static struct protocol_stack *stack_thread_init(void *arg)
     if (!use_ltran()) {
         wait_sem_value(&stack_group->ethdev_init, 1);
     }
+
+    usleep(SLEEP_US_BEFORE_LINK_UP);
 
     if (ethdev_init(stack) != 0) {
         free(stack);

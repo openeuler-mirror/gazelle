@@ -12,6 +12,7 @@
 
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <string.h>
 
 #include <signal.h>
 #include <sys/socket.h>
@@ -22,9 +23,11 @@
 #include <netinet/tcp.h>
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <net/if.h>
 
 #include <lwip/posix_api.h>
 #include <lwip/lwipsock.h>
+#include <lwip/tcp.h>
 
 #include "posix/lstack_epoll.h"
 #include "posix/lstack_unistd.h"
@@ -82,6 +85,11 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
 
     if (CONN_TYPE_IS_HOST(sock->conn)) {
         return PATH_KERNEL;
+    }
+
+    struct tcp_pcb *pcb = sock->conn->pcb.tcp;
+    if (pcb != NULL && pcb->state <= ESTABLISHED) {
+        return PATH_LWIP;
     }
 
     return PATH_UNKNOW;
@@ -179,6 +187,28 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
     return posix_api->accept4_fn(s, addr, addrlen, flags);
 }
 
+#define SIOCGIFADDR        0x8915
+static int get_addr(struct sockaddr_in *sin, char *interface)
+{
+    int sockfd = 0;
+    struct ifreq ifr;
+
+    if ((sockfd = posix_api->socket_fn(AF_INET, SOCK_STREAM, 0)) < 0) return -1;
+
+    memset(&ifr, 0, sizeof(ifr));
+    snprintf(ifr.ifr_name, (sizeof(ifr.ifr_name) - 1), "%s", interface);
+
+    if(posix_api->ioctl_fn(sockfd, SIOCGIFADDR, &ifr) < 0){
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+    posix_api->close_fn(sockfd);
+
+    memcpy(sin, &ifr.ifr_addr, sizeof(struct sockaddr_in));
+
+    return 0;
+}
+
 static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen)
 {
     if (name == NULL) {
@@ -202,12 +232,36 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
 
 bool is_dst_ip_localhost(const struct sockaddr *addr)
 {
-    struct cfg_params *global_params = get_global_cfg_params();
     struct sockaddr_in *servaddr = (struct sockaddr_in *) addr;
-    if(global_params->host_addr.addr == servaddr->sin_addr.s_addr){
-        return true;
+    FILE *ifh = fopen("/proc/net/dev", "r");
+    char *line = NULL;
+    char *p;
+    size_t linel = 0;
+    int linenum = 0;
+    struct sockaddr_in* sin = malloc(sizeof(struct sockaddr_in));
+
+    while (getdelim(&line, &linel, '\n', ifh) > 0) {
+        if (linenum++ < 2) continue;
+
+        p = line;
+        while (isspace(*p))
+                ++p;
+        int n = strcspn(p, ": \t");
+
+        char interface[20] = {0};
+        strncpy(interface, p, n);
+
+        memset(sin, 0, sizeof(struct sockaddr_in));
+        int ret = get_addr(sin, interface);
+        if (ret == 0) {
+            if(sin->sin_addr.s_addr == servaddr->sin_addr.s_addr){
+                return 1;
+            }
+        }
     }
-    return false;
+    free(sin);
+
+    return 0;
 }
 
 static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
@@ -229,22 +283,17 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         GAZELLE_RETURN(EINVAL);
     }
 
-    int32_t ret = rpc_call_connect(s, name, namelen);
-    if (ret == 0 || errno == EISCONN) {
-        return ret;
-    }
-
+    int32_t ret = 0;
     char listen_ring_name[RING_NAME_LEN];
     int remote_port = htons(((struct sockaddr_in *)name)->sin_port);
     snprintf(listen_ring_name, sizeof(listen_ring_name), "listen_rx_ring_%u", remote_port);
-    if (!is_dst_ip_localhost(name) || rte_ring_lookup(listen_ring_name) == NULL) {
+    if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
-        if (ret == 0) {
-            return ret;
-        }
+    } else {
+        ret = rpc_call_connect(s, name, namelen);
     }
 
-    return -1;
+    return ret;
 }
 
 static inline int32_t do_listen(int32_t s, int32_t backlog)
@@ -253,7 +302,12 @@ static inline int32_t do_listen(int32_t s, int32_t backlog)
         return posix_api->listen_fn(s, backlog);
     }
 
-    int32_t ret = stack_broadcast_listen(s, backlog);
+    int32_t ret;
+    if (use_ltran() && get_global_cfg_params()->listen_shadow == 0) {
+        ret = stack_single_listen(s, backlog);
+    } else {
+        ret = stack_broadcast_listen(s, backlog);
+    }
     if (ret != 0) {
         return ret;
     }
@@ -467,11 +521,7 @@ static inline int32_t do_close(int32_t s)
 
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
-    if (fds == NULL) {
-        GAZELLE_RETURN(EINVAL);
-    }
-
-    if (unlikely(posix_api->ues_posix) || nfds == 0 || !select_thread_path()) {
+    if (unlikely(posix_api->ues_posix) || fds == NULL || nfds == 0 || !select_thread_path()) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 
