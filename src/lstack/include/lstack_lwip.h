@@ -14,7 +14,7 @@
 #define __GAZELLE_LWIP_H__
 
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
-#define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata))
+#define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)))
 #define NETCONN_IS_DATAOUT(sock)    (gazelle_ring_readover_count((sock)->send_ring) || (sock)->send_lastdata || (sock)->send_pre_del)
 #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 
@@ -33,6 +33,7 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
 ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
 ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);
 void read_recv_list(struct protocol_stack *stack, uint32_t max_num);
+void read_same_node_recv_list(struct protocol_stack *stack);
 void send_stack_list(struct protocol_stack *stack, uint32_t send_max);
 void add_recv_list(int32_t fd);
 void get_lwip_conntable(struct rpc_msg *msg);

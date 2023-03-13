@@ -314,6 +314,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
     stack->lwip_stats = &lwip_stats;
 
     init_list_node(&stack->recv_list);
+    init_list_node(&stack->same_node_recv_list);
     init_list_node(&stack->wakeup_list);
 
     sys_calibrate_tsc();
@@ -497,6 +498,10 @@ static void* gazelle_stack_thread(void *arg)
 
         gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
 
+        /* reduce traversal times */
+        if ((wakeup_tick & 0xff) == 0) {
+            read_same_node_recv_list(stack);
+        }
         read_recv_list(stack, read_connect_number);
 
         if ((wakeup_tick & 0xf) == 0) {

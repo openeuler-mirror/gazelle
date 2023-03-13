@@ -82,7 +82,6 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
         len = (uint16_t)rte_pktmbuf_data_len(m);
         payload = rte_pktmbuf_mtod(m, void *);
         pc = mbuf_to_pbuf(m);
-        pc->custom_free_function = gazelle_free_pbuf;
         next = pbuf_alloced_custom(PBUF_RAW, (uint16_t)len, PBUF_RAM, pc, payload, (uint16_t)len);
         if (next == NULL) {
             stack->stats.rx_allocmbuf_fail++;
@@ -653,6 +652,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
 {
     uint32_t nr_pkts;
 
+    netif_poll(&stack->netif);
     nr_pkts = stack->dev_ops.rx_poll(stack, stack->pkts, nic_read_number);
     if (nr_pkts == 0) {
         return 0;

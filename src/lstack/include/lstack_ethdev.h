@@ -45,5 +45,6 @@ void delete_user_process_port(uint16_t dst_port, enum port_type type);
 void add_user_process_port(uint16_t dst_port, uint8_t process_idx, enum port_type type);
 void delete_flow_director(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
 void config_flow_director(uint16_t queue_id, uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
+void netif_poll(struct netif *netif);
 
 #endif /* __GAZELLE_ETHDEV_H__ */
