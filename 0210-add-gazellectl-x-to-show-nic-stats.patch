@@ -1,0 +1,457 @@
+From a991e372a23ac1a065f4a4a99096729a688d2856 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Mon, 13 Mar 2023 14:25:17 +0800
+Subject: [PATCH] add gazellectl -x to show nic stats add gazellectl -a to show
+ small packet aggregtion degree
+
+---
+ src/common/gazelle_dfx_msg.h               |  28 ++++
+ src/lstack/core/lstack_dpdk.c              |  19 +++
+ src/lstack/core/lstack_lwip.c              |   1 +
+ src/lstack/core/lstack_stack_stat.c        |  41 ++++++
+ src/lstack/include/lstack_dpdk.h           |   3 +
+ src/lstack/include/lstack_protocol_stack.h |   1 +
+ src/lstack/include/lstack_stack_stat.h     |   1 +
+ src/ltran/ltran_dfx.c                      | 148 +++++++++++++++++----
+ 8 files changed, 213 insertions(+), 29 deletions(-)
+
+diff --git a/src/common/gazelle_dfx_msg.h b/src/common/gazelle_dfx_msg.h
+index 608a023..1863837 100644
+--- a/src/common/gazelle_dfx_msg.h
++++ b/src/common/gazelle_dfx_msg.h
+@@ -43,6 +43,8 @@ enum GAZELLE_STAT_MODE {
+     GAZELLE_STAT_LSTACK_SHOW_CONN,
+     GAZELLE_STAT_LSTACK_SHOW_LATENCY,
+     GAZELLE_STAT_LSTACK_LOW_POWER_MDF,
++    GAZELLE_STAT_LSTACK_SHOW_XSTATS,
++    GAZELLE_STAT_LSTACK_SHOW_AGGREGATE,
+ 
+     GAZELLE_STAT_MODE_MAX,
+ };
+@@ -197,6 +199,30 @@ struct gazelle_stat_low_power_info {
+     uint16_t lpm_rx_pkts;
+ };
+ 
++#define RTE_ETH_XSTATS_NAME_SIZE 64
++struct nic_eth_xstats_name {
++    char name[RTE_ETH_XSTATS_NAME_SIZE];
++};
++
++struct nic_eth_xstats {
++    struct nic_eth_xstats_name xstats_name[128];
++    uint64_t values[128];
++    uint32_t len;
++    uint16_t port_id;
++};
++
++struct gazelle_stack_aggregate_stats {
++    /* 0: RX, 1: TX, 2: APP_TX */
++    uint32_t size_1_64[3];
++    uint32_t size_65_512[3];
++    uint32_t size_513_1460[3];
++    uint32_t size_1461_8192[3];
++    uint32_t size_8193_max[3];
++
++    uint64_t rx_bytes;
++    uint64_t tx_bytes;
++};
++
+ struct gazelle_stack_dfx_data {
+     /* indicates whether the current message is the last */
+     uint32_t eof;
+@@ -209,6 +235,8 @@ struct gazelle_stack_dfx_data {
+         struct gazelle_stack_latency latency;
+         struct gazelle_stat_lstack_conn conn;
+         struct gazelle_stat_lstack_snmp snmp;
++        struct nic_eth_xstats nic_xstats;
++        struct gazelle_stack_aggregate_stats aggregate_stats;
+     } data;
+ };
+ 
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index 1beb66b..c6d6290 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -645,3 +645,22 @@ bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, ui
+     return (reta_index % stack_group->nb_queues) == stack->queue_id;
+ }
+ 
++void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
++{
++    int32_t ret;
++    int32_t len = rte_eth_xstats_get_names_by_id(port_id, NULL, 0, NULL);
++    dfx->data.nic_xstats.len = len;
++    dfx->data.nic_xstats.port_id = port_id;
++    if (len < 0) {
++        return;
++    }
++    if (len != rte_eth_xstats_get_names_by_id(port_id, (struct rte_eth_xstat_name *)dfx->data.nic_xstats.xstats_name, len, NULL)) {
++        dfx->data.nic_xstats.len = -1;
++        return;
++    }
++
++    ret = rte_eth_xstats_get_by_id(port_id, NULL, dfx->data.nic_xstats.values, len);
++    if (ret < 0 || ret > len) {
++        dfx->data.nic_xstats.len = -1;
++    }
++}
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index e83bffa..063eea4 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -714,6 +714,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
+         }
+ 
+         recv_len += pbufs[i]->tot_len;
++        lstack_calculate_aggregate(0, pbufs[i]->tot_len);
+         read_count++;
+ 
+         /* once we have some data to return, only add more if we don't need to wait */
+diff --git a/src/lstack/core/lstack_stack_stat.c b/src/lstack/core/lstack_stack_stat.c
+index a39e372..92d7a39 100644
+--- a/src/lstack/core/lstack_stack_stat.c
++++ b/src/lstack/core/lstack_stack_stat.c
+@@ -27,6 +27,7 @@
+ #include "lstack_protocol_stack.h"
+ #include "lstack_stack_stat.h"
+ #include "posix/lstack_epoll.h"
++#include "lstack_dpdk.h"
+ 
+ #define US_PER_SEC  1000000
+ 
+@@ -67,6 +68,31 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
+     latency_stat->latency_pkts++;
+ }
+ 
++void lstack_calculate_aggregate(int type, uint32_t len)
++{
++    struct protocol_stack_group *stack_group = get_protocol_stack_group();
++    if (stack_group->latency_start) {
++        struct protocol_stack *stack = get_protocol_stack();
++        if (type == 1) {
++            stack->aggregate_stats.tx_bytes  += len;
++        } else if (type == 0) {
++            stack->aggregate_stats.rx_bytes  += len;
++        }
++
++        if (len <= 64) {
++            stack->aggregate_stats.size_1_64[type]++;
++        } else if (len <= 512) {
++            stack->aggregate_stats.size_65_512[type]++;
++        } else if (len <= 1460) {
++            stack->aggregate_stats.size_513_1460[type]++;
++        } else if (len <= 8192) {
++            stack->aggregate_stats.size_1461_8192[type]++;
++        } else {
++            stack->aggregate_stats.size_8193_max[type]++;
++        }
++    }
++}
++
+ static void set_latency_start_flag(bool start)
+ {
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+@@ -89,6 +115,7 @@ static void set_latency_start_flag(bool start)
+         stack->latency.start_time = get_current_time();
+         stack->latency.lwip_latency.latency_min = ~((uint64_t)0);
+         stack->latency.read_latency.latency_min = ~((uint64_t)0);
++        memset_s(&stack->aggregate_stats, sizeof(struct gazelle_stack_aggregate_stats), 0, sizeof(stack->aggregate_stats));
+     }
+ }
+ 
+@@ -185,6 +212,12 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
+                 LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+             }
+             break;
++        case GAZELLE_STAT_LSTACK_SHOW_AGGREGATE:
++            ret = memcpy_s(&dfx->data.aggregate_stats, sizeof(dfx->data.aggregate_stats), &stack->aggregate_stats, sizeof(stack->aggregate_stats));
++            if (ret != EOK) {
++                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
++            }
++            break;
+         case GAZELLE_STAT_LTRAN_START_LATENCY:
+             set_latency_start_flag(true);
+             break;
+@@ -221,6 +254,14 @@ int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
+     struct gazelle_stack_dfx_data dfx;
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
++    if (stat_mode == GAZELLE_STAT_LSTACK_SHOW_XSTATS) {
++        dpdk_nic_xstats_get(&dfx, 0);
++        dfx.tid = 0;
++        dfx.eof = 1;
++        send_control_cmd_data(fd, &dfx);
++        return 0;
++    }
++
+     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
+         struct protocol_stack *stack = stack_group->stacks[i];
+ 
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index 55ca7a1..7c222ca 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -14,6 +14,7 @@
+ #define _GAZELLE_DPDK_H_
+ 
+ #include "gazelle_opt.h"
++#include "gazelle_dfx_msg.h"
+ 
+ #define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
+ #define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
+@@ -53,4 +54,6 @@ void dpdk_restore_pci(void);
+ bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
+ uint16_t get_port_id();
+ struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,uint32_t mbuf_cache_size, uint16_t queue_id);
++
++void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
+ #endif /* GAZELLE_DPDK_H */
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index b5d3f7d..d58c98a 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -77,6 +77,7 @@ struct protocol_stack {
+     struct stats_ *lwip_stats;
+     struct gazelle_stack_latency latency;
+     struct gazelle_stack_stat stats;
++    struct gazelle_stack_aggregate_stats aggregate_stats;
+ };
+ 
+ struct eth_params;
+diff --git a/src/lstack/include/lstack_stack_stat.h b/src/lstack/include/lstack_stack_stat.h
+index 6057fe1..5737bae 100644
+--- a/src/lstack/include/lstack_stack_stat.h
++++ b/src/lstack/include/lstack_stack_stat.h
+@@ -28,5 +28,6 @@ int32_t handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode);
+ uint64_t get_current_time(void);
+ void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info);
+ void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup);
++void lstack_calculate_aggregate(int type, uint32_t len);
+ 
+ #endif /* GAZELLE_STACK_STAT_H */
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 051787e..331a23c 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -86,6 +86,8 @@ static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_st
+ static void gazelle_print_lstack_stat_lpm(void *buf, const struct gazelle_stat_msg_request *req_msg);
+ static void gazelle_print_ltran_sock(void *buf, const struct gazelle_stat_msg_request *req_msg);
+ static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg);
++static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg_request *req_msg);
++static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_msg_request *req_msg);
+ 
+ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
+     {GAZELLE_STAT_LTRAN_SHOW,          sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_total},
+@@ -106,10 +108,51 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
+     {GAZELLE_STAT_LSTACK_SHOW_CONN,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_conn},
+     {GAZELLE_STAT_LSTACK_SHOW_LATENCY, sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_latency},
+     {GAZELLE_STAT_LSTACK_LOW_POWER_MDF, sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_lpm},
++    {GAZELLE_STAT_LSTACK_SHOW_XSTATS, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_xstats},
++    {GAZELLE_STAT_LSTACK_SHOW_AGGREGATE, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_aggregate},
+ };
+ 
+ static int32_t g_wait_reply = 1;
+ 
++static double rate_convert_type(uint64_t bytes, char **type)
++{
++    static char *rate_type[] = {"b/s", "Kb/s", "Mb/s"};
++    const uint32_t per_unit = 1024; // 1KB=1024B
++    double now = bytes * 8;
++    uint32_t type_max = sizeof(rate_type) / sizeof(char *);
++    uint32_t index = 0;
++
++    while (now > per_unit && index < type_max - 1) {
++        now /= per_unit;
++        index++;
++    }
++
++    *type = rate_type[index];
++    return now;
++}
++
++static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg_request *req_msg)
++{
++    struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
++    struct nic_eth_xstats *xstats = &stat->data.nic_xstats;
++    static const char *nic_stats_border = "########################";
++
++    printf("###### NIC extended statistics for port %-2d #########\n", 0);
++    printf("%s############################\n",nic_stats_border);
++    if (xstats->len <= 0) {
++        printf("Cannot get xstats\n");
++        return;
++    }
++
++    for (uint32_t i = 0; i < xstats->len; i++) {
++        printf("%s: %"PRIu64"\n", xstats->xstats_name[i].name,
++                    xstats->values[i]);
++    }
++
++    printf("%s############################\n",
++               nic_stats_border);
++}
++
+ static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
+ {
+     struct gazelle_stat_forward_table *table = (struct gazelle_stat_forward_table *)buf;
+@@ -331,23 +374,6 @@ static void gazelle_print_ltran_stat_total(void *buf, const struct gazelle_stat_
+     }
+ }
+ 
+-static double rate_convert_type(uint64_t bytes, char **type)
+-{
+-    static char *rate_type[] = {"B/s", "KB/s", "MB/s", "GB/s"};
+-    const uint32_t per_unit = 1024; // 1KB=1024B
+-    double now = bytes;
+-    uint32_t type_max = sizeof(rate_type) / sizeof(char *);
+-    uint32_t index = 0;
+-
+-    while (now > per_unit && index < type_max - 1) {
+-        now /= per_unit;
+-        index++;
+-    }
+-
+-    *type = rate_type[index];
+-    return now;
+-}
+-
+ static void gazelle_print_ltran_stat_rate(void *buf, const struct gazelle_stat_msg_request *req_msg)
+ {
+     uint32_t i;
+@@ -949,6 +975,8 @@ static void show_usage(void)
+            "  -s, snmp        show lstack snmp \n"
+            "  -c, connect     show lstack connect \n"
+            "  -l, latency     [time]   show lstack latency \n"
++           "  -x, xstats      show lstack xstats \n"
++           "  -a, aggregatin  [time]   show lstack send/recv aggregation \n"
+            "  set: \n"
+            "  loglevel        {error | info | debug}  set lstack loglevel \n"
+            "  lowpower        {0 | 1}  set lowpower enable \n"
+@@ -1037,6 +1065,46 @@ static int32_t parse_dfx_ltran_show_args(int32_t argc, char *argv[], struct gaze
+     return cmd_index;
+ }
+ 
++static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_msg_request *req_msg)
++{
++    struct gazelle_stack_dfx_data *dfx = (struct gazelle_stack_dfx_data *)buf;
++    struct gazelle_stack_aggregate_stats *stats = &dfx->data.aggregate_stats;
++    char *rate_type = NULL;
++    double rate;
++    int32_t ret = 0;
++
++    do {
++        printf("\n================Stack(%d) Aggregate===============\n", dfx->tid);
++        rate = rate_convert_type(stats->rx_bytes / g_wait_reply, &rate_type);
++        printf("rx throught: %f%s\n", rate, rate_type);
++        rate = rate_convert_type(stats->tx_bytes / g_wait_reply, &rate_type);
++        printf("tx throught: %f%s\n", rate, rate_type);
++
++        printf("rx_szie_1_64: %u\n", stats->size_1_64[0]);
++        printf("rx_size_65_512: %u\n", stats->size_65_512[0]);
++        printf("rx_size_513_1460 byte: %u\n", stats->size_513_1460[0]);
++        printf("rx_size_1461_8192 byte: %u\n", stats->size_1461_8192[0]);
++        printf("rx_size_8193_max byte: %u\n", stats->size_8193_max[0]);
++
++        printf("tx_szie_1_64: %u\n", stats->size_1_64[1]);
++        printf("tx_size_65_512: %u\n", stats->size_65_512[1]);
++        printf("tx_size_513_1460 byte: %u\n", stats->size_513_1460[1]);
++        printf("tx_size_1461_8192 byte: %u\n", stats->size_1461_8192[1]);
++        printf("tx_size_8193_max byte: %u\n", stats->size_8193_max[1]);
++
++        printf("app_tx_szie_1_64: %u\n", stats->size_1_64[2]);
++        printf("app_tx_size_65_512: %u\n", stats->size_65_512[2]);
++        printf("app_tx_size_513_1460 byte: %u\n", stats->size_513_1460[2]);
++        printf("app_tx_size_1461_8192 byte: %u\n", stats->size_1461_8192[2]);
++        printf("app_tx_size_8193_max byte: %u\n", stats->size_8193_max[2]);
++
++        if ((dfx->eof != 0) || (ret != GAZELLE_OK)) {
++            break;
++        }
++        ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
++    } while(true);
++}
++
+ static int32_t parse_dfx_ltran_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+ {
+     int32_t num_cmd = 0;
+@@ -1098,6 +1166,23 @@ static int32_t parse_dfx_lstack_set_args(int32_t argc, char *argv[], struct gaze
+     return cmd_index;
+ }
+ 
++static int parse_delay_arg(int32_t argc, char *argv[], long int delay)
++{
++    if (argc > GAZELLE_OPTIONS2_ARG_IDX) {
++        char *end = NULL;
++        delay = strtol(argv[GAZELLE_OPTIONS2_ARG_IDX], &end, GAZELLE_DECIMAL);
++        if (delay <= 0 || (end == NULL) || (*end != '\0')) {
++            return -1;
++        }
++        if (delay > GAZELLE_MAX_LATENCY_TIME) {
++            printf("Exceeds the maximum(30mins) latency time, will be set to maximum(30mins)\n");
++            delay = GAZELLE_MAX_LATENCY_TIME;
++        }
++    }
++    g_wait_reply = delay;
++    return 0;
++}
++
+ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+ {
+     int32_t cmd_index = 0;
+@@ -1119,6 +1204,9 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
+     if (strcmp(param, "connect") == 0 || strcmp(param, "-c") == 0) {
+         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_CONN;
+     }
++    if (strcmp(param, "xstats") == 0 || strcmp(param, "-x") == 0) {
++        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_XSTATS;
++    }
+     if (strcmp(param, "latency") == 0 || strcmp(param, "-l") == 0) {
+         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_START_LATENCY;
+         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_STOP_LATENCY;
+@@ -1127,18 +1215,17 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
+             req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW_LATENCY;
+         }
+ 
+-        if (argc > GAZELLE_OPTIONS2_ARG_IDX) {
+-            char *end = NULL;
+-            delay = strtol(argv[GAZELLE_OPTIONS2_ARG_IDX], &end, GAZELLE_DECIMAL);
+-            if (delay <= 0 || (end == NULL) || (*end != '\0')) {
+-                return -1;
+-            }
+-            if (delay > GAZELLE_MAX_LATENCY_TIME) {
+-                printf("Exceeds the maximum(30mins) latency time, will be set to maximum(30mins)\n");
+-                delay = GAZELLE_MAX_LATENCY_TIME;
+-            }
++        if (parse_delay_arg(argc, argv, delay) != 0) {
++            return 0;
++        }
++    }
++    if (strcmp(param, "aggragate") == 0 || strcmp(param, "-a") == 0) {
++        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_START_LATENCY;
++        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_STOP_LATENCY;
++        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_AGGREGATE;
++        if (parse_delay_arg(argc, argv, delay) != 0) {
++            return 0;
+         }
+-        g_wait_reply = delay;
+     }
+ 
+     return cmd_index;
+@@ -1212,10 +1299,13 @@ static int32_t check_cmd_support(struct gazelle_stat_msg_request *req_msg, int32
+         case GAZELLE_STAT_LSTACK_SHOW_CONN:
+         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
+         case GAZELLE_STAT_LSTACK_LOW_POWER_MDF:
++        case GAZELLE_STAT_LSTACK_SHOW_XSTATS:
++        case GAZELLE_STAT_LSTACK_SHOW_AGGREGATE:
+             return 0;
+         default:
+             if (req_msg[0].stat_mode == GAZELLE_STAT_LTRAN_START_LATENCY &&
+-                req_msg[req_msg_num - 1].stat_mode == GAZELLE_STAT_LSTACK_SHOW_LATENCY) {
++                (req_msg[req_msg_num - 1].stat_mode == GAZELLE_STAT_LSTACK_SHOW_LATENCY ||
++                 req_msg[req_msg_num - 1].stat_mode == GAZELLE_STAT_LSTACK_SHOW_AGGREGATE)) {
+                 return 0;
+             }
+             /* keep output consistency */
+-- 
+2.23.0
+
