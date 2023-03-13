@@ -94,4 +94,6 @@
 #define LSTACK_RECV_THREAD_NAME "lstack_recv"
 #define LSTACK_THREAD_NAME "gazellelstack"
 
+#define SLEEP_US_BEFORE_LINK_UP 10000
+
 #endif /* _GAZELLE_OPT_H_ */

@@ -26,6 +26,12 @@ enum PACKET_TRANSFER_TYPE{
     TRANSFER_CURRENT_THREAD, 
 };
 
+enum TRANSFER_MESSAGE_RESULT {
+    CONNECT_ERROR = -2,
+    REPLY_ERROR = -1,
+    TRANSFER_SUCESS = 0,
+};
+
 struct protocol_stack;
 struct rte_mbuf;
 struct lstack_dev_ops {

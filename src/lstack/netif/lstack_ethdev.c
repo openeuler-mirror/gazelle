@@ -160,25 +160,23 @@ int transfer_pkt_to_other_process(char *buf, int process_index, int write_len, b
     int sockfd;
     int ret = 0;
 
-    if ((sockfd = posix_api->socket_fn(AF_UNIX, SOCK_STREAM, 0)) < 0) { 
-        return -1;
-    }
+    sockfd = posix_api->socket_fn(AF_UNIX, SOCK_STREAM, 0);
  
     memset(&serun, 0, sizeof(serun));  
     serun.sun_family = AF_UNIX;
     sprintf_s(serun.sun_path, PATH_MAX,"%s%d", server_path, process_index);
     int len = offsetof(struct sockaddr_un, sun_path) + strlen(serun.sun_path);  
     if (posix_api->connect_fn(sockfd, (struct sockaddr *)&serun, len) < 0){  
-        return -1;  
+        return CONNECT_ERROR;  
     }
     posix_api->write_fn(sockfd, buf, write_len);  
     if (need_reply) {
         char reply_message[REPLY_LEN];
         posix_api->read_fn(sockfd, reply_message, REPLY_LEN);
         if (strcmp(reply_message, SUCCESS_REPLY) == 0) {
-            ret = 0;
+            ret = TRANSFER_SUCESS;
         }else {
-            ret = -1;
+            ret = REPLY_ERROR;
         }
     }
     posix_api->close_fn(sockfd);
@@ -291,7 +289,7 @@ void transfer_delete_rule_info_to_process0(uint32_t dst_ip, uint16_t src_port, u
         char process_server_path[DELETE_FLOWS_PARAMS_LENGTH];
         sprintf_s(process_server_path, DELETE_FLOWS_PARAMS_LENGTH, "%u%s%u%s%u", dst_ip,split_delim, src_port,split_delim,dst_port);
         int ret = transfer_pkt_to_other_process(process_server_path, 0, DELETE_FLOWS_PARAMS_LENGTH, false);
-        if(ret != 0){
+        if(ret != TRANSFER_SUCESS){
             LSTACK_LOG(ERR, LSTACK,"transfer_delete_rule_info_to_process0 error. tid %d. dst_ip %u, src_port: %u, dst_port %u\n",
                                 rte_gettid(), dst_ip, src_port, dst_port);
         }
@@ -310,7 +308,7 @@ void transfer_create_rule_info_to_process0(uint16_t queue_id, uint32_t src_ip, u
     sprintf_s(process_server_path, CREATE_FLOWS_PARAMS_LENGTH, "%u%s%u%s%u%s%u%s%u%s%u", 
                 dst_ip,split_delim,src_ip,split_delim, dst_port,split_delim,src_port, split_delim,queue_id,split_delim,process_idx);
     int ret = transfer_pkt_to_other_process(process_server_path, 0, CREATE_FLOWS_PARAMS_LENGTH, true);
-    if(ret != 0){
+    if(ret != TRANSFER_SUCESS){
         LSTACK_LOG(ERR, LSTACK,"transfer_create_rule_info_to_process0 error. tid %d. src_ip %u, dst_ip %u, src_port: %u, dst_port %u, queue_id %u, process_idx %u\n",
                             rte_gettid(), src_ip, dst_ip, src_port, dst_port, queue_id, process_idx);
     } 
@@ -321,7 +319,7 @@ void transfer_add_or_delete_listen_port_to_process0(uint16_t listen_port, uint8_
     char process_server_path[ADD_OR_DELETE_LISTEN_PORT_PARAMS_LENGTH];
     sprintf_s(process_server_path, ADD_OR_DELETE_LISTEN_PORT_PARAMS_LENGTH, "%u%s%u%s%u", listen_port,split_delim,process_idx, split_delim, is_add);
     int ret = transfer_pkt_to_other_process(process_server_path, 0, ADD_OR_DELETE_LISTEN_PORT_PARAMS_LENGTH, true);
-    if(ret != 0){
+    if(ret != TRANSFER_SUCESS) {
         LSTACK_LOG(ERR, LSTACK,"transfer_add_or_delete_listen_port_to_process0 error. tid %d. listen_port %u, process_idx %u\n",
 		   rte_gettid(), listen_port, process_idx);
     } 
@@ -416,8 +414,10 @@ void transfer_arp_to_other_process(struct rte_mbuf *mbuf)
         char arp_mbuf[LSTACK_MBUF_LEN] = {0};
         sprintf_s(arp_mbuf, sizeof(arp_mbuf), "%lu", mbuf);
         int result = transfer_pkt_to_other_process(arp_mbuf, i, LSTACK_MBUF_LEN, false);
-        if(result < 0){
-             LSTACK_LOG(ERR, LSTACK,"transfer arp pakages to process %d error. \n", i);  
+        if(result == CONNECT_ERROR){
+            LSTACK_LOG(INFO, LSTACK,"connect process %d failed, ensure the process is started.\n", i);  
+        }else if (result == REPLY_ERROR) {
+            LSTACK_LOG(ERR, LSTACK,"transfer arp pakages to process %d error. %m\n", i);  
         }
     }
 }
@@ -616,7 +616,11 @@ int distribute_pakages(struct rte_mbuf *mbuf)
 void kni_handle_rx(uint16_t port_id)
 {
     struct rte_mbuf *pkts_burst[PACKET_READ_SIZE];
-    uint32_t nb_kni_rx = rte_kni_rx_burst(get_gazelle_kni(), pkts_burst, PACKET_READ_SIZE);  
+    struct rte_kni* kni = get_gazelle_kni();
+    uint32_t nb_kni_rx = 0;
+    if (kni) {
+        nb_kni_rx = rte_kni_rx_burst(kni, pkts_burst, PACKET_READ_SIZE);  
+    }
     if (nb_kni_rx > 0) {
         uint16_t nb_rx = rte_eth_tx_burst(port_id, 0, pkts_burst, nb_kni_rx);
         for (uint16_t i = nb_rx; i < nb_kni_rx; ++i) {

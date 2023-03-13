@@ -116,6 +116,7 @@ int32_t dpdk_eal_init(void)
             ret = 0;
         } else {
             LSTACK_PRE_LOG(LSTACK_ERR, "rte_eal_init failed init, rte_errno %d\n", rte_errno);
+	    return ret;
         }
     } else {
         LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
@@ -450,6 +451,7 @@ int32_t dpdk_ethdev_init(void)
         if (port_id < 0) {
             return port_id;
         }
+	get_global_cfg_params()->port_id = port_id;
 
         struct rte_eth_dev_info dev_info;
         int32_t ret = rte_eth_dev_info_get(port_id, &dev_info);
@@ -477,6 +479,9 @@ int32_t dpdk_ethdev_init(void)
         stack_group->port_id = eth_params->port_id;
         stack_group->rx_offload = eth_params->conf.rxmode.offloads;
         stack_group->tx_offload = eth_params->conf.txmode.offloads;
+	/* used for tcp port alloc */
+	stack_group->reta_mask = dev_info.reta_size - 1;
+	stack_group->nb_queues = nb_queues;
         
     if (get_global_cfg_params()->is_primary) {
         for (uint32_t i = 0; i < stack_group->stack_num; i++) {
@@ -511,7 +516,6 @@ int32_t dpdk_ethdev_init(void)
             rss_setup(port_id, nb_queues);
             stack_group->reta_mask = dev_info.reta_size - 1;
         }
-        stack_group->nb_queues = nb_queues;
     }
 
     return 0;
