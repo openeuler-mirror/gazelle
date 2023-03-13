@@ -714,6 +714,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
         }
 
         recv_len += pbufs[i]->tot_len;
+        lstack_calculate_aggregate(0, pbufs[i]->tot_len);
         read_count++;
 
         /* once we have some data to return, only add more if we don't need to wait */

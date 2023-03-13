@@ -43,6 +43,8 @@ enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LSTACK_SHOW_CONN,
     GAZELLE_STAT_LSTACK_SHOW_LATENCY,
     GAZELLE_STAT_LSTACK_LOW_POWER_MDF,
+    GAZELLE_STAT_LSTACK_SHOW_XSTATS,
+    GAZELLE_STAT_LSTACK_SHOW_AGGREGATE,
 
     GAZELLE_STAT_MODE_MAX,
 };
@@ -197,6 +199,30 @@ struct gazelle_stat_low_power_info {
     uint16_t lpm_rx_pkts;
 };
 
+#define RTE_ETH_XSTATS_NAME_SIZE 64
+struct nic_eth_xstats_name {
+    char name[RTE_ETH_XSTATS_NAME_SIZE];
+};
+
+struct nic_eth_xstats {
+    struct nic_eth_xstats_name xstats_name[128];
+    uint64_t values[128];
+    uint32_t len;
+    uint16_t port_id;
+};
+
+struct gazelle_stack_aggregate_stats {
+    /* 0: RX, 1: TX, 2: APP_TX */
+    uint32_t size_1_64[3];
+    uint32_t size_65_512[3];
+    uint32_t size_513_1460[3];
+    uint32_t size_1461_8192[3];
+    uint32_t size_8193_max[3];
+
+    uint64_t rx_bytes;
+    uint64_t tx_bytes;
+};
+
 struct gazelle_stack_dfx_data {
     /* indicates whether the current message is the last */
     uint32_t eof;
@@ -209,6 +235,8 @@ struct gazelle_stack_dfx_data {
         struct gazelle_stack_latency latency;
         struct gazelle_stat_lstack_conn conn;
         struct gazelle_stat_lstack_snmp snmp;
+        struct nic_eth_xstats nic_xstats;
+        struct gazelle_stack_aggregate_stats aggregate_stats;
     } data;
 };
 

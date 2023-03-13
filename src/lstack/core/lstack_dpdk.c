@@ -645,3 +645,22 @@ bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, ui
     return (reta_index % stack_group->nb_queues) == stack->queue_id;
 }
 
+void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
+{
+    int32_t ret;
+    int32_t len = rte_eth_xstats_get_names_by_id(port_id, NULL, 0, NULL);
+    dfx->data.nic_xstats.len = len;
+    dfx->data.nic_xstats.port_id = port_id;
+    if (len < 0) {
+        return;
+    }
+    if (len != rte_eth_xstats_get_names_by_id(port_id, (struct rte_eth_xstat_name *)dfx->data.nic_xstats.xstats_name, len, NULL)) {
+        dfx->data.nic_xstats.len = -1;
+        return;
+    }
+
+    ret = rte_eth_xstats_get_by_id(port_id, NULL, dfx->data.nic_xstats.values, len);
+    if (ret < 0 || ret > len) {
+        dfx->data.nic_xstats.len = -1;
+    }
+}
