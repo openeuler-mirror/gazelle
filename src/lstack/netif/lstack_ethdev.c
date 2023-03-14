@@ -26,6 +26,7 @@
 
 #include <securec.h>
 #include <rte_jhash.h>
+#include <uthash.h>
 
 #include "lstack_cfg.h"
 #include "lstack_vdev.h"
@@ -114,7 +115,6 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
     }
 }
 
-
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;
@@ -148,9 +148,49 @@ int32_t eth_dev_poll(void)
     return nr_pkts;
 }
 
-void init_listen_and_user_ports(){
-    memset(g_user_ports, INVAILD_PROCESS_IDX, sizeof(g_user_ports));
-    memset(g_listen_ports, INVAILD_PROCESS_IDX, sizeof(g_listen_ports));
+/* flow rule map */
+#define RULE_KEY_LEN  22
+struct flow_rule {
+    char rule_key[RULE_KEY_LEN];
+    struct rte_flow *flow;
+    UT_hash_handle hh;
+};
+
+static uint16_t g_flow_num = 0;
+struct flow_rule *g_flow_rules = NULL;
+struct flow_rule *find_rule(char *rule_key)
+{
+    struct flow_rule *fl;
+    HASH_FIND_STR(g_flow_rules, rule_key, fl);
+    return fl;
+}
+
+void add_rule(char* rule_key, struct rte_flow *flow)
+{
+    struct flow_rule *rule;
+    HASH_FIND_STR(g_flow_rules, rule_key, rule);
+    if (rule == NULL) {
+      rule = (struct flow_rule*)malloc(sizeof(struct flow_rule));
+      strcpy(rule->rule_key, rule_key);
+      HASH_ADD_STR(g_flow_rules, rule_key, rule);
+    }
+    rule->flow = flow;
+}
+
+void delete_rule(char* rule_key)
+{
+    struct flow_rule *rule = NULL;
+    HASH_FIND_STR(g_flow_rules, rule_key, rule);
+    if (rule == NULL) {
+      HASH_DEL(g_flow_rules, rule);
+      free(rule);
+    }
+}
+
+void init_listen_and_user_ports(void)
+{
+    memset_s(g_user_ports, sizeof(g_user_ports), INVAILD_PROCESS_IDX, sizeof(g_user_ports));
+    memset_s(g_listen_ports, sizeof(g_listen_ports), INVAILD_PROCESS_IDX, sizeof(g_listen_ports));
 }
 
 int transfer_pkt_to_other_process(char *buf, int process_index, int write_len, bool need_reply)
@@ -258,6 +298,12 @@ create_flow_director(uint16_t port_id, uint16_t queue_id, uint32_t src_ip, uint3
 void config_flow_director(uint16_t queue_id, uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port){
 
     uint16_t port_id = get_port_id();
+    char rule_key[RULE_KEY_LEN];
+    sprintf(rule_key,"%u_%u_%u",src_ip,src_port,dst_port);
+    struct flow_rule *fl_exist = find_rule(rule_key);
+    if(fl_exist != NULL){
+        return;
+    }
 
     LSTACK_LOG(INFO, LSTACK, "config_flow_director, flow queue_id %u, src_ip %u,src_port_ntohs:%u, dst_port_ntohs :%u \n", 
              queue_id, src_ip,ntohs(src_port), ntohs(dst_port) );
@@ -269,12 +315,26 @@ void config_flow_director(uint16_t queue_id, uint32_t src_ip, uint32_t dst_ip, u
                               queue_id, src_ip,src_port,dst_port,ntohs(dst_port), error.type, error.message ? error.message : "(no stated reason)");
         return;
     }
+    __sync_fetch_and_add(&g_flow_num, 1);
+    add_rule(rule_key, flow);
 }
 
 void delete_flow_director(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port)
 {
     uint16_t port_id = get_port_id();
-    (void)port_id;
+    char rule_key[RULE_KEY_LEN];
+    sprintf(rule_key,"%u_%u_%u",dst_ip,dst_port,src_port);
+    struct flow_rule *fl = find_rule(rule_key);
+
+    if(fl != NULL){
+        struct rte_flow_error error;
+        int ret = rte_flow_destroy(port_id, fl->flow, &error);
+        if(ret != 0){
+            LSTACK_LOG(ERR, PORT,"Flow can't be delete %d message: %s\n",error.type,error.message ? error.message : "(no stated reason)");
+        }
+        delete_rule(rule_key);
+        __sync_fetch_and_sub(&g_flow_num, 1);
+    }
 }
 
 /*
@@ -679,7 +739,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
                     transfer_type = TRANSFER_KERNEL;
                 }
             } else {
-                if (!use_ltran_flag && get_global_cfg_params()->tuple_filter && stack->queue_id == 0) {
+                if (get_global_cfg_params()->tuple_filter && stack->queue_id == 0) {
                     transfer_type = distribute_pakages(stack->pkts[i]);
                 }
             }

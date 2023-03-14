@@ -151,7 +151,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
         return -1;
     }
 
-    if (!use_ltran() & get_global_cfg_params()->tuple_filter) {
+    if (!use_ltran() && get_global_cfg_params()->tuple_filter) {
         if(type == REG_RING_TCP_LISTEN_CLOSE){
             if (get_global_cfg_params()->is_primary) {
                 delete_user_process_port(qtuple->src_port, PORT_LISTEN);
@@ -163,7 +163,10 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
         if (type == REG_RING_TCP_CONNECT_CLOSE) {
             if (get_global_cfg_params()->is_primary) {
                 delete_user_process_port(qtuple->src_port, PORT_CONNECT);
-                delete_flow_director(qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+                uint16_t queue_id = get_protocol_stack()->queue_id;
+                if (queue_id != 0) {
+                    delete_flow_director(qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+                }
             }else{
                 transfer_delete_rule_info_to_process0(qtuple->dst_ip,qtuple->src_port,qtuple->dst_port);
             }
