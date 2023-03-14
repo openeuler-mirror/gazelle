@@ -151,7 +151,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
         return -1;
     }
 
-    if (!use_ltran()) {
+    if (!use_ltran() & get_global_cfg_params()->tuple_filter) {
         if(type == REG_RING_TCP_LISTEN_CLOSE){
             if (get_global_cfg_params()->is_primary) {
                 delete_user_process_port(qtuple->src_port, PORT_LISTEN);
@@ -188,6 +188,9 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
                 transfer_add_or_delete_listen_port_to_process0(qtuple->src_port,get_global_cfg_params()->process_idx, 1);
             }
         }
+        return 0;
+    }
+    if (!use_ltran()) {
         return 0;
     }
     

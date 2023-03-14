@@ -530,7 +530,6 @@ int recv_pkts_from_other_process(int process_index, void* arg){
                 parse_arp_and_transefer(buf);
             }else if(n == TRANSFER_TCP_MUBF_LEN) {
                 /* tcp. lstack_mbuf_queue_id */
-                printf("recv_pkts_from_other_process, process idx %d \n ", process_index);
                 parse_tcp_and_transefer(buf);
             }else if (n == DELETE_FLOWS_PARAMS_LENGTH) {
                 /* delete rule */
@@ -645,7 +644,6 @@ void kni_handle_tx(struct rte_mbuf *mbuf)
         ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
     }
 
-    // 发送到内核协议栈
     if (!rte_kni_tx_burst(get_gazelle_kni(), &mbuf, 1)) {
         rte_pktmbuf_free(mbuf);
     }
@@ -680,8 +678,8 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
                     transfer_arp_to_other_process(stack->pkts[i]);
                     transfer_type = TRANSFER_KERNEL;
                 }
-            }else {
-                if (!use_ltran_flag && stack->queue_id == 0) {
+            } else {
+                if (!use_ltran_flag && get_global_cfg_params()->tuple_filter && stack->queue_id == 0) {
                     transfer_type = distribute_pakages(stack->pkts[i]);
                 }
             }
