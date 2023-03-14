@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       53
+Release:       54
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -10,7 +10,7 @@ Source0:       %{name}-%{version}.tar.gz
 
 BuildRequires: cmake gcc-c++ lwip
 BuildRequires: dpdk-devel >= 19.11
-BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck
+BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck uthash-devel
 
 Requires:      dpdk >= 19.11
 Requires:      numactl libpcap libconfig libboundscheck
@@ -222,6 +222,13 @@ Patch9204:     0204-remove-rxtx-driver-cache.patch
 Patch9205:     0205-send-ring-size-is-configure.patch
 Patch9206:     0206-send-should-return-1-errno-EAGAIN-when-ring-full.patch
 Patch9207:     0207-when-send-ring-full-whether-dynamic-alloc-mbuf-is-co.patch
+Patch9208:     0208-add-pbuf-lock-when-aggregate-pbuf.patch
+Patch9209:     0209-supprot-multi-process.patch
+Patch9210:     0210-add-gazellectl-x-to-show-nic-stats.patch
+Patch9211:     0211-add-same-node-ring-for-inter-proces-communication.patch
+Patch9212:     0212-fix-send-reset-by-peer-when-not-sleep-after-connect.patch
+Patch9213:     0213-add-tuple_filter-to-diff-rss-rule-and-tuple-filter.patch
+Patch9214:     0214-support-tuple-rule-add-delete.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -262,6 +269,15 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Mar 13 2023 jiangheng <jiagheng14@huawei.com> - 1.0.1-54
+- add pbuf lock when aggregate pbuf
+- support multi process
+- add gazellectl x to show nic stats
+- add same node ring for inter process communication
+- fix send reset by peer when not sleep after connect
+- add tuple_filter in conf to diff rss rule and tuple filter
+- support tuple rule add/delete
+
 * Sat Mar 11 2023 kircher <majun65@huawei.com> - 1.0.1-53
 - when send ring full whether dynamic alloc mbuf is configurable reduce cpu usage when send ring full
 - send should return -1, errno EAGAIN when ring full
