@@ -132,7 +132,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
     int min_conn_num = GAZELLE_MAX_CLIENTS;
 
     /* close listen shadow, per app communication thread select only one stack */
-    if (get_global_cfg_params()->listen_shadow == 0) {
+    if (!get_global_cfg_params()->tuple_filter && !get_global_cfg_params()->listen_shadow) {
         static _Atomic uint16_t stack_index = 0;
         index = atomic_fetch_add(&stack_index, 1);
         if (index >= stack_group->stack_num) {

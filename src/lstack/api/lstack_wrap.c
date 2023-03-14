@@ -303,7 +303,8 @@ static inline int32_t do_listen(int32_t s, int32_t backlog)
     }
 
     int32_t ret;
-    if (get_global_cfg_params()->listen_shadow == 0) {
+    if (!get_global_cfg_params()->tuple_filter &&
+        !get_global_cfg_params()->listen_shadow) {
         ret = stack_single_listen(s, backlog);
     } else {
         ret = stack_broadcast_listen(s, backlog);
