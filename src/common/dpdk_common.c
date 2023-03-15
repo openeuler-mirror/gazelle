@@ -118,16 +118,16 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
         COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
     }
 
+    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
+        tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
+        COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
+    }
+
     if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
         rx_ol = 0;
     }
     if (!(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) || !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
         tx_ol = 0;
-    }
-
-    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
-        tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
-        COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
     }
 
     conf->rxmode.offloads = rx_ol;
