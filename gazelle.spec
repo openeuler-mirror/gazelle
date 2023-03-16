@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       52
+Release:       51
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -212,7 +212,6 @@ Patch9194:     0194-eneble-TSO-and-fix-TSO-mbuf-pktlen-error.patch
 Patch9195:     0195-adapt-unsupport-sock-optname.patch
 Patch9196:     0196-reduce-duplicate-code-in-lstack_cfg.c.patch
 Patch9197:     0197-refactor-mbuf-private-data.patch
-Patch9198:     0198-refactor-kernel_wait-of-epoll.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -253,9 +252,6 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
-* Wed Mar 15 2023 Lemmy Huang <huangliming5@huawei.com> - 1.0.1-52
-- refactor kernel_wait of epoll
-
 * Wed Mar 15 2023 Lemmy Huang <huangliming5@huawei.com> - 1.0.1-51
 - refactor mbuf private data
 
