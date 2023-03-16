@@ -147,7 +147,7 @@ static struct rte_mempool *ltran_create_rx_mbuf_pool(uint32_t bond_port_index)
         return NULL;
     }
 
-    uint16_t private_size = RTE_ALIGN(MBUF_PRIVATE_SIZE, RTE_CACHE_LINE_SIZE);
+    uint16_t private_size = RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
     return rte_pktmbuf_pool_create(mbuf_pool_name, num_mbufs, GAZELLE_MBUFS_CACHE_SIZE, private_size,
                                    RTE_MBUF_DEFAULT_BUF_SIZE, (int32_t)rte_socket_id());
 }
@@ -166,7 +166,7 @@ static struct rte_mempool *ltran_create_tx_mbuf_pool(uint32_t bond_port_index)
         return NULL;
     }
 
-    uint16_t private_size = RTE_ALIGN(MBUF_PRIVATE_SIZE, RTE_CACHE_LINE_SIZE);
+    uint16_t private_size = RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
     return rte_pktmbuf_pool_create(mbuf_pool_name, num_mbufs, GAZELLE_MBUFS_CACHE_SIZE, private_size,
                                    RTE_MBUF_DEFAULT_BUF_SIZE, (int32_t)rte_socket_id());
 }

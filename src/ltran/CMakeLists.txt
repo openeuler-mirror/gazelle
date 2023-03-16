@@ -12,6 +12,7 @@ cmake_minimum_required(VERSION 3.12.1)
 project(ltran)
 
 set(COMMON_DIR ${PROJECT_SOURCE_DIR}/../common)
+set(LWIP_DIR /usr/include/lwip)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -31,7 +32,7 @@ add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_st
 				ltran_forward.c ltran_timer.c ${COMMON_DIR}/gazelle_dfx_msg.c ${COMMON_DIR}/dpdk_common.c
                 ${COMMON_DIR}/gazelle_parse_config.c)
 
-target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR})
+target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR} ${LWIP_DIR})
 target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_FEATURE_CRC32=1 -DRTE_MACHINE_CPUFLAG_NEON
                -DRTE_MACHINE_CPUFLAG_CRC32 -DRTE_MACHINE_CPUFLAG_PMULL -DRTE_MACHINE_CPUFLAG_AES
                -DRTE_MACHINE_CPUFLAG_SHA1 -DRTE_MACHINE_CPUFLAG_SHA2 -include rte_config.h

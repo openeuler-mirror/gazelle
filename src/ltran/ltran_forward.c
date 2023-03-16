@@ -50,22 +50,22 @@ static __rte_always_inline struct gazelle_stack *get_kni_stack(void)
 
 static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rte_mbuf *mbuf)
 {
+    struct latency_timestamp *lt;
     uint64_t latency;
-    uint64_t *priv = NULL;
 
-    priv = (uint64_t *)RTE_PTR_ADD(mbuf, sizeof(struct rte_mbuf) + LATENCY_OFFSET);
-    // priv--time stamp   priv+1 --- vaild check
-    if (*priv != ~(*(priv + 1))) {
+    lt = &mbuf_to_private(mbuf)->lt;
+    // vaild check
+    if (lt->stamp != ~(lt->check)) {
         return;
     }
 
     // time stamp must > start time
-    if (*priv < get_start_time_stamp()) {
-        *priv = 0;
+    if (lt->stamp < get_start_time_stamp()) {
+        lt->stamp = 0;
         return;
     }
 
-    latency = get_current_time() - *priv;
+    latency = get_current_time() - lt->stamp;
 
     stack->stack_stats.latency_total += latency;
     stack->stack_stats.latency_pkts++;
