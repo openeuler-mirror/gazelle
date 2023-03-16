@@ -51,16 +51,18 @@ uint64_t get_current_time(void)
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
     enum GAZELLE_LATENCY_TYPE type)
 {
+    uint64_t latency;
+    const struct latency_timestamp *lt;
+
     if (pbuf == NULL) {
        return;
     }
-    const uint64_t *priv = (uint64_t *)((uint8_t *)(pbuf) + LATENCY_OFFSET);
-    if (*priv != ~(*(priv + 1)) || *priv < stack_latency->start_time) {
+
+    lt = &pbuf_to_private(pbuf)->lt;
+    if (lt->stamp != ~(lt->check) || lt->stamp < stack_latency->start_time) {
         return;
     }
-
-    uint64_t latency = get_current_time();
-    latency = latency - *priv;
+    latency = get_current_time() - lt->stamp;
 
     struct stack_latency *latency_stat = (type == GAZELLE_LATENCY_LWIP) ?
         &stack_latency->lwip_latency : &stack_latency->read_latency;
