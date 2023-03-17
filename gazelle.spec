@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       54
+Release:       55
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -229,6 +229,8 @@ Patch9211:     0211-add-same-node-ring-for-inter-proces-communication.patch
 Patch9212:     0212-fix-send-reset-by-peer-when-not-sleep-after-connect.patch
 Patch9213:     0213-add-tuple_filter-to-diff-rss-rule-and-tuple-filter.patch
 Patch9214:     0214-support-tuple-rule-add-delete.patch
+Patch9215:     0215-disable-tso-without-ipv4-checksum.patch
+Patch9216:     0216-refactor-mbuf-private-data.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -269,6 +271,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri Mar 17 UTC wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-55
+- refactor mbuf private data
+- disable tso without ipv4 checksum
+
 * Mon Mar 13 2023 jiangheng <jiagheng14@huawei.com> - 1.0.1-54
 - add pbuf lock when aggregate pbuf
 - support multi process

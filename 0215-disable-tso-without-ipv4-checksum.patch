@@ -1,0 +1,40 @@
+From bfc44497f434c275dcaee4e82f7edbbdf30d7eab Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Tue, 14 Mar 2023 21:39:03 +0800
+Subject: [PATCH] disable tso without ipv4 checksum
+
+---
+ src/common/dpdk_common.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/common/dpdk_common.c b/src/common/dpdk_common.c
+index 2938a25..f5a20dd 100644
+--- a/src/common/dpdk_common.c
++++ b/src/common/dpdk_common.c
+@@ -118,6 +118,11 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
+         COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
+     }
+ 
++    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
++        tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
++        COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
++    }
++
+     if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
+         rx_ol = 0;
+     }
+@@ -125,11 +130,6 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
+         tx_ol = 0;
+     }
+ 
+-    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
+-        tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
+-        COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
+-    }
+-
+     conf->rxmode.offloads = rx_ol;
+     conf->txmode.offloads = tx_ol;
+ 
+-- 
+2.33.0
+
