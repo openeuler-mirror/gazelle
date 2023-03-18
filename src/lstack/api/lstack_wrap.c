@@ -88,7 +88,9 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
     }
 
     struct tcp_pcb *pcb = sock->conn->pcb.tcp;
-    if (pcb != NULL && pcb->state <= ESTABLISHED) {
+    /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
+    /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
+    if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
         return PATH_LWIP;
     }
 
