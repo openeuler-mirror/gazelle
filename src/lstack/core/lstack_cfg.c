@@ -110,6 +110,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "listen_shadow",  parse_listen_shadow },
     { "app_bind_numa",  parse_app_bind_numa },
     { "main_thread_affinity",  parse_main_thread_affinity },
+    { "unix_prefix",    parse_unix_prefix },
     { "tcp_conn_count", parse_tcp_conn_count },
     { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
     { "read_connect_number", parse_read_connect_number },
@@ -121,7 +122,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "process_numa", parse_process_numa },
     { "process_idx", parse_process_index },
     { "tuple_filter", parse_tuple_filter },
-    { "unix_prefix", parse_unix_prefix },
     { NULL,           NULL }
 };
 
@@ -951,17 +951,6 @@ static int32_t parse_unix_prefix(void)
             args, strlen(args) + 1);
         if (ret != EOK) {
             return ret;
-        }
-    } else {
-        /* if not set unix_prefix, set unix_prefix to process_idx for gazellectl can distinguish each process */
-        if (g_config_params.process_idx != 0) {
-            char prefix[NAME_MAX];
-            snprintf_s(prefix, sizeof(prefix), sizeof(prefix) - 1, "%d", g_config_params.process_idx);
-            ret = strncat_s(g_config_params.unix_socket_filename,
-                sizeof(g_config_params.unix_socket_filename), prefix, strlen(prefix) + 1);
-            if (ret != EOK) {
-                return ret;
-            }
         }
     }
 
