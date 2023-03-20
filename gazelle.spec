@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       55
+Release:       56
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -231,6 +231,7 @@ Patch9213:     0213-add-tuple_filter-to-diff-rss-rule-and-tuple-filter.patch
 Patch9214:     0214-support-tuple-rule-add-delete.patch
 Patch9215:     0215-disable-tso-without-ipv4-checksum.patch
 Patch9216:     0216-refactor-mbuf-private-data.patch
+Patch9217:     0217-fix-kernel-scoket-select-path-error.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -271,6 +272,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Mar 18 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-56
+- fix kernel scoket select path error
+
 * Fri Mar 17 UTC wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-55
 - refactor mbuf private data
 - disable tso without ipv4 checksum
