@@ -237,14 +237,6 @@ int32_t create_shared_ring(struct protocol_stack *stack)
 {
     lockless_queue_init(&stack->rpc_queue);
 
-    if (get_protocol_stack_group()->wakeup_enable) {
-        stack->wakeup_ring = create_ring("WAKEUP_RING", VDEV_WAKEUP_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ,
-            stack->queue_id);
-        if (stack->wakeup_ring == NULL) {
-            return -1;
-        }
-    }
-
     if (use_ltran()) {
         stack->rx_ring = create_ring("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
         if (stack->rx_ring == NULL) {

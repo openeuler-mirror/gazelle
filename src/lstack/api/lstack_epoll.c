@@ -79,7 +79,7 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
     }
 }
 
-void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable)
+void wakeup_stack_epoll(struct protocol_stack *stack)
 {
     struct list_node *node, *temp;
 
@@ -97,15 +97,10 @@ void wakeup_stack_epoll(struct protocol_stack *stack, bool wakeup_thread_enable)
 
         struct wakeup_poll *wakeup = container_of((node - stack->stack_idx), struct wakeup_poll, wakeup_list);
 
-        if (!wakeup_thread_enable) {
-            if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
-                __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
-                rte_mb();
-                pthread_mutex_unlock(&wakeup->wait);
-                stack->stats.wakeup_events++;
-            }
-        } else {
-            gazelle_light_ring_enqueue_busrt(stack->wakeup_ring, (void **)&wakeup, 1);
+        if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
+            __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+            rte_mb();
+            pthread_mutex_unlock(&wakeup->wait);
             stack->stats.wakeup_events++;
         }
 
