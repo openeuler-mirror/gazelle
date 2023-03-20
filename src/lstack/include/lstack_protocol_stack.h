@@ -95,7 +95,6 @@ struct protocol_stack_group {
     struct rte_mempool *kni_pktmbuf_pool;
     struct eth_params *eth_params;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
-    bool wakeup_enable;
     struct list_node  poll_list;
     pthread_spinlock_t poll_list_lock;
     sem_t sem_listen_thread;

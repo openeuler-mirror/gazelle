@@ -256,41 +256,6 @@ static int32_t create_thread(void *arg, char *thread_name, stack_thread_func fun
     return 0;
 }
 
-static void* gazelle_wakeup_thread(void *arg)
-{
-    uint16_t queue_id = *(uint16_t *)arg;
-    struct protocol_stack *stack = get_protocol_stack_group()->stacks[queue_id];
-
-    struct cfg_params *cfg = get_global_cfg_params();
-    int32_t lcore_id = cfg->wakeup[stack->stack_idx];
-    thread_affinity_init(lcore_id);
-
-    struct timespec st = {
-        .tv_sec = 0,
-        .tv_nsec = 1
-    };
-
-    LSTACK_LOG(INFO, LSTACK, "weakup_%02hu start\n", stack->queue_id);
-
-    for (;;) {
-        if (cfg->low_power_mod != 0 && stack->low_power) {
-            nanosleep(&st, NULL);
-        }
-
-        struct wakeup_poll *wakeup[WAKEUP_MAX_NUM];
-        uint32_t num = gazelle_light_ring_dequeue_burst(stack->wakeup_ring, (void **)wakeup, WAKEUP_MAX_NUM);
-        for (uint32_t i = 0; i < num; i++) {
-            if (__atomic_load_n(&wakeup[i]->in_wait, __ATOMIC_ACQUIRE)) {
-                __atomic_store_n(&wakeup[i]->in_wait, false, __ATOMIC_RELEASE);
-                rte_mb();
-                pthread_mutex_unlock(&wakeup[i]->wait);
-            }
-        }
-    }
-
-    return NULL;
-}
-
 static void* gazelle_kernelevent_thread(void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
@@ -374,16 +339,8 @@ void wait_sem_value(sem_t *sem, int32_t wait_value)
     } while (sem_val < wait_value);
 }
 
-static int32_t create_affiliate_thread(void *arg, bool wakeup_enable)
+static int32_t create_affiliate_thread(void *arg)
 {
-
-    if (wakeup_enable) {
-        if (create_thread(arg, "gazelleweakup", gazelle_wakeup_thread) != 0) {
-            LSTACK_LOG(ERR, LSTACK, "gazelleweakup errno=%d\n", errno);
-            return -1;
-        }
-    }
-
     if (create_thread(arg, "gazellekernel", gazelle_kernelevent_thread) != 0) {
         LSTACK_LOG(ERR, LSTACK, "gazellekernel errno=%d\n", errno);
         return -1;
@@ -409,7 +366,7 @@ static struct protocol_stack *stack_thread_init(void *arg)
     if (init_stack_numa_cpuset(stack) < 0) {
         goto END;
     }
-    if (create_affiliate_thread(arg, stack_group->wakeup_enable) < 0) {
+    if (create_affiliate_thread(arg) < 0) {
         goto END;
     }
 
@@ -484,7 +441,6 @@ static void* gazelle_stack_thread(void *arg)
     uint16_t low_power_mod = cfg->low_power_mod;
     uint32_t wakeup_tick = 0;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    bool wakeup_thread_enable = stack_group->wakeup_enable;
 
     struct protocol_stack *stack = stack_thread_init(arg);
 
@@ -516,7 +472,7 @@ static void* gazelle_stack_thread(void *arg)
 
         if ((wakeup_tick & 0xf) == 0) {
             wakeup_kernel_event(stack);
-            wakeup_stack_epoll(stack, wakeup_thread_enable);
+            wakeup_stack_epoll(stack);
         }
 
         /* KNI requests are generally low-rate I/Os,
@@ -583,7 +539,6 @@ int32_t init_protocol_stack(void)
         stack_group->stack_num = get_global_cfg_params()->num_cpu * 2;
     }
 
-    stack_group->wakeup_enable = (get_global_cfg_params()->num_wakeup > 0) ? true : false;
     init_list_node(&stack_group->poll_list);
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
     

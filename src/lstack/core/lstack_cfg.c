@@ -48,7 +48,6 @@ static int32_t parse_host_addr(void);
 static int32_t parse_low_power_mode(void);
 static int32_t parse_stack_cpu_number(void);
 static int32_t parse_use_ltran(void);
-static int32_t parse_wakeup_cpu_number(void);
 static int32_t parse_mask_addr(void);
 static int32_t parse_devices(void);
 static int32_t parse_dpdk_args(void);
@@ -104,7 +103,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "dpdk_args",    parse_dpdk_args },
     { "seperate_send_recv",    parse_seperate_sendrecv_args },
     { "num_cpus",     parse_stack_cpu_number },
-    { "num_wakeup",   parse_wakeup_cpu_number },
     { "low_power_mode", parse_low_power_mode },
     { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
@@ -450,9 +448,6 @@ int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
             CPU_SET(cfg->recv_cpus[idx], &stack_cpuset);
         }
     }
-    for (int32_t idx = 0; idx < cfg->num_wakeup; ++idx) {
-        CPU_SET(cfg->wakeup[idx], &stack_cpuset);
-    }
 
     ret = stack_idle_cpuset(stack, &stack_cpuset);
     if (ret < 0) {
@@ -755,40 +750,6 @@ static int32_t parse_low_power_mode(void)
     g_config_params.lpm_pkts_in_detect = LSTACK_LPM_PKTS_IN_DETECT;
 
     return parse_int(&g_config_params.low_power_mod, "low_power_mode", 0, 0, 1);
-}
-
-static int32_t parse_wakeup_cpu_number(void)
-{
-    const config_setting_t *cfg_args = NULL;
-    const char *args = NULL;
-
-    g_config_params.num_wakeup = 0;
-
-    cfg_args = config_lookup(&g_config, "num_wakeup");
-    if (cfg_args == NULL) {
-        return 0;
-    }
-
-    args = config_setting_get_string(cfg_args);
-    if (cfg_args == NULL) {
-        return 0;
-    }
-
-    char *tmp_arg = strdup(args);
-    int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.wakeup, CFG_MAX_CPUS);
-    free(tmp_arg);
-    if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
-        return -EINVAL;
-    }
-    g_config_params.num_wakeup = cnt;
-
-    if (g_config_params.num_wakeup < g_config_params.num_cpu) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "num_wakeup=%hu less than num_stack_cpu=%hu.\n", g_config_params.num_wakeup,
-            g_config_params.num_cpu);
-        return -EINVAL;
-    }
-
-    return 0;
 }
 
 static int32_t parse_use_ltran(void)
