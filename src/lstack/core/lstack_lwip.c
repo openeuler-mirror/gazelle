@@ -97,6 +97,7 @@ static void reset_sock_data(struct lwip_sock *sock)
     sock->events = 0;
     sock->call_num = 0;
     sock->remain_len = 0;
+    sock->already_bind_numa = 0;
 
     if (sock->recv_lastdata) {
         pbuf_free(sock->recv_lastdata);
@@ -882,6 +883,21 @@ ssize_t gazelle_same_node_ring_send(struct lwip_sock *sock, const void *buf, siz
     return act_len;
 }
 
+PER_THREAD uint16_t stack_sock_num[GAZELLE_MAX_STACK_NUM] = {0};
+PER_THREAD uint16_t max_sock_stack = 0;
+
+static void thread_bind_stack(struct lwip_sock *sock) {
+    if (likely(!sock->stack || sock->already_bind_numa)) {
+        return;
+    }
+    sock->already_bind_numa = 1;
+    stack_sock_num[sock->stack->stack_idx]++;
+    if (stack_sock_num[sock->stack->stack_idx] > max_sock_stack) {
+        max_sock_stack = stack_sock_num[sock->stack->stack_idx];
+	bind_to_stack_numa(sock->stack);
+    }
+}
+
 ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
 {
     if (buf == NULL) {
@@ -893,6 +909,9 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
     }
 
     struct lwip_sock *sock = get_socket_by_fd(fd);
+
+    thread_bind_stack(sock);
+
     if (sock->same_node_tx_ring != NULL) {
         return gazelle_same_node_ring_send(sock, buf, len, flags);
     }
@@ -972,6 +991,8 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
     if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
         return 0;
     }
+
+    thread_bind_stack(sock);
 
     if (sock->same_node_rx_ring != NULL) {
         return gazelle_same_node_ring_recv(sock, buf, len, flags);
