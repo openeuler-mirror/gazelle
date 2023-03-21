@@ -473,6 +473,12 @@ void control_fd_close(void)
     }
 }
 
+void delete_primary_path(void) {
+    if (!remove(GAZELLE_PRIMARY_START_PATH)) {
+        LSTACK_LOG(ERR, LSTACK, "delete %s failed\n", GAZELLE_PRIMARY_START_PATH);
+    }
+}
+
 int32_t control_init_client(bool is_reconnect)
 {
     int32_t ret;

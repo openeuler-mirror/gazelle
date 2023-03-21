@@ -151,6 +151,32 @@ bool select_thread_path(void)
     return true;
 }
 
+static void check_process_start(void) {
+    if (get_global_cfg_params()->is_primary) {
+        return;
+    }
+
+    while (!fopen(GAZELLE_PRIMARY_START_PATH, "r")) {
+	printf("please make sure the primary process start already!\n");
+	sleep(1);
+    }
+}
+
+static int32_t set_process_start_flag(void) {
+    if (!get_global_cfg_params()->is_primary) {
+        return 0;
+    }
+
+    FILE *fp = NULL;
+    fp = fopen(GAZELLE_PRIMARY_START_PATH, "w");
+    if (fp == NULL) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "set primary proceaa start flag failed!\n");
+	return -1;
+    }
+    (void)fclose(fp);
+    return 0;
+}
+
 static int32_t check_process_conflict(void)
 {
     int32_t ret;
@@ -341,6 +367,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
     LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
 
     /*
+     * check primary process start */
+    check_process_start();
+
+    /*
     * check conflict */
     if (check_process_conflict() < 0) {
         LSTACK_PRE_LOG(LSTACK_INFO, "Have another same primary process. WARNING: Posix API will use kernel mode!\n");
@@ -400,6 +430,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     if (get_global_cfg_params()->kni_switch) {
         set_kni_ip_mac();
+    }
+
+    if (set_process_start_flag() != 0) {
+        LSTACK_EXIT(1, "set_process_start_flag failed\n");
     }
 
     posix_api->ues_posix = 0;

@@ -85,6 +85,7 @@
 #define GAZELLE_SOCK_FILENAME_MAXLEN    128
 
 #define GAZELLE_RUN_DIR                  "/var/run/gazelle/"
+#define GAZELLE_PRIMARY_START_PATH       "/var/run/gazelle/gazelle_primary"
 #define GAZELLE_FILE_PERMISSION          0700
 
 #define SEND_TIME_WAIT_NS 20000
