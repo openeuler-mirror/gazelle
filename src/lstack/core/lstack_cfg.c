@@ -70,24 +70,25 @@ static int32_t parse_process_index(void);
 static int32_t parse_seperate_sendrecv_args(void);
 static int32_t parse_tuple_filter(void);
 
-static inline int32_t parse_int(void *arg, char * arg_string, int32_t default_val,
-                             int32_t min_val, int32_t max_val)
-{
-    const config_setting_t *config_arg = NULL;
-    config_arg = config_lookup(&g_config, arg_string);
-    if (config_arg == NULL) {
-        *(int32_t *)arg = default_val;
-        return 0;
-    }
-    int32_t val = config_setting_get_int(config_arg);
-    if (val < min_val || val > max_val) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg %s %d invaild, range is [%d, %d].\n",
-                       arg_string, val, min_val, max_val);
-        return -EINVAL;
-    }
-    *(int32_t *)arg = val;
-    return 0;
-}
+#define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
+    do { \
+        const config_setting_t *_config_arg = NULL; \
+        _config_arg = config_lookup(&g_config, _arg_string); \
+        if (_config_arg == NULL) { \
+            _arg = _default_val; \
+            _ret = 0; \
+            break; \
+        } \
+        int32_t _val = config_setting_get_int(_config_arg); \
+        if (_val < _min_val || _val > _max_val) { \
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg %s %d invaild, range is [%d, %d].\n", \
+                _arg_string, _val, _min_val, _max_val); \
+            _ret = -EINVAL; \
+            break; \
+        } \
+        _arg = _val; \
+        _ret = 0; \
+    } while (0)
 
 struct config_vector_t {
     const char *name;
@@ -744,78 +745,104 @@ free_dpdk_args:
 
 static int32_t parse_low_power_mode(void)
 {
+    int32_t ret;
     /* Set parameter default value */
     g_config_params.lpm_detect_ms = LSTACK_LPM_DETECT_MS;
     g_config_params.lpm_rx_pkts = LSTACK_LPM_RX_PKTS;
     g_config_params.lpm_pkts_in_detect = LSTACK_LPM_PKTS_IN_DETECT;
 
-    return parse_int(&g_config_params.low_power_mod, "low_power_mode", 0, 0, 1);
+    PARSE_ARG(g_config_params.low_power_mod, "low_power_mode", 0, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_use_ltran(void)
 {
-    return parse_int(&g_config_params.use_ltran, "use_ltran", 1, 0, 1);
+    int32_t ret;
+    PARSE_ARG(g_config_params.use_ltran, "use_ltran", 1, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_tcp_conn_count(void)
 {
-    return parse_int(&g_config_params.tcp_conn_count, "tcp_conn_count", TCP_CONN_COUNT, 1, TCP_CONN_COUNT);
+    int32_t ret;
+    PARSE_ARG(g_config_params.tcp_conn_count, "tcp_conn_count", TCP_CONN_COUNT, 1, TCP_CONN_COUNT, ret);
+    return ret;
 }
 
 static int32_t parse_send_ring_size(void)
 {
+    int32_t ret;
     /* send ring size default value is 32 */
-    return parse_int(&g_config_params.send_ring_size, "send_ring_size", 32, 1, SOCK_SEND_RING_SIZE_MAX);
+    PARSE_ARG(g_config_params.send_ring_size, "send_ring_size", 32, 1, SOCK_SEND_RING_SIZE_MAX, ret);
+    return ret;
 }
 
 static int32_t parse_expand_send_ring(void)
 {
-    return parse_int(&g_config_params.expand_send_ring, "expand_send_ring", 0, 0, 1);
+    int32_t ret;
+    PARSE_ARG(g_config_params.expand_send_ring, "expand_send_ring", 0, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_mbuf_count_per_conn(void)
 {
-    return parse_int(&g_config_params.mbuf_count_per_conn, "mbuf_count_per_conn",
-                     MBUF_COUNT_PER_CONN, 1, INT32_MAX);
+    int32_t ret;
+    PARSE_ARG(g_config_params.mbuf_count_per_conn, "mbuf_count_per_conn",
+                     MBUF_COUNT_PER_CONN, 1, INT32_MAX, ret);
+    return ret;
 }
 
 static int32_t parse_read_connect_number(void)
 {
-    return parse_int(&g_config_params.read_connect_number, "read_connect_number",
-              STACK_THREAD_DEFAULT, 1, INT32_MAX);
+    int32_t ret;
+    PARSE_ARG(g_config_params.read_connect_number, "read_connect_number",
+              STACK_THREAD_DEFAULT, 1, INT32_MAX, ret);
+    return ret;
 }
 
 static int32_t parse_rpc_number(void)
 {
-    return parse_int(&g_config_params.rpc_number, "rpc_number",
-              STACK_THREAD_DEFAULT, 1, INT32_MAX);
+    int32_t ret;
+    PARSE_ARG(g_config_params.rpc_number, "rpc_number",
+              STACK_THREAD_DEFAULT, 1, INT32_MAX, ret);
+    return ret;
 }
 
 static int32_t parse_nic_read_number(void)
 {
-    return parse_int(&g_config_params.nic_read_number, "nic_read_number",
-              STACK_NIC_READ_DEFAULT, 1, INT32_MAX);
+    int32_t ret;
+    PARSE_ARG(g_config_params.nic_read_number, "nic_read_number",
+              STACK_NIC_READ_DEFAULT, 1, INT32_MAX, ret);
+    return ret;
 }
 
 static int32_t parse_listen_shadow(void)
 {
-    return parse_int(&g_config_params.listen_shadow, "listen_shadow", 0, 0, 1);
+    int32_t ret;
+    PARSE_ARG(g_config_params.listen_shadow, "listen_shadow", 0, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_app_bind_numa(void)
 {
-    return parse_int(&g_config_params.app_bind_numa, "app_bind_numa", 1, 0, 1);
+    int32_t ret;
+    PARSE_ARG(g_config_params.app_bind_numa, "app_bind_numa", 1, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_main_thread_affinity(void)
 {
-    return parse_int(&g_config_params.main_thread_affinity, "main_thread_affinity", 0, 0, 1);
+    int32_t ret;
+    PARSE_ARG(g_config_params.main_thread_affinity, "main_thread_affinity", 0, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_kni_switch(void)
 {
-    if (parse_int(&g_config_params.kni_switch, "kni_switch", 0, 0, 1) != 0) {
-        return -1;
+    int32_t ret;
+    PARSE_ARG(g_config_params.kni_switch, "kni_switch", 0, 0, 1, ret);
+    if (ret != 0) {
+        return ret;
     }
 
     if (g_config_params.use_ltran && g_config_params.kni_switch) {
@@ -926,7 +953,9 @@ static int32_t parse_unix_prefix(void)
 
 static int32_t parse_seperate_sendrecv_args(void)
 {
-    return parse_int(&g_config_params.seperate_send_recv, "seperate_send_recv", 0, 0, 1);
+    int32_t ret;
+    PARSE_ARG(g_config_params.seperate_send_recv, "seperate_send_recv", 0, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_num_process(void)
@@ -995,7 +1024,11 @@ static int parse_process_index(void)
 
 static int parse_tuple_filter(void)
 {
-    parse_int(&g_config_params.tuple_filter, "tuple_filter", 0, 0, 1);
+    int32_t ret;
+    PARSE_ARG(g_config_params.tuple_filter, "tuple_filter", 0, 0, 1, ret);
+    if (ret != 0) {
+        return ret;
+    }
     if (g_config_params.tuple_filter == 0) {
         return 0;
     }
