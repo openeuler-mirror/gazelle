@@ -57,12 +57,15 @@ static inline bool match_hijack_signal(int sig)
 static void lstack_sig_default_handler(int sig)
 {
     LSTACK_LOG(ERR, LSTACK, "lstack dumped，caught signal：%d\n", sig);
-    dump_stack();
-    lwip_exit();
+    if (get_global_cfg_params() && get_global_cfg_params()->is_primary) {
+        delete_primary_path();
+    }
     if (!use_ltran()) {
         dpdk_kni_release();
     }
     control_fd_close();
+    dump_stack();
+    lwip_exit();
     (void)kill(getpid(), sig);
 }
 

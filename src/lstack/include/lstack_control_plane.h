@@ -32,5 +32,6 @@ bool get_register_state(void);
 void thread_register_phase1(struct rpc_msg *msg);
 void thread_register_phase2(struct rpc_msg *msg);
 void control_fd_close(void);
+void delete_primary_path(void);
 
 #endif /* GAZELLE_CONTROL_PLANE_H */
