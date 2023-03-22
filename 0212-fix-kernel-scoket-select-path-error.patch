@@ -1,0 +1,27 @@
+From 551fbc433a51eb34dd353236391f6d844866f67c Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Sat, 18 Mar 2023 19:36:38 +0800
+Subject: [PATCH] fix kernel scoket select path error
+
+---
+ src/lstack/api/lstack_wrap.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 9a021d7..e1b82fc 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -88,7 +88,9 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
+     }
+ 
+     struct tcp_pcb *pcb = sock->conn->pcb.tcp;
+-    if (pcb != NULL && pcb->state <= ESTABLISHED) {
++    /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
++    /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
++    if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
+         return PATH_LWIP;
+     }
+ 
+-- 
+2.23.0
+
