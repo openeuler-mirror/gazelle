@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       51
+Release:       52
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -10,7 +10,7 @@ Source0:       %{name}-%{version}.tar.gz
 
 BuildRequires: cmake gcc-c++ lwip
 BuildRequires: dpdk-devel >= 21.11-5
-BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck
+BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck uthash-devel
 
 Requires:      dpdk >= 21.11-5
 Requires:      numactl libpcap libconfig libboundscheck
@@ -217,6 +217,15 @@ Patch9199:     0199-remove-rxtx-driver-cache.patch
 Patch9200:     0200-send-ring-size-is-configure.patch
 Patch9201:     0201-send-should-return-1-errno-EAGAIN-when-ring-full.patch
 Patch9202:     0202-when-send-ring-full-whether-dynamic-alloc-mbuf-is-co.patch
+Patch9203:     0203-add-pbuf-lock-when-aggregate-pbuf.patch
+Patch9204:     0204-supprot-multi-process.patch
+Patch9205:     0205-add-gazellectl-x-to-show-nic-stats.patch
+Patch9206:     0206-add-same-node-ring-for-inter-proces-communication.patch
+Patch9207:     0207-fix-send-reset-by-peer-when-not-sleep-after-connect.patch
+Patch9208:     0208-add-tuple-filter-in-conf-to-diff-rss-rule-and-tuple-.patch
+Patch9209:     0210-disable-tso-without-ipv4-checksum.patch
+Patch9210:     0210-support-tuple-rule-add-delete.patch
+Patch9211:     0211-refactor-mbuf-private-data.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -257,6 +266,17 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat Mar 18 2023 jiangheng<jiangheng14@huawei.com> - 1.0.1-52
+- add pbuf lock when aggregate pbuf
+- support multi process
+- add gazellectl -x -a args
+- add same node ring for iner-process communication
+- fix send reset by peer when not sleep after connect
+- add tuple filter in conf to diff rss rule adn tuple filter rule
+- support tuple rule add/delete
+- disable tso without ipv4 checksum
+- refactor mbuf private data
+
 * Sat Mar 11 2023 kircher <majun65@huawei.com> - 1.0.1-51
 - when send ring full whether dynamic alloc mbuf is configurable reduce cpu usage when send ring full
 - send should return -1, errno EAGAIN when ring full
