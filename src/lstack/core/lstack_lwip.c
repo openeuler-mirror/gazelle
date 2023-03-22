@@ -886,8 +886,8 @@ ssize_t gazelle_same_node_ring_send(struct lwip_sock *sock, const void *buf, siz
 PER_THREAD uint16_t stack_sock_num[GAZELLE_MAX_STACK_NUM] = {0};
 PER_THREAD uint16_t max_sock_stack = 0;
 
-static void thread_bind_stack(struct lwip_sock *sock) {
-    if (likely(!sock->stack || sock->already_bind_numa)) {
+static inline void thread_bind_stack(struct lwip_sock *sock) {
+    if (likely(sock->already_bind_numa || !sock->stack)) {
         return;
     }
     sock->already_bind_numa = 1;

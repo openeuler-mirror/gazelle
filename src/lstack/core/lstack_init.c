@@ -51,10 +51,8 @@
 #define LSTACK_SO_NAME              "liblstack.so"
 #define LSTACK_PRELOAD_NAME_LEN     PATH_MAX
 #define LSTACK_PRELOAD_ENV_PROC     "GAZELLE_BIND_PROCNAME"
-#define LSTACK_ENV_THREAD           "GAZELLE_THREAD_NAME"
 
 static volatile bool g_init_fail = false;
-static PER_THREAD int32_t g_thread_path = -1;
 
 void set_init_fail(void)
 {
@@ -69,34 +67,14 @@ bool get_init_fail(void)
 struct lstack_preload {
     int32_t preload_switch;
     char env_procname[LSTACK_PRELOAD_NAME_LEN];
-    bool get_thread_name;
-    char env_threadname[LSTACK_PRELOAD_NAME_LEN];
 };
 static struct lstack_preload g_preload_info = {0};
-
-static void get_select_thread_name(void)
-{
-    g_preload_info.get_thread_name = true;
-
-    char *enval = NULL;
-    enval = getenv(LSTACK_ENV_THREAD);
-    if (enval == NULL) {
-        return;
-    }
-    if (strcpy_s(g_preload_info.env_threadname, LSTACK_PRELOAD_NAME_LEN, enval) != EOK) {
-        return;
-    }
-
-    LSTACK_PRE_LOG(LSTACK_INFO, "thread name=%s ok\n", g_preload_info.env_threadname);
-}
 
 static int32_t preload_info_init(void)
 {
     char *enval = NULL;
 
     g_preload_info.preload_switch = 0;
-    
-    get_select_thread_name();
 
     enval = getenv(LSTACK_PRELOAD_ENV_SYS);
     if (enval == NULL) {
@@ -118,37 +96,6 @@ static int32_t preload_info_init(void)
     g_preload_info.preload_switch = 1;
     LSTACK_PRE_LOG(LSTACK_INFO, "LD_PRELOAD ok\n");
     return 0;
-}
-
-bool select_thread_path(void)
-{
-    if (g_thread_path >= 0) {
-        return g_thread_path;
-    }
-
-    if (!g_preload_info.get_thread_name) {
-        get_select_thread_name();
-    }
-
-    /* not set GAZELLE_THREAD_NAME, select all thread */
-    if (g_preload_info.env_threadname[0] == '\0') {
-        g_thread_path = 1;
-        return true;
-    }
-
-    char thread_name[PATH_MAX] = {0};
-    if (pthread_getname_np(pthread_self(), thread_name, PATH_MAX) != 0) {
-        g_thread_path = 0;
-        return false;
-    }
-
-    if (strstr(thread_name, g_preload_info.env_threadname) == NULL) {
-        g_thread_path = 0;
-        return false;
-    }
-
-    g_thread_path = 1;
-    return true;
 }
 
 static void check_process_start(void) {

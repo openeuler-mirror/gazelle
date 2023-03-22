@@ -49,9 +49,7 @@ enum KERNEL_LWIP_PATH {
     PATH_UNKNOW,
 };
 
-bool select_thread_path(void);
-
-static enum KERNEL_LWIP_PATH select_path(int fd)
+static inline enum KERNEL_LWIP_PATH select_path(int fd)
 {
     if (unlikely(posix_api == NULL)) {
         /*
@@ -64,27 +62,19 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
         return PATH_KERNEL;
     }
 
-    if (!select_thread_path()) {
-        return PATH_KERNEL;
-    }
-
     if (unlikely(posix_api->ues_posix)) {
         return PATH_KERNEL;
     }
 
-    struct lwip_sock *sock = posix_api->get_socket(fd);
+    struct lwip_sock *sock = get_socket_by_fd(fd);
 
     /* AF_UNIX case */
-    if (!sock) {
+    if (!sock || !sock->conn || CONN_TYPE_IS_HOST(sock->conn)) {
         return PATH_KERNEL;
     }
 
-    if (CONN_TYPE_IS_LIBOS(sock->conn)) {
+    if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
         return PATH_LWIP;
-    }
-
-    if (CONN_TYPE_IS_HOST(sock->conn)) {
-        return PATH_KERNEL;
     }
 
     struct tcp_pcb *pcb = sock->conn->pcb.tcp;
@@ -133,7 +123,7 @@ static inline int32_t do_epoll_create(int32_t size)
 
 static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
 {
-    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -142,7 +132,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
-    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
@@ -291,8 +281,10 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     snprintf(listen_ring_name, sizeof(listen_ring_name), "listen_rx_ring_%u", remote_port);
     if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
+	SET_CONN_TYPE_HOST(sock->conn);
     } else {
         ret = rpc_call_connect(s, name, namelen);
+	SET_CONN_TYPE_LIBOS(sock->conn);
     }
 
     return ret;
@@ -524,7 +516,7 @@ static inline int32_t do_close(int32_t s)
 
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
-    if (unlikely(posix_api->ues_posix) || fds == NULL || nfds == 0 || !select_thread_path()) {
+    if (unlikely(posix_api->ues_posix) || fds == NULL || nfds == 0) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 
