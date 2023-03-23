@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       47
+Release:       53
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -10,7 +10,7 @@ Source0:       %{name}-%{version}.tar.gz
 
 BuildRequires: cmake gcc-c++ lwip
 BuildRequires: dpdk-devel >= 21.11-5
-BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck
+BuildRequires: numactl-devel libpcap-devel libconfig-devel libboundscheck uthash-devel
 
 Requires:      dpdk >= 21.11-5
 Requires:      numactl libpcap libconfig libboundscheck
@@ -201,6 +201,34 @@ Patch9183:     0183-add-log-message-when-wait-for-connecting-to-ltran.patch
 Patch9184:     0184-add-gazelle-fuzz.patch
 Patch9185:     0185-add-unitest.patch
 Patch9186:     0186-add-gazelle-setup-tools.patch
+Patch9187:     0187-test-readv-writev-epoll_create1-accept4.patch
+Patch9188:     0188-add-fucntest.patch
+Patch9189:     0189-fix-coredump-in-example-server-mum-mode.patch
+Patch9190:     0190-bring-up-kni-when-init.patch
+Patch9191:     0191-change-mbuf_pool_size-in-lstack.conf-to-tcp_conn_cou.patch
+Patch9192:     0192-fix-build-error-in-lstack.patch
+Patch9193:     0193-check-and-fix-wakeup_list-when-null-appears.patch
+Patch9194:     0194-eneble-TSO-and-fix-TSO-mbuf-pktlen-error.patch
+Patch9195:     0195-adapt-unsupport-sock-optname.patch
+Patch9196:     0196-reduce-duplicate-code-in-lstack_cfg.c.patch
+Patch9197:     0197-fix-private-data-offset-error.patch
+Patch9198:     0198-fix-do_close-core-dump.patch
+Patch9199:     0199-remove-rxtx-driver-cache.patch
+Patch9200:     0200-send-ring-size-is-configure.patch
+Patch9201:     0201-send-should-return-1-errno-EAGAIN-when-ring-full.patch
+Patch9202:     0202-when-send-ring-full-whether-dynamic-alloc-mbuf-is-co.patch
+Patch9203:     0203-add-pbuf-lock-when-aggregate-pbuf.patch
+Patch9204:     0204-supprot-multi-process.patch
+Patch9205:     0205-add-gazellectl-x-to-show-nic-stats.patch
+Patch9206:     0206-add-same-node-ring-for-inter-proces-communication.patch
+Patch9207:     0207-fix-send-reset-by-peer-when-not-sleep-after-connect.patch
+Patch9208:     0208-add-tuple-filter-in-conf-to-diff-rss-rule-and-tuple-.patch
+Patch9209:     0210-disable-tso-without-ipv4-checksum.patch
+Patch9210:     0210-support-tuple-rule-add-delete.patch
+Patch9211:     0211-refactor-mbuf-private-data.patch
+Patch9212:     0212-fix-kernel-scoket-select-path-error.patch
+Patch9213:     0213-discard-wakeup_num-parameter.patch
+Patch9214:     0214-fix-parse-args-error.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -241,6 +269,45 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue Mar 21 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-53
+- fix parse args error
+- discard wakeup_num parameter
+- fix kernel scoket select path error
+
+* Sat Mar 18 2023 jiangheng<jiangheng14@huawei.com> - 1.0.1-52
+- add pbuf lock when aggregate pbuf
+- support multi process
+- add gazellectl -x -a args
+- add same node ring for iner-process communication
+- fix send reset by peer when not sleep after connect
+- add tuple filter in conf to diff rss rule adn tuple filter rule
+- support tuple rule add/delete
+- disable tso without ipv4 checksum
+- refactor mbuf private data
+
+* Sat Mar 11 2023 kircher <majun65@huawei.com> - 1.0.1-51
+- when send ring full whether dynamic alloc mbuf is configurable reduce cpu usage when send ring full
+- send should return -1, errno EAGAIN when ring full
+- send ring size is configure
+- remove rxtx driver cache
+- fix do_close core dump
+- fix private data offset error
+
+* Mon Feb 27 2023 wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-50
+- reduce duplicate code in lstack_cfg.c
+- adapt unsupport sock optname
+
+* Wed Feb 22 2023 kircher <majun65@huawei.com> - 1.0.1-49
+- eneble TSO and fix TSO mbuf pktlen error
+- check and fix wakeup_list when null appears
+
+* Mon Feb 13 2023 net <jiangheng14@huawei.com> - 1.0.1-48
+- change mbuf_pool_size in lstack.conf to tcp_conn_count * mbuf_count_per_conn
+- bring up kni when init
+- fix coredump in example server mum mode
+- add fucntest
+- test readv writev epoll_create1 accept4
+
 * Mon Feb 6 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-47
 - add gazelle setup tools
 - add unitest
