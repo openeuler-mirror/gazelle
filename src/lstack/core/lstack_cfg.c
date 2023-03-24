@@ -1040,5 +1040,10 @@ static int parse_tuple_filter(void)
     if (g_config_params.use_ltran || g_config_params.listen_shadow) {
         return -EINVAL;
     }
+
+    // check primary process_idx
+    if (g_config_params.is_primary && g_config_params.process_idx != 0) {
+        return -EINVAL;
+    }
     return 0;
 }

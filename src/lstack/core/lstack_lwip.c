@@ -1386,7 +1386,7 @@ err_t netif_loop_output(struct netif *netif, struct pbuf *p)
   if ((flags & TCP_SYN) && !(flags & TCP_ACK)) {
     /* SYN packet, send to listen_ring */
     char ring_name[RING_NAME_LEN] = {0};
-    snprintf(ring_name, sizeof(ring_name), "listen_rx_ring_%d", pcb->remote_port);
+    snprintf_s(ring_name, sizeof(ring_name), sizeof(ring_name) - 1, "listen_rx_ring_%d", pcb->remote_port);
     struct rte_ring *ring = rte_ring_lookup(ring_name);
     if (ring == NULL) {
         LSTACK_LOG(INFO, LSTACK, "netif_loop_output: cant find listen_rx_ring %d\n", pcb->remote_port);
@@ -1411,7 +1411,7 @@ err_t netif_loop_output(struct netif *netif, struct pbuf *p)
 err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
 {
   char name[RING_NAME_LEN];
-  snprintf(name, sizeof(name), "rte_mz_rx_%u", pcb->remote_port);
+  snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_rx_%u", pcb->remote_port);
   if ((nsock->same_node_tx_ring_mz = rte_memzone_lookup(name)) == NULL) {
     LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
     return -1;
@@ -1420,13 +1420,13 @@ err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
   }
   nsock->same_node_tx_ring = (struct same_node_ring *)nsock->same_node_tx_ring_mz->addr;
 
-  snprintf(name, sizeof(name), "rte_mz_buf_rx_%u", pcb->remote_port);
+  snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_buf_rx_%u", pcb->remote_port);
   if ((nsock->same_node_tx_ring->mz = rte_memzone_lookup(name)) == NULL) {
     LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
     return -1;
   }
 
-  snprintf(name, sizeof(name), "rte_mz_tx_%u", pcb->remote_port);
+  snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_tx_%u", pcb->remote_port);
   if ((nsock->same_node_rx_ring_mz = rte_memzone_lookup(name)) == NULL) {
     LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
     return -1;
@@ -1435,7 +1435,7 @@ err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
   }
   nsock->same_node_rx_ring = (struct same_node_ring *)nsock->same_node_rx_ring_mz->addr;
 
-  snprintf(name, sizeof(name), "rte_mz_buf_tx_%u", pcb->remote_port);
+  snprintf_s(name, sizeof(name), sizeof(name) - 1,"rte_mz_buf_tx_%u", pcb->remote_port);
   if ((nsock->same_node_rx_ring->mz = rte_memzone_lookup(name)) == NULL) {
     LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
     return -1;
@@ -1450,7 +1450,7 @@ err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
 err_t same_node_memzone_create(const struct rte_memzone **zone, int size, int port, char *name, char *rx)
 {
     char mem_name[RING_NAME_LEN] = {0};
-    snprintf(mem_name, sizeof(mem_name), "%s_%s_%u", name, rx, port);
+    snprintf_s(mem_name, sizeof(mem_name), sizeof(mem_name) - 1, "%s_%s_%u", name, rx, port);
 
     *zone = rte_memzone_reserve_aligned(mem_name, size, rte_socket_id(), 0, RTE_CACHE_LINE_SIZE);
     if (*zone == NULL) {
@@ -1473,7 +1473,7 @@ err_t same_node_ring_create(struct rte_ring **ring, int size, int port, char *na
         flags = RING_F_SP_ENQ | RING_F_SC_DEQ;
     }
 
-    snprintf(ring_name, sizeof(ring_name), "%s_%s_ring_%u", name, rx, port);
+    snprintf_s(ring_name, sizeof(ring_name), sizeof(ring_name) - 1, "%s_%s_ring_%u", name, rx, port);
     *ring = rte_ring_create(ring_name, size, rte_socket_id(), flags);
     if (*ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create rte_ring %s, errno is %d\n", ring_name, rte_errno);
@@ -1550,10 +1550,10 @@ END:
 err_t find_same_node_ring(struct tcp_pcb *npcb)
 {
   char name[RING_NAME_LEN] = {0};
-  snprintf(name, sizeof(name), "client_tx_ring_%u", npcb->remote_port);
+  snprintf_s(name, sizeof(name), sizeof(name) - 1, "client_tx_ring_%u", npcb->remote_port);
   npcb->client_rx_ring = rte_ring_lookup(name);
-  memset(name, 0, sizeof(name));
-  snprintf(name, sizeof(name), "client_rx_ring_%u", npcb->remote_port);
+  memset_s(name, sizeof(name), 0, sizeof(name));
+  snprintf_s(name, sizeof(name), sizeof(name) - 1, "client_rx_ring_%u", npcb->remote_port);
   npcb->client_tx_ring = rte_ring_lookup(name);
   npcb->free_ring = 0;
   if (npcb->client_tx_ring == NULL ||

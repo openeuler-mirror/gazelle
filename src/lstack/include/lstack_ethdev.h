@@ -45,6 +45,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
 void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack);
 
 int recv_pkts_from_other_process(int process_index, void* arg);
+int32_t check_params_from_primary(void);
 void kni_handle_rx(uint16_t port_id);
 void delete_user_process_port(uint16_t dst_port, enum port_type type);
 void add_user_process_port(uint16_t dst_port, uint8_t process_idx, enum port_type type);

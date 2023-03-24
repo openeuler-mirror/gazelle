@@ -24,6 +24,7 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <net/if.h>
+#include <securec.h>
 
 #include <lwip/posix_api.h>
 #include <lwip/lwipsock.h>
@@ -187,8 +188,8 @@ static int get_addr(struct sockaddr_in *sin, char *interface)
 
     if ((sockfd = posix_api->socket_fn(AF_INET, SOCK_STREAM, 0)) < 0) return -1;
 
-    memset(&ifr, 0, sizeof(ifr));
-    snprintf(ifr.ifr_name, (sizeof(ifr.ifr_name) - 1), "%s", interface);
+    memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
+    snprintf_s(ifr.ifr_name, sizeof(ifr.ifr_name), (sizeof(ifr.ifr_name) - 1), "%s", interface);
 
     if(posix_api->ioctl_fn(sockfd, SIOCGIFADDR, &ifr) < 0){
         posix_api->close_fn(sockfd);
@@ -243,7 +244,7 @@ bool is_dst_ip_localhost(const struct sockaddr *addr)
         char interface[20] = {0};
         strncpy(interface, p, n);
 
-        memset(sin, 0, sizeof(struct sockaddr_in));
+        memset_s(sin, sizeof(struct sockaddr_in), 0, sizeof(struct sockaddr_in));
         int ret = get_addr(sin, interface);
         if (ret == 0) {
             if(sin->sin_addr.s_addr == servaddr->sin_addr.s_addr){
@@ -278,7 +279,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     int32_t ret = 0;
     char listen_ring_name[RING_NAME_LEN];
     int remote_port = htons(((struct sockaddr_in *)name)->sin_port);
-    snprintf(listen_ring_name, sizeof(listen_ring_name), "listen_rx_ring_%u", remote_port);
+    snprintf_s(listen_ring_name, sizeof(listen_ring_name), sizeof(listen_ring_name) - 1, "listen_rx_ring_%u", remote_port);
     if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
 	SET_CONN_TYPE_HOST(sock->conn);
