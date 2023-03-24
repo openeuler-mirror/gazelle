@@ -344,19 +344,28 @@ static ssize_t do_app_write(struct pbuf *pbufs[], void *buf, size_t len, uint32_
 {
     ssize_t send_len = 0;
     uint32_t i = 0;
+    uint32_t expand_send_ring = get_global_cfg_params()->expand_send_ring;
 
     for (i = 0; i < write_num - 1; i++) {
         rte_prefetch0(pbufs[i + 1]);
         rte_prefetch0(pbufs[i + 1]->payload);
         rte_prefetch0((char *)buf + send_len + MBUF_MAX_DATA_LEN);
-        pbuf_take(pbufs[i], (char *)buf + send_len, MBUF_MAX_DATA_LEN);
+        if (expand_send_ring) {
+            pbuf_take(pbufs[i], (char *)buf + send_len, MBUF_MAX_DATA_LEN);
+        } else {
+            rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, MBUF_MAX_DATA_LEN);
+        }
         pbufs[i]->tot_len = pbufs[i]->len = MBUF_MAX_DATA_LEN;
         send_len += MBUF_MAX_DATA_LEN;
     }
 
     /* reduce the branch in loop */
     uint16_t copy_len = len - send_len;
-    pbuf_take(pbufs[i], (char *)buf + send_len, copy_len);
+    if (expand_send_ring) {
+        pbuf_take(pbufs[i], (char *)buf + send_len, copy_len);
+    } else {
+        rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, copy_len);
+    }
     pbufs[i]->tot_len = pbufs[i]->len = copy_len;
     send_len += copy_len;
 
@@ -500,7 +509,11 @@ static inline size_t merge_data_lastpbuf(struct lwip_sock *sock, void *buf, size
 
     uint16_t offset = last_pbuf->len;
     last_pbuf->tot_len = last_pbuf->len = offset + send_len;
-    pbuf_take_at(last_pbuf, buf, send_len, offset);
+    if (get_global_cfg_params()->expand_send_ring) {
+        pbuf_take_at(last_pbuf, buf, send_len, offset);
+    } else {
+        rte_memcpy((char *)last_pbuf->payload + offset, buf, send_len);
+    }
 
     gazelle_ring_lastover(last_pbuf);
 
@@ -924,12 +937,11 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
     return send;
 }
 
-ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags)
+ssize_t sendmsg_to_stack(struct lwip_sock *sock, int32_t s, const struct msghdr *message, int32_t flags)
 {
     int32_t ret;
     int32_t i;
     ssize_t buflen = 0;
-    struct lwip_sock *sock = get_socket_by_fd(s);
 
     if (check_msg_vaild(message)) {
         GAZELLE_RETURN(EINVAL);
