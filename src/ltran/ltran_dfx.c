@@ -139,8 +139,8 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
 
     printf("###### NIC extended statistics for port %-2d #########\n", 0);
     printf("%s############################\n",nic_stats_border);
-    if (xstats->len <= 0) {
-        printf("Cannot get xstats\n");
+    if (xstats->len <= 0 || xstats->len > RTE_ETH_XSTATS_MAX_LEN) {
+        printf("xstats item(%d) num error!\n", xstats->len);
         return;
     }
 

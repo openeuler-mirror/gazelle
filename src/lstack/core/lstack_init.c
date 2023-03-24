@@ -324,6 +324,14 @@ __attribute__((constructor)) void gazelle_network_init(void)
         return;
     }
 
+    /**
+     * check lstack num, and get process idx
+     */
+    if (check_params_from_primary() < 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "lstack num error, not same to primary process!\n");
+        LSTACK_EXIT(1, "lstack num error, not same to primary process!\n");
+    }
+
     /*
     * save initial affinity */
     if (!get_global_cfg_params()->main_thread_affinity) {

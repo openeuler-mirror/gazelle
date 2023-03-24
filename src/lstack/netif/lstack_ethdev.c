@@ -58,6 +58,9 @@
 #define ERROR_REPLY "error"
 #define PACKET_READ_SIZE 32
 
+#define GET_LSTACK_NUM  14
+#define GET_LSTACK_NUM_STRING "get_lstack_num"
+
 char *client_path = "/var/run/gazelle/client.socket";  
 char *server_path = "/var/run/gazelle/server.socket"; 
 const char *split_delim = ",";
@@ -171,7 +174,7 @@ void add_rule(char* rule_key, struct rte_flow *flow)
     HASH_FIND_STR(g_flow_rules, rule_key, rule);
     if (rule == NULL) {
       rule = (struct flow_rule*)malloc(sizeof(struct flow_rule));
-      strcpy(rule->rule_key, rule_key);
+      strcpy_s(rule->rule_key, RULE_KEY_LEN, rule_key);
       HASH_ADD_STR(g_flow_rules, rule_key, rule);
     }
     rule->flow = flow;
@@ -202,26 +205,47 @@ int transfer_pkt_to_other_process(char *buf, int process_index, int write_len, b
 
     sockfd = posix_api->socket_fn(AF_UNIX, SOCK_STREAM, 0);
  
-    memset(&serun, 0, sizeof(serun));  
+    memset_s(&serun, sizeof(serun), 0, sizeof(serun));  
     serun.sun_family = AF_UNIX;
     sprintf_s(serun.sun_path, PATH_MAX,"%s%d", server_path, process_index);
-    int len = offsetof(struct sockaddr_un, sun_path) + strlen(serun.sun_path);  
+    int32_t len = offsetof(struct sockaddr_un, sun_path) + strlen(serun.sun_path);
     if (posix_api->connect_fn(sockfd, (struct sockaddr *)&serun, len) < 0){  
         return CONNECT_ERROR;  
     }
     posix_api->write_fn(sockfd, buf, write_len);  
     if (need_reply) {
         char reply_message[REPLY_LEN];
-        posix_api->read_fn(sockfd, reply_message, REPLY_LEN);
-        if (strcmp(reply_message, SUCCESS_REPLY) == 0) {
-            ret = TRANSFER_SUCESS;
-        }else {
+        int32_t read_result = posix_api->read_fn(sockfd, reply_message, REPLY_LEN);
+        if (read_result > 0) {
+            if (strcmp(reply_message, SUCCESS_REPLY) == 0) {
+                ret = TRANSFER_SUCESS;
+            } else if (strcmp(reply_message, ERROR_REPLY) == 0) {
+                ret = REPLY_ERROR;
+            } else {
+                ret = atoi(reply_message);
+            }
+        } else {
             ret = REPLY_ERROR;
         }
     }
     posix_api->close_fn(sockfd);
 
     return ret;
+}
+
+int32_t check_params_from_primary(void){
+    struct cfg_params *cfg = get_global_cfg_params();
+    if (cfg->is_primary) {
+        return 0;
+    }
+    // check lstack num
+    char get_lstack_num[GET_LSTACK_NUM];
+    sprintf_s(get_lstack_num, GET_LSTACK_NUM, "%s", GET_LSTACK_NUM_STRING);
+    int32_t ret = transfer_pkt_to_other_process(get_lstack_num, 0, GET_LSTACK_NUM, true);
+    if (ret != cfg->num_cpu) {
+        return -1;
+    }
+    return 0;
 }
 
 struct rte_flow * 
@@ -240,14 +264,14 @@ create_flow_director(uint16_t port_id, uint16_t queue_id, uint32_t src_ip, uint3
     struct rte_flow_item_tcp tcp_mask;
 	int res;
 
-	memset(pattern, 0, sizeof(pattern));
-	memset(action, 0, sizeof(action));
+	memset_s(pattern, sizeof(pattern), 0, sizeof(pattern));
+	memset_s(action, sizeof(action), 0, sizeof(action));
 
     /*
 	 * set the rule attribute.
 	 * in this case only ingress packets will be checked.
 	 */
-	memset(&attr, 0, sizeof(struct rte_flow_attr));
+	memset_s(&attr, sizeof(struct rte_flow_attr), 0, sizeof(struct rte_flow_attr));
 	attr.ingress = 1;
 
     /*
@@ -262,8 +286,8 @@ create_flow_director(uint16_t port_id, uint16_t queue_id, uint32_t src_ip, uint3
     pattern[0].type = RTE_FLOW_ITEM_TYPE_ETH;
 
     // ip header
-    memset(&ip_spec, 0, sizeof(struct rte_flow_item_ipv4));
-    memset(&ip_mask, 0, sizeof(struct rte_flow_item_ipv4));
+    memset_s(&ip_spec, sizeof(struct rte_flow_item_ipv4), 0, sizeof(struct rte_flow_item_ipv4));
+    memset_s(&ip_mask, sizeof(struct rte_flow_item_ipv4), 0, sizeof(struct rte_flow_item_ipv4));
     ip_spec.hdr.dst_addr = dst_ip;
     ip_mask.hdr.dst_addr = FULL_MASK;
     ip_spec.hdr.src_addr = src_ip;
@@ -273,8 +297,8 @@ create_flow_director(uint16_t port_id, uint16_t queue_id, uint32_t src_ip, uint3
     pattern[1].mask = &ip_mask;
 
     // tcp header, full mask 0xffff
-    memset(&tcp_spec, 0, sizeof(struct rte_flow_item_tcp));
-    memset(&tcp_mask, 0, sizeof(struct rte_flow_item_tcp));
+    memset_s(&tcp_spec, sizeof(struct rte_flow_item_tcp), 0, sizeof(struct rte_flow_item_tcp));
+    memset_s(&tcp_mask, sizeof(struct rte_flow_item_tcp), 0, sizeof(struct rte_flow_item_tcp));
     pattern[2].type = RTE_FLOW_ITEM_TYPE_TCP;
     tcp_spec.hdr.src_port = src_port;
     tcp_spec.hdr.dst_port = dst_port;
@@ -392,7 +416,7 @@ static int str_to_array(char *args, uint32_t *array, int size)
     char *elem = NULL;
     char *next_token = NULL;
 
-    memset(array, 0, sizeof(*array) * size);
+    memset_s(array, sizeof(*array) * size, 0, sizeof(*array) * size);
     elem = strtok_s((char *)args, split_delim, &next_token);
     while (elem != NULL) {
         if (cnt >= size) {
@@ -548,50 +572,50 @@ int recv_pkts_from_other_process(int process_index, void* arg){
     int listenfd, connfd, size;
     char buf[132];
     /* socket */
-    if ((listenfd = posix_api->socket_fn(AF_UNIX, SOCK_STREAM, 0)) < 0) {  
-        perror("socket error"); 
-        return -1;  
-    }  
+    if ((listenfd = posix_api->socket_fn(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+        perror("socket error");
+        return -1;
+    }
     /* bind */
-    memset(&serun, 0, sizeof(serun));  
-    serun.sun_family = AF_UNIX;  
+    memset_s(&serun, sizeof(serun), 0, sizeof(serun));
+    serun.sun_family = AF_UNIX;
     char process_server_path[PATH_MAX];
     sprintf_s(process_server_path, sizeof(process_server_path), "%s%d", server_path, process_index);
-    strcpy(serun.sun_path, process_server_path);  
-    size = offsetof(struct sockaddr_un, sun_path) + strlen(serun.sun_path);  
-    unlink(process_server_path);  
+    strcpy_s(serun.sun_path, sizeof(serun.sun_path),process_server_path);
+    size = offsetof(struct sockaddr_un, sun_path) + strlen(serun.sun_path);
+    unlink(process_server_path);
     if (posix_api->bind_fn(listenfd, (struct sockaddr *)&serun, size) < 0) {  
-        perror("bind error");  
-        return -1;  
+        perror("bind error");
+        return -1;
     }
-    if (posix_api->listen_fn(listenfd, 20) < 0) {  
+    if (posix_api->listen_fn(listenfd, 20) < 0) { /* 20: max backlog */
         perror("listen error");  
-        return -1;         
+        return -1;
     }  
     sem_post((sem_t *)arg);
     /* block */
      while(1) {  
-        cliun_len = sizeof(cliun);         
-        if ((connfd = posix_api->accept_fn(listenfd, (struct sockaddr *)&cliun, &cliun_len)) < 0){  
-            perror("accept error");  
-            continue;  
-        }  
-        while(1) {  
-            int n = posix_api->read_fn(connfd, buf, sizeof(buf));  
-            if (n < 0) {  
-                perror("read error");  
-                break;  
-            } else if(n == 0) {  
-                break;  
+        cliun_len = sizeof(cliun);
+        if ((connfd = posix_api->accept_fn(listenfd, (struct sockaddr *)&cliun, &cliun_len)) < 0){
+            perror("accept error");
+            continue;
+        }
+        while(1) {
+            int n = posix_api->read_fn(connfd, buf, sizeof(buf));
+            if (n < 0) {
+                perror("read error");
+                break;
+            } else if(n == 0) {
+                break;
             }
 
             if(n == LSTACK_MBUF_LEN){
                 /* arp */
                 parse_arp_and_transefer(buf);
-            }else if(n == TRANSFER_TCP_MUBF_LEN) {
+            } else if (n == TRANSFER_TCP_MUBF_LEN) {
                 /* tcp. lstack_mbuf_queue_id */
                 parse_tcp_and_transefer(buf);
-            }else if (n == DELETE_FLOWS_PARAMS_LENGTH) {
+            } else if (n == DELETE_FLOWS_PARAMS_LENGTH) {
                 /* delete rule */
                 parse_and_delete_rule(buf);
             }else if(n == CREATE_FLOWS_PARAMS_LENGTH){
@@ -599,20 +623,24 @@ int recv_pkts_from_other_process(int process_index, void* arg){
                 parse_and_create_rule(buf);
                 char reply_buf[REPLY_LEN];
                 sprintf_s(reply_buf, sizeof(reply_buf), "%s", SUCCESS_REPLY);
-                posix_api->write_fn(connfd, reply_buf, REPLY_LEN);  
-            }else {
+                posix_api->write_fn(connfd, reply_buf, REPLY_LEN);
+            }else if (n == GET_LSTACK_NUM) {
+                char reply_buf[REPLY_LEN];
+                sprintf_s(reply_buf, sizeof(reply_buf), "%d", get_global_cfg_params()->num_cpu);
+                posix_api->write_fn(connfd, reply_buf, REPLY_LEN);
+            }else{
                 /* add port */
                 parse_and_add_or_delete_listen_port(buf);
                 char reply_buf[REPLY_LEN];
                 sprintf_s(reply_buf, sizeof(reply_buf), "%s", SUCCESS_REPLY);
-                posix_api->write_fn(connfd, reply_buf, REPLY_LEN);  
+                posix_api->write_fn(connfd, reply_buf, REPLY_LEN);
             }
             
-        }  
-        posix_api->close_fn(connfd);  
+        }
+        posix_api->close_fn(connfd);
     }
-    posix_api->close_fn(listenfd);  
-    return 0;    
+    posix_api->close_fn(listenfd);
+    return 0;
 }
 
 void concat_mbuf_and_queue_id(struct rte_mbuf *mbuf, uint16_t queue_id, char* mbuf_and_queue_id, int write_len){

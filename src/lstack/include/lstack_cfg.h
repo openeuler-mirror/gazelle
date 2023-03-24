@@ -34,6 +34,7 @@
 #define LOG_DIR_PATH    PATH_MAX
 #define LOG_LEVEL_LEN   16
 #define GAZELLE_MAX_NUMA_NODES 8
+#define MAX_PROCESS_NUM 32
 
 /* Default value of low power mode parameters */
 #define LSTACK_LPM_DETECT_MS_MIN        (5 * 1000)
