@@ -88,6 +88,8 @@
 #define GAZELLE_PRIMARY_START_PATH       "/var/run/gazelle/gazelle_primary"
 #define GAZELLE_FILE_PERMISSION          0700
 
+#define GAZELLE_MAX_PORTS_VALUE   (UINT16_MAX - 1)
+
 #define SEND_TIME_WAIT_NS 20000
 #define SECOND_NSECOND 1000000000
 

@@ -309,7 +309,7 @@ static int32_t parse_stack_cpu_number(void)
         }
 
         char *tmp_arg = strdup(args);
-        int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS);
+        int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg);
         if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
             return -EINVAL;
@@ -342,7 +342,7 @@ static int32_t parse_stack_cpu_number(void)
         }
 
         char *tmp_arg_send = strdup(args);
-        int32_t cnt = separate_str_to_array(tmp_arg_send, g_config_params.send_cpus, CFG_MAX_CPUS);
+        int32_t send_cpu_cnt = separate_str_to_array(tmp_arg_send, g_config_params.send_cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg_send);
 
         // recv_num_cpus
@@ -368,15 +368,15 @@ static int32_t parse_stack_cpu_number(void)
         }
 
         char *tmp_arg_recv = strdup(args);
-        cnt = separate_str_to_array(tmp_arg_recv, g_config_params.recv_cpus, CFG_MAX_CPUS);
+        int32_t recv_cpu_cnt = separate_str_to_array(tmp_arg_recv, g_config_params.recv_cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg_recv);
 
-        if (cnt <= 0 || cnt > CFG_MAX_CPUS / 2) {
+        if (send_cpu_cnt <= 0 || send_cpu_cnt > CFG_MAX_CPUS / 2 || send_cpu_cnt != recv_cpu_cnt) {
             return -EINVAL;
         }
 
-        g_config_params.num_cpu = cnt;
-        g_config_params.num_queue = (uint16_t)cnt * 2;
+        g_config_params.num_cpu = send_cpu_cnt;
+        g_config_params.num_queue = (uint16_t)send_cpu_cnt * 2;
         g_config_params.tot_queue_num = g_config_params.num_queue;
     }
 
@@ -407,7 +407,7 @@ static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t nu
         return -1;
     }
 
-    int32_t count = separate_str_to_array(strbuf, cpulist, num);
+    int32_t count = separate_str_to_array(strbuf, cpulist, num, CFG_MAX_CPUS);
     return count;
 }
 
@@ -492,9 +492,14 @@ static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach
         return -1;
     }
 
-    int32_t count = separate_str_to_array(socket_mem, sec_attach_arg->socket_per_size, GAZELLE_MAX_NUMA_NODES);
+    int32_t count = separate_str_to_array(socket_mem, sec_attach_arg->socket_per_size, GAZELLE_MAX_NUMA_NODES, GAZELLE_MAX_PORTS_VALUE);
+
+    if (count < 0) {
+        return -1;
+    }
+
     for (uint32_t i = 0; i < count; i++) {
-        mem_size += sec_attach_arg->socket_per_size[count];
+        mem_size += sec_attach_arg->socket_per_size[i];
     }
     mem_size *= 1024LL;
     mem_size *= 1024LL;
@@ -993,7 +998,7 @@ static int32_t parse_process_numa(void)
         return 0;
     }
 
-    ret = separate_str_to_array((char *)args, g_config_params.process_numa, PROTOCOL_STACK_MAX);
+    ret = separate_str_to_array((char *)args, g_config_params.process_numa, PROTOCOL_STACK_MAX, GAZELLE_MAX_NUMA_NODES);
     if (ret <= 0) {
         return -EINVAL;
     }

@@ -31,58 +31,63 @@
 #define  COMMON_INFO(fmt, ...)   LSTACK_LOG(INFO, LSTACK, fmt, ##__VA_ARGS__)
 #endif
 
-static int32_t parse_str_data(char *args, uint32_t *array, int32_t array_size)
+int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size, int32_t max_value)
 {
-    const char *delim = "-";
-    char *elem = NULL;
-    char *next_token = NULL;
-    char *endptr = NULL;
-    int32_t cnt = 0;
-    int64_t start, end;
+    uint32_t count = 0;
+    char *end = NULL;
+    int32_t min, max;
+    int32_t idx;
 
-    elem = strtok_s(args, delim, &next_token);
-    start = strtol(elem, &endptr, 0);
-    if (endptr == elem) {
-        return cnt;
+    for (idx = 0; idx < array_size; idx++) {
+        array[idx] = 0;
     }
 
-    elem = strtok_s(NULL, delim, &next_token);
-    if (elem == NULL) {
-        /* just a single data */
-        array[cnt++] = (uint32_t)start;
-        return cnt;
-    }
-    end = strtol(elem, &endptr, 0);
-    if (endptr == elem) {
-        array[cnt++] = start;
-        return cnt;
+    while (isblank(*args)) {
+        args++;
     }
 
-    for (int64_t i = start; i <= end && cnt < array_size; i++) {
-        if (i < 0 || i > UINT_MAX) {
-            break;
+    min = array_size;
+    do {
+        while (isblank(*args)) {
+            args++;
         }
-        array[cnt++] = (uint32_t)i;
+        if (*args == '\0') {
+            return -1;
+        }
+        errno = 0;
+        idx = strtol(args, &end, 10); /* 10: decimal */
+        if (errno || end == NULL) {
+            return -1;
+        }
+        if (idx < 0 || idx >= max_value) {
+            return -1;
+        }
+        while (isblank(*end)) {
+            end++;
+        }
+        if (*end == '-') {
+            min = idx;
+        } else if ((*end == ',') || (*end == '\0') || (*end == '\n')) {
+            max = idx;
+            if (min == array_size) {
+                min = idx;
+            }
+            for (idx = min; idx <= max; idx++) {
+                array[count] = idx;
+                count++;
+            }
+            min = array_size;
+        } else {
+            return -1;
+        }
+        args = end + 1;
+    } while (*end != '\0' && *end != '\n');
+
+    if (count == 0) {
+        return -1;
     }
 
-    return cnt;
-}
-
-/* support '-' and ',' */
-int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size)
-{
-    const char *delim = ",";
-    char *elem = NULL;
-    char *next_token = NULL;
-    int32_t cnt = 0;
-
-    elem = strtok_s(args, delim, &next_token);
-    while (elem != NULL && cnt < array_size) {
-        cnt += parse_str_data(elem, &array[cnt], array_size - cnt);
-        elem = strtok_s(NULL, delim, &next_token);
-    }
-
-    return cnt;
+    return count;
 }
 
 int32_t check_and_set_run_dir(void)
