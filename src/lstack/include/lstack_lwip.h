@@ -43,7 +43,7 @@ void stack_send(struct rpc_msg *msg);
 void app_rpc_write(struct rpc_msg *msg);
 int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num);
 void gazelle_free_pbuf(struct pbuf *pbuf);
-ssize_t sendmsg_to_stack(int32_t s, const struct msghdr *message, int32_t flags);
+ssize_t sendmsg_to_stack(struct lwip_sock *sock, int32_t s, const struct msghdr *message, int32_t flags);
 ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags);
 ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags);
 void rpc_replenish(struct rpc_msg *msg);

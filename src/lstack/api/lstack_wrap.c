@@ -50,7 +50,7 @@ enum KERNEL_LWIP_PATH {
     PATH_UNKNOW,
 };
 
-static inline enum KERNEL_LWIP_PATH select_path(int fd)
+static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socket)
 {
     if (unlikely(posix_api == NULL)) {
         /*
@@ -75,6 +75,7 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd)
     }
 
     if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
+        *socket = sock;
         return PATH_LWIP;
     }
 
@@ -82,6 +83,7 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd)
     /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
     /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
     if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
+        *socket = sock
         return PATH_LWIP;
     }
 
@@ -150,7 +152,8 @@ static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, in
 
 static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
 {
-    if (select_path(s) == PATH_KERNEL) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_KERNEL) {
         return posix_api->accept_fn(s, addr, addrlen);
     }
 
@@ -168,7 +171,8 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_path(s) == PATH_KERNEL) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_KERNEL) {
         return posix_api->accept4_fn(s, addr, addrlen, flags);
     }
 
@@ -208,7 +212,8 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_path(s) == PATH_KERNEL) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_KERNEL) {
         return posix_api->bind_fn(s, name, namelen);
     }
 
@@ -263,11 +268,11 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_path(s) == PATH_KERNEL) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_KERNEL) {
         return posix_api->connect_fn(s, name, namelen);
     }
 
-    struct lwip_sock *sock = get_socket(s);
     if (sock == NULL) {
         return posix_api->connect_fn(s, name, namelen);
     }
@@ -293,7 +298,8 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
 
 static inline int32_t do_listen(int32_t s, int32_t backlog)
 {
-    if (select_path(s) == PATH_KERNEL) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_KERNEL) {
         return posix_api->listen_fn(s, backlog);
     }
 
@@ -317,7 +323,8 @@ static inline int32_t do_getpeername(int32_t s, struct sockaddr *name, socklen_t
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_path(s) == PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_LWIP) {
         return rpc_call_getpeername(s, name, namelen);
     }
 
@@ -330,7 +337,8 @@ static inline int32_t do_getsockname(int32_t s, struct sockaddr *name, socklen_t
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_path(s) == PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_LWIP) {
         return rpc_call_getsockname(s, name, namelen);
     }
 
@@ -351,7 +359,8 @@ static bool unsupport_optname(int32_t optname)
 
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
-    if (select_path(s) == PATH_LWIP && !unsupport_optname(optname)) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_LWIP && !unsupport_optname(optname)) {
         return rpc_call_getsockopt(s, level, optname, optval, optlen);
     }
 
@@ -360,7 +369,8 @@ static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, v
 
 static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, const void *optval, socklen_t optlen)
 {
-    if (select_path(s) == PATH_KERNEL || unsupport_optname(optname)) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_KERNEL || unsupport_optname(optname)) {
         return posix_api->setsockopt_fn(s, level, optname, optval, optlen);
     }
 
@@ -393,7 +403,8 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
         return 0;
     }
 
-    if (select_path(sockfd) == PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(sockfd, &sock) == PATH_LWIP) {
         return read_stack_data(sockfd, buf, len, flags);
     }
 
@@ -410,7 +421,8 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
         return 0;
     }
 
-    if (select_path(s) == PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_LWIP) {
         return read_stack_data(s, mem, len, 0);
     }
     return posix_api->read_fn(s, mem, len);
@@ -418,7 +430,8 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 
 static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 {
-   if (select_path(s) != PATH_LWIP) {
+   struct lwip_sock *sock = NULL;
+   if (select_path(s, &sock) != PATH_LWIP) {
         return posix_api->readv_fn(s, iov, iovcnt);
    }
 
@@ -441,7 +454,8 @@ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
 {
-    if (select_path(sockfd) != PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(sockfd, &sock) != PATH_LWIP) {
         return posix_api->send_fn(sockfd, buf, len, flags);
     }
 
@@ -450,7 +464,8 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
 
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 {
-    if (select_path(s) != PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) != PATH_LWIP) {
         return posix_api->write_fn(s, mem, size);
     }
 
@@ -459,7 +474,8 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
 {
-   if (select_path(s) != PATH_LWIP) {
+   struct lwip_sock *sock = NULL;
+   if (select_path(s, &sock) != PATH_LWIP) {
         return posix_api->writev_fn(s, iov, iovcnt);
    }
 
@@ -472,7 +488,7 @@ static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
    msg.msg_control = NULL;
    msg.msg_controllen = 0;
    msg.msg_flags = 0;
-   return sendmsg_to_stack(s, &msg, 0);
+   return sendmsg_to_stack(sock, s, &msg, 0);
 }
 
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)
@@ -481,7 +497,8 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_path(s) == PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_LWIP) {
         return recvmsg_from_stack(s, message, flags);
     }
 
@@ -494,8 +511,9 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_path(s) == PATH_LWIP) {
-        return sendmsg_to_stack(s, message, flags);
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) == PATH_LWIP) {
+        return sendmsg_to_stack(sock, s, message, flags);
     }
 
     return posix_api->send_msg(s, message, flags);
@@ -508,7 +526,7 @@ static inline int32_t do_close(int32_t s)
         return lstack_epoll_close(s);
     }
 
-    if (select_path(s) == PATH_KERNEL) {
+    if (select_path(s, &sock) == PATH_KERNEL) {
         return posix_api->close_fn(s);
     }
 
@@ -561,7 +579,8 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
         va_start(ap, _cmd); \
         val = va_arg(ap, typeof(val)); \
         va_end(ap); \
-        if (select_path(_fd) == PATH_KERNEL) \
+        struct lwip_sock *sock = NULL; \
+        if (select_path(_fd, &sock) == PATH_KERNEL) \
             return _fcntl_fn(_fd, _cmd, val); \
         int32_t ret = _fcntl_fn(_fd, _cmd, val); \
         if (ret == -1) \
