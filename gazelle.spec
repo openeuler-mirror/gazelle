@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       58
+Release:       59
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -237,6 +237,10 @@ Patch9219:     0219-fix-parse-args-error.patch
 Patch9220:     0220-gazelle-send-recv-thread-bind-numa.patch
 Patch9221:     0221-waiting-when-primary-process-not-start-already.patch
 Patch9222:     0222-do-not-transfer-broadcast-arp-pkts-to-other-process.patch
+Patch9223:     0223-revert-select_thread_path-and-optimize-app-thread-wh.patch
+Patch9224:     0224-sepeate_string_to-array-add-error-args-handle.patch
+Patch9225:     0225-check-primary-process-idx-and-secondary-lstack-num.patch
+Patch9226:     0226-optimite-select_path-and-pbuf_take.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -277,6 +281,12 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Mar 27 2023 kircher <majun65@huawei.com> - 1.0.1-59
+- optimite select_path and pbuf_take
+- check primary process idx and secondary lstack num
+- sepeate_string_to array add error args handle
+- revert select_thread_path and optimize app thread when sendmsg
+
 * Wed Mar 22 2023 kircher <majun65@huawei.com> - 1.0.1-58
 - do not transfer broadcast arp pkts to other process
 - waiting when primary process not start already
