@@ -521,15 +521,13 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
 
 static inline int32_t do_close(int32_t s)
 {
-    struct lwip_sock *sock = get_socket_by_fd(s);
-    if (likely(posix_api->ues_posix == 0) && sock && sock->wakeup && sock->wakeup->epollfd == s) {
-        return lstack_epoll_close(s);
-    }
-
+    struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_KERNEL) {
         return posix_api->close_fn(s);
     }
-
+    if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
+        return lstack_epoll_close(s);
+    }
     return stack_broadcast_close(s);
 }
 
