@@ -855,6 +855,10 @@ static int32_t parse_kni_switch(void)
         return -1;
     }
 
+    if (!g_config_params.use_ltran && !g_config_params.is_primary) {
+        g_config_params.kni_switch = 0;
+    }
+
     return 0;
 }
 
