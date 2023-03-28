@@ -1,0 +1,27 @@
+From 17120ad1d57365d2980d4d60742b25cf76ac35bd Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Mon, 27 Mar 2023 20:16:00 +0800
+Subject: [PATCH] set kni_switch valid only in primary process
+
+---
+ src/lstack/core/lstack_cfg.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 95590e2..168aa49 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -855,6 +855,10 @@ static int32_t parse_kni_switch(void)
+         return -1;
+     }
+ 
++    if (!g_config_params.use_ltran && !g_config_params.is_primary) {
++        g_config_params.kni_switch = 0;
++    }
++
+     return 0;
+ }
+ 
+-- 
+2.23.0
+

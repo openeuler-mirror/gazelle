@@ -1,0 +1,46 @@
+From da9f7797985fe2cc7bd6a5f1a5837bd833838982 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Mon, 27 Mar 2023 22:15:48 +0800
+Subject: [PATCH] add socket check before write it
+
+---
+ src/lstack/api/lstack_wrap.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index aacb30c..f81328d 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -75,7 +75,9 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
+     }
+ 
+     if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
+-        *socket = sock;
++        if (socket) {
++            *socket = sock;
++        }
+         return PATH_LWIP;
+     }
+ 
+@@ -83,7 +85,9 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
+     /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
+     /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
+     if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
+-        *socket = sock;
++        if (socket) {
++            *socket = sock;
++        }
+         return PATH_LWIP;
+     }
+ 
+@@ -273,6 +277,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
+         return posix_api->connect_fn(s, name, namelen);
+     }
+ 
++    sock = get_socket(s);
+     if (sock == NULL) {
+         return posix_api->connect_fn(s, name, namelen);
+     }
+-- 
+2.23.0
+
