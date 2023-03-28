@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       59
+Release:       60
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -241,6 +241,9 @@ Patch9223:     0223-revert-select_thread_path-and-optimize-app-thread-wh.patch
 Patch9224:     0224-sepeate_string_to-array-add-error-args-handle.patch
 Patch9225:     0225-check-primary-process-idx-and-secondary-lstack-num.patch
 Patch9226:     0226-optimite-select_path-and-pbuf_take.patch
+Patch9227:     0227-fix-build-err-on-select_path.patch
+Patch9228:     0228-set-kni_switch-valid-only-in-primary-process.patch
+Patch9229:     0229-add-socket-check-before-write-it.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -281,6 +284,11 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue Mar 28 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-60
+- add socket check before write it
+- set kni_switch valid only in primary process
+- fix build err on select_path
+
 * Mon Mar 27 2023 kircher <majun65@huawei.com> - 1.0.1-59
 - optimite select_path and pbuf_take
 - check primary process idx and secondary lstack num

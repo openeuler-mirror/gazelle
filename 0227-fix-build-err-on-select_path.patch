@@ -1,0 +1,25 @@
+From c721d637a8a387b53ec614705238714412cfe1be Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Mon, 27 Mar 2023 20:05:59 +0800
+Subject: [PATCH] fix build err on select_path
+
+---
+ src/lstack/api/lstack_wrap.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 1fe576f..aacb30c 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -83,7 +83,7 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
+     /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
+     /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
+     if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
+-        *socket = sock
++        *socket = sock;
+         return PATH_LWIP;
+     }
+ 
+-- 
+2.23.0
+
