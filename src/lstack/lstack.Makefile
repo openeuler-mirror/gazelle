@@ -40,7 +40,12 @@ WRAP_API := epoll_ctl \
             close \
             ioctl \
             sigaction \
-            fork
+            fork \
+            epoll_create1 \
+            readv \
+            writev \
+            poll \
+            ppoll
 
 WRAP_LDFLAGS = $(patsubst %, $(WRAP_PREFIX)%, $(WRAP_API))
 
