@@ -200,7 +200,7 @@ struct gazelle_stat_low_power_info {
 };
 
 #define RTE_ETH_XSTATS_NAME_SIZE 64
-#define RTE_ETH_XSTATS_MAX_LEN 128
+#define RTE_ETH_XSTATS_MAX_LEN 256
 struct nic_eth_xstats_name {
     char name[RTE_ETH_XSTATS_NAME_SIZE];
 };
