@@ -298,7 +298,8 @@ void lstack_log_level_init(void)
 }
 
 // get port id
-inline uint16_t get_port_id(){
+inline uint16_t get_port_id(void)
+{
     uint16_t port_id = get_global_cfg_params()->port_id;
     return port_id;
 }
