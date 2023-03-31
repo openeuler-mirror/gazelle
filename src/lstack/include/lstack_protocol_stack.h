@@ -103,6 +103,7 @@ struct protocol_stack_group {
     /* dfx stats */
     bool latency_start;
     uint64_t call_alloc_fail;
+    pthread_spinlock_t socket_lock;
 };
 
 long get_stack_tid(void);

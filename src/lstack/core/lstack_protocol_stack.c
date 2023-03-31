@@ -124,6 +124,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
 
     /* same app communication thread bind same stack */
     if (bind_stack) {
+        bind_stack->conn_num++;
         return bind_stack;
     }
 
@@ -140,6 +141,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
             return NULL;
         }
     } else {
+        pthread_spin_lock(&stack_group->socket_lock);
         for (uint16_t i = 0; i < stack_group->stack_num; i++) {
             struct protocol_stack* stack = stack_group->stacks[i];
             if (get_global_cfg_params()->seperate_send_recv) {
@@ -147,7 +149,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
                     index = i;
                     min_conn_num = stack->conn_num;
                 }
-            }else {
+            } else {
                 if (stack->conn_num < min_conn_num) {
                     index = i;
                     min_conn_num = stack->conn_num;
@@ -156,7 +158,9 @@ struct protocol_stack *get_bind_protocol_stack(void)
         }
     }
 
+    stack_group->stacks[index]->conn_num++;
     bind_stack = stack_group->stacks[index];
+    pthread_spin_unlock(&stack_group->socket_lock);
     return stack_group->stacks[index];
 }
 
@@ -541,6 +545,7 @@ int32_t init_protocol_stack(void)
 
     init_list_node(&stack_group->poll_list);
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
+    pthread_spin_init(&stack_group->socket_lock, PTHREAD_PROCESS_PRIVATE);
     
 
     if (init_protocol_sem() != 0) {
@@ -689,6 +694,7 @@ void stack_accept(struct rpc_msg *msg)
     }
 
     msg->result = accept_fd;
+    sock->stack->conn_num++;
     if (rte_ring_count(sock->conn->recvmbox->ring)) {
         add_recv_list(accept_fd);
     }
