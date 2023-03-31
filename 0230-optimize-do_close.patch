@@ -1,0 +1,36 @@
+From 22405fd936105e4178a617d46077c871835ac6d5 Mon Sep 17 00:00:00 2001
+From: wangweizZZ <wangwei7_yewu@cmss.chinamobile.com>
+Date: Mon, 27 Mar 2023 21:46:59 +0800
+Subject: [PATCH] optimize do_close
+
+---
+ src/lstack/api/lstack_wrap.c | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index aacb30c..ae08bfe 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -521,15 +521,13 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
+ 
+ static inline int32_t do_close(int32_t s)
+ {
+-    struct lwip_sock *sock = get_socket_by_fd(s);
+-    if (likely(posix_api->ues_posix == 0) && sock && sock->wakeup && sock->wakeup->epollfd == s) {
+-        return lstack_epoll_close(s);
+-    }
+-
++    struct lwip_sock *sock = NULL;
+     if (select_path(s, &sock) == PATH_KERNEL) {
+         return posix_api->close_fn(s);
+     }
+-
++    if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
++        return lstack_epoll_close(s);
++    }
+     return stack_broadcast_close(s);
+ }
+ 
+-- 
+2.23.0
+
