@@ -260,7 +260,7 @@ int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     if (stat_mode == GAZELLE_STAT_LSTACK_SHOW_XSTATS) {
-        dpdk_nic_xstats_get(&dfx, 0);
+        dpdk_nic_xstats_get(&dfx, get_port_id());
         dfx.tid = 0;
         dfx.eof = 1;
         send_control_cmd_data(fd, &dfx);
