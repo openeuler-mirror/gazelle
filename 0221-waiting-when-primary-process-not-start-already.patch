@@ -1,0 +1,137 @@
+From f17b74371b14b97521462724069812fc9728b9ed Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Tue, 21 Mar 2023 15:36:52 +0800
+Subject: [PATCH] waiting when primary process not start already
+
+---
+ src/common/gazelle_opt.h                  |  1 +
+ src/lstack/api/lstack_signal.c            |  7 +++--
+ src/lstack/core/lstack_control_plane.c    |  6 ++++
+ src/lstack/core/lstack_init.c             | 34 +++++++++++++++++++++++
+ src/lstack/include/lstack_control_plane.h |  1 +
+ 5 files changed, 47 insertions(+), 2 deletions(-)
+
+diff --git a/src/common/gazelle_opt.h b/src/common/gazelle_opt.h
+index 4c0eef3..fe0483b 100644
+--- a/src/common/gazelle_opt.h
++++ b/src/common/gazelle_opt.h
+@@ -85,6 +85,7 @@
+ #define GAZELLE_SOCK_FILENAME_MAXLEN    128
+ 
+ #define GAZELLE_RUN_DIR                  "/var/run/gazelle/"
++#define GAZELLE_PRIMARY_START_PATH       "/var/run/gazelle/gazelle_primary"
+ #define GAZELLE_FILE_PERMISSION          0700
+ 
+ #define SEND_TIME_WAIT_NS 20000
+diff --git a/src/lstack/api/lstack_signal.c b/src/lstack/api/lstack_signal.c
+index e73bc61..03118f5 100644
+--- a/src/lstack/api/lstack_signal.c
++++ b/src/lstack/api/lstack_signal.c
+@@ -57,12 +57,15 @@ static inline bool match_hijack_signal(int sig)
+ static void lstack_sig_default_handler(int sig)
+ {
+     LSTACK_LOG(ERR, LSTACK, "lstack dumped，caught signal：%d\n", sig);
+-    dump_stack();
+-    lwip_exit();
++    if (get_global_cfg_params() && get_global_cfg_params()->is_primary) {
++        delete_primary_path();
++    }
+     if (!use_ltran()) {
+         dpdk_kni_release();
+     }
+     control_fd_close();
++    dump_stack();
++    lwip_exit();
+     (void)kill(getpid(), sig);
+ }
+ 
+diff --git a/src/lstack/core/lstack_control_plane.c b/src/lstack/core/lstack_control_plane.c
+index bc2c55d..e705cae 100644
+--- a/src/lstack/core/lstack_control_plane.c
++++ b/src/lstack/core/lstack_control_plane.c
+@@ -473,6 +473,12 @@ void control_fd_close(void)
+     }
+ }
+ 
++void delete_primary_path(void) {
++    if (!remove(GAZELLE_PRIMARY_START_PATH)) {
++        LSTACK_LOG(ERR, LSTACK, "delete %s failed\n", GAZELLE_PRIMARY_START_PATH);
++    }
++}
++
+ int32_t control_init_client(bool is_reconnect)
+ {
+     int32_t ret;
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index e8fa0dc..3537002 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -151,6 +151,32 @@ bool select_thread_path(void)
+     return true;
+ }
+ 
++static void check_process_start(void) {
++    if (get_global_cfg_params()->is_primary) {
++        return;
++    }
++
++    while (!fopen(GAZELLE_PRIMARY_START_PATH, "r")) {
++	printf("please make sure the primary process start already!\n");
++	sleep(1);
++    }
++}
++
++static int32_t set_process_start_flag(void) {
++    if (!get_global_cfg_params()->is_primary) {
++        return 0;
++    }
++
++    FILE *fp = NULL;
++    fp = fopen(GAZELLE_PRIMARY_START_PATH, "w");
++    if (fp == NULL) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "set primary proceaa start flag failed!\n");
++	return -1;
++    }
++    (void)fclose(fp);
++    return 0;
++}
++
+ static int32_t check_process_conflict(void)
+ {
+     int32_t ret;
+@@ -340,6 +366,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
+     }
+     LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
+ 
++    /*
++     * check primary process start */
++    check_process_start();
++
+     /*
+     * check conflict */
+     if (check_process_conflict() < 0) {
+@@ -402,6 +432,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
+         set_kni_ip_mac();
+     }
+ 
++    if (set_process_start_flag() != 0) {
++        LSTACK_EXIT(1, "set_process_start_flag failed\n");
++    }
++
+     posix_api->ues_posix = 0;
+     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
+     rte_smp_mb();
+diff --git a/src/lstack/include/lstack_control_plane.h b/src/lstack/include/lstack_control_plane.h
+index d631ea6..aed5443 100644
+--- a/src/lstack/include/lstack_control_plane.h
++++ b/src/lstack/include/lstack_control_plane.h
+@@ -32,5 +32,6 @@ bool get_register_state(void);
+ void thread_register_phase1(struct rpc_msg *msg);
+ void thread_register_phase2(struct rpc_msg *msg);
+ void control_fd_close(void);
++void delete_primary_path(void);
+ 
+ #endif /* GAZELLE_CONTROL_PLANE_H */
+-- 
+2.33.0
+
