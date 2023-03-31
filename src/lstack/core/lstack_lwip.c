@@ -192,7 +192,6 @@ void gazelle_init_sock(int32_t fd)
     (void)replenish_send_idlembuf(stack, sock);
 
     sock->stack = stack;
-    sock->stack->conn_num++;
     init_list_node_null(&sock->recv_list);
     init_list_node_null(&sock->event_list);
 }
