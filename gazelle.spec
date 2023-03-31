@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       60
+Release:       61
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -244,6 +244,11 @@ Patch9226:     0226-optimite-select_path-and-pbuf_take.patch
 Patch9227:     0227-fix-build-err-on-select_path.patch
 Patch9228:     0228-set-kni_switch-valid-only-in-primary-process.patch
 Patch9229:     0229-add-socket-check-before-write-it.patch
+Patch9230:     0230-optimize-do_close.patch
+Patch9231:     0231-fix-config-flow-rule-race.patch
+Patch9232:     0232-update-lstack.Makefile.patch
+Patch9233:     0233-fix-gazellectl-x-error-when-multiplt-user-nic-config.patch
+Patch9234:     0234-fix-client-connect-number-unbalance-on-lstack.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -284,6 +289,13 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Fri Mar 31 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-61
+- fix gazellectl -x error when multiplt user nic config
+- update lstack.Makefile
+- fix config flow rule race
+- optimize do_close
+- fix client connect number unbalance on lstack
+
 * Tue Mar 28 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-60
 - add socket check before write it
 - set kni_switch valid only in primary process
