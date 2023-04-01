@@ -86,6 +86,11 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
             return PROGRAM_FAULT;
         }
 
+        if (set_socket_unblock(*socket_fd) < 0) {
+            PRINT_ERROR("can't set the socket to unblock! ");
+            return PROGRAM_FAULT;
+        }
+
         struct sockaddr_in server_addr;
         memset_s(&server_addr, sizeof(server_addr), 0, sizeof(server_addr));
         server_addr.sin_family = AF_INET;

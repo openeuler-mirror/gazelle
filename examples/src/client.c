@@ -372,6 +372,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->epollcreate = params->epollcreate;
         client_unit->debug = params->debug;
         client_unit->next = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
+        memset_s(client_unit->next, sizeof(struct ClientUnit), 0, sizeof(struct ClientUnit));
 
         if (pthread_create((tids + i), NULL, client_s_create_and_run, client_unit) < 0) {
             PRINT_ERROR("client can't create thread of poisx %d! ", errno);
