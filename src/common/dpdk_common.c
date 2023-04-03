@@ -34,16 +34,12 @@
 #define  COMMON_INFO(fmt, ...)   LSTACK_LOG(INFO, LSTACK, fmt, ##__VA_ARGS__)
 #endif
 
-static pthread_mutex_t g_kni_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct rte_kni *g_pkni = NULL;
+static volatile bool g_kni_started = false;
 
-/*
- * lock for preventing data race between tx thread and down operation.
- * Don't need to add lock on rx because down operation and rx are in the same thread
- */
-pthread_mutex_t *get_kni_mutex(void)
+bool get_kni_started(void)
 {
-    return &g_kni_mutex;
+    return g_kni_started;
 }
 
 struct rte_kni* get_gazelle_kni(void)
@@ -62,23 +58,18 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
     }
 
     if (if_up != 0) { /* Configure network interface up */
-        if (!g_bond_dev_started) {
-            pthread_mutex_lock(&g_kni_mutex);
-            ret = rte_eth_dev_start(port_id);
-            pthread_mutex_unlock(&g_kni_mutex);
-            if (ret < 0) {
-                COMMON_ERR("Failed to start port %hu ret=%d\n", port_id, ret);
+        if (!g_kni_started) {
+            g_kni_started = true;
+            if (!g_bond_dev_started) {
+                rte_eth_dev_start(port_id);
+                g_bond_dev_started = true;
             }
-            g_bond_dev_started = true;
         } else {
             COMMON_INFO("trying to start a started dev. \n");
         }
     } else {  /* Configure network interface down */
-        if (g_bond_dev_started) {
-            pthread_mutex_lock(&g_kni_mutex);
-            rte_eth_dev_stop(port_id);
-            pthread_mutex_unlock(&g_kni_mutex);
-            g_bond_dev_started = false;
+        if (g_kni_started) {
+            g_kni_started = false;
         } else {
             COMMON_INFO("trying to stop a stopped dev. \n");
         }
@@ -201,6 +192,12 @@ void dpdk_kni_release(void)
 int32_t kni_process_tx(struct rte_mbuf **pkts_burst, uint32_t count)
 {
     uint32_t i;
+    if (!g_kni_started) {
+        for (i = 0; i < count; i++) {
+            rte_pktmbuf_free(pkts_burst[i]);
+        }
+        return 0;
+    }
 
     for (i = 0; i < count; ++i) {
         struct rte_ipv4_hdr * ipv4_hdr = (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(pkts_burst[i], char*)
@@ -227,9 +224,7 @@ void kni_process_rx(uint16_t port)
 
     nb_kni_rx = rte_kni_rx_burst(g_pkni, pkts_burst, GAZELLE_KNI_READ_SIZE);
     if (nb_kni_rx > 0) {
-        pthread_mutex_lock(&g_kni_mutex);
         nb_rx = rte_eth_tx_burst(port, 0, pkts_burst, nb_kni_rx);
-        pthread_mutex_unlock(&g_kni_mutex);
 
         for (i = nb_rx; i < nb_kni_rx; ++i) {
             rte_pktmbuf_free(pkts_burst[i]);

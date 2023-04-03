@@ -483,7 +483,9 @@ static void* gazelle_stack_thread(void *arg)
         * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
         if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
             rte_kni_handle_request(get_gazelle_kni());
-            kni_handle_rx(get_port_id());
+            if (get_kni_started()) {
+                kni_handle_rx(get_port_id());
+            }
         }
 
         wakeup_tick++;
@@ -557,9 +559,9 @@ int32_t init_protocol_stack(void)
 
     if (get_global_cfg_params()->is_primary) {
         for (uint16_t idx = 0; idx < get_global_cfg_params()->tot_queue_num; idx++) {
-           struct rte_mempool* rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf",
-                               get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_group->stack_num, RXTX_CACHE_SZ, idx);
-           get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx] = rxtx_mbuf;    
+            struct rte_mempool* rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf",
+                get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_group->stack_num, RXTX_CACHE_SZ, idx);
+            get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx] = rxtx_mbuf;
         }
     }
 
