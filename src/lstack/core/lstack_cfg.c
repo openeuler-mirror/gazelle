@@ -998,8 +998,8 @@ static int32_t parse_process_numa(void)
         return 0;
 
     args = config_setting_get_string(cfg_args);
-    if (cfg_args == NULL) {
-        return 0;
+    if (args == NULL) {
+        return -EINVAL;
     }
 
     ret = separate_str_to_array((char *)args, g_config_params.process_numa, PROTOCOL_STACK_MAX, GAZELLE_MAX_NUMA_NODES);

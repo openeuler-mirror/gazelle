@@ -25,7 +25,7 @@
 #define MSG_ARG_4                      (4)
 #define RPM_MSG_ARG_SIZE               (5)
 
-#define RPC_MSG_MAX            512
+#define RPC_MSG_MAX            2048
 #define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
 
 struct rpc_msg;

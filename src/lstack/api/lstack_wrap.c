@@ -528,7 +528,14 @@ static inline int32_t do_close(int32_t s)
 {
     struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_KERNEL) {
-        return posix_api->close_fn(s);
+        /* we called lwip_socket, even if kernel fd */
+        if (posix_api != NULL && !posix_api->ues_posix &&
+            /* contain posix_api->close_fn if success */
+            stack_broadcast_close(s) == 0) {
+            return 0;
+        } else {
+            return posix_api->close_fn(s);
+        }
     }
     if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
         return lstack_epoll_close(s);
