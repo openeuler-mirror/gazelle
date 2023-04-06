@@ -819,6 +819,10 @@ int32_t stack_broadcast_close(int32_t fd)
     struct lwip_sock *sock = get_socket(fd);
     int32_t ret = 0;
 
+    if (sock == NULL) {
+        return -1;
+    }
+
     do {
         sock = sock->listen_next;
         if (rpc_call_close(fd)) {
