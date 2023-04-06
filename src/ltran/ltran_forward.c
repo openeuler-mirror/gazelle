@@ -690,7 +690,6 @@ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *sta
     /* send packets anyway. */
     tx_pkts = 0;
 
-    pthread_mutex_lock(get_kni_mutex());
     while (tx_pkts < used_cnt) {
         tx_pkts += rte_eth_tx_burst(port_id, queue_id,
                                     (struct rte_mbuf **)(&dst_bufs[tx_pkts]),
@@ -702,7 +701,6 @@ static __rte_always_inline void downstream_forward_one(struct gazelle_stack *sta
             }
         }
     }
-    pthread_mutex_unlock(get_kni_mutex());
 
     get_statistics()->port_stats[g_port_index].tx_bytes += tx_bytes;
     get_statistics()->port_stats[g_port_index].tx += tx_pkts;
@@ -737,7 +735,8 @@ int32_t downstream_forward(uint16_t *port)
 
     while (get_ltran_stop_flag() != GAZELLE_TRUE) {
         /* kni rx means read from kni and send to nic */
-        if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
+        if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON &&
+            get_kni_started()) {
             kni_process_rx(g_port_index);
         }
 

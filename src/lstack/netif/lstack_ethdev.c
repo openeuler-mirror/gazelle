@@ -719,7 +719,9 @@ void kni_handle_rx(uint16_t port_id)
 
 void kni_handle_tx(struct rte_mbuf *mbuf)
 {
-    if (!get_global_cfg_params()->kni_switch) {
+    if (!get_global_cfg_params()->kni_switch ||
+        !get_kni_started()) {
+        rte_pktmbuf_free(mbuf);
         return;
     }
     struct rte_ipv4_hdr *ipv4_hdr;
@@ -776,9 +778,9 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
         if (likely(transfer_type == TRANSFER_CURRENT_THREAD)) {
             eth_dev_recv(stack->pkts[i], stack);
             
-        }else if (transfer_type == TRANSFER_KERNEL) {
+        } else if (transfer_type == TRANSFER_KERNEL) {
             kni_handle_tx(stack->pkts[i]);
-        }else {
+        } else {
             /*transfer to other thread*/
         } 
     }
