@@ -81,7 +81,8 @@ struct protocol_stack_group *get_protocol_stack_group(void)
     return &g_stack_group;
 }
 
-int get_min_conn_stack(struct protocol_stack_group *stack_group){
+int get_min_conn_stack(struct protocol_stack_group *stack_group)
+{
     int min_conn_stk_idx = 0;
     int min_conn_num = GAZELLE_MAX_CLIENTS;
     for (int i = 0; i < stack_group->stack_num; i++) {
@@ -91,7 +92,7 @@ int get_min_conn_stack(struct protocol_stack_group *stack_group){
                 min_conn_stk_idx = i;
                 min_conn_num = stack->conn_num;
             }
-        }else {
+        } else {
             if (stack->conn_num < min_conn_num) {
                 min_conn_stk_idx = i;
                 min_conn_num = stack->conn_num;
@@ -100,7 +101,6 @@ int get_min_conn_stack(struct protocol_stack_group *stack_group){
 
     }
     return min_conn_stk_idx;
-
 }
 
 struct protocol_stack *get_protocol_stack(void)
@@ -230,14 +230,14 @@ static int32_t create_thread(void *arg, char *thread_name, stack_thread_func fun
         return -1;
     }
 
-    if (get_global_cfg_params()->seperate_send_recv){
+    if (get_global_cfg_params()->seperate_send_recv) {
         ret = sprintf_s(name, sizeof(name), "%s", thread_name);
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "set name failed\n");
             return -1;
         }
 
-    }else {
+    } else {
         ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, t_params->queue_id);
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "set name failed\n");
@@ -500,7 +500,8 @@ static void* gazelle_stack_thread(void *arg)
     return NULL;
 }
 
-static void libnet_listen_thread(void *arg){
+static void libnet_listen_thread(void *arg)
+{
     struct cfg_params * cfg_param = get_global_cfg_params();
     recv_pkts_from_other_process(cfg_param->process_idx, arg);
 }
@@ -561,6 +562,9 @@ int32_t init_protocol_stack(void)
         for (uint16_t idx = 0; idx < get_global_cfg_params()->tot_queue_num; idx++) {
             struct rte_mempool* rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf",
                 get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_group->stack_num, RXTX_CACHE_SZ, idx);
+            if (rxtx_mbuf == NULL) {
+                return -1;
+            }
             get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx] = rxtx_mbuf;
         }
     }
@@ -572,13 +576,13 @@ int32_t init_protocol_stack(void)
                 if (ret < 0) {
                     return -1;
                 }
-            }else {
+            } else {
                 ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_SEND_THREAD_NAME, process_index, i/2);
                 if (ret < 0) {
                     return -1;
                 }
             }
-        }else {
+        } else {
             ret = sprintf_s(name, sizeof(name), "%s", LSTACK_THREAD_NAME);
             if (ret < 0) {
                 return -1;
