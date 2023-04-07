@@ -33,6 +33,7 @@ struct ClientUnit
     uint64_t send_bytes;                ///< total send bytes
     in_addr_t ip;                       ///< server ip
     uint16_t port;                      ///< server port
+    uint16_t sport;                     ///< client sport
     uint32_t connect_num;               ///< total connection number
     uint32_t pktlen;                    ///< the length of peckage
     bool verify;                        ///< if we verify or not
@@ -80,10 +81,11 @@ void client_info_print(struct Client *client);
  * @param epoll_fd          the epoll file descriptor
  * @param ip                ip address
  * @param port              port
+ * @param sport             sport
  * @param domain            domain
  * @return                  the result pointer
  */
-int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port, const char *api);
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port, uint16_t sport, const char *api);
 
 /**
  * @brief the single thread, client retry to connect to server, register to epoll

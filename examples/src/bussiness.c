@@ -37,7 +37,7 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
         iov[2].iov_base = buffer_in + iov_len_size + iov_len_size;
         iov[2].iov_len = length- iov_len_size - iov_len_size;
         return readv(fd, iov, iovcnt);
-    } else {
+    } else if (strcmp(api, "recvsendmsg") == 0) {
         struct msghdr msg_recv;
         struct iovec iov;
 
@@ -52,6 +52,8 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
         msg_recv.msg_flags = 0;
 
         return recvmsg(fd, &msg_recv, 0);
+    } else {
+        return recvfrom(fd, buffer_in, length, 0, NULL, 0);
     }
  }
 
@@ -75,7 +77,7 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
         iov[2].iov_len = length- iov_len_size - iov_len_size;
         
         return writev(fd, iov, iovcnt);
-    } else {
+    } else if (strcmp(api, "recvsendmsg") == 0) {
         struct msghdr msg_send;
         struct iovec iov;
 
@@ -90,6 +92,8 @@ static const char bussiness_messages_cap[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";  // t
         msg_send.msg_flags = 0;
 
         return sendmsg(fd, &msg_send, 0);
+    } else {
+        return sendto(fd, buffer_out, length, 0, NULL, 0);
     }
  }
 
@@ -131,7 +135,7 @@ int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, 
 }
 
 // server answers
-int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api)
+int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api, const char* domain)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
@@ -139,14 +143,34 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
 
     int32_t cread = 0;
     int32_t sread = length;
+    int32_t nread = 0;
+    struct sockaddr_in client_addr;
+    socklen_t len = sizeof(client_addr);
+
+    if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") != 0) {
+        if (getpeername(server_handler->fd, (struct sockaddr *)&client_addr, &len) < 0) {
+            if (recvfrom(server_handler->fd, buffer_in, length, MSG_PEEK, (struct sockaddr *)&client_addr, &len) < 0) {
+                return PROGRAM_FAULT;
+	    }
+            if (connect(server_handler->fd, (struct sockaddr *)&client_addr, sizeof(struct sockaddr_in)) < 0) {
+                return PROGRAM_FAULT;
+	    }
+        }
+    }
+
     while (cread < sread) {
-        int32_t nread = read_api(server_handler->fd, buffer_in, length, api);
+        if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
+            nread = recvfrom(server_handler->fd, buffer_in, length, 0, (struct sockaddr *)&client_addr, &len);
+        } else {
+            nread = read_api(server_handler->fd, buffer_in, length, api);
+        }
+
         if (nread == 0) {
             return PROGRAM_ABORT;
         } else if (nread < 0) {
-             if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
+            if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
                 return PROGRAM_FAULT;
-             }
+            }
         } else {
             cread += nread;
             continue;
@@ -157,8 +181,14 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
 
     int32_t cwrite = 0;
     int32_t swrite = length;
+    int32_t nwrite = 0;
     while (cwrite < swrite) {
-        int32_t nwrite = write_api(server_handler->fd, buffer_out, length, api);
+        if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
+            nwrite = sendto(server_handler->fd, buffer_out, length, 0, (struct sockaddr *)&client_addr, len);
+        } else {
+            nwrite = write_api(server_handler->fd, buffer_out, length, api);
+	}
+
         if (nwrite == 0) {
             return PROGRAM_ABORT;
         } else if (nwrite < 0) {
