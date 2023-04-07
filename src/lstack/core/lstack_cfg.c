@@ -1026,8 +1026,8 @@ static int parse_process_index(void)
         }
     } else {
         g_config_params.process_idx = (uint8_t)config_setting_get_int(process_idx);
-        if (g_config_params.is_primary && g_config_params.process_idx != 0 ||
-            !g_config_params.is_primary && g_config_params.process_idx == 0) {
+        if ((g_config_params.is_primary && g_config_params.process_idx != 0) ||
+            (!g_config_params.is_primary && g_config_params.process_idx == 0)) {
             return -EINVAL;
         }
     }
