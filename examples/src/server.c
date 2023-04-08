@@ -13,7 +13,6 @@
 
 #include "server.h"
 
-
 static pthread_mutex_t server_debug_mutex;      // the server mutex for debug
 
 // server debug information print
@@ -142,6 +141,10 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
         struct sockaddr_in accept_addr;
         uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
         int32_t accept_fd;
+        if (strcmp(server_mud->domain, "udp") == 0) {
+            break;
+        }
+
         if (strcmp(server_mud->accept, "ac4") == 0) {
             accept_fd = accept4(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
         } else {
@@ -175,7 +178,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
 
         server_mud->workers = worker;
 
-        if (pthread_create(tid, NULL, sermud_worker_create_and_run, server_mud->workers) < 0) {
+        if (pthread_create(tid, NULL, sermud_worker_create_and_run, server_mud) < 0) {
             PRINT_ERROR("server can't create poisx thread %d! ", errno);
             return PROGRAM_FAULT;
         }
@@ -187,7 +190,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
 }
 
 // the worker thread, unblock, dissymmetric server processes the events
-int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit)
+int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char* domain)
 {
     int32_t epoll_nfds = epoll_wait(worker_unit->epfd, worker_unit->epevs, SERVER_EPOLL_SIZE_MAX, SERVER_EPOLL_WAIT_TIMEOUT);
     if (epoll_nfds < 0) {
@@ -206,7 +209,7 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit)
         if (curr_epev->events == EPOLLIN) {
             struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
-            int32_t server_ans_ret = server_ans(server_handler, worker_unit->pktlen, worker_unit->api);
+            int32_t server_ans_ret = server_ans(server_handler, worker_unit->pktlen, worker_unit->api, domain);
             if (server_ans_ret == PROGRAM_FAULT) {
                 struct epoll_event ep_ev;
                 if (epoll_ctl(worker_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev) < 0) {
@@ -263,13 +266,14 @@ void *sermud_worker_create_and_run(void *arg)
 {
     pthread_detach(pthread_self());
 
-    struct ServerMudWorker *worker_unit = (struct ServerMudWorker *)arg;
+    struct ServerMudWorker *worker_unit = ((struct ServerMud *)arg)->workers;
+    char* domain = ((struct ServerMud *)arg)->domain;
 
     if (sermud_worker_create_epfd_and_reg(worker_unit) < 0) {
        exit(PROGRAM_FAULT);
     }
     while (true) {
-        if (sermud_worker_proc_epevs(worker_unit) < 0) {
+        if (sermud_worker_proc_epevs(worker_unit, domain) < 0) {
             exit(PROGRAM_FAULT);
         }
     }
@@ -428,6 +432,10 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
         struct sockaddr_in accept_addr;
         uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
         int32_t accept_fd;
+        if (strcmp(server_unit->domain, "udp") == 0) {
+            break;
+        }
+
         if (strcmp(server_unit->accept, "ac4") == 0) {
             accept_fd = accept4(server_unit->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
         } else {
@@ -479,7 +487,7 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
         }
 
         if (curr_epev->events == EPOLLIN) {
-            if (curr_epev->data.ptr == (void *)&(server_unit->listener)) {
+            if (curr_epev->data.ptr == (void *)&(server_unit->listener) && strcmp(server_unit->domain, "udp") != 0) {
                 int32_t sersum_accept_connects_ret = sersum_accept_connects(server_unit, &(server_unit->listener));
                 if (sersum_accept_connects_ret < 0) {
                     PRINT_ERROR("server try accept error %d! ", sersum_accept_connects_ret);
@@ -490,12 +498,12 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                 struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
                 struct sockaddr_in connect_addr;
                 socklen_t connect_addr_len = sizeof(connect_addr);
-                if (getpeername(server_handler->fd, (struct sockaddr *)&connect_addr, &connect_addr_len) < 0) {
+                if (strcmp(server_unit->domain, "udp") != 0 && getpeername(server_handler->fd, (struct sockaddr *)&connect_addr, &connect_addr_len) < 0) {
                     PRINT_ERROR("server can't socket peername %d! ", errno);
                     return PROGRAM_FAULT;
                 }
 
-                int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen, server_unit->api);
+                int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen, server_unit->api, server_unit->domain);
                 if (server_ans_ret == PROGRAM_FAULT) {
                     --server_unit->curr_connect;
                     struct epoll_event ep_ev;

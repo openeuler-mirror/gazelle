@@ -142,7 +142,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud);
  * @param worker_unit       the server worker
  * @return                  the result pointer
  */
-int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit);
+int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char* domain);
 
 /**
  * @brief the listener thread, unblock, dissymmetric server processes the events

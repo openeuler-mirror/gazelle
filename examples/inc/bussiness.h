@@ -95,7 +95,7 @@ int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, 
  * @param api               the api
  * @return                  the result
  */
-int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api);
+int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api, const char* domain);
 
 /**
  * @brief client asks server

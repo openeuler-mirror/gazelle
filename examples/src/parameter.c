@@ -19,6 +19,7 @@ const char prog_short_opts[] = \
     "a:"        // as
     "i:"        // ip
     "p:"        // port
+    "s:"        // sport
     "m:"        // model
     "t:"        // thread number
     "c:"        // connect number
@@ -39,6 +40,7 @@ const struct ProgramOption prog_long_opts[] = \
     {PARAM_NAME_AS, REQUIRED_ARGUMETN, NULL, PARAM_NUM_AS},
     {PARAM_NAME_IP, REQUIRED_ARGUMETN, NULL, PARAM_NUM_IP},
     {PARAM_NAME_PORT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_PORT},
+    {PARAM_NAME_SPORT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_SPORT},
     {PARAM_NAME_MODEL, REQUIRED_ARGUMETN, NULL, PARAM_NUM_MODEL},
     {PARAM_NAME_THREAD_NUM, REQUIRED_ARGUMETN, NULL, PARAM_NUM_THREAD_NUM},
     {PARAM_NAME_CONNECT_NUM, REQUIRED_ARGUMETN, NULL, PARAM_NUM_CONNECT_NUM},
@@ -93,6 +95,19 @@ void program_param_parse_port(struct ProgramParams *params)
     }
 }
 
+// set `sport` parameter
+void program_param_parse_sport(struct ProgramParams *params)
+{
+    int32_t sport_arg = strtol(optarg, NULL, 0);
+    printf("%d\n", sport_arg);
+    if (CHECK_VAL_RANGE(sport_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
+        params->sport = (uint32_t)sport_arg;
+    } else {
+        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+}
+
 // set `model` parameter
 void program_param_parse_model(struct ProgramParams *params)
 {
@@ -131,7 +146,7 @@ void program_param_parse_threadnum(struct ProgramParams *params)
 // set `domain` parameter
 void program_param_parse_domain(struct ProgramParams *params)
 {
-    if (strcmp(optarg, "unix") == 0 || strcmp(optarg, "posix") == 0) {
+    if (strcmp(optarg, "unix") == 0 || strcmp(optarg, "tcp") == 0 || strcmp(optarg, "udp") == 0) {
         params->domain = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
@@ -143,7 +158,7 @@ void program_param_parse_domain(struct ProgramParams *params)
 void program_param_parse_api(struct ProgramParams *params)
 {
     printf("aaaaaa %s\n", optarg);
-    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "readvwritev") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0) {
+    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "readvwritev") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0 || strcmp(optarg, "recvfromsendto") == 0) {
         params->api = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
@@ -191,6 +206,7 @@ void program_params_init(struct ProgramParams *params)
     params->as = PARAM_DEFAULT_AS;
     params->ip = PARAM_DEFAULT_IP;
     params->port = PARAM_DEFAULT_PORT;
+    params->sport = PARAM_DEFAULT_SPORT;
     params->model = PARAM_DEFAULT_MODEL;
     params->thread_num = PARAM_DEFAULT_THREAD_NUM;
     params->connect_num = PARAM_DEFAULT_CONNECT_NUM;
@@ -213,18 +229,21 @@ void program_params_help(void)
     printf("    client: as client. \n");
     printf("-i, --ip [???.???.???.???]: set ip address. \n");
     printf("-p, --port [????]: set port number in range of %d - %d. \n", UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX);
+    printf("-s, --sport [????]: set sport number in range of %d - %d. \n", UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX);
     printf("-m, --model [mum | mud]: set the network model. \n");
     printf("    mum: multi thread, unblock, multiplexing IO network model. \n");
     printf("    mud: multi thread, unblock, dissymmetric network model. \n");
     printf("-t, --threadnum [???]: set thread number in range of %d - %d. \n", THREAD_NUM_MIN, THREAD_NUM_MAX);
     printf("-c, --connectnum [???]: set connection number of each thread. \n");
-    printf("-D, --domain [unix | posix]: set domain type is server or client. \n");
+    printf("-D, --domain [unix | tcp | udp]: set domain type is server or client. \n");
     printf("    unix: use unix's api. \n");
-    printf("    posix: use posix api. \n");
-    printf("-A, --api [readwrite | recvsend | recvsendmsg]: set api type is server or client. \n");
+    printf("    tcp: use tcp api. \n");
+    printf("    udp: use udp api. \n");
+    printf("-A, --api [readwrite | recvsend | recvsendmsg | recvfromsendto]: set api type is server or client. \n");
     printf("    readwrite: use `read` and `write`. \n");
     printf("    recvsend: use `recv and `send`. \n");
     printf("    recvsendmsg: use `recvmsg` and `sendmsg`. \n");
+    printf("    recvfromsendto: use `recvfrom` and `sendto`. \n");
     printf("-P, --pktlen [????]: set packet length in range of %d - %d. \n", MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX);
     printf("-v, --verify: set to verifying the message packet. \n");
     printf("-r, --ringpmd: set to use ringpmd. \n");
@@ -258,6 +277,9 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
                 break;
             case (PARAM_NUM_PORT):
                 program_param_parse_port(params);
+                break;
+	    case (PARAM_NUM_SPORT):
+                program_param_parse_sport(params);
                 break;
             case (PARAM_NUM_MODEL):
                 program_param_parse_model(params);
@@ -303,7 +325,7 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
         }
     }
 
-    if (strcmp(params->domain, "unix") == 0) {
+    if (strcmp(params->domain, "tcp") != 0) {
         params->thread_num = 1;
         params->connect_num = 1;
     }
@@ -319,6 +341,9 @@ void program_params_print(struct ProgramParams *params)
     printf("--> [as]:                       %s \n", params->as);
     printf("--> [server ip]:                %s \n", params->ip);
     printf("--> [server port]:              %u \n", params->port);
+    if (params->sport && strcmp(params->as, "client") == 0) {
+        printf("--> [client sport]:             %u \n", params->sport);
+    }
     if (strcmp(params->as, "server") == 0) {
         printf("--> [model]:                    %s \n", params->model);
     }
@@ -333,8 +358,10 @@ void program_params_print(struct ProgramParams *params)
         printf("--> [api]:                      read & write \n");
     } else if (strcmp(params->api, "recvsend") == 0) {
         printf("--> [api]:                      recv & send \n");
-    } else {
+    } else if (strcmp(params->api, "recvsendmsg") == 0) {
         printf("--> [api]:                      recvmsg & sendmsg \n");
+    } else {
+        printf("--> [api]:                      recvfrom & sendto \n");
     }
     printf("--> [packet length]:            %u \n", params->pktlen);
     printf("--> [verify]:                   %s \n", (params->verify == true) ? "on" : "off");

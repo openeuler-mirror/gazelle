@@ -17,14 +17,20 @@
 // create the socket and listen
 int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port, const char *domain)
 {
-    if (strcmp(domain, "posix") == 0) {
+    if (strcmp(domain, "tcp") == 0) {
         *socket_fd = socket(AF_INET, SOCK_STREAM, 0);
         if (*socket_fd < 0) {
             PRINT_ERROR("can't create socket %d! ", errno);
             return PROGRAM_FAULT;
         }
-    } else {
+    } else if (strcmp(domain, "unix") == 0) {
         *socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (*socket_fd < 0) {
+            PRINT_ERROR("can't create socket %d! ", errno);
+            return PROGRAM_FAULT;
+        }
+    } else if (strcmp(domain, "udp") == 0) {
+	*socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
         if (*socket_fd < 0) {
             PRINT_ERROR("can't create socket %d! ", errno);
             return PROGRAM_FAULT;
@@ -42,7 +48,7 @@ int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port
         return PROGRAM_FAULT;
     }
 
-    if (strcmp(domain, "posix") == 0) {
+    if (strcmp(domain, "tcp") == 0) {
         struct sockaddr_in socket_addr;
         memset_s(&socket_addr, sizeof(socket_addr), 0, sizeof(socket_addr));
         socket_addr.sin_family = AF_INET;
@@ -57,7 +63,7 @@ int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port
             PRINT_ERROR("server socket can't lisiten %d! ", errno);
             return PROGRAM_FAULT;
         }
-    } else {
+    } else if (strcmp(domain, "unix") == 0) {
         struct sockaddr_un socket_addr;
         unlink(SOCKET_UNIX_DOMAIN_FILE);
         socket_addr.sun_family = AF_UNIX;
@@ -71,16 +77,30 @@ int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port
             PRINT_ERROR("server socket can't lisiten %d! ", errno);
             return PROGRAM_FAULT;
         }
+    } else if (strcmp(domain, "udp") == 0) {
+	struct sockaddr_in socket_addr;
+        memset_s(&socket_addr, sizeof(socket_addr), 0, sizeof(socket_addr));
+        socket_addr.sin_family = AF_INET;
+        socket_addr.sin_addr.s_addr = ip;
+        socket_addr.sin_port = port;
+        if (bind(*socket_fd, (struct sockaddr *)&socket_addr, sizeof(struct sockaddr_in)) < 0) {
+            PRINT_ERROR("can't bind the address to socket %d! ", errno);
+            return PROGRAM_FAULT;
+        }
     }
     
     return PROGRAM_OK;
 }
 
 // create the socket and connect
-int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t port, const char *domain)
+int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t port, uint16_t sport, const char *domain)
 {
-    if (strcmp(domain, "posix") == 0) {
-        *socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (strcmp(domain, "tcp") == 0 || strcmp(domain, "udp") == 0) {
+	if (strcmp(domain, "tcp") == 0) {
+            *socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+	} else {
+            *socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+	}
         if (*socket_fd < 0) {
             PRINT_ERROR("client can't create socket %d! ", errno);
             return PROGRAM_FAULT;
@@ -94,6 +114,14 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
         struct sockaddr_in server_addr;
         memset_s(&server_addr, sizeof(server_addr), 0, sizeof(server_addr));
         server_addr.sin_family = AF_INET;
+        if (sport) {
+            server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+            server_addr.sin_port = sport;
+            if (bind(*socket_fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in)) < 0) {
+                PRINT_ERROR("can't bind the address to socket %d! ", errno);
+                return PROGRAM_FAULT;
+            }
+        }
         server_addr.sin_addr.s_addr = ip;
         server_addr.sin_port = port;
         if (connect(*socket_fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in)) < 0) {
@@ -104,7 +132,7 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
                 return PROGRAM_FAULT;
             }
         }
-    } else {
+    } else if (strcmp(domain, "unix") == 0) {
         *socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (*socket_fd < 0) {
             PRINT_ERROR("client can't create socket %d! ", errno);
@@ -123,6 +151,7 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
             }
         }
     }
+
     return PROGRAM_OK;
 }
 

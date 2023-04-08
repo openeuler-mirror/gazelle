@@ -21,6 +21,7 @@
 #define PARAM_DEFAULT_AS            ("server")              ///< default type
 #define PARAM_DEFAULT_IP            ("127.0.0.1")           ///< default IP
 #define PARAM_DEFAULT_PORT          (5050)                  ///< default port
+#define PARAM_DEFAULT_SPORT         (0)                     ///< default sport
 #define PARAM_DEFAULT_MODEL         ("mum")                 ///< default model type
 #define PARAM_DEFAULT_CONNECT_NUM   (10)                    ///< default connection number
 #define PARAM_DEFAULT_THREAD_NUM    (8)                     ///< default thread number
@@ -41,6 +42,8 @@ enum {
     PARAM_NUM_IP = 'i',
 #define PARAM_NAME_PORT             ("port")                ///< name of parameter port
     PARAM_NUM_PORT = 'p',
+#define PARAM_NAME_SPORT            ("sport")                ///< name of parameter sport
+    PARAM_NUM_SPORT = 's',
 #define PARAM_NAME_MODEL            ("model")               ///< name of parameter model type
     PARAM_NUM_MODEL = 'm',
 #define PARAM_NAME_CONNECT_NUM      ("connectnum")          ///< name of parameter connection number
@@ -91,6 +94,7 @@ struct ProgramParams {
     char*               as;                 ///< as server or client
     char*               ip;                 ///< IP address
     uint32_t            port;               ///< port
+    uint32_t            sport;               ///< sport
     char*               model;              ///< model type
     uint32_t            thread_num;         ///< the number of threads
     uint32_t            connect_num;        ///< the connection number

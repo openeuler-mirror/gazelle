@@ -85,9 +85,9 @@ void client_info_print(struct Client *client)
 }
 
 // the single thread, client try to connect to server, register to epoll
-int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port, const char *domain)
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port, uint16_t sport, const char *domain)
 {
-    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, port, domain);
+    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, port, sport, domain);
     if (create_socket_and_connect_ret == PROGRAM_INPROGRESS) {
         struct epoll_event ep_ev;
         ep_ev.events = EPOLLOUT;
@@ -103,7 +103,7 @@ int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t 
 // the single thread, client retry to connect to server, register to epoll
 int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler)
 {
-    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, client_unit->ip, client_unit->port, client_unit->domain);
+    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, client_unit->ip, client_unit->port, client_unit->sport, client_unit->domain);
     if (clithd_try_cnntask_ret < 0) {
         if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
             return PROGRAM_OK;
@@ -168,7 +168,7 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
     }
 
     for (uint32_t i = 0; i < connect_num; ++i) {
-        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->port, client_unit->domain);
+        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->port, client_unit->sport, client_unit->domain);
         if (clithd_try_cnntask_ret < 0) {
             if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
                 continue;
@@ -230,7 +230,7 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
     for (int32_t i = 0; i < epoll_nfds; ++i) {
         struct epoll_event *curr_epev = client_unit->epevs + i;
 
-        if (curr_epev->events == EPOLLERR) {
+        if (curr_epev->events == EPOLLERR && errno != 0) {
             PRINT_ERROR("client epoll wait error! %d", curr_epev->events);
             return PROGRAM_FAULT;
         } else if (curr_epev->events == EPOLLOUT) {
@@ -364,6 +364,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->send_bytes = 0;
         client_unit->ip = inet_addr(params->ip);
         client_unit->port = htons(params->port);
+        client_unit->sport = htons(params->sport);
         client_unit->connect_num = params->connect_num;
         client_unit->pktlen = params->pktlen;
         client_unit->verify = params->verify;
