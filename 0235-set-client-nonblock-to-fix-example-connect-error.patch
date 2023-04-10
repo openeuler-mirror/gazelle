@@ -1,0 +1,41 @@
+From 81de059e410f6d1fc38e7caa380b13a0ea1fc9f1 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Sat, 1 Apr 2023 17:30:07 +0800
+Subject: [PATCH] set client nonblock to fix example connect error
+
+---
+ examples/src/client.c    | 1 +
+ examples/src/utilities.c | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/examples/src/client.c b/examples/src/client.c
+index 46dd039..a3a3ad0 100644
+--- a/examples/src/client.c
++++ b/examples/src/client.c
+@@ -372,6 +372,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
+         client_unit->epollcreate = params->epollcreate;
+         client_unit->debug = params->debug;
+         client_unit->next = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
++        memset_s(client_unit->next, sizeof(struct ClientUnit), 0, sizeof(struct ClientUnit));
+ 
+         if (pthread_create((tids + i), NULL, client_s_create_and_run, client_unit) < 0) {
+             PRINT_ERROR("client can't create thread of poisx %d! ", errno);
+diff --git a/examples/src/utilities.c b/examples/src/utilities.c
+index 38a0d3e..877e611 100644
+--- a/examples/src/utilities.c
++++ b/examples/src/utilities.c
+@@ -86,6 +86,11 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
+             return PROGRAM_FAULT;
+         }
+ 
++        if (set_socket_unblock(*socket_fd) < 0) {
++            PRINT_ERROR("can't set the socket to unblock! ");
++            return PROGRAM_FAULT;
++        }
++
+         struct sockaddr_in server_addr;
+         memset_s(&server_addr, sizeof(server_addr), 0, sizeof(server_addr));
+         server_addr.sin_family = AF_INET;
+-- 
+2.23.0
+
