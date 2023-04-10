@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       61
+Release:       62
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -249,6 +249,12 @@ Patch9231:     0231-fix-config-flow-rule-race.patch
 Patch9232:     0232-update-lstack.Makefile.patch
 Patch9233:     0233-fix-gazellectl-x-error-when-multiplt-user-nic-config.patch
 Patch9234:     0234-fix-client-connect-number-unbalance-on-lstack.patch
+Patch9235:     0235-set-client-nonblock-to-fix-example-connect-error.patch
+Patch9236:     0236-kni-down-not-stop-nic.patch
+Patch9237:     0237-fix-rpc-msg-alloc-failed.patch
+Patch9238:     0238-add-parentheses-to-fix-build-error.patch
+Patch9239:     0239-add-udp-protocol-support-in-example.patch
+Patch9240:     0240-fix-bond_ports-parse-error.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -289,6 +295,14 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Mon Apr 10 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-62
+- fix bond_ports parse error fix socket_mem parse error when the value exceeds 65536 exit if create_rxtx_pktmbuf failed build.sh build failed return 1 clean code
+- add udp protocol support in example
+- add parentheses to fix build error
+- fix rpc msg alloc failed fix process_numa args error coredump fix sock->conn not free when fd is kernel mode
+- kni down not stop nic
+- set client nonblock to fix example connect error
+
 * Fri Mar 31 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-61
 - fix gazellectl -x error when multiplt user nic config
 - update lstack.Makefile
