@@ -492,7 +492,8 @@ static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach
         return -1;
     }
 
-    int32_t count = separate_str_to_array(socket_mem, sec_attach_arg->socket_per_size, GAZELLE_MAX_NUMA_NODES, GAZELLE_MAX_PORTS_VALUE);
+    int32_t count = separate_str_to_array(socket_mem, sec_attach_arg->socket_per_size,
+                                          GAZELLE_MAX_NUMA_NODES, INT32_MAX);
 
     if (count < 0) {
         return -1;

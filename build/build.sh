@@ -14,6 +14,10 @@ cd $CURRENT_PATH
 
 make -C ../src/lstack clean
 make -C ../src/lstack
+if [ $? -ne 0 ]; then
+    echo "build lstack failed"
+    exit 1
+fi
 
 cd ../src/ltran
 rm -f CMakeCache.txt
@@ -21,5 +25,9 @@ rm -f ltran gazellectl
 rm -rf CMakeFiles
 cmake .
 make
+if [ $? -ne 0 ]; then
+    echo "build ltran failed"
+    exit 1
+fi
 
 cd -

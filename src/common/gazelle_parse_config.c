@@ -55,7 +55,12 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size, i
             return -1;
         }
         errno = 0;
-        idx = strtol(args, &end, 10); /* 10: decimal */
+        /* prefix 0x,0X indicate hexdecimal */
+        if (strncmp(args, "0x", 2) == 0 || strncmp(args, "0X", 2) == 0) {
+            idx = strtol(args, &end, 16); /* 16: hexdecimal */
+        } else {
+            idx = strtol(args, &end, 10); /* 10: decimal */
+        }
         if (errno || end == NULL) {
             return -1;
         }
@@ -107,18 +112,18 @@ int32_t check_and_set_run_dir(void)
 int32_t filename_check(const char* args)
 {
     if (args == NULL) {
-	return 1;
+        return 1;
     }
 
     if (strlen(args) <= 0 || strlen(args) > GAZELLE_SOCK_FILENAME_MAXLEN - 1) {
-	COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename exceeds the limit %d.\n", args, GAZELLE_SOCK_FILENAME_MAXLEN);
-	return 1;
+        COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename exceeds the limit %d.\n", args, GAZELLE_SOCK_FILENAME_MAXLEN);
+        return 1;
     }
 
     char* sensitive_chars = strpbrk(args, "|;&$><`\\!\n");
     if (sensitive_chars != NULL) {
-	COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename contains sensitive characters.\n", args);
-	return 1;
+        COMMON_ERR("socket_filename_check: invalid unix sock name %s, filename contains sensitive characters.\n", args);
+        return 1;
     }
 
     return 0;

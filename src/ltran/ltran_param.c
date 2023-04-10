@@ -339,7 +339,8 @@ static int32_t parse_bond_ports(const config_t *config, const char *key, struct 
         return GAZELLE_ERR;
     }
 
-    ltran_config->bond.port_num = separate_str_to_array(port_str, ltran_config->bond.portmask, GAZELLE_MAX_BOND_NUM, GAZELLE_MAX_PORTS_VALUE);
+    ltran_config->bond.port_num = separate_str_to_array(port_str, ltran_config->bond.portmask,
+                                                        GAZELLE_MAX_BOND_NUM, UINT16_MAX);
 
     if (ltran_config->bond.port_num > GAZELLE_MAX_BOND_NUM) {
         free(port_str);
@@ -547,67 +548,67 @@ static int32_t parse_unix_prefix(const config_t *config, const char *key, struct
     int32_t ret = 0;
 
     ret = memset_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
-		   0, sizeof(ltran_config->unix_socket_filename));
+        0, sizeof(ltran_config->unix_socket_filename));
     if (ret != EOK) {
-	gazelle_set_errno(GAZELLE_EINETATON);
-	return GAZELLE_ERR;
+        gazelle_set_errno(GAZELLE_EINETATON);
+        return GAZELLE_ERR;
     }
 
     ret = memset_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
-		   0, sizeof(ltran_config->dfx_socket_filename));
+        0, sizeof(ltran_config->dfx_socket_filename));
     if (ret != EOK) {
-	gazelle_set_errno(GAZELLE_EINETATON);
-	return GAZELLE_ERR;
+        gazelle_set_errno(GAZELLE_EINETATON);
+        return GAZELLE_ERR;
     }
 
     ret = strncpy_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
-		    GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+        GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
     if (ret != EOK) {
-	gazelle_set_errno(GAZELLE_EINETATON);
-	return GAZELLE_ERR;
+        gazelle_set_errno(GAZELLE_EINETATON);
+        return GAZELLE_ERR;
     }
 
     ret = strncpy_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
-		    GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+        GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
     if (ret != EOK) {
-	gazelle_set_errno(GAZELLE_EINETATON);
-	return GAZELLE_ERR;
+        gazelle_set_errno(GAZELLE_EINETATON);
+        return GAZELLE_ERR;
     }
 
     ret = config_lookup_string(config, key, &prefix);
     if (ret) {
         if (filename_check(prefix)) {
-	    gazelle_set_errno(GAZELLE_EINETATON);
-	    return GAZELLE_ERR;
-	}
+            gazelle_set_errno(GAZELLE_EINETATON);
+            return GAZELLE_ERR;
+        }
 
-	ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
-			prefix, strlen(prefix) + 1);
-	if (ret != EOK) {
-	    gazelle_set_errno(GAZELLE_EINETATON);
-	    return GAZELLE_ERR;
-	}
+        ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
+            prefix, strlen(prefix) + 1);
+        if (ret != EOK) {
+            gazelle_set_errno(GAZELLE_EINETATON);
+            return GAZELLE_ERR;
+        }
 
-	ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
-			prefix, strlen(prefix) + 1);
-	if (ret != EOK) {
-	    gazelle_set_errno(GAZELLE_EINETATON);
-	    return GAZELLE_ERR;
-	}
+        ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
+            prefix, strlen(prefix) + 1);
+        if (ret != EOK) {
+            gazelle_set_errno(GAZELLE_EINETATON);
+            return GAZELLE_ERR;
+        }
     }
 
     ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
-		    GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+        GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
     if (ret != EOK) {
-	gazelle_set_errno(GAZELLE_EINETATON);
-	return GAZELLE_ERR;
+        gazelle_set_errno(GAZELLE_EINETATON);
+        return GAZELLE_ERR;
     }
 
     ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
-		    GAZELLE_DFX_SOCK_FILENAME, strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
+        GAZELLE_DFX_SOCK_FILENAME, strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
     if (ret != EOK) {
-	gazelle_set_errno(GAZELLE_EINETATON);
-	return GAZELLE_ERR;
+        gazelle_set_errno(GAZELLE_EINETATON);
+        return GAZELLE_ERR;
     }
 
     return GAZELLE_OK;

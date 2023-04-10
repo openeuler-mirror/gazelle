@@ -205,7 +205,7 @@ static int get_addr(struct sockaddr_in *sin, char *interface)
     }
     posix_api->close_fn(sockfd);
 
-    memcpy(sin, &ifr.ifr_addr, sizeof(struct sockaddr_in));
+    memcpy_s(sin, sizeof(struct sockaddr_in), &ifr.ifr_addr, sizeof(struct sockaddr_in));
 
     return 0;
 }
@@ -250,8 +250,8 @@ bool is_dst_ip_localhost(const struct sockaddr *addr)
                 ++p;
         int n = strcspn(p, ": \t");
 
-        char interface[20] = {0};
-        strncpy(interface, p, n);
+        char interface[20] = {0}; /* 20: nic name len */
+        strncpy_s(interface, sizeof(interface), p, n);
 
         memset_s(sin, sizeof(struct sockaddr_in), 0, sizeof(struct sockaddr_in));
         int ret = get_addr(sin, interface);
@@ -289,7 +289,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     int32_t ret = 0;
     char listen_ring_name[RING_NAME_LEN];
     int remote_port = htons(((struct sockaddr_in *)name)->sin_port);
-    snprintf_s(listen_ring_name, sizeof(listen_ring_name), sizeof(listen_ring_name) - 1, "listen_rx_ring_%u", remote_port);
+    snprintf_s(listen_ring_name, sizeof(listen_ring_name), sizeof(listen_ring_name) - 1, "listen_rx_ring_%d", remote_port);
     if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
 	SET_CONN_TYPE_HOST(sock->conn);

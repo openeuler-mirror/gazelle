@@ -1392,7 +1392,7 @@ err_t netif_loop_output(struct netif *netif, struct pbuf *p)
     return ERR_MEM;
   }
   head->ol_flags = p->ol_flags;
-  memcpy(head->payload, p->payload, p->len);
+  memcpy_s(head->payload, head->len, p->payload, p->len);
 
   if ((flags & TCP_SYN) && !(flags & TCP_ACK)) {
     /* SYN packet, send to listen_ring */
@@ -1461,7 +1461,7 @@ err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
 err_t same_node_memzone_create(const struct rte_memzone **zone, int size, int port, char *name, char *rx)
 {
     char mem_name[RING_NAME_LEN] = {0};
-    snprintf_s(mem_name, sizeof(mem_name), sizeof(mem_name) - 1, "%s_%s_%u", name, rx, port);
+    snprintf_s(mem_name, sizeof(mem_name), sizeof(mem_name) - 1, "%s_%s_%d", name, rx, port);
 
     *zone = rte_memzone_reserve_aligned(mem_name, size, rte_socket_id(), 0, RTE_CACHE_LINE_SIZE);
     if (*zone == NULL) {
@@ -1484,7 +1484,7 @@ err_t same_node_ring_create(struct rte_ring **ring, int size, int port, char *na
         flags = RING_F_SP_ENQ | RING_F_SC_DEQ;
     }
 
-    snprintf_s(ring_name, sizeof(ring_name), sizeof(ring_name) - 1, "%s_%s_ring_%u", name, rx, port);
+    snprintf_s(ring_name, sizeof(ring_name), sizeof(ring_name) - 1, "%s_%s_ring_%d", name, rx, port);
     *ring = rte_ring_create(ring_name, size, rte_socket_id(), flags);
     if (*ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create rte_ring %s, errno is %d\n", ring_name, rte_errno);

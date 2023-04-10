@@ -209,17 +209,17 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
     }
 
     ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
-		    strlen(GAZELLE_RUN_DIR) + 1);
+                    strlen(GAZELLE_RUN_DIR) + 1);
     if (ret != EOK) {
-	printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
     }
 
     if (g_unix_prefix) {
-	ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), g_unix_prefix,
-			strlen(g_unix_prefix) + 1);
-	if (ret != EOK) {
-	    printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
-	}
+        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), g_unix_prefix,
+                        strlen(g_unix_prefix) + 1);
+        if (ret != EOK) {
+            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        }
     }
 
     addr.sun_family = AF_UNIX;

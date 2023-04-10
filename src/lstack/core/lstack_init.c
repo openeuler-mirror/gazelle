@@ -240,7 +240,8 @@ static void gazelle_signal_init(void)
     lstack_signal_init();
 }
 
-static void set_kni_ip_mac() {
+static void set_kni_ip_mac()
+{
     struct cfg_params *cfg = get_global_cfg_params();
 
     int32_t fd = posix_api->socket_fn(AF_INET, SOCK_DGRAM, IPPROTO_IP);
