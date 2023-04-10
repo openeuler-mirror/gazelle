@@ -1,0 +1,79 @@
+From 9ae296b6fbda03781799251ba8801e166cded656 Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Thu, 6 Apr 2023 19:42:59 +0800
+Subject: [PATCH] fix rpc msg alloc failed fix process_numa args error coredump
+ fix sock->conn not free when fd is kernel mode
+
+---
+ src/lstack/api/lstack_wrap.c            | 9 ++++++++-
+ src/lstack/core/lstack_cfg.c            | 4 ++--
+ src/lstack/core/lstack_protocol_stack.c | 4 ++++
+ src/lstack/include/lstack_thread_rpc.h  | 2 +-
+ 4 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index b8a6590..90b2252 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -528,7 +528,14 @@ static inline int32_t do_close(int32_t s)
+ {
+     struct lwip_sock *sock = NULL;
+     if (select_path(s, &sock) == PATH_KERNEL) {
+-        return posix_api->close_fn(s);
++        /* we called lwip_socket, even if kernel fd */
++        if (posix_api != NULL && !posix_api->ues_posix &&
++            /* contain posix_api->close_fn if success */
++            stack_broadcast_close(s) == 0) {
++            return 0;
++        } else {
++            return posix_api->close_fn(s);
++        }
+     }
+     if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
+         return lstack_epoll_close(s);
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 8558121..9430dd7 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -998,8 +998,8 @@ static int32_t parse_process_numa(void)
+         return 0;
+ 
+     args = config_setting_get_string(cfg_args);
+-    if (cfg_args == NULL) {
+-        return 0;
++    if (args == NULL) {
++        return -EINVAL;
+     }
+ 
+     ret = separate_str_to_array((char *)args, g_config_params.process_numa, PROTOCOL_STACK_MAX, GAZELLE_MAX_NUMA_NODES);
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index a858b37..061582f 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -819,6 +819,10 @@ int32_t stack_broadcast_close(int32_t fd)
+     struct lwip_sock *sock = get_socket(fd);
+     int32_t ret = 0;
+ 
++    if (sock == NULL) {
++        return -1;
++    }
++
+     do {
+         sock = sock->listen_next;
+         if (rpc_call_close(fd)) {
+diff --git a/src/lstack/include/lstack_thread_rpc.h b/src/lstack/include/lstack_thread_rpc.h
+index ed111fb..657ffa9 100644
+--- a/src/lstack/include/lstack_thread_rpc.h
++++ b/src/lstack/include/lstack_thread_rpc.h
+@@ -25,7 +25,7 @@
+ #define MSG_ARG_4                      (4)
+ #define RPM_MSG_ARG_SIZE               (5)
+ 
+-#define RPC_MSG_MAX            512
++#define RPC_MSG_MAX            2048
+ #define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
+ 
+ struct rpc_msg;
+-- 
+2.23.0
+
