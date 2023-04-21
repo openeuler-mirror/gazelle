@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       53
+Release:       54
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -229,6 +229,8 @@ Patch9211:     0211-refactor-mbuf-private-data.patch
 Patch9212:     0212-fix-kernel-scoket-select-path-error.patch
 Patch9213:     0213-discard-wakeup_num-parameter.patch
 Patch9214:     0214-fix-parse-args-error.patch
+Patch9215:     0215-gazelle-send-recv-thread-bind-numa.patch
+Patch9216:     0216-waiting-when-primary-process-not-start-already.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -269,6 +271,10 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Thu Apr 20 UTC wu-changsheng <wuchangsheng2@huawei.com> - 1.0.1-54
+- waiting when primary process not start already
+- gazelle send/recv thread bind numa
+
 * Tue Mar 21 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-53
 - fix parse args error
 - discard wakeup_num parameter
