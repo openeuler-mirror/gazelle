@@ -211,7 +211,7 @@ chmod +x *.sh
 
 服务端开启STEAL优化
 
-1. 在/etc/grub2-grub2-efi.cfg文件中，"BEGIN /etc/grub.d/10_linux"模块，系统启动项添加参数sched_steal_node_limit=4，reboot重启生效
+1. 在/etc/grub2-efi.cfg文件中，"BEGIN /etc/grub.d/10_linux"模块，系统启动项添加参数sched_steal_node_limit=4，reboot重启生效
 
 <img src="test/STEAL.png" alt=下载  style="zoom:60%">
 
