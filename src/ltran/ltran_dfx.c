@@ -289,6 +289,7 @@ static int32_t dfx_stat_read_from_ltran(char *buf, uint32_t len, enum GAZELLE_ST
     dfx = find_dfx_node(mode);
     if (dfx == NULL) {
         close(fd);
+        g_unix_fd = -1;
         return GAZELLE_ERR;
     }
 
@@ -297,6 +298,7 @@ static int32_t dfx_stat_read_from_ltran(char *buf, uint32_t len, enum GAZELLE_ST
         if (ret == -1) {
             printf("read stat response msg failed ret=%d\n", ret);
             close(fd);
+            g_unix_fd = -1;
             return GAZELLE_ERR;
         }
     }
@@ -1368,16 +1370,16 @@ int32_t main(int32_t argc, char *argv[])
 
     int unix_arg = 0;
     for (int32_t i = 1; i < argc; i++) {
-	if (unix_arg == 0) {
-	    if (!strcmp(argv[i], "-u")) {
-		unix_arg++;
-	    }
-	} else if (unix_arg == 1) {
-	    g_unix_prefix = argv[i];
-	    unix_arg++;
-	} else {
-	    argv[i - unix_arg] = argv[i];
-	}
+        if (unix_arg == 0) {
+            if (!strcmp(argv[i], "-u")) {
+                unix_arg++;
+            }
+        } else if (unix_arg == 1) {
+            g_unix_prefix = argv[i];
+            unix_arg++;
+        } else {
+            argv[i - unix_arg] = argv[i];
+        }
     }
 
     argv[argc - unix_arg] = argv[argc];
