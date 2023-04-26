@@ -206,12 +206,14 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
     ret = memset_s(&addr, sizeof(addr), 0, sizeof(struct sockaddr_un));
     if (ret != EOK) {
         printf("%s:%d memset_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        goto END;
     }
 
     ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
                     strlen(GAZELLE_RUN_DIR) + 1);
     if (ret != EOK) {
         printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        goto END;
     }
 
     if (g_unix_prefix) {
@@ -219,6 +221,7 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
                         strlen(g_unix_prefix) + 1);
         if (ret != EOK) {
             printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            goto END;
         }
     }
 
@@ -234,6 +237,7 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
             strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
         if (ret != EOK) {
             printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            goto END;
         }
     }
 
@@ -243,11 +247,13 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
             printf("connect ltran failed. errno: %d ret=%d\n", errno, ret);
             printf("You may need to use the -u parameter to specify the UNIX_PREFIX that matches the configuration.\n");
         }
-        close(fd);
-        return GAZELLE_ERR;
+        goto END;
     }
 
     return fd;
+END:
+    close(fd);
+    return GAZELLE_ERR;
 }
 
 static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
