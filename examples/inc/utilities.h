@@ -117,18 +117,20 @@
  * @param domain        domain
  * @return              the result
  */
-int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, uint16_t port, const char *domain);
+int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, const char *domain);
 
 /**
  * @brief create the socket and connect
  * Thi function creates the socket and connect.
  * @param socket_fd     the socket file descriptor
  * @param ip            ip address
+ * @param groupip       group ip address
  * @param port          port number
  * @param domain        domain
+ * @param api           api
  * @return              the result
  */
-int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t port, uint16_t sport, const char *domain);
+int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t port, uint16_t sport, const char *domain, const char *api);
 
 /**
  * @brief set the socket to unblock

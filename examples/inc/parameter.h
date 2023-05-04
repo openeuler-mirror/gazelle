@@ -23,9 +23,9 @@
 #define PARAM_DEFAULT_PORT          (5050)                  ///< default port
 #define PARAM_DEFAULT_SPORT         (0)                     ///< default sport
 #define PARAM_DEFAULT_MODEL         ("mum")                 ///< default model type
-#define PARAM_DEFAULT_CONNECT_NUM   (10)                    ///< default connection number
-#define PARAM_DEFAULT_THREAD_NUM    (8)                     ///< default thread number
-#define PARAM_DEFAULT_DOMAIN        ("posix")               ///< default communication domain
+#define PARAM_DEFAULT_CONNECT_NUM   (1)                     ///< default connection number
+#define PARAM_DEFAULT_THREAD_NUM    (1)                     ///< default thread number
+#define PARAM_DEFAULT_DOMAIN        ("tcp")                 ///< default communication domain
 #define PARAM_DEFAULT_API           ("readwrite")           ///< default API type
 #define PARAM_DEFAULT_PKTLEN        (1024)                  ///< default packet length of message
 #define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
@@ -33,6 +33,7 @@
 #define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
 #define PARAM_DEFAULT_EPOLLCREATE   ("ec")                  ///< default method of epoll_create
 #define PARAM_DEFAULT_ACCEPT        ("ac")                  ///< default method of accept method
+#define PARAM_DEFAULT_GROUPIP       ("0.0.0.0")             ///< default group IP>
 
 
 enum {
@@ -68,6 +69,8 @@ enum {
     PARAM_NUM_EPOLLCREATE = 'E',
 #define PARAM_NAME_ACCEPT           ("accept")              ///< name of parameter accept
     PARAM_NUM_ACCEPT = 'C',
+#define PARAM_NAME_GROUPIP          ("groupip")             ///< name of parameter group ip
+    PARAM_NUM_GROUPIP = 'g',
 };
 
 #define NO_ARGUMENT             0                           ///< options takes no arguments
@@ -106,6 +109,7 @@ struct ProgramParams {
     char*               epollcreate;        ///< epoll_create method
     char*               accept;             ///< accept connections method
     bool                ringpmd;            ///< if we use ring PMD or not
+    char*               groupip;            ///< group IP address>
 };
 
 /**

@@ -32,6 +32,7 @@ const char prog_short_opts[] = \
     "h"         // help
     "E"         // epollcreate
     "C"         // accept
+    "g:"        // group address
     ;
 
 // program long options
@@ -53,6 +54,7 @@ const struct ProgramOption prog_long_opts[] = \
     {PARAM_NAME_HELP, NO_ARGUMENT, NULL, PARAM_NUM_HELP},
     {PARAM_NAME_EPOLLCREATE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_EPOLLCREATE},
     {PARAM_NAME_ACCEPT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_ACCEPT},
+    {PARAM_NAME_GROUPIP, REQUIRED_ARGUMETN, NULL, PARAM_NUM_GROUPIP},
 };
 
 
@@ -158,7 +160,7 @@ void program_param_parse_domain(struct ProgramParams *params)
 void program_param_parse_api(struct ProgramParams *params)
 {
     printf("aaaaaa %s\n", optarg);
-    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "readvwritev") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0 || strcmp(optarg, "recvfromsendto") == 0) {
+    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "readvwritev") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0 || strcmp(optarg, "recvfromsendto") == 0 || strcmp(optarg, "recvfrom") == 0) {
         params->api = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
@@ -200,6 +202,17 @@ void program_param_parse_accept(struct ProgramParams *params)
     }
 }
 
+// set `group ip` parameter
+void program_param_parse_groupip(struct ProgramParams *params)
+{
+    if (inet_addr(optarg) != INADDR_NONE) {
+        params->groupip = optarg;
+    } else {
+        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+}
+
 // initialize the parameters
 void program_params_init(struct ProgramParams *params)
 {
@@ -218,6 +231,7 @@ void program_params_init(struct ProgramParams *params)
     params->debug = PARAM_DEFAULT_DEBUG;
     params->epollcreate = PARAM_DEFAULT_EPOLLCREATE;
     params->accept = PARAM_DEFAULT_ACCEPT;
+    params->groupip = PARAM_DEFAULT_GROUPIP;
 }
 
 // print program helps
@@ -239,11 +253,12 @@ void program_params_help(void)
     printf("    unix: use unix's api. \n");
     printf("    tcp: use tcp api. \n");
     printf("    udp: use udp api. \n");
-    printf("-A, --api [readwrite | recvsend | recvsendmsg | recvfromsendto]: set api type is server or client. \n");
+    printf("-A, --api [readwrite | recvsend | recvsendmsg | recvfromsendto | recvfrom]: set api type is server or client. \n");
     printf("    readwrite: use `read` and `write`. \n");
     printf("    recvsend: use `recv and `send`. \n");
     printf("    recvsendmsg: use `recvmsg` and `sendmsg`. \n");
     printf("    recvfromsendto: use `recvfrom` and `sendto`. \n");
+    printf("    recvfrom: just use `recvfrom`, used by the server to receive group messages. \n");
     printf("-P, --pktlen [????]: set packet length in range of %d - %d. \n", MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX);
     printf("-v, --verify: set to verifying the message packet. \n");
     printf("-r, --ringpmd: set to use ringpmd. \n");
@@ -314,6 +329,9 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
             case (PARAM_NUM_ACCEPT):
                 program_param_parse_accept(params);
                 break;
+	    case (PARAM_NUM_GROUPIP):
+	        program_param_parse_groupip(params);
+		break;
             case (PARAM_NUM_HELP):
                 program_params_help();
                 return PROGRAM_ABORT;
@@ -360,8 +378,10 @@ void program_params_print(struct ProgramParams *params)
         printf("--> [api]:                      recv & send \n");
     } else if (strcmp(params->api, "recvsendmsg") == 0) {
         printf("--> [api]:                      recvmsg & sendmsg \n");
-    } else {
+    } else if (strcmp(params->api, "recvfromsendto") == 0) {
         printf("--> [api]:                      recvfrom & sendto \n");
+    } else {
+        printf("--> [api]:                      recvfrom \n");
     }
     printf("--> [packet length]:            %u \n", params->pktlen);
     printf("--> [verify]:                   %s \n", (params->verify == true) ? "on" : "off");

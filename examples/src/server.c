@@ -289,7 +289,7 @@ void *sermud_listener_create_and_run(void *arg)
 {
     struct ServerMud *server_mud = (struct ServerMud *)arg;
 
-    if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->port, server_mud->domain) < 0) {
+    if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->groupip, server_mud->port, server_mud->domain) < 0) {
         exit(PROGRAM_FAULT);
     }
     if (sermud_listener_create_epfd_and_reg(server_mud) < 0) {
@@ -324,6 +324,7 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
     server_mud->curr_connect = 0;
     server_mud->ip = inet_addr(params->ip);
+    server_mud->groupip = inet_addr(params->groupip);
     server_mud->port = htons(params->port);
     server_mud->pktlen = params->pktlen;
     server_mud->domain = params->domain;
@@ -534,7 +535,7 @@ void *sersum_create_and_run(void *arg)
 {
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)arg;
 
-    if (create_socket_and_listen(&(server_unit->listener.fd), server_unit->ip, server_unit->port, server_unit->domain) < 0) {
+    if (create_socket_and_listen(&(server_unit->listener.fd), server_unit->ip, server_unit->groupip, server_unit->port, server_unit->domain) < 0) {
         exit(PROGRAM_FAULT);
     }
     if (sersum_create_epfd_and_reg(server_unit) < 0) {
@@ -575,6 +576,7 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->curr_connect = 0;
         server_unit->recv_bytes = 0;
         server_unit->ip = inet_addr(params->ip);
+	server_unit->groupip = inet_addr(params->groupip);
         server_unit->port = htons(params->port);
         server_unit->pktlen = params->pktlen;
         server_unit->domain = params->domain;
