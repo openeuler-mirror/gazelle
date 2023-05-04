@@ -147,14 +147,14 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
     struct sockaddr_in client_addr;
     socklen_t len = sizeof(client_addr);
 
-    if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") != 0) {
+    if (strcmp(domain, "udp") == 0 && strncmp(api, "recvfrom", strlen("recvfrom")) != 0) {
         if (getpeername(server_handler->fd, (struct sockaddr *)&client_addr, &len) < 0) {
             if (recvfrom(server_handler->fd, buffer_in, length, MSG_PEEK, (struct sockaddr *)&client_addr, &len) < 0) {
                 return PROGRAM_FAULT;
-	    }
+            }
             if (connect(server_handler->fd, (struct sockaddr *)&client_addr, sizeof(struct sockaddr_in)) < 0) {
                 return PROGRAM_FAULT;
-	    }
+            }
         }
     }
 
@@ -177,6 +177,10 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
         }
     }
 
+    if (strcmp(api, "recvfrom") == 0) {
+        return PROGRAM_OK;
+    }
+
     server_bussiness(buffer_out, buffer_in, length);
 
     int32_t cwrite = 0;
@@ -187,7 +191,7 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
             nwrite = sendto(server_handler->fd, buffer_out, length, 0, (struct sockaddr *)&client_addr, len);
         } else {
             nwrite = write_api(server_handler->fd, buffer_out, length, api);
-	}
+        }
 
         if (nwrite == 0) {
             return PROGRAM_ABORT;
@@ -208,18 +212,29 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
 }
 
 // client asks
-int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api)
+int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api, const char* domain, in_addr_t ip, uint16_t port)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
     char *buffer_out = (char *)malloc(length * sizeof(char));
+    struct sockaddr_in server_addr;
+    socklen_t len = sizeof(server_addr);
+    memset_s(&server_addr, sizeof(server_addr), 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = ip;
+    server_addr.sin_port = port;
 
     client_bussiness(buffer_out, buffer_in, length, false, &(client_handler->msg_idx));
 
     int32_t cwrite = 0;
     int32_t swrite = length;
+    int32_t nwrite = 0;
     while (cwrite < swrite) {
-        int32_t nwrite = write_api(client_handler->fd, buffer_out, length, api);
+        if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
+            nwrite = sendto(client_handler->fd, buffer_out, length, 0, (struct sockaddr *)&server_addr, len);
+        } else {
+            nwrite = write_api(client_handler->fd, buffer_out, length, api);
+        }
         if (nwrite == 0) {
             return PROGRAM_ABORT;
         } else if (nwrite < 0) {
@@ -239,7 +254,7 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const 
 }
 
 // client checks
-int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api)
+int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api, const char* domain, in_addr_t ip)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
@@ -247,8 +262,16 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
 
     int32_t cread = 0;
     int32_t sread = length;
+    int32_t nread = 0;
+    struct sockaddr_in server_addr;
+    socklen_t len = sizeof(server_addr);
+
     while (cread < sread) {
-        int32_t nread = read_api(client_handler->fd, buffer_in, length, api);
+        if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
+            nread = recvfrom(client_handler->fd, buffer_in, length, 0, (struct sockaddr *)&server_addr, &len);
+        } else {
+            nread = read_api(client_handler->fd, buffer_in, length, api);
+        }
         if (nread == 0) {
             return PROGRAM_ABORT;
         } else if (nread < 0) {
@@ -268,8 +291,17 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
 
     int32_t cwrite = 0;
     int32_t swrite = length;
+    int32_t nwrite = 0;
+    if (ip >= inet_addr("224.0.0.0") && ip <= inet_addr("239.255.255.255")) {
+        server_addr.sin_addr.s_addr = ip;
+    }
+
     while (cwrite < swrite) {
-        int32_t nwrite = write_api(client_handler->fd, buffer_out, length, api);
+        if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
+            nwrite = sendto(client_handler->fd, buffer_out, length, 0, (struct sockaddr *)&server_addr, len);
+        } else {
+            nwrite = write_api(client_handler->fd, buffer_out, length, api);
+        }
         if (nwrite == 0) {
             return PROGRAM_ABORT;
         } else if (nwrite < 0) {

@@ -32,6 +32,7 @@ struct ServerMumUnit
     uint32_t curr_connect;                  ///< current connection number
     uint64_t recv_bytes;                    ///< total receive bytes
     in_addr_t ip;                           ///< server ip
+    in_addr_t groupip;                      ///< server group ip
     uint16_t port;                          ///< server port
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
@@ -83,6 +84,7 @@ struct ServerMud
     struct epoll_event *epevs;              ///< the epoll events
     uint32_t curr_connect;                  ///< current connection number
     in_addr_t ip;                           ///< server ip
+    in_addr_t groupip;                      ///< server group ip
     uint16_t port;                          ///< server port
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
