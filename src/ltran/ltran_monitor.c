@@ -31,8 +31,8 @@
 #include "ltran_instance.h"
 #include "gazelle_dfx_msg.h"
 #include "gazelle_base_func.h"
-#include "ltran_monitor.h"
 #include "ltran_param.h"
+#include "ltran_monitor.h"
 
 #define GAZELLE_LISTEN_BACKLOG          5
 

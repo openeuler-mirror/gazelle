@@ -38,12 +38,12 @@
 
 #include "lstack_log.h"
 #include "dpdk_common.h"
-#include "lstack_dpdk.h"
 #include "lstack_lockless_queue.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_lwip.h"
 #include "lstack_cfg.h"
+#include "lstack_dpdk.h"
 
 struct eth_params {
     uint16_t port_id;
@@ -116,7 +116,7 @@ int32_t dpdk_eal_init(void)
             ret = 0;
         } else {
             LSTACK_PRE_LOG(LSTACK_ERR, "rte_eal_init failed init, rte_errno %d\n", rte_errno);
-	    return ret;
+        return ret;
         }
     } else {
         LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
@@ -155,7 +155,8 @@ struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
     return pool;
 }
 
-static struct rte_mempool* get_pktmbuf_mempool(const char *name, uint16_t queue_id){
+static struct rte_mempool* get_pktmbuf_mempool(const char *name, uint16_t queue_id)
+{
     int32_t ret;
     char pool_name[PATH_MAX];
     struct rte_mempool *pool;
@@ -169,9 +170,7 @@ static struct rte_mempool* get_pktmbuf_mempool(const char *name, uint16_t queue_
         LSTACK_LOG(ERR, LSTACK, "look up %s pool rte_err=%d\n", pool_name, rte_errno);
     }
 
-    // rte_mempool_dump(stdout, pool) ;
     return pool;
-
 }
 
 static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_id)
@@ -220,7 +219,8 @@ struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, i
     char ring_name[RTE_RING_NAMESIZE] = {0};
     struct rte_ring *ring;
 
-    int32_t ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1, "%s_%d_%d", name, get_global_cfg_params()->process_idx,  queue_id);
+    int32_t ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1,
+        "%s_%d_%d", name, get_global_cfg_params()->process_idx,  queue_id);
     if (ret < 0) {
         return NULL;
     }
@@ -521,10 +521,10 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t i
     struct rte_mempool *rxtx_pktmbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx];
     
     uint16_t socket_id = 0;
-    struct cfg_params * cfg = get_global_cfg_params();
+    struct cfg_params *cfg = get_global_cfg_params();
     if (!cfg->use_ltran && cfg->num_process == 1) {
         socket_id = numa_node_of_cpu(cfg->cpus[idx]);
-    }else {
+    } else {
         socket_id = cfg->process_numa[idx];
     }
     ret = rte_eth_rx_queue_setup(eth_params->port_id, idx, eth_params->nb_rx_desc, socket_id,
@@ -568,8 +568,6 @@ int32_t dpdk_ethdev_start(void)
 int32_t dpdk_init_lstack_kni(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-
-
     stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, 0, 0);
     if (stack_group->kni_pktmbuf_pool == NULL) {
         return -1;
@@ -651,7 +649,8 @@ void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
     if (len < 0) {
         return;
     }
-    if (len != rte_eth_xstats_get_names_by_id(port_id, (struct rte_eth_xstat_name *)dfx->data.nic_xstats.xstats_name, len, NULL)) {
+    if (len != rte_eth_xstats_get_names_by_id(port_id,
+        (struct rte_eth_xstat_name *)dfx->data.nic_xstats.xstats_name, len, NULL)) {
         dfx->data.nic_xstats.len = -1;
         return;
     }

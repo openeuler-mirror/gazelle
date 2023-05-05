@@ -70,8 +70,9 @@ static inline lockless_queue_node* lockless_queue_mpsc_pop(lockless_queue* queue
     lockless_queue_node *next = tail->next;
 
     if (tail == &queue->stub) {
-        if (next == NULL)
+        if (next == NULL) {
             return NULL;
+        }
         queue->tail = next;
         tail = next;
         next = next->next;
@@ -83,8 +84,9 @@ static inline lockless_queue_node* lockless_queue_mpsc_pop(lockless_queue* queue
     }
 
     lockless_queue_node *head = queue->head;
-    if (tail != head)
+    if (tail != head) {
         return NULL;
+    }
 
     lockless_queue_mpsc_push(queue, &queue->stub);
 
