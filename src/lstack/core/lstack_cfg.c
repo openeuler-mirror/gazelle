@@ -69,6 +69,8 @@ static int32_t parse_process_numa(void);
 static int32_t parse_process_index(void);
 static int32_t parse_seperate_sendrecv_args(void);
 static int32_t parse_tuple_filter(void);
+static int32_t parse_use_bond4(void);
+static int32_t parse_bond4_slave_mac(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -121,6 +123,8 @@ static struct config_vector_t g_config_tbl[] = {
     { "process_numa", parse_process_numa },
     { "process_idx", parse_process_index },
     { "tuple_filter", parse_tuple_filter },
+    { "use_bond4", parse_use_bond4 },
+    { "bond4_slave_mac", parse_bond4_slave_mac },
     { NULL,           NULL }
 };
 
@@ -1052,3 +1056,54 @@ static int parse_tuple_filter(void)
 
     return 0;
 }
+
+static int32_t parse_use_bond4(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.use_bond4, "use_bond4", 0, 0, 1, ret);
+    return ret;
+}
+
+static int32_t parse_bond4_slave_mac(void)
+{
+    if (g_config_params.use_bond4 == 0) {
+        return 0;
+    }
+
+    int32_t ret;
+    const char *slave_mac1 = NULL;
+    const char *slave_mac2 = NULL;
+    const config_setting_t *devs = NULL;
+
+    devs = config_lookup(&g_config, "slave_mac1");
+    if (devs == NULL) {
+        return -EINVAL;
+    }
+    slave_mac1 = config_setting_get_string(devs);
+    if (slave_mac1 == NULL) {
+        return 0;
+    }
+
+    devs = config_lookup(&g_config, "slave_mac2");
+    if (devs == NULL) {
+        return -EINVAL;
+    }
+    slave_mac2 = config_setting_get_string(devs);
+    if (slave_mac2 == NULL) {
+        return 0;
+    }
+
+    /* add dev */
+    ret = str_to_eth_addr(slave_mac1, g_config_params.bond4_slave1_mac_addr);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac1, ret);
+        return ret;
+    }
+
+    ret = str_to_eth_addr(slave_mac2, g_config_params.bond4_slave2_mac_addr);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac2, ret);
+    }
+    return ret;
+}
+

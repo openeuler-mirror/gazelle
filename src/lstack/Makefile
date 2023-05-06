@@ -85,7 +85,8 @@ LIBRTE_LIB = $(LIB_PATH)/librte_bus_pci.so \
              $(LIB_PATH)/librte_pcapng.so \
              $(LIB_PATH)/librte_security.so \
              $(LIB_PATH)/librte_cryptodev.so \
-	     $(LIB_PATH)/librte_net_pcap.so
+	     $(LIB_PATH)/librte_net_pcap.so \
+	     $(LIB_PATH)/librte_net_bond.so
 
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)

@@ -35,6 +35,9 @@
 #include <lwip/pbuf.h>
 #include <lwip/reg_sock.h>
 #include <lwip/priv/tcp_priv.h>
+#include <rte_eth_bond_8023ad.h>
+#include <rte_eth_bond.h>
+#include <rte_ethdev.h>
 
 #include "lstack_log.h"
 #include "dpdk_common.h"
@@ -427,9 +430,10 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
     free(reta_conf);
 }
 
-int32_t dpdk_ethdev_init(void)
+int32_t dpdk_ethdev_init(int port_id, bool bond_port)
 {
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
+    int32_t use_bond4 = get_global_cfg_params()->use_bond4;
     if (get_global_cfg_params()->seperate_send_recv) {
         nb_queues = get_global_cfg_params()->num_cpu * 2;
     }
@@ -440,10 +444,13 @@ int32_t dpdk_ethdev_init(void)
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
-    if (port_id < 0) {
-        return port_id;
+    if (!use_bond4) {
+        port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
+        if (port_id < 0) {
+            return port_id;
+        }
     }
+
     get_global_cfg_params()->port_id = port_id;
 
     struct rte_eth_dev_info dev_info;
@@ -459,10 +466,38 @@ int32_t dpdk_ethdev_init(void)
         return -EINVAL;
     }
 
+    if (bond_port) {
+        int slave_num = 2;
+        int32_t slave_port_id[2];
+        slave_port_id[0] = ethdev_port_id(get_global_cfg_params()->bond4_slave1_mac_addr);
+        slave_port_id[1] = ethdev_port_id(get_global_cfg_params()->bond4_slave2_mac_addr);
+
+        for (int i = 0; i < slave_num; i++) {
+            ret = dpdk_ethdev_init(slave_port_id[i], 0);
+            if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
+                return -1;
+            }
+            ret = rte_eth_promiscuous_enable(slave_port_id[i]);
+            rte_eth_allmulticast_enable(slave_port_id[i]);
+            ret = rte_eth_bond_slave_add(port_id, slave_port_id[i]);
+            ret = rte_eth_dev_start(slave_port_id[i]);
+        }
+    }
+
     struct eth_params *eth_params = alloc_eth_params(port_id, nb_queues);
     if (eth_params == NULL) {
         return -ENOMEM;
     }
+
+    if (bond_port) {
+        struct rte_eth_dev_info slave_dev_info;
+        int slave_id = rte_eth_bond_primary_get(port_id);
+        rte_eth_dev_info_get(slave_id, &slave_dev_info);
+        dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
+        dev_info.tx_offload_capa = slave_dev_info.tx_offload_capa;
+    }
+
     eth_params_checksum(&eth_params->conf, &dev_info);
     int32_t rss_enable = 0;
     if (!get_global_cfg_params()->tuple_filter) {
@@ -556,6 +591,10 @@ int32_t dpdk_ethdev_start(void)
         }
     }
 
+    if (get_global_cfg_params()->use_bond4) {
+        return 0;
+    }
+
     ret = rte_eth_dev_start(stack_group->eth_params->port_id);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot start ethdev: %d\n", (-ret));
@@ -603,10 +642,45 @@ int32_t init_dpdk_ethdev(void)
 {
     int32_t ret;
 
-    ret = dpdk_ethdev_init();
-    if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
-        return -1;
+    if (get_global_cfg_params()->use_bond4) {
+        int bond_port_id = rte_eth_bond_create("net_bonding0", 4, (uint8_t)rte_socket_id());
+        if (bond_port_id < 0) {
+            LSTACK_LOG(ERR, LSTACK, "get bond port id failed ret=%d\n", bond_port_id);
+            return bond_port_id;
+        }
+
+        ret = dpdk_ethdev_init(bond_port_id, 1);
+        ret = rte_eth_bond_xmit_policy_set(bond_port_id, BALANCE_XMIT_POLICY_LAYER34);
+        if (ret < 0) {
+            return -1;
+        }
+
+        ret = rte_eth_bond_8023ad_dedicated_queues_enable(bond_port_id);
+        if (ret < 0) {
+            return -1;
+        }
+
+        ret = rte_eth_promiscuous_enable(bond_port_id);
+        if (ret < 0) {
+            return -1;
+        }
+
+        ret = rte_eth_allmulticast_enable(bond_port_id);
+        if (ret < 0) {
+            return -1;
+        }
+
+        ret = rte_eth_dev_start(bond_port_id);
+        /* 20: sleep for lacp ,this is a temp plan, it will be changed in future */
+        int wait_lacp = 20;
+        sleep(wait_lacp);
+
+    } else {
+        ret = dpdk_ethdev_init(0, 0);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
+            return -1;
+        }
     }
 
     if (get_global_cfg_params()->kni_switch && get_global_cfg_params()->is_primary) {
