@@ -25,9 +25,9 @@
 #include "gazelle_dfx_msg.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_protocol_stack.h"
-#include "lstack_stack_stat.h"
 #include "posix/lstack_epoll.h"
 #include "lstack_dpdk.h"
+#include "lstack_stack_stat.h"
 
 #define US_PER_SEC  1000000
 
@@ -55,7 +55,7 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
     const struct latency_timestamp *lt;
 
     if (pbuf == NULL) {
-       return;
+        return;
     }
 
     lt = &pbuf_to_private(pbuf)->lt;
@@ -120,7 +120,8 @@ static void set_latency_start_flag(bool start)
         stack->latency.start_time = get_current_time();
         stack->latency.lwip_latency.latency_min = ~((uint64_t)0);
         stack->latency.read_latency.latency_min = ~((uint64_t)0);
-        memset_s(&stack->aggregate_stats, sizeof(struct gazelle_stack_aggregate_stats), 0, sizeof(stack->aggregate_stats));
+        memset_s(&stack->aggregate_stats, sizeof(struct gazelle_stack_aggregate_stats),
+            0, sizeof(stack->aggregate_stats));
     }
 }
 
@@ -218,7 +219,8 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             }
             break;
         case GAZELLE_STAT_LSTACK_SHOW_AGGREGATE:
-            ret = memcpy_s(&dfx->data.aggregate_stats, sizeof(dfx->data.aggregate_stats), &stack->aggregate_stats, sizeof(stack->aggregate_stats));
+            ret = memcpy_s(&dfx->data.aggregate_stats, sizeof(dfx->data.aggregate_stats),
+                &stack->aggregate_stats, sizeof(stack->aggregate_stats));
             if (ret != EOK) {
                 LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
             }

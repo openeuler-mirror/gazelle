@@ -33,8 +33,8 @@
 #include "posix/lstack_epoll.h"
 #include "lstack_thread_rpc.h"
 #include "dpdk_common.h"
-#include "lstack_lwip.h"
 #include "lstack_cfg.h"
+#include "lstack_lwip.h"
 
 static void free_ring_pbuf(struct rte_ring *ring)
 {
@@ -263,7 +263,7 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
             return NULL;
         }
         if (pbuf->allow_in == 1) {
-             __sync_fetch_and_sub(&pbuf->allow_in, 1);
+            __sync_fetch_and_sub(&pbuf->allow_in, 1);
         }
         pthread_spin_unlock(&pbuf->pbuf_lock);
 
@@ -300,7 +300,7 @@ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8
             pbuf->head = 1;
             return NULL;
         }
-        if(pbuf->allow_in == 1){
+        if (pbuf->allow_in == 1) {
             __sync_fetch_and_sub(&pbuf->allow_in, 1);
         }
         pthread_spin_unlock(&pbuf->pbuf_lock);
@@ -374,6 +374,9 @@ static ssize_t do_app_write(struct pbuf *pbufs[], void *buf, size_t len, uint32_
 static inline ssize_t app_direct_write(struct protocol_stack *stack, struct lwip_sock *sock, void *buf,
     size_t len, uint32_t write_num)
 {
+    if (write_num == 0) {
+        return 0;
+    }
     struct pbuf **pbufs = (struct pbuf **)malloc(write_num * sizeof(struct pbuf *));
     if (pbufs == NULL) {
         return 0;
@@ -410,6 +413,9 @@ static inline ssize_t app_direct_write(struct protocol_stack *stack, struct lwip
 static inline ssize_t app_direct_attach(struct protocol_stack *stack, struct pbuf *attach_pbuf, void *buf,
     size_t len, uint32_t write_num)
 {
+    if (write_num == 0) {
+        return 0;
+    }
     struct pbuf **pbufs = (struct pbuf **)malloc(write_num * sizeof(struct pbuf *));
     if (pbufs == NULL) {
         return 0;
@@ -469,7 +475,7 @@ static inline struct pbuf *gazelle_ring_readlast(struct rte_ring *r)
     __rte_ring_dequeue_elems(r, last, (void **)&last_pbuf, sizeof(void *), 1);
 
     if (pthread_spin_trylock(&last_pbuf->pbuf_lock) != 0) {
-       return NULL;
+        return NULL;
     }
     if (last_pbuf->allow_in != 1) {
         pthread_spin_unlock(&last_pbuf->pbuf_lock);
@@ -587,7 +593,8 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
 
     /* send_ring have idle */
     if (get_global_cfg_params()->expand_send_ring) {
-        send_len += (write_num <= write_avail) ? app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num) :
+        send_len += (write_num <= write_avail) ?
+            app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num) :
             app_direct_write(stack, sock, (char *)buf + send_len, len - send_len, write_num);
     } else {
         if (write_num > write_avail) {
@@ -662,7 +669,7 @@ void stack_send(struct rpc_msg *msg)
         rpc_msg_free(msg);
         return;
     } else {
-        if(__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 0){
+        if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 0) {
             rpc_call(&stack->rpc_queue, msg);
              __sync_fetch_and_add(&sock->call_num, 1);
         } else {
@@ -741,7 +748,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
 
     sock->stack->stats.read_lwip_cnt += read_count;
     if (recv_len == 0) {
-         GAZELLE_RETURN(EAGAIN);
+        GAZELLE_RETURN(EAGAIN);
     }
     return recv_len;
 }
@@ -797,11 +804,10 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
 
 static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
 {
-    if(__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) >= 2){
-        ;;
-    } else {
+    // 2: call_num >= 2, don't need add new rpc send
+    if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) < 2) {
         while (rpc_call_send(fd, NULL, len, flags) < 0) {
-            usleep(1000); // wait 1ms to exec again
+            usleep(1000); // 1000: wait 1ms to exec again
             LSTACK_LOG(INFO, LSTACK, "rpc_call_send failed, try again\n");
         }
         __sync_fetch_and_add(&sock->call_num, 1);
@@ -838,10 +844,8 @@ ssize_t gazelle_same_node_ring_recv(struct lwip_sock *sock, const void *buf, siz
         act_len = -1;
         goto END;
     }
-
     act_len = cur_end - index + 1;
     act_len = RTE_MIN(act_len, len);
-
     if ((index & SAME_NODE_RING_MASK) + act_len > SAME_NODE_RING_LEN) {
         size_t act_len1 = SAME_NODE_RING_LEN - (index & SAME_NODE_RING_MASK);
         size_t act_len2 = act_len - act_len1;
@@ -898,7 +902,8 @@ ssize_t gazelle_same_node_ring_send(struct lwip_sock *sock, const void *buf, siz
 PER_THREAD uint16_t stack_sock_num[GAZELLE_MAX_STACK_NUM] = {0};
 PER_THREAD uint16_t max_sock_stack = 0;
 
-static inline void thread_bind_stack(struct lwip_sock *sock) {
+static inline void thread_bind_stack(struct lwip_sock *sock)
+{
     if (likely(sock->already_bind_numa || !sock->stack)) {
         return;
     }
@@ -906,7 +911,7 @@ static inline void thread_bind_stack(struct lwip_sock *sock) {
     stack_sock_num[sock->stack->stack_idx]++;
     if (stack_sock_num[sock->stack->stack_idx] > max_sock_stack) {
         max_sock_stack = stack_sock_num[sock->stack->stack_idx];
-	bind_to_stack_numa(sock->stack);
+        bind_to_stack_numa(sock->stack);
     }
 }
 
@@ -960,7 +965,7 @@ ssize_t sendmsg_to_stack(struct lwip_sock *sock, int32_t s, const struct msghdr 
         buflen += ret;
 
         if (ret < message->msg_iov[i].iov_len) {
-           break;
+            break;
         }
     }
 
@@ -1104,7 +1109,6 @@ void read_recv_list(struct protocol_stack *stack, uint32_t max_num)
 
         ssize_t len = lwip_recv(sock->conn->socket, NULL, 0, 0);
         if (len == 0) {
-            /* FIXME: should use POLLRDHUP, when connection be closed. lwip event-callback no POLLRDHUP */
             sock->errevent = 1;
             add_sock_event(sock, EPOLLERR);
         } else if (len > 0) {
@@ -1125,7 +1129,7 @@ void gazelle_connected_callback(struct netconn *conn)
         return;
     }
 
-    if (sock->wakeup != NULL && sock->wakeup->epollfd > 0){
+    if (sock->wakeup != NULL && sock->wakeup->epollfd > 0) {
         posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
     }
 
@@ -1186,7 +1190,7 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
 
 int32_t gazelle_socket(int domain, int type, int protocol)
 {
-    if (((type & SOCK_TYPE_MASK) & ~SOCK_STREAM) != 0){
+    if (((type & SOCK_TYPE_MASK) & ~SOCK_STREAM) != 0) {
         LSTACK_LOG(ERR, LSTACK, "sock type error:%d, only support SOCK_STREAM \n", type);
         return -1;
     }
@@ -1337,125 +1341,125 @@ void stack_recvlist_count(struct rpc_msg *msg)
 
 void netif_poll(struct netif *netif)
 {
-  struct tcp_pcb *pcb = NULL;
-  struct tcp_pcb_listen *pcbl = NULL;
+    struct tcp_pcb *pcb = NULL;
+    struct tcp_pcb_listen *pcbl = NULL;
 
-  for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next) {
+    for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next) {
 #define NETIF_POLL_READ_COUNT 32
-    struct pbuf *pbufs[NETIF_POLL_READ_COUNT];
-    int ret;
+        struct pbuf *pbufs[NETIF_POLL_READ_COUNT];
+        int ret;
 
-    if (pcb->client_rx_ring != NULL) {
-      ret = rte_ring_sc_dequeue_burst(pcb->client_rx_ring, (void **)pbufs, NETIF_POLL_READ_COUNT, NULL);
-      for (int i = 0; i < ret; i++) {
-        if (ip_input(pbufs[i], netif) != 0) {
-          LSTACK_LOG(INFO, LSTACK, "netif_poll: ip_input return err\n");
-          pbuf_free(pbufs[i]);
+        if (pcb->client_rx_ring != NULL) {
+            ret = rte_ring_sc_dequeue_burst(pcb->client_rx_ring, (void **)pbufs, NETIF_POLL_READ_COUNT, NULL);
+            for (int i = 0; i < ret; i++) {
+                if (ip_input(pbufs[i], netif) != 0) {
+                    LSTACK_LOG(INFO, LSTACK, "ip_input return err\n");
+                    pbuf_free(pbufs[i]);
+                }
+            }
         }
-      }
     }
-  }
-  for (pcbl = tcp_listen_pcbs.listen_pcbs; pcbl != NULL; pcbl = pcbl->next) {
-    if (pcbl->listen_rx_ring != NULL) {
-      struct pbuf *pbuf;
-      if (rte_ring_sc_dequeue(pcbl->listen_rx_ring, (void **)&pbuf)  == 0) {
-        if (ip_input(pbuf, netif) != ERR_OK) {
-           pbuf_free(pbuf);
+    for (pcbl = tcp_listen_pcbs.listen_pcbs; pcbl != NULL; pcbl = pcbl->next) {
+        if (pcbl->listen_rx_ring != NULL) {
+            struct pbuf *pbuf;
+            if (rte_ring_sc_dequeue(pcbl->listen_rx_ring, (void **)&pbuf)  == 0) {
+                if (ip_input(pbuf, netif) != ERR_OK) {
+                    pbuf_free(pbuf);
+                }
+            }
         }
-      }
     }
-  }
 }
 
 /* processes on same node handshake packet use this function */
 err_t netif_loop_output(struct netif *netif, struct pbuf *p)
 {
-  struct tcp_pcb *pcb = p->pcb;
-  struct pbuf *head = NULL;
+    struct tcp_pcb *pcb = p->pcb;
+    struct pbuf *head = NULL;
 
-  if (pcb == NULL || pcb->client_tx_ring == NULL) {
-    LSTACK_LOG(ERR, LSTACK, "netif_loop_output: pcb is null\n");
-    return ERR_ARG;
-  }
+    if (pcb == NULL || pcb->client_tx_ring == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "pcb is null\n");
+        return ERR_ARG;
+    }
 
-  if (p->next != NULL) {
-    LSTACK_LOG(ERR, LSTACK, "netif_loop_output: not support chained pbuf\n");
-    return ERR_ARG;
-  }
+    if (p->next != NULL) {
+        LSTACK_LOG(ERR, LSTACK, "netif_loop_output: not support chained pbuf\n");
+        return ERR_ARG;
+    }
 
-  struct tcp_hdr *tcp_hdr = (struct tcp_hdr *)((char *)p->payload + sizeof(struct ip_hdr));
-  uint8_t flags = TCPH_FLAGS(tcp_hdr);
+    struct tcp_hdr *tcp_hdr = (struct tcp_hdr *)((char *)p->payload + sizeof(struct ip_hdr));
+    uint8_t flags = TCPH_FLAGS(tcp_hdr);
 
-  head = pbuf_alloc(0, p->len, PBUF_RAM);
-  if (head == NULL) {
-    LSTACK_LOG(ERR, LSTACK, "netif_loop_output: pbuf_alloc failed\n");
-    return ERR_MEM;
-  }
-  head->ol_flags = p->ol_flags;
-  memcpy_s(head->payload, head->len, p->payload, p->len);
+    head = pbuf_alloc(0, p->len, PBUF_RAM);
+    if (head == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "netif_loop_output: pbuf_alloc failed\n");
+        return ERR_MEM;
+    }
+    head->ol_flags = p->ol_flags;
+    memcpy_s(head->payload, head->len, p->payload, p->len);
 
-  if ((flags & TCP_SYN) && !(flags & TCP_ACK)) {
-    /* SYN packet, send to listen_ring */
-    char ring_name[RING_NAME_LEN] = {0};
-    snprintf_s(ring_name, sizeof(ring_name), sizeof(ring_name) - 1, "listen_rx_ring_%d", pcb->remote_port);
-    struct rte_ring *ring = rte_ring_lookup(ring_name);
-    if (ring == NULL) {
-        LSTACK_LOG(INFO, LSTACK, "netif_loop_output: cant find listen_rx_ring %d\n", pcb->remote_port);
-        pbuf_free(head);
+    if ((flags & TCP_SYN) && !(flags & TCP_ACK)) {
+        /* SYN packet, send to listen_ring */
+        char ring_name[RING_NAME_LEN] = {0};
+        snprintf_s(ring_name, sizeof(ring_name), sizeof(ring_name) - 1, "listen_rx_ring_%d", pcb->remote_port);
+        struct rte_ring *ring = rte_ring_lookup(ring_name);
+        if (ring == NULL) {
+            LSTACK_LOG(INFO, LSTACK, "netif_loop_output: cant find listen_rx_ring %d\n", pcb->remote_port);
+            pbuf_free(head);
+        } else {
+            if (rte_ring_mp_enqueue(ring, head) != 0) {
+                LSTACK_LOG(INFO, LSTACK, "enqueue sync packet failed\n");
+                pbuf_free(head);
+            }
+        }
     } else {
-        if (rte_ring_mp_enqueue(ring, head) != 0) {
-            LSTACK_LOG(INFO, LSTACK, "enqueue sync packet failed\n");
+        /* send other type packet to tx_ring */
+        if (rte_ring_sp_enqueue(pcb->client_tx_ring, head) != 0) {
+            LSTACK_LOG(INFO, LSTACK, "client tx ring full\n");
             pbuf_free(head);
         }
     }
-  } else {
-    /* send other type packet to tx_ring */
-    if (rte_ring_sp_enqueue(pcb->client_tx_ring, head) != 0) {
-      LSTACK_LOG(INFO, LSTACK, "client tx ring full\n");
-      pbuf_free(head);
-    }
-  }
 
-  return ERR_OK;
+    return ERR_OK;
 }
 
 err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
 {
-  char name[RING_NAME_LEN];
-  snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_rx_%u", pcb->remote_port);
-  if ((nsock->same_node_tx_ring_mz = rte_memzone_lookup(name)) == NULL) {
-    LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
-    return -1;
-  } else {
-    LSTACK_LOG(INFO, LSTACK, "lookup %s success\n", name);
-  }
-  nsock->same_node_tx_ring = (struct same_node_ring *)nsock->same_node_tx_ring_mz->addr;
+    char name[RING_NAME_LEN];
+    snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_rx_%u", pcb->remote_port);
+    if ((nsock->same_node_tx_ring_mz = rte_memzone_lookup(name)) == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
+        return -1;
+    } else {
+        LSTACK_LOG(INFO, LSTACK, "lookup %s success\n", name);
+    }
+    nsock->same_node_tx_ring = (struct same_node_ring *)nsock->same_node_tx_ring_mz->addr;
 
-  snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_buf_rx_%u", pcb->remote_port);
-  if ((nsock->same_node_tx_ring->mz = rte_memzone_lookup(name)) == NULL) {
-    LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
-    return -1;
-  }
+    snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_buf_rx_%u", pcb->remote_port);
+    if ((nsock->same_node_tx_ring->mz = rte_memzone_lookup(name)) == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
+        return -1;
+    }
 
-  snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_tx_%u", pcb->remote_port);
-  if ((nsock->same_node_rx_ring_mz = rte_memzone_lookup(name)) == NULL) {
-    LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
-    return -1;
-  } else {
-    LSTACK_LOG(INFO, LSTACK, "lookup %s success\n", name);
-  }
-  nsock->same_node_rx_ring = (struct same_node_ring *)nsock->same_node_rx_ring_mz->addr;
+    snprintf_s(name, sizeof(name), sizeof(name) - 1, "rte_mz_tx_%u", pcb->remote_port);
+    if ((nsock->same_node_rx_ring_mz = rte_memzone_lookup(name)) == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
+        return -1;
+    } else {
+        LSTACK_LOG(INFO, LSTACK, "lookup %s success\n", name);
+    }
+    nsock->same_node_rx_ring = (struct same_node_ring *)nsock->same_node_rx_ring_mz->addr;
 
-  snprintf_s(name, sizeof(name), sizeof(name) - 1,"rte_mz_buf_tx_%u", pcb->remote_port);
-  if ((nsock->same_node_rx_ring->mz = rte_memzone_lookup(name)) == NULL) {
-    LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
-    return -1;
-  }
+    snprintf_s(name, sizeof(name), sizeof(name) - 1,"rte_mz_buf_tx_%u", pcb->remote_port);
+    if ((nsock->same_node_rx_ring->mz = rte_memzone_lookup(name)) == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "lwip_accept: can't find %s\n",name);
+        return -1;
+    }
 
-  /* rcvlink init in alloc_socket() */
-  /* remove from g_rcv_process_list in free_socket */
-  list_add_node(&nsock->stack->same_node_recv_list, &nsock->recv_list);
-  return 0;
+    /* rcvlink init in alloc_socket() */
+    /* remove from g_rcv_process_list in free_socket */
+    list_add_node(&nsock->stack->same_node_recv_list, &nsock->recv_list);
+    return 0;
 }
 
 err_t same_node_memzone_create(const struct rte_memzone **zone, int size, int port, char *name, char *rx)
@@ -1469,7 +1473,8 @@ err_t same_node_memzone_create(const struct rte_memzone **zone, int size, int po
         return ERR_MEM;
     }
 
-    LSTACK_LOG(INFO, LSTACK, "lstack id %d, reserve %s(%p) success, addr is %p, size is %u\n", rte_socket_id(), mem_name, *zone, (*zone)->addr, size);
+    LSTACK_LOG(INFO, LSTACK, "lstack id %d, reserve %s(%p) success, addr is %p, size is %u\n",
+        rte_socket_id(), mem_name, *zone, (*zone)->addr, size);
 
     return ERR_OK;
 }
@@ -1496,16 +1501,16 @@ err_t same_node_ring_create(struct rte_ring **ring, int size, int port, char *na
 
 static void init_same_node_ring(struct tcp_pcb *pcb)
 {
-  struct netconn *netconn = (struct netconn *)pcb->callback_arg;
-  struct lwip_sock *sock = get_socket(netconn->socket);
+    struct netconn *netconn = (struct netconn *)pcb->callback_arg;
+    struct lwip_sock *sock = get_socket(netconn->socket);
 
-  pcb->client_rx_ring = NULL;
-  pcb->client_tx_ring = NULL;
-  pcb->free_ring = 0;
-  sock->same_node_rx_ring = NULL;
-  sock->same_node_rx_ring_mz = NULL;
-  sock->same_node_tx_ring = NULL;
-  sock->same_node_tx_ring_mz = NULL;
+    pcb->client_rx_ring = NULL;
+    pcb->client_tx_ring = NULL;
+    pcb->free_ring = 0;
+    sock->same_node_rx_ring = NULL;
+    sock->same_node_rx_ring_mz = NULL;
+    sock->same_node_tx_ring = NULL;
+    sock->same_node_tx_ring_mz = NULL;
 }
 
 #define CLIENT_RING_SIZE 512
@@ -1522,24 +1527,28 @@ err_t create_same_node_ring(struct tcp_pcb *pcb)
     }
     pcb->free_ring = 1;
 
-    if (same_node_memzone_create(&sock->same_node_rx_ring_mz, sizeof(struct same_node_ring), pcb->local_port, "rte_mz", "rx") != 0) {
+    if (same_node_memzone_create(&sock->same_node_rx_ring_mz, sizeof(struct same_node_ring),
+        pcb->local_port, "rte_mz", "rx") != 0) {
         goto END;
     }
     sock->same_node_rx_ring = (struct same_node_ring*)sock->same_node_rx_ring_mz->addr;
 
-    if (same_node_memzone_create(&sock->same_node_rx_ring->mz, SAME_NODE_RING_LEN, pcb->local_port, "rte_mz_buf", "rx") != 0) {
+    if (same_node_memzone_create(&sock->same_node_rx_ring->mz, SAME_NODE_RING_LEN,
+        pcb->local_port, "rte_mz_buf", "rx") != 0) {
         goto END;
     }
 
     sock->same_node_rx_ring->sndbegin = 0;
     sock->same_node_rx_ring->sndend = 0;
 
-    if (same_node_memzone_create(&sock->same_node_tx_ring_mz, sizeof(struct same_node_ring), pcb->local_port, "rte_mz", "tx") != 0) {
+    if (same_node_memzone_create(&sock->same_node_tx_ring_mz, sizeof(struct same_node_ring),
+        pcb->local_port, "rte_mz", "tx") != 0) {
         goto END;
     }
     sock->same_node_tx_ring = (struct same_node_ring*)sock->same_node_tx_ring_mz->addr;
 
-    if (same_node_memzone_create(&sock->same_node_tx_ring->mz, SAME_NODE_RING_LEN, pcb->local_port, "rte_mz_buf", "tx") != 0) {
+    if (same_node_memzone_create(&sock->same_node_tx_ring->mz, SAME_NODE_RING_LEN,
+        pcb->local_port, "rte_mz_buf", "tx") != 0) {
         goto END;
     }
 
@@ -1560,20 +1569,21 @@ END:
 
 err_t find_same_node_ring(struct tcp_pcb *npcb)
 {
-  char name[RING_NAME_LEN] = {0};
-  snprintf_s(name, sizeof(name), sizeof(name) - 1, "client_tx_ring_%u", npcb->remote_port);
-  npcb->client_rx_ring = rte_ring_lookup(name);
-  memset_s(name, sizeof(name), 0, sizeof(name));
-  snprintf_s(name, sizeof(name), sizeof(name) - 1, "client_rx_ring_%u", npcb->remote_port);
-  npcb->client_tx_ring = rte_ring_lookup(name);
-  npcb->free_ring = 0;
-  if (npcb->client_tx_ring == NULL ||
-      npcb->client_rx_ring == NULL) {
-      LSTACK_LOG(INFO, LSTACK, "lookup client rxtx ring failed, port is %d\n", npcb->remote_port);
-      tcp_abandon(npcb, 0);
-      return ERR_CONN;
-  } else {
-     LSTACK_LOG(INFO, LSTACK, "find client_tx_ring_%u and client_rx_ring_%u\n", npcb->remote_port, npcb->remote_port);
-  }
-  return 0;
+    char name[RING_NAME_LEN] = {0};
+    snprintf_s(name, sizeof(name), sizeof(name) - 1, "client_tx_ring_%u", npcb->remote_port);
+    npcb->client_rx_ring = rte_ring_lookup(name);
+    memset_s(name, sizeof(name), 0, sizeof(name));
+    snprintf_s(name, sizeof(name), sizeof(name) - 1, "client_rx_ring_%u", npcb->remote_port);
+    npcb->client_tx_ring = rte_ring_lookup(name);
+    npcb->free_ring = 0;
+    if (npcb->client_tx_ring == NULL ||
+        npcb->client_rx_ring == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "lookup client rxtx ring failed, port is %d\n", npcb->remote_port);
+        tcp_abandon(npcb, 0);
+        return ERR_CONN;
+    } else {
+        LSTACK_LOG(INFO, LSTACK, "find client_tx_ring_%u and client_rx_ring_%u\n",
+            npcb->remote_port, npcb->remote_port);
+    }
+    return 0;
 }

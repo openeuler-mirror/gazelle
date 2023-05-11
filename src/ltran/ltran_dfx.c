@@ -138,19 +138,17 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
     static const char *nic_stats_border = "########################";
 
     printf("###### NIC extended statistics for port %-2d #########\n", xstats->port_id);
-    printf("%s############################\n",nic_stats_border);
+    printf("%s############################\n", nic_stats_border);
     if (xstats->len <= 0 || xstats->len > RTE_ETH_XSTATS_MAX_LEN) {
         printf("xstats item(%d) num error!\n", xstats->len);
         return;
     }
 
     for (uint32_t i = 0; i < xstats->len; i++) {
-        printf("%s: %"PRIu64"\n", xstats->xstats_name[i].name,
-                    xstats->values[i]);
+        printf("%s: %"PRIu64"\n", xstats->xstats_name[i].name, xstats->values[i]);
     }
 
-    printf("%s############################\n",
-               nic_stats_border);
+    printf("%s############################\n", nic_stats_border);
 }
 
 static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
@@ -1110,7 +1108,7 @@ static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_
             break;
         }
         ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
-    } while(true);
+    } while (true);
 }
 
 static int32_t parse_dfx_ltran_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)

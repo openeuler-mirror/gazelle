@@ -199,7 +199,7 @@ static int get_addr(struct sockaddr_in *sin, char *interface)
     memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
     snprintf_s(ifr.ifr_name, sizeof(ifr.ifr_name), (sizeof(ifr.ifr_name) - 1), "%s", interface);
 
-    if(posix_api->ioctl_fn(sockfd, SIOCGIFADDR, &ifr) < 0){
+    if (posix_api->ioctl_fn(sockfd, SIOCGIFADDR, &ifr) < 0) {
         posix_api->close_fn(sockfd);
         return -1;
     }
@@ -243,11 +243,15 @@ bool is_dst_ip_localhost(const struct sockaddr *addr)
     struct sockaddr_in* sin = malloc(sizeof(struct sockaddr_in));
 
     while (getdelim(&line, &linel, '\n', ifh) > 0) {
-        if (linenum++ < 2) continue;
+        /* 2: skip the first two lines, which are not nic name */
+        if (linenum++ < 2) {
+            continue;
+        }
 
         p = line;
-        while (isspace(*p))
-                ++p;
+        while (isspace(*p)) {
+            ++p;
+        }
         int n = strcspn(p, ": \t");
 
         char interface[20] = {0}; /* 20: nic name len */
@@ -256,7 +260,7 @@ bool is_dst_ip_localhost(const struct sockaddr *addr)
         memset_s(sin, sizeof(struct sockaddr_in), 0, sizeof(struct sockaddr_in));
         int ret = get_addr(sin, interface);
         if (ret == 0) {
-            if(sin->sin_addr.s_addr == servaddr->sin_addr.s_addr){
+            if (sin->sin_addr.s_addr == servaddr->sin_addr.s_addr) {
                 return 1;
             }
         }
@@ -289,13 +293,14 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     int32_t ret = 0;
     char listen_ring_name[RING_NAME_LEN];
     int remote_port = htons(((struct sockaddr_in *)name)->sin_port);
-    snprintf_s(listen_ring_name, sizeof(listen_ring_name), sizeof(listen_ring_name) - 1, "listen_rx_ring_%d", remote_port);
+    snprintf_s(listen_ring_name, sizeof(listen_ring_name), sizeof(listen_ring_name) - 1,
+        "listen_rx_ring_%d", remote_port);
     if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
-	SET_CONN_TYPE_HOST(sock->conn);
+        SET_CONN_TYPE_HOST(sock->conn);
     } else {
         ret = rpc_call_connect(s, name, namelen);
-	SET_CONN_TYPE_LIBOS(sock->conn);
+        SET_CONN_TYPE_LIBOS(sock->conn);
     }
 
     return ret;
@@ -435,26 +440,26 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 
 static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 {
-   struct lwip_sock *sock = NULL;
-   if (select_path(s, &sock) != PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) != PATH_LWIP) {
         return posix_api->readv_fn(s, iov, iovcnt);
-   }
+    }
 
-   struct msghdr msg;
+    struct msghdr msg;
 
-   msg.msg_name = NULL;
-   msg.msg_namelen = 0;
-   msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
-   msg.msg_iovlen = iovcnt;
-   msg.msg_control = NULL;
-   msg.msg_controllen = 0;
-   msg.msg_flags = 0;
-   ssize_t result = recvmsg_from_stack(s, &msg, 0);
-   if(result == -1 && errno == EAGAIN){
+    msg.msg_name = NULL;
+    msg.msg_namelen = 0;
+    msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
+    msg.msg_iovlen = iovcnt;
+    msg.msg_control = NULL;
+    msg.msg_controllen = 0;
+    msg.msg_flags = 0;
+    ssize_t result = recvmsg_from_stack(s, &msg, 0);
+    if (result == -1 && errno == EAGAIN) {
         errno = 0;
-	return 0;
-   }
-   return result;
+        return 0;
+    }
+    return result;
 }
 
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
@@ -479,21 +484,21 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
 {
-   struct lwip_sock *sock = NULL;
-   if (select_path(s, &sock) != PATH_LWIP) {
+    struct lwip_sock *sock = NULL;
+    if (select_path(s, &sock) != PATH_LWIP) {
         return posix_api->writev_fn(s, iov, iovcnt);
-   }
+    }
 
-   struct msghdr msg;
+    struct msghdr msg;
 
-   msg.msg_name = NULL;
-   msg.msg_namelen = 0;
-   msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
-   msg.msg_iovlen = iovcnt;
-   msg.msg_control = NULL;
-   msg.msg_controllen = 0;
-   msg.msg_flags = 0;
-   return sendmsg_to_stack(sock, s, &msg, 0);
+    msg.msg_name = NULL;
+    msg.msg_namelen = 0;
+    msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
+    msg.msg_iovlen = iovcnt;
+    msg.msg_control = NULL;
+    msg.msg_controllen = 0;
+    msg.msg_flags = 0;
+    return sendmsg_to_stack(sock, s, &msg, 0);
 }
 
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)

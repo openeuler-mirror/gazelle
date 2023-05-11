@@ -98,18 +98,20 @@ static int32_t preload_info_init(void)
     return 0;
 }
 
-static void check_process_start(void) {
+static void check_process_start(void)
+{
     if (get_global_cfg_params()->is_primary) {
         return;
     }
 
     while (!fopen(GAZELLE_PRIMARY_START_PATH, "r")) {
-	printf("please make sure the primary process start already!\n");
-	sleep(1);
+        LSTACK_LOG(INFO, LSTACK, "please make sure the primary process start already!\n");
+        sleep(1);
     }
 }
 
-static int32_t set_process_start_flag(void) {
+static int32_t set_process_start_flag(void)
+{
     if (!get_global_cfg_params()->is_primary) {
         return 0;
     }
@@ -118,7 +120,7 @@ static int32_t set_process_start_flag(void) {
     fp = fopen(GAZELLE_PRIMARY_START_PATH, "w");
     if (fp == NULL) {
         LSTACK_PRE_LOG(LSTACK_ERR, "set primary proceaa start flag failed!\n");
-	return -1;
+        return -1;
     }
     (void)fclose(fp);
     return 0;
@@ -199,9 +201,7 @@ static void create_control_thread(void)
 
     pthread_t tid;
     if (use_ltran()) {
-	/* 
-	 * The function call here should be in strict order. 
-	 */
+        /* The function call here should be in strict order. */
         dpdk_skip_nic_init();
         if (control_init_client(false) != 0) {
             LSTACK_EXIT(1, "control_init_client failed\n");
@@ -235,8 +235,7 @@ static void gazelle_signal_init(void)
         LSTACK_EXIT(1, "signal SIGPIPE SIG_IGN\n");
     }
 
-    /*
-    * register core sig handler func to dumped stack */
+    /* register core sig handler func to dumped stack */
     lstack_signal_init();
 }
 
@@ -264,15 +263,16 @@ static void set_kni_ip_mac()
     }
 
     set_ifr.ifr_hwaddr.sa_family = ARPHRD_ETHER;
+    /* 6: mac addr len */
     for (int i = 0; i < 6; i++) {
         set_ifr.ifr_hwaddr.sa_data[i] = cfg->mac_addr[i];
     }
 
     if (posix_api->ioctl_fn(fd, SIOCSIFHWADDR, &set_ifr) < 0) {
         LSTACK_LOG(ERR, LSTACK, "set kni macaddr=%hhx:%hhx:%hhx:%hhx:%hhx:%hhx fail\n",
-                    cfg->mac_addr[0], cfg->mac_addr[1],
-                    cfg->mac_addr[2], cfg->mac_addr[3],
-                    cfg->mac_addr[4], cfg->mac_addr[5]);
+            cfg->mac_addr[0], cfg->mac_addr[1],
+            cfg->mac_addr[2], cfg->mac_addr[3],
+            cfg->mac_addr[4], cfg->mac_addr[5]);
     }
 
     if (posix_api->ioctl_fn(fd, SIOCGIFFLAGS, &set_ifr) < 0) {
@@ -280,7 +280,7 @@ static void set_kni_ip_mac()
     }
 
     set_ifr.ifr_flags |= (IFF_RUNNING | IFF_UP);
-    if (posix_api->ioctl_fn(fd, SIOCSIFFLAGS, &set_ifr) < 0){
+    if (posix_api->ioctl_fn(fd, SIOCSIFFLAGS, &set_ifr) < 0) {
         LSTACK_LOG(ERR, LSTACK, "set kni state fail\n");
     }
 
@@ -289,16 +289,14 @@ static void set_kni_ip_mac()
 
 __attribute__((constructor)) void gazelle_network_init(void)
 {
-    /*
-    * Init POSXI API and prelog */
+    /* Init POSXI API and prelog */
     lstack_prelog_init("LSTACK");
     if (posix_api_init() != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
         LSTACK_EXIT(1, "failed\n");
     }
 
-    /*
-    * Init LD_PRELOAD */
+    /* Init LD_PRELOAD */
     if (preload_info_init() < 0) {
         return;
     }
@@ -306,35 +304,29 @@ __attribute__((constructor)) void gazelle_network_init(void)
         return;
     }
 
-    /*
-    * Read configure from lstack.cfg */
+    /* Read configure from lstack.cfg */
     if (cfg_init() != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "cfg_init failed\n");
         LSTACK_EXIT(1, "cfg_init failed\n");
     }
     LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
 
-    /*
-     * check primary process start */
+    /* check primary process start */
     check_process_start();
 
-    /*
-    * check conflict */
+    /* check conflict */
     if (check_process_conflict() < 0) {
         LSTACK_PRE_LOG(LSTACK_INFO, "Have another same primary process. WARNING: Posix API will use kernel mode!\n");
         return;
     }
 
-    /**
-     * check lstack num, and get process idx
-     */
+    /* check lstack num, and get process idx */
     if (check_params_from_primary() < 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "lstack num error, not same to primary process!\n");
         LSTACK_EXIT(1, "lstack num error, not same to primary process!\n");
     }
 
-    /*
-    * save initial affinity */
+    /* save initial affinity */
     if (!get_global_cfg_params()->main_thread_affinity) {
         if (thread_affinity_default() < 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "pthread_getaffinity_np failed\n");
@@ -342,17 +334,13 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
-    // @todo, check process 2 dumped, resorce need to release. 
-
     gazelle_signal_init();
 
-    /*
-    * Init control plane and dpdk init */
+    /* Init control plane and dpdk init */
     create_control_thread();
     dpdk_restore_pci();
 
-    /*
-    * cancel the core binding from DPDK initialization */
+    /* cancel the core binding from DPDK initialization */
     if (!get_global_cfg_params()->main_thread_affinity) {
         if (thread_affinity_default() < 0) {
             LSTACK_EXIT(1, "pthread_setaffinity_np failed\n");
@@ -366,16 +354,13 @@ __attribute__((constructor)) void gazelle_network_init(void)
         LSTACK_EXIT(1, "init_protocol_stack failed\n");
     }
 
-    /*
-    * nic */
     if (!use_ltran()) {
         if (init_dpdk_ethdev() != 0) {
             LSTACK_EXIT(1, "init_dpdk_ethdev failed\n");
         }
     }
 
-    /*
-    * lwip initialization */
+    /* lwip initialization */
     lwip_sock_init();
 
     /* wait stack thread and kernel_event thread init finish */

@@ -32,11 +32,11 @@
 #include "lstack_ethdev.h"
 #include "lstack_vdev.h"
 #include "lstack_lwip.h"
-#include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
 #include "posix/lstack_epoll.h"
 #include "lstack_stack_stat.h"
+#include "lstack_protocol_stack.h"
 
 #define KERNEL_EVENT_100us              100
 
@@ -98,7 +98,6 @@ int get_min_conn_stack(struct protocol_stack_group *stack_group)
                 min_conn_num = stack->conn_num;
             }
         }
-
     }
     return min_conn_stk_idx;
 }
@@ -236,7 +235,6 @@ static int32_t create_thread(void *arg, char *thread_name, stack_thread_func fun
             LSTACK_LOG(ERR, LSTACK, "set name failed\n");
             return -1;
         }
-
     } else {
         ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, t_params->queue_id);
         if (ret < 0) {
@@ -307,15 +305,16 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
 
     int idx = t_params->idx;
     if (get_global_cfg_params()->seperate_send_recv) {
+        // 2: idx is even, stack is recv thread, idx is odd, stack is send thread
         if (idx % 2 == 0) {
-            stack->cpu_id = get_global_cfg_params()->recv_cpus[idx/2];
+            stack->cpu_id = get_global_cfg_params()->recv_cpus[idx / 2];
             stack->is_send_thread = 0;
-        }else {
-            stack->cpu_id = get_global_cfg_params()->send_cpus[idx/2];
+        } else {
+            stack->cpu_id = get_global_cfg_params()->send_cpus[idx / 2];
             stack->is_send_thread = 1;
         }
-    }else {
-         stack->cpu_id = get_global_cfg_params()->cpus[idx];
+    } else {
+        stack->cpu_id = get_global_cfg_params()->cpus[idx];
     }
 
     stack->socket_id = numa_node_of_cpu(stack->cpu_id);
@@ -355,7 +354,7 @@ static int32_t create_affiliate_thread(void *arg)
 
 static struct protocol_stack *stack_thread_init(void *arg)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();    
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
     struct protocol_stack *stack = calloc(1, sizeof(*stack));
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
@@ -437,7 +436,7 @@ static void* gazelle_stack_thread(void *arg)
 
     uint16_t queue_id = t_params->queue_id;
     struct cfg_params *cfg = get_global_cfg_params();
-    uint8_t use_ltran_flag = cfg->use_ltran;;
+    uint8_t use_ltran_flag = cfg->use_ltran;
     bool kni_switch = cfg->kni_switch;
     uint32_t read_connect_number = cfg->read_connect_number;
     uint32_t rpc_number = cfg->rpc_number;
@@ -502,7 +501,7 @@ static void* gazelle_stack_thread(void *arg)
 
 static void libnet_listen_thread(void *arg)
 {
-    struct cfg_params * cfg_param = get_global_cfg_params();
+    struct cfg_params *cfg_param = get_global_cfg_params();
     recv_pkts_from_other_process(cfg_param->process_idx, arg);
 }
 
@@ -542,7 +541,7 @@ int32_t init_protocol_stack(void)
 
     if (!get_global_cfg_params()->seperate_send_recv) {
         stack_group->stack_num = get_global_cfg_params()->num_cpu;
-    }else {
+    } else {
         stack_group->stack_num = get_global_cfg_params()->num_cpu * 2;
     }
 
@@ -550,7 +549,6 @@ int32_t init_protocol_stack(void)
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
     pthread_spin_init(&stack_group->socket_lock, PTHREAD_PROCESS_PRIVATE);
     
-
     if (init_protocol_sem() != 0) {
         return -1;
     }
@@ -559,9 +557,10 @@ int32_t init_protocol_stack(void)
     int process_index = get_global_cfg_params()->process_idx;
 
     if (get_global_cfg_params()->is_primary) {
+        uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
         for (uint16_t idx = 0; idx < get_global_cfg_params()->tot_queue_num; idx++) {
             struct rte_mempool* rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf",
-                get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count / stack_group->stack_num, RXTX_CACHE_SZ, idx);
+                total_mbufs / stack_group->stack_num, RXTX_CACHE_SZ, idx);
             if (rxtx_mbuf == NULL) {
                 return -1;
             }
@@ -572,12 +571,12 @@ int32_t init_protocol_stack(void)
     for (uint32_t i = 0; i < queue_num; i++) {
         if (get_global_cfg_params()->seperate_send_recv) {
             if (i % 2 == 0) {
-                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_RECV_THREAD_NAME, process_index, i/2);
+                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_RECV_THREAD_NAME, process_index, i / 2);
                 if (ret < 0) {
                     return -1;
                 }
             } else {
-                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_SEND_THREAD_NAME, process_index, i/2);
+                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_SEND_THREAD_NAME, process_index, i / 2);
                 if (ret < 0) {
                     return -1;
                 }
@@ -601,17 +600,18 @@ int32_t init_protocol_stack(void)
 
     wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
 
-    for(int idx = 0; idx < queue_num; idx++){
+    for (int idx = 0; idx < queue_num; idx++){
         free(t_params[idx]);
     }
 
-   if (!use_ltran()) {
+    if (!use_ltran()) {
         ret = sem_init(&stack_group->sem_listen_thread, 0, 0);
         ret = sprintf_s(name, sizeof(name), "%s", "listen_thread");
-        struct sys_thread *thread = sys_thread_new(name, libnet_listen_thread, (void*)(&stack_group->sem_listen_thread), 0, 0);
+        struct sys_thread *thread = sys_thread_new(name, libnet_listen_thread,
+            (void*)(&stack_group->sem_listen_thread), 0, 0);
         free(thread);
         sem_wait(&stack_group->sem_listen_thread);
-   }
+    }
 
     if (get_init_fail()) {
         return -1;
@@ -888,7 +888,7 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 
         if (min_conn_stk_idx == i) {
             get_socket_by_fd(clone_fd)->conn->is_master_fd = 1;
-        }else {
+        } else {
             get_socket_by_fd(clone_fd)->conn->is_master_fd = 0;
         }
 

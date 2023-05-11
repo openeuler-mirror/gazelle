@@ -466,14 +466,15 @@ void control_fd_close(void)
 
     struct cfg_params *global_params = get_global_cfg_params();
     if (!global_params->use_ltran) {
-	int ret = unlink(global_params->unix_socket_filename);
-	if (ret == -1) {
+	    int ret = unlink(global_params->unix_socket_filename);
+	    if (ret == -1) {
             LSTACK_LOG(ERR, LSTACK, "unlink failed, just skip it\n");
-	}
+	    }
     }
 }
 
-void delete_primary_path(void) {
+void delete_primary_path(void)
+{
     if (!remove(GAZELLE_PRIMARY_START_PATH)) {
         LSTACK_LOG(ERR, LSTACK, "delete %s failed\n", GAZELLE_PRIMARY_START_PATH);
     }

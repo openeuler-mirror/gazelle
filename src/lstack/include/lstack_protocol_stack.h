@@ -138,7 +138,7 @@ void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup);
 void stack_send_pkts(struct protocol_stack *stack);
 
 struct rpc_msg;
-struct thread_params{
+struct thread_params {
     uint16_t queue_id;
     uint16_t idx;
 };

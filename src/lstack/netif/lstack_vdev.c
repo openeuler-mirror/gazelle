@@ -43,7 +43,7 @@
 #define IPV4_MASK                       (0xf0)
 #define IPV4_VERION                     (0x40)
 
-#define TCP_HDR_LEN(tcp_hdr)            ((tcp_hdr->data_off & 0xf0) >> 2)
+#define TCP_HDR_LEN(tcp_hdr)            (((tcp_hdr)->data_off & 0xf0) >> 2)
 
 static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf)
 {
@@ -156,7 +156,8 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
             if (get_global_cfg_params()->is_primary) {
                 delete_user_process_port(qtuple->src_port, PORT_LISTEN);
             } else {
-                transfer_add_or_delete_listen_port_to_process0(qtuple->src_port,get_global_cfg_params()->process_idx, 0);
+                transfer_add_or_delete_listen_port_to_process0(qtuple->src_port,
+                    get_global_cfg_params()->process_idx, 0);
             }
         }
 
@@ -174,13 +175,15 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
 
         if (type == REG_RING_TCP_CONNECT) {
             uint16_t queue_id = get_protocol_stack()->queue_id;
-            if (get_global_cfg_params()->is_primary){
+            if (get_global_cfg_params()->is_primary) {
                 add_user_process_port(qtuple->src_port, get_global_cfg_params()->process_idx, PORT_CONNECT);
                 if (queue_id != 0) {
-                    transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip, qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+                    transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip, qtuple->dst_ip,
+                        qtuple->src_port, qtuple->dst_port);
                 }
             } else {
-                transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip, qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+                transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip, qtuple->dst_ip,
+                    qtuple->src_port, qtuple->dst_port);
             }
         }
 
@@ -188,7 +191,8 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
             if (get_global_cfg_params()->is_primary) {
                 add_user_process_port(qtuple->src_port, get_global_cfg_params()->process_idx, PORT_LISTEN);
             } else {
-                transfer_add_or_delete_listen_port_to_process0(qtuple->src_port, get_global_cfg_params()->process_idx, 1);
+                transfer_add_or_delete_listen_port_to_process0(qtuple->src_port,
+                    get_global_cfg_params()->process_idx, 1);
             }
         }
         return 0;

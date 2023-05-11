@@ -77,19 +77,19 @@ static int32_t parse_bond4_slave_mac(void);
         const config_setting_t *_config_arg = NULL; \
         _config_arg = config_lookup(&g_config, _arg_string); \
         if (_config_arg == NULL) { \
-            _arg = _default_val; \
-            _ret = 0; \
+            (_arg) = (_default_val); \
+            (_ret) = 0; \
             break; \
         } \
         int32_t _val = config_setting_get_int(_config_arg); \
-        if (_val < _min_val || _val > _max_val) { \
+        if (_val < (_min_val) || _val > (_max_val)) { \
             LSTACK_PRE_LOG(LSTACK_ERR, "cfg %s %d invaild, range is [%d, %d].\n", \
-                _arg_string, _val, _min_val, _max_val); \
-            _ret = -EINVAL; \
+                (_arg_string), _val, (_min_val), (_max_val)); \
+            (_ret) = -EINVAL; \
             break; \
         } \
-        _arg = _val; \
-        _ret = 0; \
+        (_arg) = _val; \
+        (_ret) = 0; \
     } while (0)
 
 struct config_vector_t {
@@ -346,7 +346,8 @@ static int32_t parse_stack_cpu_number(void)
         }
 
         char *tmp_arg_send = strdup(args);
-        int32_t send_cpu_cnt = separate_str_to_array(tmp_arg_send, g_config_params.send_cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
+        int32_t send_cpu_cnt = separate_str_to_array(tmp_arg_send, g_config_params.send_cpus,
+            CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg_send);
 
         // recv_num_cpus
@@ -372,7 +373,8 @@ static int32_t parse_stack_cpu_number(void)
         }
 
         char *tmp_arg_recv = strdup(args);
-        int32_t recv_cpu_cnt = separate_str_to_array(tmp_arg_recv, g_config_params.recv_cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
+        int32_t recv_cpu_cnt = separate_str_to_array(tmp_arg_recv, g_config_params.recv_cpus,
+            CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg_recv);
 
         if (send_cpu_cnt <= 0 || send_cpu_cnt > CFG_MAX_CPUS / 2 || send_cpu_cnt != recv_cpu_cnt) {
@@ -448,7 +450,7 @@ int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
     for (int32_t idx = 0; idx < cfg->num_cpu; ++idx) {
         if (!cfg->seperate_send_recv) {
             CPU_SET(cfg->cpus[idx], &stack_cpuset);
-        }else {
+        } else {
             CPU_SET(cfg->send_cpus[idx], &stack_cpuset);
             CPU_SET(cfg->recv_cpus[idx], &stack_cpuset);
         }
@@ -498,7 +500,6 @@ static int32_t gazelle_parse_socket_mem(const char *arg, struct secondary_attach
 
     int32_t count = separate_str_to_array(socket_mem, sec_attach_arg->socket_per_size,
                                           GAZELLE_MAX_NUMA_NODES, INT32_MAX);
-
     if (count < 0) {
         return -1;
     }
@@ -730,7 +731,7 @@ static int32_t parse_dpdk_args(void)
         g_config_params.dpdk_argv[start_index + i] = p;
 
         const char *primary = "primary";
-        if(strcmp(p, primary) == 0){
+        if (strcmp(p, primary) == 0) {
             struct cfg_params *global_params = get_global_cfg_params();
             global_params->is_primary = 1;
         }
@@ -941,10 +942,8 @@ static int32_t parse_unix_prefix(void)
     }
 
     unix_prefix = config_lookup(&g_config, "unix_prefix");
-
     if (unix_prefix) {
         args = config_setting_get_string(unix_prefix);
-
         if (filename_check(args)) {
             return -EINVAL;
         }
@@ -983,7 +982,7 @@ static int32_t parse_num_process(void)
     num_process = config_lookup(&g_config, "num_process");
     if (num_process == NULL) {
         g_config_params.num_process = 1;
-    }else {
+    } else {
         g_config_params.num_process = (uint8_t)config_setting_get_int(num_process);
     }
 
@@ -1026,7 +1025,7 @@ static int parse_process_index(void)
     if (process_idx == NULL) {
         if (g_config_params.num_process == 1) {
             g_config_params.process_idx = 0;
-        }else {
+        } else {
             return -EINVAL;
         }
     } else {

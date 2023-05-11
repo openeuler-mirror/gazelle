@@ -15,7 +15,6 @@
 
 #include <sys/types.h>
 #include <stdint.h>
-#include <sys/stat.h>
 
 #define GAZELLE_CLIENT_NUM_MIN           1
 #define GAZELLE_LOG_LEVEL_MAX            10
