@@ -81,14 +81,21 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
         return PATH_LWIP;
     }
 
-    struct tcp_pcb *pcb = sock->conn->pcb.tcp;
-    /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
-    /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
-    if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
+    if (NETCONN_IS_UDP(sock)) {
         if (socket) {
             *socket = sock;
         }
         return PATH_LWIP;
+    } else {
+        struct tcp_pcb *pcb = sock->conn->pcb.tcp;
+        /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
+        /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
+        if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
+            if (socket) {
+                *socket = sock;
+            }
+            return PATH_LWIP;
+        }
     }
 
     return PATH_UNKNOW;
@@ -396,7 +403,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
 static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     if ((domain != AF_INET && domain != AF_UNSPEC)
-        || posix_api->ues_posix || ((type & SOCK_TYPE_MASK) & ~SOCK_STREAM)) {
+        || posix_api->ues_posix) {
         return posix_api->socket_fn(domain, type, protocol);
     }
 
@@ -415,7 +422,7 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
 
     struct lwip_sock *sock = NULL;
     if (select_path(sockfd, &sock) == PATH_LWIP) {
-        return read_stack_data(sockfd, buf, len, flags);
+        return read_stack_data(sockfd, buf, len, flags, NULL, NULL);
     }
 
     return posix_api->recv_fn(sockfd, buf, len, flags);
@@ -433,7 +440,7 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 
     struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_LWIP) {
-        return read_stack_data(s, mem, len, 0);
+        return read_stack_data(s, mem, len, 0, NULL, NULL);
     }
     return posix_api->read_fn(s, mem, len);
 }
@@ -469,7 +476,7 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
         return posix_api->send_fn(sockfd, buf, len, flags);
     }
 
-    return gazelle_send(sockfd, buf, len, flags);
+    return gazelle_send(sockfd, buf, len, flags, NULL, 0);
 }
 
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
@@ -479,7 +486,7 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
         return posix_api->write_fn(s, mem, size);
     }
 
-    return gazelle_send(s, mem, size, 0);
+    return gazelle_send(s, mem, size, 0, NULL, 0);
 }
 
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
@@ -527,6 +534,36 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
     }
 
     return posix_api->send_msg(s, message, flags);
+}
+
+static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
+                                  struct sockaddr *addr, socklen_t *addrlen)
+{
+    if (buf == NULL) {
+        GAZELLE_RETURN(EINVAL);
+    }
+
+    if (len == 0) {
+        return 0;
+    }
+
+    struct lwip_sock *sock = NULL;
+    if (select_path(sockfd, &sock) == PATH_LWIP) {
+        return read_stack_data(sockfd, buf, len, flags, addr, addrlen);
+    }
+
+    return posix_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
+}
+
+static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
+                                const struct sockaddr *addr, socklen_t addrlen)
+{
+    struct lwip_sock *sock = NULL;
+    if (select_path(sockfd, &sock) != PATH_LWIP) {
+        return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
+    }
+
+    return gazelle_send(sockfd, buf, len, flags, addr, addrlen);
 }
 
 static inline int32_t do_close(int32_t s)
@@ -716,6 +753,16 @@ ssize_t sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
 {
     return do_sendmsg(s, message, flags);
 }
+ssize_t recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
+                 struct sockaddr *addr, socklen_t *addrlen)
+{
+    return do_recvfrom(sockfd, buf, len, flags, addr, addrlen);
+}
+ssize_t sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
+               const struct sockaddr *addr, socklen_t addrlen)
+{
+    return do_sendto(sockfd, buf, len, flags, addr, addrlen);
+}
 int32_t close(int32_t s)
 {
     return do_close(s);
@@ -834,6 +881,16 @@ ssize_t __wrap_recvmsg(int32_t s, struct msghdr *message, int32_t flags)
 ssize_t __wrap_sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
 {
     return do_sendmsg(s, message, flags);
+}
+ssize_t __wrap_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
+                        struct sockaddr *addr, socklen_t *addrlen)
+{
+    return do_recvfrom(sockfd, buf, len, flags, addr, addrlen);
+}
+ssize_t __wrap_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
+                      const struct sockaddr *addr, socklen_t addrlen)
+{
+    return do_sendto(sockfd, buf, len, flags, addr, addrlen);
 }
 int32_t __wrap_close(int32_t s)
 {

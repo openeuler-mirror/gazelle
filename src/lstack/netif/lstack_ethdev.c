@@ -842,6 +842,10 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
             }
         }
 
+        if (first_pbuf->l4_len == 8) {
+            mbuf->data_off += 12;
+        }
+
         if (likely(first_mbuf->pkt_len > MBUF_MAX_LEN)) {
             mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
             mbuf->tso_segsz = MBUF_MAX_DATA_LEN;
@@ -873,7 +877,7 @@ static err_t eth_dev_init(struct netif *netif)
 
     netif->name[0] = 'e';
     netif->name[1] = 't';
-    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP;
+    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP;
     netif->mtu = FRAME_MTU;
     netif->output = etharp_output;
     netif->linkoutput = eth_dev_output;
