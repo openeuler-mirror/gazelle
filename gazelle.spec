@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       55
+Release:       56
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -232,6 +232,17 @@ Patch9214:     0214-fix-parse-args-error.patch
 Patch9215:     0215-gazelle-send-recv-thread-bind-numa.patch
 Patch9216:     0216-waiting-when-primary-process-not-start-already.patch
 Patch9217:     0217-sepeate_string_to-array-add-error-args-handle.patch
+Patch9218:     0218-do-not-transfer-broadcast-arp-pkts-to-other-process.patch
+Patch9219:     0219-revert-select_thread_path-and-optimize-app-thread-wh.patch
+Patch9220:     0220-check-primary-process-idx-and-secondary-lstack-num.patch
+Patch9221:     0221-optimite-select_path-and-pbuf_take.patch
+Patch9222:     0222-fix-build-err-on-select_path.patch
+Patch9223:     0223-set-kni_switch-valid-only-in-primary-process.patch
+Patch9224:     0224-optimize-do_close.patch
+Patch9225:     0225-add-socket-check-before-write-it.patch
+Patch9226:     0226-update-lstack.Makefile.patch
+Patch9227:     0227-fix-config-flow-rule-race.patch
+Patch9228:     0228-fix-build-err-with-dpdk-21.11.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -272,6 +283,19 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat May 13 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-56
+- fix build err with dpdk-21.11
+- fix config flow rule race
+- update lstack.Makefile
+- add socket check before write it
+- optimize do_close
+- set kni_switch valid only in primary process
+- fix build err on select_path
+- optimite select_path and pbuf_take
+- check primary process idx and secondary lstack num
+- revert select_thread_path and optimize app thread when sendmsg
+- do not transfer broadcast arp pkts to other process
+
 * Thu Apr 20 2023 sunsuwan <sunsuwan3@huawei.com> - 1.0.1-55
 - sepeate_string_to array add error args handle
 
