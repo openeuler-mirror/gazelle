@@ -1,0 +1,30 @@
+From c7a8bc37c1aa0fcb33005e49e4b84e46478b2c3c Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Thu, 30 Mar 2023 11:29:33 +0800
+Subject: [PATCH] update lstack.Makefile
+
+---
+ src/lstack/lstack.Makefile | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/lstack/lstack.Makefile b/src/lstack/lstack.Makefile
+index dc98a1b..7da439d 100644
+--- a/src/lstack/lstack.Makefile
++++ b/src/lstack/lstack.Makefile
+@@ -40,7 +40,12 @@ WRAP_API := epoll_ctl \
+             close \
+             ioctl \
+             sigaction \
+-            fork
++            fork \
++            epoll_create1 \
++            readv \
++            writev \
++            poll \
++            ppoll
+ 
+ WRAP_LDFLAGS = $(patsubst %, $(WRAP_PREFIX)%, $(WRAP_API))
+ 
+-- 
+2.23.0
+
