@@ -1,0 +1,204 @@
+From f93092054d3fbf55d522a16c888fefeee00b5da0 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Wed, 22 Mar 2023 20:07:28 +0800
+Subject: [PATCH] revert select_thread_path and optimize app thread when
+ sendmsg
+
+---
+ src/lstack/api/lstack_wrap.c  | 26 ++++++-----------
+ src/lstack/core/lstack_init.c | 53 -----------------------------------
+ src/lstack/core/lstack_lwip.c |  4 +--
+ 3 files changed, 11 insertions(+), 72 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index e1b82fc..5234c19 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -49,9 +49,7 @@ enum KERNEL_LWIP_PATH {
+     PATH_UNKNOW,
+ };
+ 
+-bool select_thread_path(void);
+-
+-static enum KERNEL_LWIP_PATH select_path(int fd)
++static inline enum KERNEL_LWIP_PATH select_path(int fd)
+ {
+     if (unlikely(posix_api == NULL)) {
+         /*
+@@ -64,29 +62,21 @@ static enum KERNEL_LWIP_PATH select_path(int fd)
+         return PATH_KERNEL;
+     }
+ 
+-    if (!select_thread_path()) {
+-        return PATH_KERNEL;
+-    }
+-
+     if (unlikely(posix_api->ues_posix)) {
+         return PATH_KERNEL;
+     }
+ 
+-    struct lwip_sock *sock = posix_api->get_socket(fd);
++    struct lwip_sock *sock = get_socket_by_fd(fd);
+ 
+     /* AF_UNIX case */
+-    if (!sock) {
++    if (!sock || !sock->conn || CONN_TYPE_IS_HOST(sock->conn)) {
+         return PATH_KERNEL;
+     }
+ 
+-    if (CONN_TYPE_IS_LIBOS(sock->conn)) {
++    if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
+         return PATH_LWIP;
+     }
+ 
+-    if (CONN_TYPE_IS_HOST(sock->conn)) {
+-        return PATH_KERNEL;
+-    }
+-
+     struct tcp_pcb *pcb = sock->conn->pcb.tcp;
+     /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
+     /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
+@@ -133,7 +123,7 @@ static inline int32_t do_epoll_create(int32_t size)
+ 
+ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
+ {
+-    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
++    if (unlikely(posix_api->ues_posix)) {
+         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
+     }
+ 
+@@ -142,7 +132,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct
+ 
+ static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
+ {
+-    if (unlikely(posix_api->ues_posix) || !select_thread_path()) {
++    if (unlikely(posix_api->ues_posix)) {
+         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
+     }
+ 
+@@ -291,8 +281,10 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
+     snprintf(listen_ring_name, sizeof(listen_ring_name), "listen_rx_ring_%u", remote_port);
+     if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
+         ret = posix_api->connect_fn(s, name, namelen);
++	SET_CONN_TYPE_HOST(sock->conn);
+     } else {
+         ret = rpc_call_connect(s, name, namelen);
++	SET_CONN_TYPE_LIBOS(sock->conn);
+     }
+ 
+     return ret;
+@@ -524,7 +516,7 @@ static inline int32_t do_close(int32_t s)
+ 
+ static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+ {
+-    if (unlikely(posix_api->ues_posix) || fds == NULL || nfds == 0 || !select_thread_path()) {
++    if (unlikely(posix_api->ues_posix) || fds == NULL || nfds == 0) {
+         return posix_api->poll_fn(fds, nfds, timeout);
+     }
+ 
+diff --git a/src/lstack/core/lstack_init.c b/src/lstack/core/lstack_init.c
+index 3537002..c40938d 100644
+--- a/src/lstack/core/lstack_init.c
++++ b/src/lstack/core/lstack_init.c
+@@ -51,10 +51,8 @@
+ #define LSTACK_SO_NAME              "liblstack.so"
+ #define LSTACK_PRELOAD_NAME_LEN     PATH_MAX
+ #define LSTACK_PRELOAD_ENV_PROC     "GAZELLE_BIND_PROCNAME"
+-#define LSTACK_ENV_THREAD           "GAZELLE_THREAD_NAME"
+ 
+ static volatile bool g_init_fail = false;
+-static PER_THREAD int32_t g_thread_path = -1;
+ 
+ void set_init_fail(void)
+ {
+@@ -69,34 +67,14 @@ bool get_init_fail(void)
+ struct lstack_preload {
+     int32_t preload_switch;
+     char env_procname[LSTACK_PRELOAD_NAME_LEN];
+-    bool get_thread_name;
+-    char env_threadname[LSTACK_PRELOAD_NAME_LEN];
+ };
+ static struct lstack_preload g_preload_info = {0};
+ 
+-static void get_select_thread_name(void)
+-{
+-    g_preload_info.get_thread_name = true;
+-
+-    char *enval = NULL;
+-    enval = getenv(LSTACK_ENV_THREAD);
+-    if (enval == NULL) {
+-        return;
+-    }
+-    if (strcpy_s(g_preload_info.env_threadname, LSTACK_PRELOAD_NAME_LEN, enval) != EOK) {
+-        return;
+-    }
+-
+-    LSTACK_PRE_LOG(LSTACK_INFO, "thread name=%s ok\n", g_preload_info.env_threadname);
+-}
+-
+ static int32_t preload_info_init(void)
+ {
+     char *enval = NULL;
+ 
+     g_preload_info.preload_switch = 0;
+-    
+-    get_select_thread_name();
+ 
+     enval = getenv(LSTACK_PRELOAD_ENV_SYS);
+     if (enval == NULL) {
+@@ -120,37 +98,6 @@ static int32_t preload_info_init(void)
+     return 0;
+ }
+ 
+-bool select_thread_path(void)
+-{
+-    if (g_thread_path >= 0) {
+-        return g_thread_path;
+-    }
+-
+-    if (!g_preload_info.get_thread_name) {
+-        get_select_thread_name();
+-    }
+-
+-    /* not set GAZELLE_THREAD_NAME, select all thread */
+-    if (g_preload_info.env_threadname[0] == '\0') {
+-        g_thread_path = 1;
+-        return true;
+-    }
+-
+-    char thread_name[PATH_MAX] = {0};
+-    if (pthread_getname_np(pthread_self(), thread_name, PATH_MAX) != 0) {
+-        g_thread_path = 0;
+-        return false;
+-    }
+-
+-    if (strstr(thread_name, g_preload_info.env_threadname) == NULL) {
+-        g_thread_path = 0;
+-        return false;
+-    }
+-
+-    g_thread_path = 1;
+-    return true;
+-}
+-
+ static void check_process_start(void) {
+     if (get_global_cfg_params()->is_primary) {
+         return;
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 7355d7b..b4a08ea 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -886,8 +886,8 @@ ssize_t gazelle_same_node_ring_send(struct lwip_sock *sock, const void *buf, siz
+ PER_THREAD uint16_t stack_sock_num[GAZELLE_MAX_STACK_NUM] = {0};
+ PER_THREAD uint16_t max_sock_stack = 0;
+ 
+-static void thread_bind_stack(struct lwip_sock *sock) {
+-    if (likely(!sock->stack || sock->already_bind_numa)) {
++static inline void thread_bind_stack(struct lwip_sock *sock) {
++    if (likely(sock->already_bind_numa || !sock->stack)) {
+         return;
+     }
+     sock->already_bind_numa = 1;
+-- 
+2.23.0
+
