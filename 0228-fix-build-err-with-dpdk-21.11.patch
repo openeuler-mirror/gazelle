@@ -1,0 +1,25 @@
+From 9a14d507fbad2f7f6875abf2d9cd45031f86d523 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Thu, 30 Mar 2023 20:43:43 +0800
+Subject: [PATCH] fix build err with dpdk-21.11
+
+---
+ src/lstack/netif/lstack_ethdev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 52aa9a8..e26fe30 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -761,7 +761,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
+             struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
+             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
+                 stack_broadcast_arp(stack->pkts[i], stack);
+-                if (!use_ltran_flag && !rte_is_broadcast_ether_addr(&ethh->d_addr)) {
++                if (!use_ltran_flag && !rte_is_broadcast_ether_addr(&ethh->dst_addr)) {
+                     // copy arp into other process
+                     transfer_arp_to_other_process(stack->pkts[i]);
+                     transfer_type = TRANSFER_KERNEL;
+-- 
+2.23.0
+
