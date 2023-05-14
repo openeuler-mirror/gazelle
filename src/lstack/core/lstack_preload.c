@@ -26,6 +26,29 @@ struct lstack_preload {
 };
 static struct lstack_preload g_preload_info = {0};
 
+static int32_t preload_check_bind_proc(void)
+{
+    char proc_path[PATH_MAX] = {0};
+
+    if (!g_preload_info.preload_switch) {
+        return 0;
+    }
+
+    if (readlink("/proc/self/exe", proc_path, PATH_MAX - 1) <= 0) {
+        return -1;
+    }
+
+    char *proc_name = strrchr(proc_path, '/');
+    if (!proc_name) {
+        return -1;
+    }
+
+    if (strncmp(++proc_name, g_preload_info.env_procname, PATH_MAX) == 0) {
+        return 0;
+    }
+    return -1;
+}
+
 static int32_t preload_info_init(void)
 {
     char *enval = NULL;
@@ -51,5 +74,5 @@ static int32_t preload_info_init(void)
 
     g_preload_info.preload_switch = 1;
     LSTACK_PRE_LOG(LSTACK_INFO, "LD_PRELOAD ok\n");
-    return 0;
+    return preload_check_bind_proc();
 }
