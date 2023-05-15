@@ -17,6 +17,7 @@
 #define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)))
 #define NETCONN_IS_DATAOUT(sock)    (gazelle_ring_readover_count((sock)->send_ring) || (sock)->send_lastdata || (sock)->send_pre_del)
 #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
+#define NETCONN_IS_UDP(sock)        (NETCONNTYPE_GROUP(netconn_type((sock)->conn)) == NETCONN_UDP)
 
 struct lwip_sock;
 struct rte_mempool;
@@ -29,8 +30,9 @@ int32_t gazelle_socket(int domain, int type, int protocol);
 void gazelle_clean_sock(int32_t fd);
 struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags);
 void write_lwip_over(struct lwip_sock *sock);
-ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
-ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
+ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len,
+                         const struct sockaddr *addr, socklen_t addrlen);
+ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags, struct sockaddr *addr, socklen_t *addrlen);
 ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);
 void read_recv_list(struct protocol_stack *stack, uint32_t max_num);
 void read_same_node_recv_list(struct protocol_stack *stack);
@@ -45,7 +47,8 @@ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs,
 void gazelle_free_pbuf(struct pbuf *pbuf);
 ssize_t sendmsg_to_stack(struct lwip_sock *sock, int32_t s, const struct msghdr *message, int32_t flags);
 ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags);
-ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags);
+ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags,
+                     const struct sockaddr *addr, socklen_t addrlen);
 void rpc_replenish(struct rpc_msg *msg);
 void stack_mempool_size(struct rpc_msg *msg);
 

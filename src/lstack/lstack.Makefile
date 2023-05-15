@@ -45,7 +45,9 @@ WRAP_API := epoll_ctl \
             readv \
             writev \
             poll \
-            ppoll
+            ppoll \
+            sendto \
+            recvfrom
 
 WRAP_LDFLAGS = $(patsubst %, $(WRAP_PREFIX)%, $(WRAP_API))
 

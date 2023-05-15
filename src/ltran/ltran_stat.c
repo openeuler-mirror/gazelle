@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <rte_ring.h>
-#include <netinet/in.h>
 
 #include "ltran_tcp_sock.h"
 #include "ltran_tcp_conn.h"
@@ -29,6 +28,13 @@
 #include "ltran_stack.h"
 #include "dpdk_common.h"
 #include "ltran_forward.h"
+
+/* undefine lwip_ntohs in lwip/def.h */
+#ifdef ntohs
+#undef ntohs
+#endif
+#include <netinet/in.h>
+
 
 static uint64_t g_start_time_stamp = 0;
 static int32_t g_start_latency = GAZELLE_OFF;

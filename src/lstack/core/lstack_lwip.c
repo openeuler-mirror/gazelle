@@ -14,11 +14,13 @@
 #include <stdatomic.h>
 #include <lwip/sockets.h>
 #include <lwip/tcp.h>
+#include <lwip/udp.h>
 #include <lwipsock.h>
 #include <arch/sys_arch.h>
 #include <lwip/pbuf.h>
 #include <lwip/priv/tcp_priv.h>
 #include <lwip/posix_api.h>
+#include <lwip/api.h>
 #include <lwip/tcp.h>
 #include <securec.h>
 #include <rte_errno.h>
@@ -121,6 +123,8 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
         pbuf->allow_in = 1;
         pbuf->head = 0;
         pbuf->last = pbuf;
+        pbuf->addr.addr = 0;
+        pbuf->port = 0;
         pthread_spin_init(&pbuf->pbuf_lock, PTHREAD_PROCESS_SHARED);
     }
 
@@ -449,13 +453,22 @@ static inline ssize_t app_direct_attach(struct protocol_stack *stack, struct pbu
     return send_len;
 }
 
-static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t len, uint32_t write_num)
+static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t len, uint32_t write_num,
+                                     const struct sockaddr *addr, socklen_t addrlen)
 {
     struct pbuf *pbufs[SOCK_SEND_RING_SIZE_MAX];
 
     (void)gazelle_ring_read(sock->send_ring, (void **)pbufs, write_num);
 
     ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
+
+    if (addr) {
+        struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+        for (int i = 0; i < write_num; i++) {
+            pbufs[i]->addr.addr = saddr->sin_addr.s_addr;
+            pbufs[i]->port = lwip_ntohs((saddr)->sin_port);
+        }
+    }
 
     gazelle_ring_read_over(sock->send_ring);
 
@@ -536,7 +549,8 @@ int sem_timedwait_nsecs(sem_t *sem)
     return sem_timedwait(sem, &ts);
 }
 
-ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len,
+                         const struct sockaddr *addr, socklen_t addrlen)
 {
     if (sock->errevent > 0) {
         GAZELLE_RETURN(ENOTCONN);
@@ -581,6 +595,11 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
             if (wakeup) {
                 wakeup->stat.app_write_cnt += write_num;
             }
+            if (addr) {
+                struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+                last_pbuf->addr.addr = saddr->sin_addr.s_addr;
+                last_pbuf->port = lwip_ntohs((saddr)->sin_port);
+            }
         } else {
             (void)rpc_call_replenish(stack, sock);
             if (wakeup) {
@@ -594,14 +613,14 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
     /* send_ring have idle */
     if (get_global_cfg_params()->expand_send_ring) {
         send_len += (write_num <= write_avail) ?
-            app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num) :
+            app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num, addr, addrlen) :
             app_direct_write(stack, sock, (char *)buf + send_len, len - send_len, write_num);
     } else {
         if (write_num > write_avail) {
             write_num = write_avail;
             len = write_num * MBUF_MAX_DATA_LEN;
         }
-        send_len += app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num);
+        send_len += app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num, addr, addrlen);
     }
 
     if (wakeup) {
@@ -641,10 +660,15 @@ void rpc_replenish(struct rpc_msg *msg)
     msg->result = replenish_send_ring(stack, sock);
 }
 
-static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock, int32_t flags)
+static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
+                                size_t len, int32_t flags)
 {
     /* send all send_ring, so len set lwip send max. */
-    (void)lwip_send(fd, sock, UINT16_MAX, flags);
+    if (NETCONN_IS_UDP(sock)) {
+        (void)lwip_send(fd, sock, len, flags);
+    } else {
+        (void)lwip_send(fd, sock, UINT16_MAX, flags);
+    }
 
     return replenish_send_ring(stack, sock);
 }
@@ -652,6 +676,7 @@ static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct
 void stack_send(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
+    size_t len = msg->args[MSG_ARG_1].size;
     struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
     bool replenish_again;
 
@@ -663,7 +688,7 @@ void stack_send(struct rpc_msg *msg)
         return;
     }
 
-    replenish_again = do_lwip_send(stack, sock->conn->socket, sock, 0);
+    replenish_again = do_lwip_send(stack, sock->conn->socket, sock, len, 0);
     __sync_fetch_and_sub(&sock->call_num, 1);
     if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
         rpc_msg_free(msg);
@@ -712,11 +737,21 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
     uint32_t data_count = rte_ring_count(sock->conn->recvmbox->ring);
     uint32_t read_num = LWIP_MIN(free_count, data_count);
     struct pbuf *pbufs[SOCK_RECV_RING_SIZE];
+    struct netbuf *netbufs[SOCK_RECV_RING_SIZE];
     uint32_t read_count = 0;
     ssize_t recv_len = 0;
 
     for (uint32_t i = 0; i < read_num; i++) {
-        err_t err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
+
+        err_t err = ERR_OK;
+        if (NETCONN_IS_UDP(sock)) {
+            err = netconn_recv_udp_raw_netbuf_flags(sock->conn, &netbufs[i], apiflags);
+            pbufs[i] = netbufs[i]->p;
+            pbufs[i]->addr = netbufs[i]->addr;
+            pbufs[i]->port = netbufs[i]->port;
+        } else {
+            err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
+        }
         if (err != ERR_OK) {
             if (recv_len > 0) {
                 /* already received data, return that (this trusts in getting the same error from
@@ -735,10 +770,19 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
     }
 
     uint32_t enqueue_num = gazelle_ring_sp_enqueue(sock->recv_ring, (void **)pbufs, read_count);
+    if (NETCONN_IS_UDP(sock)) {
+        for (uint32_t i = 0; i < read_count; i++) {
+            memp_free(MEMP_NETBUF, netbufs[i]);
+        }
+    }
     for (uint32_t i = enqueue_num; i < read_count; i++) {
-        /* update receive window */
-        tcp_recved(sock->conn->pcb.tcp, pbufs[i]->tot_len);
-        pbuf_free(pbufs[i]);
+        if (NETCONN_IS_UDP(sock)) {
+            netbuf_delete(netbufs[i]);
+        } else {
+            /* update receive window */
+            tcp_recved(sock->conn->pcb.tcp, pbufs[i]->tot_len);
+            pbuf_free(pbufs[i]);
+        }
         sock->stack->stats.read_lwip_drop++;
     }
 
@@ -786,7 +830,8 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
             continue;
         }
 
-        ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
+        ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len,
+                                              flags, NULL, NULL);
         if (recvd_local > 0) {
             buflen += recvd_local;
         }
@@ -915,7 +960,8 @@ static inline void thread_bind_stack(struct lwip_sock *sock)
     }
 }
 
-ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
+ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags,
+                     const struct sockaddr *addr, socklen_t addrlen)
 {
     if (buf == NULL) {
         GAZELLE_RETURN(EINVAL);
@@ -932,7 +978,7 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
     if (sock->same_node_tx_ring != NULL) {
         return gazelle_same_node_ring_send(sock, buf, len, flags);
     }
-    ssize_t send = write_stack_data(sock, buf, len);
+    ssize_t send = write_stack_data(sock, buf, len, addr, addrlen);
     if (send <= 0) {
         return send;
     }
@@ -956,7 +1002,7 @@ ssize_t sendmsg_to_stack(struct lwip_sock *sock, int32_t s, const struct msghdr 
             continue;
         }
 
-        ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
+        ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, NULL, 0);
         if (ret <= 0) {
             buflen = (buflen == 0) ? ret : buflen;
             break;
@@ -995,7 +1041,7 @@ static struct pbuf *pbuf_free_partial(struct pbuf *pbuf, uint16_t free_len)
     return pbuf;
 }
 
-ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags, struct sockaddr *addr, socklen_t *addrlen)
 {
     size_t recv_left = len;
     struct pbuf *pbuf = NULL;
@@ -1050,6 +1096,10 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
     /* rte_ring_count reduce lock */
     if (sock->wakeup && sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLIN)) {
         del_data_in_event(sock);
+    }
+
+    if (addr && addrlen) {
+        lwip_sock_make_addr(sock->conn, &(pbuf->addr), pbuf->port, addr, addrlen);
     }
 
     if (recvd == 0) {
@@ -1107,7 +1157,12 @@ void read_recv_list(struct protocol_stack *stack, uint32_t max_num)
             continue;
         }
 
-        ssize_t len = lwip_recv(sock->conn->socket, NULL, 0, 0);
+        ssize_t len = 0;
+        if (NETCONN_IS_UDP(sock)) {
+            len = lwip_recv(sock->conn->socket, NULL, SSIZE_MAX, 0);
+        } else {
+            len = lwip_recv(sock->conn->socket, NULL, 0, 0);
+        }
         if (len == 0) {
             sock->errevent = 1;
             add_sock_event(sock, EPOLLERR);
@@ -1190,11 +1245,6 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
 
 int32_t gazelle_socket(int domain, int type, int protocol)
 {
-    if (((type & SOCK_TYPE_MASK) & ~SOCK_STREAM) != 0) {
-        LSTACK_LOG(ERR, LSTACK, "sock type error:%d, only support SOCK_STREAM \n", type);
-        return -1;
-    }
-
     int32_t fd = lwip_socket(AF_INET, type, 0);
     if (fd < 0) {
         return fd;
