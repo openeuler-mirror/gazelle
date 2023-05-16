@@ -1,0 +1,27 @@
+From ace78c329b02e69162c1ec4b9b3260d276694ece Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Fri, 7 Apr 2023 09:42:39 +0800
+Subject: [PATCH] add parentheses to fix build error
+
+---
+ src/lstack/core/lstack_cfg.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index 9430dd7..394cb13 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -1026,8 +1026,8 @@ static int parse_process_index(void)
+         }
+     } else {
+         g_config_params.process_idx = (uint8_t)config_setting_get_int(process_idx);
+-        if (g_config_params.is_primary && g_config_params.process_idx != 0 ||
+-            !g_config_params.is_primary && g_config_params.process_idx == 0) {
++        if ((g_config_params.is_primary && g_config_params.process_idx != 0) ||
++            (!g_config_params.is_primary && g_config_params.process_idx == 0)) {
+             return -EINVAL;
+         }
+     }
+-- 
+2.33.0
+

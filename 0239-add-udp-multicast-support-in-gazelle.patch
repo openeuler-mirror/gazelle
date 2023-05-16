@@ -1,0 +1,518 @@
+From 2c82e9a9f745f7a959014f788059ac79181b9440 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Sat, 13 May 2023 14:32:02 +0800
+Subject: [PATCH] add udp multicast support in gazelle
+
+---
+ src/lstack/api/lstack_wrap.c     | 75 ++++++++++++++++++++++---
+ src/lstack/core/lstack_lwip.c    | 94 ++++++++++++++++++++++++--------
+ src/lstack/include/lstack_lwip.h |  9 ++-
+ src/lstack/lstack.Makefile       |  4 +-
+ src/lstack/netif/lstack_ethdev.c |  6 +-
+ src/ltran/ltran_stat.c           |  8 ++-
+ 6 files changed, 159 insertions(+), 37 deletions(-)
+
+diff --git a/src/lstack/api/lstack_wrap.c b/src/lstack/api/lstack_wrap.c
+index 98632c0..505e33d 100644
+--- a/src/lstack/api/lstack_wrap.c
++++ b/src/lstack/api/lstack_wrap.c
+@@ -81,14 +81,21 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
+         return PATH_LWIP;
+     }
+ 
+-    struct tcp_pcb *pcb = sock->conn->pcb.tcp;
+-    /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
+-    /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
+-    if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
++    if (NETCONN_IS_UDP(sock)) {
+         if (socket) {
+             *socket = sock;
+         }
+         return PATH_LWIP;
++    } else {
++        struct tcp_pcb *pcb = sock->conn->pcb.tcp;
++        /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
++        /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
++        if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
++            if (socket) {
++                *socket = sock;
++            }
++            return PATH_LWIP;
++        }
+     }
+ 
+     return PATH_UNKNOW;
+@@ -396,7 +403,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
+ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
+ {
+     if ((domain != AF_INET && domain != AF_UNSPEC)
+-        || posix_api->ues_posix || ((type & SOCK_TYPE_MASK) & ~SOCK_STREAM)) {
++        || posix_api->ues_posix) {
+         return posix_api->socket_fn(domain, type, protocol);
+     }
+ 
+@@ -415,7 +422,7 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
+ 
+     struct lwip_sock *sock = NULL;
+     if (select_path(sockfd, &sock) == PATH_LWIP) {
+-        return read_stack_data(sockfd, buf, len, flags);
++        return read_stack_data(sockfd, buf, len, flags, NULL, NULL);
+     }
+ 
+     return posix_api->recv_fn(sockfd, buf, len, flags);
+@@ -433,7 +440,7 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
+ 
+     struct lwip_sock *sock = NULL;
+     if (select_path(s, &sock) == PATH_LWIP) {
+-        return read_stack_data(s, mem, len, 0);
++        return read_stack_data(s, mem, len, 0, NULL, NULL);
+     }
+     return posix_api->read_fn(s, mem, len);
+ }
+@@ -469,7 +476,7 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
+         return posix_api->send_fn(sockfd, buf, len, flags);
+     }
+ 
+-    return gazelle_send(sockfd, buf, len, flags);
++    return gazelle_send(sockfd, buf, len, flags, NULL, 0);
+ }
+ 
+ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
+@@ -479,7 +486,7 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
+         return posix_api->write_fn(s, mem, size);
+     }
+ 
+-    return gazelle_send(s, mem, size, 0);
++    return gazelle_send(s, mem, size, 0, NULL, 0);
+ }
+ 
+ static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
+@@ -529,6 +536,36 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
+     return posix_api->send_msg(s, message, flags);
+ }
+ 
++static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
++                                  struct sockaddr *addr, socklen_t *addrlen)
++{
++    if (buf == NULL) {
++        GAZELLE_RETURN(EINVAL);
++    }
++
++    if (len == 0) {
++        return 0;
++    }
++
++    struct lwip_sock *sock = NULL;
++    if (select_path(sockfd, &sock) == PATH_LWIP) {
++        return read_stack_data(sockfd, buf, len, flags, addr, addrlen);
++    }
++
++    return posix_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
++}
++
++static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
++                                const struct sockaddr *addr, socklen_t addrlen)
++{
++    struct lwip_sock *sock = NULL;
++    if (select_path(sockfd, &sock) != PATH_LWIP) {
++        return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
++    }
++
++    return gazelle_send(sockfd, buf, len, flags, addr, addrlen);
++}
++
+ static inline int32_t do_close(int32_t s)
+ {
+     struct lwip_sock *sock = NULL;
+@@ -716,6 +753,16 @@ ssize_t sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
+ {
+     return do_sendmsg(s, message, flags);
+ }
++ssize_t recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
++                 struct sockaddr *addr, socklen_t *addrlen)
++{
++    return do_recvfrom(sockfd, buf, len, flags, addr, addrlen);
++}
++ssize_t sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
++               const struct sockaddr *addr, socklen_t addrlen)
++{
++    return do_sendto(sockfd, buf, len, flags, addr, addrlen);
++}
+ int32_t close(int32_t s)
+ {
+     return do_close(s);
+@@ -835,6 +882,16 @@ ssize_t __wrap_sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
+ {
+     return do_sendmsg(s, message, flags);
+ }
++ssize_t __wrap_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
++                        struct sockaddr *addr, socklen_t *addrlen)
++{
++    return do_recvfrom(sockfd, buf, len, flags, addr, addrlen);
++}
++ssize_t __wrap_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
++                      const struct sockaddr *addr, socklen_t addrlen)
++{
++    return do_sendto(sockfd, buf, len, flags, addr, addrlen);
++}
+ int32_t __wrap_close(int32_t s)
+ {
+     return do_close(s);
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index b6c5813..12c2aa6 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -14,11 +14,13 @@
+ #include <stdatomic.h>
+ #include <lwip/sockets.h>
+ #include <lwip/tcp.h>
++#include <lwip/udp.h>
+ #include <lwipsock.h>
+ #include <arch/sys_arch.h>
+ #include <lwip/pbuf.h>
+ #include <lwip/priv/tcp_priv.h>
+ #include <lwip/posix_api.h>
++#include <lwip/api.h>
+ #include <lwip/tcp.h>
+ #include <securec.h>
+ #include <rte_errno.h>
+@@ -121,6 +123,8 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
+         pbuf->allow_in = 1;
+         pbuf->head = 0;
+         pbuf->last = pbuf;
++        pbuf->addr.addr = 0;
++        pbuf->port = 0;
+         pthread_spin_init(&pbuf->pbuf_lock, PTHREAD_PROCESS_SHARED);
+     }
+ 
+@@ -449,7 +453,8 @@ static inline ssize_t app_direct_attach(struct protocol_stack *stack, struct pbu
+     return send_len;
+ }
+ 
+-static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t len, uint32_t write_num)
++static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t len, uint32_t write_num,
++                                     const struct sockaddr *addr, socklen_t addrlen)
+ {
+     struct pbuf *pbufs[SOCK_SEND_RING_SIZE_MAX];
+ 
+@@ -457,6 +462,14 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
+ 
+     ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
+ 
++    if (addr) {
++        struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
++        for (int i = 0; i < write_num; i++) {
++            pbufs[i]->addr.addr = saddr->sin_addr.s_addr;
++            pbufs[i]->port = lwip_ntohs((saddr)->sin_port);
++        }
++    }
++
+     gazelle_ring_read_over(sock->send_ring);
+ 
+     sock->remain_len = MBUF_MAX_DATA_LEN - pbufs[write_num - 1]->len;
+@@ -536,7 +549,8 @@ int sem_timedwait_nsecs(sem_t *sem)
+     return sem_timedwait(sem, &ts);
+ }
+ 
+-ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
++ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len,
++                         const struct sockaddr *addr, socklen_t addrlen)
+ {
+     if (sock->errevent > 0) {
+         GAZELLE_RETURN(ENOTCONN);
+@@ -581,6 +595,11 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+             if (wakeup) {
+                 wakeup->stat.app_write_cnt += write_num;
+             }
++            if (addr) {
++                struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
++                last_pbuf->addr.addr = saddr->sin_addr.s_addr;
++                last_pbuf->port = lwip_ntohs((saddr)->sin_port);
++            }
+         } else {
+             (void)rpc_call_replenish(stack, sock);
+             if (wakeup) {
+@@ -594,14 +613,14 @@ ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len)
+     /* send_ring have idle */
+     if (get_global_cfg_params()->expand_send_ring) {
+         send_len += (write_num <= write_avail) ?
+-            app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num) :
++            app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num, addr, addrlen) :
+             app_direct_write(stack, sock, (char *)buf + send_len, len - send_len, write_num);
+     } else {
+         if (write_num > write_avail) {
+             write_num = write_avail;
+             len = write_num * MBUF_MAX_DATA_LEN;
+         }
+-        send_len += app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num);
++        send_len += app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num, addr, addrlen);
+     }
+ 
+     if (wakeup) {
+@@ -641,10 +660,15 @@ void rpc_replenish(struct rpc_msg *msg)
+     msg->result = replenish_send_ring(stack, sock);
+ }
+ 
+-static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock, int32_t flags)
++static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
++                                size_t len, int32_t flags)
+ {
+     /* send all send_ring, so len set lwip send max. */
+-    (void)lwip_send(fd, sock, UINT16_MAX, flags);
++    if (NETCONN_IS_UDP(sock)) {
++        (void)lwip_send(fd, sock, len, flags);
++    } else {
++        (void)lwip_send(fd, sock, UINT16_MAX, flags);
++    }
+ 
+     return replenish_send_ring(stack, sock);
+ }
+@@ -652,6 +676,7 @@ static inline bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct
+ void stack_send(struct rpc_msg *msg)
+ {
+     int32_t fd = msg->args[MSG_ARG_0].i;
++    size_t len = msg->args[MSG_ARG_1].size;
+     struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
+     bool replenish_again;
+ 
+@@ -663,7 +688,7 @@ void stack_send(struct rpc_msg *msg)
+         return;
+     }
+ 
+-    replenish_again = do_lwip_send(stack, sock->conn->socket, sock, 0);
++    replenish_again = do_lwip_send(stack, sock->conn->socket, sock, len, 0);
+     __sync_fetch_and_sub(&sock->call_num, 1);
+     if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
+         rpc_msg_free(msg);
+@@ -712,11 +737,21 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
+     uint32_t data_count = rte_ring_count(sock->conn->recvmbox->ring);
+     uint32_t read_num = LWIP_MIN(free_count, data_count);
+     struct pbuf *pbufs[SOCK_RECV_RING_SIZE];
++    struct netbuf *netbufs[SOCK_RECV_RING_SIZE];
+     uint32_t read_count = 0;
+     ssize_t recv_len = 0;
+ 
+     for (uint32_t i = 0; i < read_num; i++) {
+-        err_t err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
++
++        err_t err = ERR_OK;
++        if (NETCONN_IS_UDP(sock)) {
++            err = netconn_recv_udp_raw_netbuf_flags(sock->conn, &netbufs[i], apiflags);
++            pbufs[i] = netbufs[i]->p;
++            pbufs[i]->addr = netbufs[i]->addr;
++            pbufs[i]->port = netbufs[i]->port;
++        } else {
++            err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
++        }
+         if (err != ERR_OK) {
+             if (recv_len > 0) {
+                 /* already received data, return that (this trusts in getting the same error from
+@@ -735,10 +770,19 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
+     }
+ 
+     uint32_t enqueue_num = gazelle_ring_sp_enqueue(sock->recv_ring, (void **)pbufs, read_count);
++    if (NETCONN_IS_UDP(sock)) {
++        for (uint32_t i = 0; i < read_count; i++) {
++            memp_free(MEMP_NETBUF, netbufs[i]);
++        }
++    }
+     for (uint32_t i = enqueue_num; i < read_count; i++) {
+-        /* update receive window */
+-        tcp_recved(sock->conn->pcb.tcp, pbufs[i]->tot_len);
+-        pbuf_free(pbufs[i]);
++        if (NETCONN_IS_UDP(sock)) {
++            netbuf_delete(netbufs[i]);
++        } else {
++            /* update receive window */
++            tcp_recved(sock->conn->pcb.tcp, pbufs[i]->tot_len);
++            pbuf_free(pbufs[i]);
++        }
+         sock->stack->stats.read_lwip_drop++;
+     }
+ 
+@@ -786,7 +830,8 @@ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
+             continue;
+         }
+ 
+-        ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, flags);
++        ssize_t recvd_local = read_stack_data(s, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len,
++                                              flags, NULL, NULL);
+         if (recvd_local > 0) {
+             buflen += recvd_local;
+         }
+@@ -915,7 +960,8 @@ static inline void thread_bind_stack(struct lwip_sock *sock)
+     }
+ }
+ 
+-ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
++ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags,
++                     const struct sockaddr *addr, socklen_t addrlen)
+ {
+     if (buf == NULL) {
+         GAZELLE_RETURN(EINVAL);
+@@ -932,7 +978,7 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags)
+     if (sock->same_node_tx_ring != NULL) {
+         return gazelle_same_node_ring_send(sock, buf, len, flags);
+     }
+-    ssize_t send = write_stack_data(sock, buf, len);
++    ssize_t send = write_stack_data(sock, buf, len, addr, addrlen);
+     if (send <= 0) {
+         return send;
+     }
+@@ -956,7 +1002,7 @@ ssize_t sendmsg_to_stack(struct lwip_sock *sock, int32_t s, const struct msghdr
+             continue;
+         }
+ 
+-        ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len);
++        ret = write_stack_data(sock, message->msg_iov[i].iov_base, message->msg_iov[i].iov_len, NULL, 0);
+         if (ret <= 0) {
+             buflen = (buflen == 0) ? ret : buflen;
+             break;
+@@ -995,7 +1041,7 @@ static struct pbuf *pbuf_free_partial(struct pbuf *pbuf, uint16_t free_len)
+     return pbuf;
+ }
+ 
+-ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
++ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags, struct sockaddr *addr, socklen_t *addrlen)
+ {
+     size_t recv_left = len;
+     struct pbuf *pbuf = NULL;
+@@ -1052,6 +1098,10 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags)
+         del_data_in_event(sock);
+     }
+ 
++    if (addr && addrlen) {
++        lwip_sock_make_addr(sock->conn, &(pbuf->addr), pbuf->port, addr, addrlen);
++    }
++
+     if (recvd == 0) {
+         if (sock->wakeup) {
+             sock->wakeup->stat.read_null++;
+@@ -1107,7 +1157,12 @@ void read_recv_list(struct protocol_stack *stack, uint32_t max_num)
+             continue;
+         }
+ 
+-        ssize_t len = lwip_recv(sock->conn->socket, NULL, 0, 0);
++        ssize_t len = 0;
++        if (NETCONN_IS_UDP(sock)) {
++            len = lwip_recv(sock->conn->socket, NULL, SSIZE_MAX, 0);
++        } else {
++            len = lwip_recv(sock->conn->socket, NULL, 0, 0);
++        }
+         if (len == 0) {
+             sock->errevent = 1;
+             add_sock_event(sock, EPOLLERR);
+@@ -1190,11 +1245,6 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
+ 
+ int32_t gazelle_socket(int domain, int type, int protocol)
+ {
+-    if (((type & SOCK_TYPE_MASK) & ~SOCK_STREAM) != 0) {
+-        LSTACK_LOG(ERR, LSTACK, "sock type error:%d, only support SOCK_STREAM \n", type);
+-        return -1;
+-    }
+-
+     int32_t fd = lwip_socket(AF_INET, type, 0);
+     if (fd < 0) {
+         return fd;
+diff --git a/src/lstack/include/lstack_lwip.h b/src/lstack/include/lstack_lwip.h
+index 0b29e71..223ff93 100644
+--- a/src/lstack/include/lstack_lwip.h
++++ b/src/lstack/include/lstack_lwip.h
+@@ -17,6 +17,7 @@
+ #define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)))
+ #define NETCONN_IS_DATAOUT(sock)    (gazelle_ring_readover_count((sock)->send_ring) || (sock)->send_lastdata || (sock)->send_pre_del)
+ #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
++#define NETCONN_IS_UDP(sock)        (NETCONNTYPE_GROUP(netconn_type((sock)->conn)) == NETCONN_UDP)
+ 
+ struct lwip_sock;
+ struct rte_mempool;
+@@ -29,8 +30,9 @@ int32_t gazelle_socket(int domain, int type, int protocol);
+ void gazelle_clean_sock(int32_t fd);
+ struct pbuf *write_lwip_data(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags);
+ void write_lwip_over(struct lwip_sock *sock);
+-ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len);
+-ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags);
++ssize_t write_stack_data(struct lwip_sock *sock, const void *buf, size_t len,
++                         const struct sockaddr *addr, socklen_t addrlen);
++ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags, struct sockaddr *addr, socklen_t *addrlen);
+ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);
+ void read_recv_list(struct protocol_stack *stack, uint32_t max_num);
+ void read_same_node_recv_list(struct protocol_stack *stack);
+@@ -45,7 +47,8 @@ int32_t gazelle_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs,
+ void gazelle_free_pbuf(struct pbuf *pbuf);
+ ssize_t sendmsg_to_stack(struct lwip_sock *sock, int32_t s, const struct msghdr *message, int32_t flags);
+ ssize_t recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags);
+-ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags);
++ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags,
++                     const struct sockaddr *addr, socklen_t addrlen);
+ void rpc_replenish(struct rpc_msg *msg);
+ void stack_mempool_size(struct rpc_msg *msg);
+ 
+diff --git a/src/lstack/lstack.Makefile b/src/lstack/lstack.Makefile
+index 7da439d..768c5ba 100644
+--- a/src/lstack/lstack.Makefile
++++ b/src/lstack/lstack.Makefile
+@@ -45,7 +45,9 @@ WRAP_API := epoll_ctl \
+             readv \
+             writev \
+             poll \
+-            ppoll
++            ppoll \
++            sendto \
++            recvfrom
+ 
+ WRAP_LDFLAGS = $(patsubst %, $(WRAP_PREFIX)%, $(WRAP_API))
+ 
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 2bae2f1..e4e7ebd 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -842,6 +842,10 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
+             }
+         }
+ 
++        if (first_pbuf->l4_len == 8) {
++            mbuf->data_off += 12;
++        }
++
+         if (likely(first_mbuf->pkt_len > MBUF_MAX_LEN)) {
+             mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
+             mbuf->tso_segsz = MBUF_MAX_DATA_LEN;
+@@ -873,7 +877,7 @@ static err_t eth_dev_init(struct netif *netif)
+ 
+     netif->name[0] = 'e';
+     netif->name[1] = 't';
+-    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP;
++    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP;
+     netif->mtu = FRAME_MTU;
+     netif->output = etharp_output;
+     netif->linkoutput = eth_dev_output;
+diff --git a/src/ltran/ltran_stat.c b/src/ltran/ltran_stat.c
+index 50f65e3..c17a5c1 100644
+--- a/src/ltran/ltran_stat.c
++++ b/src/ltran/ltran_stat.c
+@@ -16,7 +16,6 @@
+ #include <stdio.h>
+ #include <arpa/inet.h>
+ #include <rte_ring.h>
+-#include <netinet/in.h>
+ 
+ #include "ltran_tcp_sock.h"
+ #include "ltran_tcp_conn.h"
+@@ -30,6 +29,13 @@
+ #include "dpdk_common.h"
+ #include "ltran_forward.h"
+ 
++/* undefine lwip_ntohs in lwip/def.h */
++#ifdef ntohs
++#undef ntohs
++#endif
++#include <netinet/in.h>
++
++
+ static uint64_t g_start_time_stamp = 0;
+ static int32_t g_start_latency = GAZELLE_OFF;
+ volatile int32_t g_ltran_stop_flag = GAZELLE_FALSE;
+-- 
+2.33.0
+
