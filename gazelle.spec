@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       56
+Release:       57
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -243,6 +243,17 @@ Patch9225:     0225-add-socket-check-before-write-it.patch
 Patch9226:     0226-update-lstack.Makefile.patch
 Patch9227:     0227-fix-config-flow-rule-race.patch
 Patch9228:     0228-fix-build-err-with-dpdk-21.11.patch
+Patch9229:     0229-fix-gazellectl-x-error-when-multiplt-user-nic-config.patch
+Patch9230:     0230-fix-client-connect-number-unbalance-on-lstack.patch
+Patch9231:     0231-kni-down-not-stop-nic.patch
+Patch9232:     0232-fix-rpc-msg-alloc-failed.patch
+Patch9233:     0233-add-parentheses-to-fix-build-error.patch
+Patch9234:     0234-fix-bond_ports-parse-error.patch
+Patch9235:     0235-dfx-set-g_unix_fd-to-1-after-abnormal-close-fd-to-av.patch
+Patch9236:     0236-dfx-security-function-failed-return-error-directly.patch
+Patch9237:     0237-add-bond4-suport.patch
+Patch9238:     0238-clean-code.patch
+Patch9239:     0239-add-udp-multicast-support-in-gazelle.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -283,6 +294,19 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue May 16 2023 kircher <majun65@huawei.com> - 1.0.1-57
+- add udp multicast support in gazelle
+- clean code
+- add bond4 suport
+- dfx: security function failed, return error directly
+- dfx: set g_unix_fd to -1 after abnormal close fd to avoid double close
+- fix bond_ports parse error fix socket_mem parse error when the value exceeds 65536 exit if create_rxtx_pktmbuf failed build.sh build failed return 1 clean code
+- add parentheses to fix build error
+- fix rpc msg alloc failed fix process_numa args error coredump fix sock->conn not free when fd is kernel mode
+- kni down not stop nic
+- fix client connect number unbalance on lstack
+- fix gazellectl -x error when multiplt user nic config
+
 * Sat May 13 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-56
 - fix build err with dpdk-21.11
 - fix config flow rule race
