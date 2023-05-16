@@ -1,0 +1,277 @@
+From: 97e31b514dde519ac5b83a3b7519c98d9805d746 Mon Sep 17 00:00:00 2001
+From: compile_success <980965867@qq.com>
+Date: Fri, 5 May 2023 11:18:59 +0000
+Subject: [PATCH] add bond4 suport
+
+---
+ src/lstack/Makefile              |  3 +-
+ src/lstack/core/lstack_cfg.c     | 55 +++++++++++++++++++
+ src/lstack/core/lstack_dpdk.c    | 90 +++++++++++++++++++++++++++++---
+ src/lstack/include/lstack_cfg.h  |  3 ++
+ src/lstack/include/lstack_dpdk.h |  2 +-
+ 5 files changed, 143 insertions(+), 10 deletions(-)
+
+diff --git a/src/lstack/Makefile b/src/lstack/Makefile
+index d475961..a79b963 100644
+--- a/src/lstack/Makefile
++++ b/src/lstack/Makefile
+@@ -83,7 +83,8 @@ LIBRTE_LIB = $(DPDK_LIB_PATH)/librte_pci.so \
+              $(DPDK_LIB_PATH)/librte_net.so \
+              $(DPDK_LIB_PATH)/librte_ethdev.so \
+              $(DPDK_LIB_PATH)/librte_pdump.so \
+-             $(DPDK_LIB_PATH)/librte_pmd_pcap.so 
++             $(DPDK_LIB_PATH)/librte_pmd_pcap.so \
++             $(DPDK_LIB_PATH)/librte_pmd_bond.so
+ 
+ 
+ DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
+diff --git a/src/lstack/core/lstack_cfg.c b/src/lstack/core/lstack_cfg.c
+index cdb0200..c4919d3 100644
+--- a/src/lstack/core/lstack_cfg.c
++++ b/src/lstack/core/lstack_cfg.c
+@@ -69,6 +69,8 @@ static int32_t parse_process_numa(void);
+ static int32_t parse_process_index(void);
+ static int32_t parse_seperate_sendrecv_args(void);
+ static int32_t parse_tuple_filter(void);
++static int32_t parse_use_bond4(void);
++static int32_t parse_bond4_slave_mac(void);
+ 
+ #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
+     do { \
+@@ -121,6 +123,8 @@ static struct config_vector_t g_config_tbl[] = {
+     { "process_numa", parse_process_numa },
+     { "process_idx", parse_process_index },
+     { "tuple_filter", parse_tuple_filter },
++    { "use_bond4", parse_use_bond4 },
++    { "bond4_slave_mac", parse_bond4_slave_mac },
+     { NULL,           NULL }
+ };
+ 
+@@ -1052,3 +1056,54 @@ static int parse_tuple_filter(void)
+ 
+     return 0;
+ }
++
++static int32_t parse_use_bond4(void)
++{
++    int32_t ret;
++    PARSE_ARG(g_config_params.use_bond4, "use_bond4", 0, 0, 1, ret);
++    return ret;
++}
++
++static int32_t parse_bond4_slave_mac(void)
++{
++    if (g_config_params.use_bond4 == 0) {
++        return 0;
++    }
++
++    int32_t ret;
++    const char *slave_mac1 = NULL;
++    const char *slave_mac2 = NULL;
++    const config_setting_t *devs = NULL;
++
++    devs = config_lookup(&g_config, "slave_mac1");
++    if (devs == NULL) {
++        return -EINVAL;
++    }
++    slave_mac1 = config_setting_get_string(devs);
++    if (slave_mac1 == NULL) {
++        return 0;
++    }
++
++    devs = config_lookup(&g_config, "slave_mac2");
++    if (devs == NULL) {
++        return -EINVAL;
++    }
++    slave_mac2 = config_setting_get_string(devs);
++    if (slave_mac2 == NULL) {
++        return 0;
++    }
++
++    /* add dev */
++    ret = str_to_eth_addr(slave_mac1, g_config_params.bond4_slave1_mac_addr);
++    if (ret != 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac1, ret);
++        return ret;
++    }
++
++    ret = str_to_eth_addr(slave_mac2, g_config_params.bond4_slave2_mac_addr);
++    if (ret != 0) {
++        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac2, ret);
++    }
++    return ret;
++}
++
+diff --git a/src/lstack/core/lstack_dpdk.c b/src/lstack/core/lstack_dpdk.c
+index e386dfc..297dd7b 100644
+--- a/src/lstack/core/lstack_dpdk.c
++++ b/src/lstack/core/lstack_dpdk.c
+@@ -35,6 +35,9 @@
+ #include <lwip/pbuf.h>
+ #include <lwip/reg_sock.h>
+ #include <lwip/priv/tcp_priv.h>
++#include <rte_eth_bond_8023ad.h>
++#include <rte_eth_bond.h>
++#include <rte_ethdev.h>
+ 
+ #include "lstack_log.h"
+ #include "dpdk_common.h"
+@@ -427,9 +430,10 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
+     free(reta_conf);
+ }
+ 
+-int32_t dpdk_ethdev_init(void)
++int32_t dpdk_ethdev_init(int port_id, bool bond_port)
+ {
+     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
++    int32_t use_bond4 = get_global_cfg_params()->use_bond4;
+     if (get_global_cfg_params()->seperate_send_recv) {
+         nb_queues = get_global_cfg_params()->num_cpu * 2;
+     }
+@@ -440,10 +444,13 @@ int32_t dpdk_ethdev_init(void)
+ 
+     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+ 
+-    int32_t port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
+-    if (port_id < 0) {
+-        return port_id;
++    if (!use_bond4) {
++        port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
++        if (port_id < 0) {
++            return port_id;
++        }
+     }
++
+     get_global_cfg_params()->port_id = port_id;
+ 
+     struct rte_eth_dev_info dev_info;
+@@ -459,10 +466,38 @@ int32_t dpdk_ethdev_init(void)
+         return -EINVAL;
+     }
+ 
++    if (bond_port) {
++        int slave_num = 2;
++        int32_t slave_port_id[2];
++        slave_port_id[0] = ethdev_port_id(get_global_cfg_params()->bond4_slave1_mac_addr);
++        slave_port_id[1] = ethdev_port_id(get_global_cfg_params()->bond4_slave2_mac_addr);
++
++        for (int i = 0; i < slave_num; i++) {
++            ret = dpdk_ethdev_init(slave_port_id[i], 0);
++            if (ret != 0) {
++                LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
++                return -1;
++            }
++            ret = rte_eth_promiscuous_enable(slave_port_id[i]);
++            rte_eth_allmulticast_enable(slave_port_id[i]);
++            ret = rte_eth_bond_slave_add(port_id, slave_port_id[i]);
++            ret = rte_eth_dev_start(slave_port_id[i]);
++        }
++    }
++
+     struct eth_params *eth_params = alloc_eth_params(port_id, nb_queues);
+     if (eth_params == NULL) {
+         return -ENOMEM;
+     }
++
++    if (bond_port) {
++        struct rte_eth_dev_info slave_dev_info;
++        int slave_id = rte_eth_bond_primary_get(port_id);
++        rte_eth_dev_info_get(slave_id, &slave_dev_info);
++        dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
++        dev_info.tx_offload_capa = slave_dev_info.tx_offload_capa;
++    }
++
+     eth_params_checksum(&eth_params->conf, &dev_info);
+     int32_t rss_enable = 0;
+     if (!get_global_cfg_params()->tuple_filter) {
+@@ -556,6 +591,10 @@ int32_t dpdk_ethdev_start(void)
+         }
+     }
+ 
++    if (get_global_cfg_params()->use_bond4) {
++        return 0;
++    }
++
+     ret = rte_eth_dev_start(stack_group->eth_params->port_id);
+     if (ret < 0) {
+         LSTACK_LOG(ERR, LSTACK, "cannot start ethdev: %d\n", (-ret));
+@@ -603,10 +642,45 @@ int32_t init_dpdk_ethdev(void)
+ {
+     int32_t ret;
+ 
+-    ret = dpdk_ethdev_init();
+-    if (ret != 0) {
+-        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
+-        return -1;
++    if (get_global_cfg_params()->use_bond4) {
++        int bond_port_id = rte_eth_bond_create("net_bonding0", 4, (uint8_t)rte_socket_id());
++        if (bond_port_id < 0) {
++            LSTACK_LOG(ERR, LSTACK, "get bond port id failed ret=%d\n", bond_port_id);
++            return bond_port_id;
++        }
++
++        ret = dpdk_ethdev_init(bond_port_id, 1);
++        ret = rte_eth_bond_xmit_policy_set(bond_port_id, BALANCE_XMIT_POLICY_LAYER34);
++        if (ret < 0) {
++            return -1;
++        }
++
++        ret = rte_eth_bond_8023ad_dedicated_queues_enable(bond_port_id);
++        if (ret < 0) {
++            return -1;
++        }
++
++        ret = rte_eth_promiscuous_enable(bond_port_id);
++        if (ret < 0) {
++            return -1;
++        }
++
++        ret = rte_eth_allmulticast_enable(bond_port_id);
++        if (ret < 0) {
++            return -1;
++        }
++
++        ret = rte_eth_dev_start(bond_port_id);
++        /* 20: sleep for lacp ,this is a temp plan, it will be changed in future */
++        int wait_lacp = 20;
++        sleep(wait_lacp);
++
++    } else {
++        ret = dpdk_ethdev_init(0, 0);
++        if (ret != 0) {
++            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
++            return -1;
++        }
+     }
+ 
+     if (get_global_cfg_params()->kni_switch && get_global_cfg_params()->is_primary) {
+diff --git a/src/lstack/include/lstack_cfg.h b/src/lstack/include/lstack_cfg.h
+index a4170ca..4d0f611 100644
+--- a/src/lstack/include/lstack_cfg.h
++++ b/src/lstack/include/lstack_cfg.h
+@@ -103,6 +103,9 @@ struct cfg_params {
+     uint16_t send_ring_size;
+     bool expand_send_ring;
+     bool tuple_filter;
++    bool use_bond4;
++    uint8_t bond4_slave1_mac_addr[ETHER_ADDR_LEN];
++    uint8_t bond4_slave2_mac_addr[ETHER_ADDR_LEN];
+ };
+ 
+ struct cfg_params *get_global_cfg_params(void);
+diff --git a/src/lstack/include/lstack_dpdk.h b/src/lstack/include/lstack_dpdk.h
+index a896903..1047c44 100644
+--- a/src/lstack/include/lstack_dpdk.h
++++ b/src/lstack/include/lstack_dpdk.h
+@@ -46,7 +46,7 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
+ struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id);
+ int32_t create_shared_ring(struct protocol_stack *stack);
+ void lstack_log_level_init(void);
+-int dpdk_ethdev_init(void);
++int dpdk_ethdev_init(int port_id, bool bond_port);
+ int dpdk_ethdev_start(void);
+ void dpdk_skip_nic_init(void);
+ int32_t dpdk_init_lstack_kni(void);
+-- 
+2.33.0
+

@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       62
+Release:       63
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -255,6 +255,11 @@ Patch9237:     0237-fix-rpc-msg-alloc-failed.patch
 Patch9238:     0238-add-parentheses-to-fix-build-error.patch
 Patch9239:     0239-add-udp-protocol-support-in-example.patch
 Patch9240:     0240-fix-bond_ports-parse-error.patch
+Patch9241:     0241-dfx-set-g_unix_fd-to-1-after-abnormal-close-fd-to-av.patch
+Patch9242:     0242-dfx-security-function-failed-return-error-directly.patch
+Patch9243:     0243-add-bond4-suport.patch
+Patch9244:     0244-clean-code.patch
+Patch9245:     0245-add-udp-multicast-support-in-gazelle.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -295,6 +300,13 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Tue May 16 2023 kircher <majun65@huawei.com> - 1.0.1-63
+- add udp multicast support in gazelle
+- clean code
+- add bond4 suport
+- dfx: security function failed, return error directly
+- dfx: set g_unix_fd to -1 after abnormal close fd to avoid double close
+
 * Mon Apr 10 2023 jiangheng12 <jiangheng14@huawei.com> - 1.0.1-62
 - fix bond_ports parse error fix socket_mem parse error when the value exceeds 65536 exit if create_rxtx_pktmbuf failed build.sh build failed return 1 clean code
 - add udp protocol support in example
