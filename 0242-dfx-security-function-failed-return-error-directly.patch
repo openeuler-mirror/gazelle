@@ -1,0 +1,63 @@
+From b3b492c64bab47d4bb898422fb9a57a2536e0d61 Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Wed, 26 Apr 2023 20:06:42 +0800
+Subject: [PATCH] dfx: security function failed, return error directly
+
+---
+ src/ltran/ltran_dfx.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/ltran/ltran_dfx.c b/src/ltran/ltran_dfx.c
+index 4baca26..944675e 100644
+--- a/src/ltran/ltran_dfx.c
++++ b/src/ltran/ltran_dfx.c
+@@ -206,12 +206,14 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
+     ret = memset_s(&addr, sizeof(addr), 0, sizeof(struct sockaddr_un));
+     if (ret != EOK) {
+         printf("%s:%d memset_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
++        goto END;
+     }
+ 
+     ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
+                     strlen(GAZELLE_RUN_DIR) + 1);
+     if (ret != EOK) {
+         printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
++        goto END;
+     }
+ 
+     if (g_unix_prefix) {
+@@ -219,6 +221,7 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
+                         strlen(g_unix_prefix) + 1);
+         if (ret != EOK) {
+             printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
++            goto END;
+         }
+     }
+ 
+@@ -234,6 +237,7 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
+             strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+         if (ret != EOK) {
+             printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
++            goto END;
+         }
+     }
+ 
+@@ -243,11 +247,13 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
+             printf("connect ltran failed. errno: %d ret=%d\n", errno, ret);
+             printf("You may need to use the -u parameter to specify the UNIX_PREFIX that matches the configuration.\n");
+         }
+-        close(fd);
+-        return GAZELLE_ERR;
++        goto END;
+     }
+ 
+     return fd;
++END:
++    close(fd);
++    return GAZELLE_ERR;
+ }
+ 
+ static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
+-- 
+2.33.0
+
