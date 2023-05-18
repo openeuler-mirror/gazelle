@@ -16,7 +16,7 @@
 #include <netinet/in.h>
 #include <rte_ether.h>
 
-#include "gazelle_opt.h"
+#include "common/gazelle_opt.h"
 
 struct ltran_config {
     struct {

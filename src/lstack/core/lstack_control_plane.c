@@ -26,8 +26,8 @@
 
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"
-#include "gazelle_reg_msg.h"
-#include "gazelle_base_func.h"
+#include "common/gazelle_reg_msg.h"
+#include "common/gazelle_base_func.h"
 #include "lstack_stack_stat.h"
 #include "lstack_log.h"
 #include "lstack_thread_rpc.h"

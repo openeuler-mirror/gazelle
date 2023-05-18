@@ -15,7 +15,7 @@
 #include "ltran_instance.h"
 #include "ltran_log.h"
 #include "ltran_jhash.h"
-#include "gazelle_base_func.h"
+#include "common/gazelle_base_func.h"
 #include "ltran_stack.h"
 
 struct gazelle_stack_htable *g_stack_htable = NULL;

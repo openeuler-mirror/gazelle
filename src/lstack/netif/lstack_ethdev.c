@@ -34,7 +34,7 @@
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_lwip.h"
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_ethdev.h"

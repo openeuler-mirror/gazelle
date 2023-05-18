@@ -15,7 +15,7 @@
 
 #include <limits.h>
 
-#include "gazelle_opt.h"
+#include "common/gazelle_opt.h"
 
 #define GAZELLE_CMD_BUFFER_SIZE          _POSIX_ARG_MAX
 #define GAZELLE_PATH_BUFFER_SIZE         PATH_MAX

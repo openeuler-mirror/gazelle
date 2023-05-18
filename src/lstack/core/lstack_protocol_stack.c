@@ -9,7 +9,7 @@
 * PURPOSE.
 * See the Mulan PSL v2 for more details.
 */
-#define _GNU_SOURCE
+
 #include <pthread.h>
 #include <stdatomic.h>
 
@@ -24,9 +24,9 @@
 #include <securec.h>
 #include <numa.h>
 
-#include "gazelle_base_func.h"
+#include "common/gazelle_base_func.h"
 #include "lstack_thread_rpc.h"
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_ethdev.h"

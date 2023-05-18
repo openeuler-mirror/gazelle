@@ -17,7 +17,7 @@
 #include <lwip/ip_addr.h>
 
 #include "lstack_protocol_stack.h"
-#include "gazelle_opt.h"
+#include "common/gazelle_opt.h"
 
 #define BASE_BIN_SCALE  2
 #define BASE_OCT_SCALE  8

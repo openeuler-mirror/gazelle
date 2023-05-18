@@ -17,8 +17,8 @@
 #include <netinet/in.h>
 #include <limits.h>
 
-#include "gazelle_opt.h"
-#include "gazelle_reg_msg.h"
+#include "common/gazelle_opt.h"
+#include "common/gazelle_reg_msg.h"
 
 struct gazelle_stack;
 struct gazelle_instance {
