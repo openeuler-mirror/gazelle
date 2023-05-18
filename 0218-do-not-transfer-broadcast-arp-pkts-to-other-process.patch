@@ -1,0 +1,25 @@
+From 3a2712ef47155848817409ebf550fefb7bc3d944 Mon Sep 17 00:00:00 2001
+From: kircher <majun65@huawei.com>
+Date: Tue, 21 Mar 2023 20:05:45 +0800
+Subject: [PATCH] do not transfer broadcast arp pkts to other process
+
+---
+ src/lstack/netif/lstack_ethdev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lstack/netif/lstack_ethdev.c b/src/lstack/netif/lstack_ethdev.c
+index 532f006..b35852b 100644
+--- a/src/lstack/netif/lstack_ethdev.c
++++ b/src/lstack/netif/lstack_ethdev.c
+@@ -733,7 +733,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
+             struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
+             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
+                 stack_broadcast_arp(stack->pkts[i], stack);
+-                if (!use_ltran_flag) {
++                if (!use_ltran_flag && !rte_is_broadcast_ether_addr(&ethh->d_addr)) {
+                     // copy arp into other process
+                     transfer_arp_to_other_process(stack->pkts[i]);
+                     transfer_type = TRANSFER_KERNEL;
+-- 
+2.23.0
+
