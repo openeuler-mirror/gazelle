@@ -10,7 +10,6 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#define _GNU_SOURCE
 #include <sched.h>
 #include <stdbool.h>
 #include <securec.h>
@@ -40,7 +39,7 @@
 #include <rte_ethdev.h>
 
 #include "lstack_log.h"
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "lstack_lockless_queue.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"

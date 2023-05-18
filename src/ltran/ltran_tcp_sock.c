@@ -18,7 +18,7 @@
 #include "ltran_instance.h"
 #include "ltran_base.h"
 #include "ltran_jhash.h"
-#include "gazelle_base_func.h"
+#include "common/gazelle_base_func.h"
 #include "ltran_tcp_sock.h"
 
 struct gazelle_tcp_sock_htable *g_tcp_sock_htable = NULL;

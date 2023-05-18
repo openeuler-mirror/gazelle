@@ -10,7 +10,6 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <string.h>
 
@@ -37,7 +36,7 @@
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
-#include "gazelle_base_func.h"
+#include "common/gazelle_base_func.h"
 #include "lstack_thread_rpc.h"
 
 #ifndef SOCK_TYPE_MASK

@@ -10,7 +10,6 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,10 +40,10 @@
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 #include "lstack_log.h"
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "posix/lstack_epoll.h"
 #include "posix/lstack_unistd.h"
-#include "gazelle_base_func.h"
+#include "common/gazelle_base_func.h"
 #include "lstack_protocol_stack.h"
 
 #define LSTACK_PRELOAD_ENV_SYS      "LD_PRELOAD"
