@@ -1,0 +1,93 @@
+From 3a1ff6aa0c9d85e3a5021fd3b6d788efe77db52a Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Fri, 31 Mar 2023 20:15:28 +0800
+Subject: [PATCH] fix client connect number unbalance on lstack
+
+---
+ src/lstack/core/lstack_lwip.c              | 1 -
+ src/lstack/core/lstack_protocol_stack.c    | 8 +++++++-
+ src/lstack/include/lstack_protocol_stack.h | 1 +
+ 3 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/lstack/core/lstack_lwip.c b/src/lstack/core/lstack_lwip.c
+index 71abbc6..ebdb469 100644
+--- a/src/lstack/core/lstack_lwip.c
++++ b/src/lstack/core/lstack_lwip.c
+@@ -192,7 +192,6 @@ void gazelle_init_sock(int32_t fd)
+     (void)replenish_send_idlembuf(stack, sock);
+ 
+     sock->stack = stack;
+-    sock->stack->conn_num++;
+     init_list_node_null(&sock->recv_list);
+     init_list_node_null(&sock->event_list);
+ }
+diff --git a/src/lstack/core/lstack_protocol_stack.c b/src/lstack/core/lstack_protocol_stack.c
+index 92300ef..76914f8 100644
+--- a/src/lstack/core/lstack_protocol_stack.c
++++ b/src/lstack/core/lstack_protocol_stack.c
+@@ -124,6 +124,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
+ 
+     /* same app communication thread bind same stack */
+     if (bind_stack) {
++        bind_stack->conn_num++;
+         return bind_stack;
+     }
+ 
+@@ -140,6 +141,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
+             return NULL;
+         }
+     } else {
++        pthread_spin_lock(&stack_group->socket_lock);
+         for (uint16_t i = 0; i < stack_group->stack_num; i++) {
+             struct protocol_stack* stack = stack_group->stacks[i];
+             if (get_global_cfg_params()->seperate_send_recv) {
+@@ -147,7 +149,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
+                     index = i;
+                     min_conn_num = stack->conn_num;
+                 }
+-            }else {
++            } else {
+                 if (stack->conn_num < min_conn_num) {
+                     index = i;
+                     min_conn_num = stack->conn_num;
+@@ -156,7 +158,9 @@ struct protocol_stack *get_bind_protocol_stack(void)
+         }
+     }
+ 
++    stack_group->stacks[index]->conn_num++;
+     bind_stack = stack_group->stacks[index];
++    pthread_spin_unlock(&stack_group->socket_lock);
+     return stack_group->stacks[index];
+ }
+ 
+@@ -541,6 +545,7 @@ int32_t init_protocol_stack(void)
+ 
+     init_list_node(&stack_group->poll_list);
+     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
++    pthread_spin_init(&stack_group->socket_lock, PTHREAD_PROCESS_PRIVATE);
+     
+ 
+     if (init_protocol_sem() != 0) {
+@@ -689,6 +694,7 @@ void stack_accept(struct rpc_msg *msg)
+     }
+ 
+     msg->result = accept_fd;
++    sock->stack->conn_num++;
+     if (rte_ring_count(sock->conn->recvmbox->ring)) {
+         add_recv_list(accept_fd);
+     }
+diff --git a/src/lstack/include/lstack_protocol_stack.h b/src/lstack/include/lstack_protocol_stack.h
+index 001ab47..c75161f 100644
+--- a/src/lstack/include/lstack_protocol_stack.h
++++ b/src/lstack/include/lstack_protocol_stack.h
+@@ -103,6 +103,7 @@ struct protocol_stack_group {
+     /* dfx stats */
+     bool latency_start;
+     uint64_t call_alloc_fail;
++    pthread_spinlock_t socket_lock;
+ };
+ 
+ long get_stack_tid(void);
+-- 
+2.33.0
+
