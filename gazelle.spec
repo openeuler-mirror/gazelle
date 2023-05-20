@@ -2,7 +2,7 @@
 
 Name:          gazelle
 Version:       1.0.1
-Release:       57
+Release:       58
 Summary:       gazelle is a high performance user-mode stack
 License:       MulanPSL-2.0
 URL:           https://gitee.com/openeuler/gazelle
@@ -254,6 +254,7 @@ Patch9236:     0236-dfx-security-function-failed-return-error-directly.patch
 Patch9237:     0237-add-bond4-suport.patch
 Patch9238:     0238-clean-code.patch
 Patch9239:     0239-add-udp-multicast-support-in-gazelle.patch
+Patch9240:     0240-modify-huge-dir-dir-name.patch
 
 %description
 %{name} is a high performance user-mode stack.
@@ -294,6 +295,9 @@ install -Dpm 0640 %{_builddir}/%{name}-%{version}/src/ltran/ltran.conf       %{b
 %config(noreplace) %{conf_path}/ltran.conf
 
 %changelog
+* Sat May 20 2023 jiangheng <jiangheng14@huawei.com> - 1.0.1-58
+- modify hugepage directory name
+
 * Tue May 16 2023 kircher <majun65@huawei.com> - 1.0.1-57
 - add udp multicast support in gazelle
 - clean code
