@@ -66,14 +66,14 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
         return PATH_KERNEL;
     }
 
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
 
     /* AF_UNIX case */
-    if (!sock || !sock->conn || CONN_TYPE_IS_HOST(sock->conn)) {
+    if (!sock || !sock->conn || POSIX_IS_TYPE(sock, POSIX_KERNEL)) {
         return PATH_KERNEL;
     }
 
-    if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
+    if (likely(POSIX_IS_TYPE(sock, POSIX_LWIP))) {
         if (socket) {
             *socket = sock;
         }
@@ -287,7 +287,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         return posix_api->connect_fn(s, name, namelen);
     }
 
-    sock = get_socket(s);
+    sock = lwip_get_socket_nouse(s);
     if (sock == NULL) {
         return posix_api->connect_fn(s, name, namelen);
     }
@@ -303,10 +303,10 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         "listen_rx_ring_%d", remote_port);
     if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
-        SET_CONN_TYPE_HOST(sock->conn);
+        POSIX_SET_TYPE(sock, POSIX_KERNEL);
     } else {
         ret = rpc_call_connect(s, name, namelen);
-        SET_CONN_TYPE_LIBOS(sock->conn);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
     }
 
     return ret;

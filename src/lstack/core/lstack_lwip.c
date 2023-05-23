@@ -92,6 +92,7 @@ static void reset_sock_data(struct lwip_sock *sock)
         sock->send_pre_del = NULL;
     }
 
+    sock->type = 0;
     sock->stack = NULL;
     sock->wakeup = NULL;
     sock->listen_next = NULL;
@@ -171,10 +172,15 @@ void gazelle_init_sock(int32_t fd)
 {
     static _Atomic uint32_t name_tick = 0;
     struct protocol_stack *stack = get_protocol_stack();
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     if (sock == NULL) {
         return;
     }
+
+    sock->same_node_rx_ring = NULL;
+    sock->same_node_rx_ring_mz = NULL;
+    sock->same_node_tx_ring = NULL;
+    sock->same_node_tx_ring_mz = NULL;
 
     reset_sock_data(sock);
 
@@ -202,7 +208,7 @@ void gazelle_init_sock(int32_t fd)
 
 void gazelle_clean_sock(int32_t fd)
 {
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     if (sock == NULL || sock->stack == NULL) {
         return;
     }
@@ -680,7 +686,7 @@ void stack_send(struct rpc_msg *msg)
     struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
     bool replenish_again;
 
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     if (sock == NULL) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "stack_send: sock error!\n");
@@ -971,7 +977,7 @@ ssize_t gazelle_send(int32_t fd, const void *buf, size_t len, int32_t flags,
         return 0;
     }
 
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
 
     thread_bind_stack(sock);
 
@@ -1047,7 +1053,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags, struct
     struct pbuf *pbuf = NULL;
     ssize_t recvd = 0;
     uint32_t copy_len;
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     bool latency_enable = get_protocol_stack_group()->latency_start;
 
     if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
@@ -1113,7 +1119,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags, struct
 
 void add_recv_list(int32_t fd)
 {
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
 
     if (sock && sock->stack && list_is_null(&sock->recv_list)) {
         list_add_node(&sock->stack->recv_list, &sock->recv_list);
@@ -1179,7 +1185,7 @@ void gazelle_connected_callback(struct netconn *conn)
     }
 
     int32_t fd = conn->socket;
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     if (sock == NULL || sock->conn == NULL) {
         return;
     }
@@ -1190,8 +1196,7 @@ void gazelle_connected_callback(struct netconn *conn)
 
     posix_api->shutdown_fn(fd, SHUT_RDWR);
 
-    SET_CONN_TYPE_LIBOS(conn);
-
+    POSIX_SET_TYPE(sock, POSIX_LWIP);
     add_sock_event(sock, EPOLLOUT);
 }
 
@@ -1217,7 +1222,7 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
         conn->recv_cnt = rte_ring_count(netconn->recvmbox->ring);
         conn->fd = netconn->socket;
 
-        struct lwip_sock *sock = get_socket(netconn->socket);
+        struct lwip_sock *sock = lwip_get_socket_nouse(netconn->socket);
         if (netconn->socket > 0 && sock != NULL && sock->recv_ring != NULL && sock->send_ring != NULL) {
             conn->recv_ring_cnt = gazelle_ring_readable_count(sock->recv_ring);
             conn->recv_ring_cnt += (sock->recv_lastdata) ? 1 : 0;
@@ -1252,7 +1257,7 @@ int32_t gazelle_socket(int domain, int type, int protocol)
 
     gazelle_init_sock(fd);
 
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     if (sock == NULL || sock->stack == NULL) {
         lwip_close(fd);
         gazelle_clean_sock(fd);
@@ -1276,8 +1281,8 @@ void create_shadow_fd(struct rpc_msg *msg)
         return;
     }
 
-    struct lwip_sock *sock = get_socket_by_fd(fd);
-    struct lwip_sock *clone_sock = get_socket_by_fd(clone_fd);
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
+    struct lwip_sock *clone_sock = lwip_get_socket_nouse(clone_fd);
     if (sock == NULL || clone_sock == NULL) {
         LSTACK_LOG(ERR, LSTACK, "get sock null fd=%d clone_fd=%d\n", fd, clone_fd);
         msg->result = -1;
@@ -1552,7 +1557,7 @@ err_t same_node_ring_create(struct rte_ring **ring, int size, int port, char *na
 static void init_same_node_ring(struct tcp_pcb *pcb)
 {
     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
-    struct lwip_sock *sock = get_socket(netconn->socket);
+    struct lwip_sock *sock = lwip_get_socket_nouse(netconn->socket);
 
     pcb->client_rx_ring = NULL;
     pcb->client_tx_ring = NULL;
@@ -1567,7 +1572,7 @@ static void init_same_node_ring(struct tcp_pcb *pcb)
 err_t create_same_node_ring(struct tcp_pcb *pcb)
 {
     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
-    struct lwip_sock *sock = get_socket(netconn->socket);
+    struct lwip_sock *sock = lwip_get_socket_nouse(netconn->socket);
 
     if (same_node_ring_create(&pcb->client_rx_ring, CLIENT_RING_SIZE, pcb->local_port, "client", "rx") != 0) {
         goto END;

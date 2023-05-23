@@ -13,13 +13,21 @@
 #ifndef __GAZELLE_LWIP_H__
 #define __GAZELLE_LWIP_H__
 
+#include <lwip/lwipsock.h>
+
+static inline unsigned same_node_ring_count(struct lwip_sock *sock)
+{
+    const unsigned long long cur_begin = __atomic_load_n(&sock->same_node_rx_ring->sndbegin, __ATOMIC_RELAXED);
+    const unsigned long long cur_end = __atomic_load_n(&sock->same_node_rx_ring->sndend, __ATOMIC_RELAXED);
+    return cur_end - cur_begin;
+}
+
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
 #define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)))
 #define NETCONN_IS_DATAOUT(sock)    (gazelle_ring_readover_count((sock)->send_ring) || (sock)->send_lastdata || (sock)->send_pre_del)
 #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 #define NETCONN_IS_UDP(sock)        (NETCONNTYPE_GROUP(netconn_type((sock)->conn)) == NETCONN_UDP)
 
-struct lwip_sock;
 struct rte_mempool;
 struct rpc_msg;
 struct rte_mbuf;
