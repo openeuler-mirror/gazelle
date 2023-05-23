@@ -25,7 +25,7 @@
 #include <net/if.h>
 #include <securec.h>
 
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 #include <lwip/lwipsock.h>
 #include <lwip/tcp.h>
 

@@ -20,7 +20,7 @@
 #include <lwip/tcp.h>
 #include <lwip/memp_def.h>
 #include <lwipsock.h>
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 #include <securec.h>
 #include <numa.h>
 

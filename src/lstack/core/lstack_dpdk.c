@@ -29,10 +29,10 @@
 #include <rte_kni.h>
 #include <rte_pdump.h>
 #include <rte_thash.h>
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 #include <lwipopts.h>
 #include <lwip/pbuf.h>
-#include <lwip/reg_sock.h>
+#include <lwip/gazelle_tcp_reg.h>
 #include <lwip/priv/tcp_priv.h>
 #include <rte_eth_bond_8023ad.h>
 #include <rte_eth_bond.h>

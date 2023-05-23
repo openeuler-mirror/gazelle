@@ -21,8 +21,8 @@
 #include <lwip/tcp.h>
 #include <rte_eal.h>
 #include <rte_errno.h>
-#include <lwip/posix_api.h>
-#include <lwip/reg_sock.h>
+#include <lwip/gazelle_posix_api.h>
+#include <lwip/gazelle_tcp_reg.h>
 
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"

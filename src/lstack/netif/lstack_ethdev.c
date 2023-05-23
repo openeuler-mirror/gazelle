@@ -19,7 +19,7 @@
 
 #include <lwip/debug.h>
 #include <lwip/etharp.h>
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 #include <netif/ethernet.h>
 #include <lwip/tcp.h>
 #include <lwip/prot/tcp.h>

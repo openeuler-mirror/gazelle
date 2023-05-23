@@ -13,7 +13,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 
 pid_t lstack_fork(void)
 {
