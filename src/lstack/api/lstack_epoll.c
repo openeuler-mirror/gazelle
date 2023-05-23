@@ -20,11 +20,11 @@
 
 #include <lwip/lwipsock.h>
 #include <lwip/sockets.h>
-#include <lwip/eventpoll.h>
+#include <lwip/gazelle_event.h>
 #include <lwip/api.h>
 #include <lwip/tcp.h>
 #include <lwip/timeouts.h>
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 
 #include "lstack_ethdev.h"
 #include "lstack_stack_stat.h"

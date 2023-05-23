@@ -24,7 +24,7 @@
 #include <sched.h>
 
 #include <lwip/lwipsock.h>
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 #include <lwip/inet.h>
 
 #include "common/gazelle_reg_msg.h"

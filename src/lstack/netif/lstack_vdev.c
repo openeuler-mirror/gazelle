@@ -14,7 +14,7 @@
 #include <lwip/memp.h>
 #include <lwip/lwipopts.h>
 #include <lwip/sys.h>
-#include <lwip/reg_sock.h>
+#include <lwip/gazelle_tcp_reg.h>
 #include <rte_ring.h>
 #include <rte_malloc.h>
 #include <rte_ethdev.h>

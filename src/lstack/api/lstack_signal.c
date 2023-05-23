@@ -16,7 +16,7 @@
 #include <execinfo.h>
 #include <unistd.h>
 #include <lwip/lwipsock.h>
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 
 #include "lstack_cfg.h"
 #include "common/dpdk_common.h"

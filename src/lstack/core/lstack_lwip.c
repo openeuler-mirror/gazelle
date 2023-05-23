@@ -19,7 +19,7 @@
 #include <arch/sys_arch.h>
 #include <lwip/pbuf.h>
 #include <lwip/priv/tcp_priv.h>
-#include <lwip/posix_api.h>
+#include <lwip/gazelle_posix_api.h>
 #include <lwip/api.h>
 #include <lwip/tcp.h>
 #include <securec.h>

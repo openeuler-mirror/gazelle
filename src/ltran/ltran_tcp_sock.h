@@ -13,7 +13,7 @@
 #ifndef __GAZELLE_TCP_SOCK_H__
 #define __GAZELLE_TCP_SOCK_H__
 
-#include <lwip/hlist.h>
+#include <lwip/gazelle_hlist.h>
 #include <pthread.h>
 #include <stdint.h>
 

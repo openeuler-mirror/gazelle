@@ -13,7 +13,7 @@
 #ifndef __GAZELLE_INSTANCE_H__
 #define __GAZELLE_INSTANCE_H__
 
-#include <lwip/hlist.h>
+#include <lwip/gazelle_hlist.h>
 #include <netinet/in.h>
 #include <limits.h>
 
