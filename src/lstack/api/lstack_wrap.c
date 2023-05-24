@@ -62,7 +62,7 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
         return PATH_KERNEL;
     }
 
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->use_kernel)) {
         return PATH_KERNEL;
     }
 
@@ -110,7 +110,7 @@ static inline int32_t do_epoll_create1(int32_t flags)
         return posix_api->epoll_create1_fn(flags);
     }
 
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->use_kernel)) {
         return posix_api->epoll_create1_fn(flags);
     }
 
@@ -127,7 +127,7 @@ static inline int32_t do_epoll_create(int32_t size)
         return posix_api->epoll_create_fn(size);
     }
 
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->use_kernel)) {
         return posix_api->epoll_create_fn(size);
     }
 
@@ -136,7 +136,7 @@ static inline int32_t do_epoll_create(int32_t size)
 
 static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
 {
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->use_kernel)) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -145,7 +145,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->use_kernel)) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
@@ -402,7 +402,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
 static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     if ((domain != AF_INET && domain != AF_UNSPEC)
-        || posix_api->ues_posix) {
+        || posix_api->use_kernel) {
         return posix_api->socket_fn(domain, type, protocol);
     }
 
@@ -518,7 +518,7 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
         return recvmsg_from_stack(s, message, flags);
     }
 
-    return posix_api->recv_msg(s, message, flags);
+    return posix_api->recvmsg_fn(s, message, flags);
 }
 
 static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
@@ -532,7 +532,7 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
         return sendmsg_to_stack(sock, s, message, flags);
     }
 
-    return posix_api->send_msg(s, message, flags);
+    return posix_api->sendmsg_fn(s, message, flags);
 }
 
 static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
@@ -551,7 +551,7 @@ static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t
         return read_stack_data(sockfd, buf, len, flags, addr, addrlen);
     }
 
-    return posix_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
+    return posix_api->recvfrom_fn(sockfd, buf, len, flags, addr, addrlen);
 }
 
 static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
@@ -559,7 +559,7 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
 {
     struct lwip_sock *sock = NULL;
     if (select_path(sockfd, &sock) != PATH_LWIP) {
-        return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
+        return posix_api->sendto_fn(sockfd, buf, len, flags, addr, addrlen);
     }
 
     return gazelle_send(sockfd, buf, len, flags, addr, addrlen);
@@ -570,7 +570,7 @@ static inline int32_t do_close(int32_t s)
     struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_KERNEL) {
         /* we called lwip_socket, even if kernel fd */
-        if (posix_api != NULL && !posix_api->ues_posix &&
+        if (posix_api != NULL && !posix_api->use_kernel &&
             /* contain posix_api->close_fn if success */
             stack_broadcast_close(s) == 0) {
             return 0;
@@ -586,7 +586,7 @@ static inline int32_t do_close(int32_t s)
 
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
-    if (unlikely(posix_api->ues_posix) || fds == NULL || nfds == 0) {
+    if (unlikely(posix_api->use_kernel) || fds == NULL || nfds == 0) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 

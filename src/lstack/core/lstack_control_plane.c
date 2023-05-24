@@ -741,7 +741,7 @@ void control_server_thread(void *arg)
     struct epoll_event evt_array;
     while (1) {
         /* wait init finish */
-        if (posix_api->ues_posix) {
+        if (posix_api->use_kernel) {
             usleep(GAZELLE_10MS);
             continue;
         }
@@ -790,7 +790,7 @@ void control_client_thread(void *arg)
 
     while (1) {
         /* wait init finish */
-        if (posix_api->ues_posix) {
+        if (posix_api->use_kernel) {
             usleep(GAZELLE_10MS);
             continue;
         }

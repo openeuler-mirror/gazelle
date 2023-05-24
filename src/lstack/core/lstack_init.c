@@ -180,7 +180,7 @@ static int32_t check_preload_bind_proc(void)
 
 __attribute__((destructor)) void gazelle_network_exit(void)
 {
-    if (posix_api != NULL && !posix_api->ues_posix) {
+    if (posix_api != NULL && !posix_api->use_kernel) {
         lwip_exit();
     }
 
@@ -373,7 +373,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
         LSTACK_EXIT(1, "set_process_start_flag failed\n");
     }
 
-    posix_api->ues_posix = 0;
+    posix_api->use_kernel = 0;
     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
     rte_smp_mb();
 }
