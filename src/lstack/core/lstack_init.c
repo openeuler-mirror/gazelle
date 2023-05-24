@@ -359,9 +359,6 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
-    /* lwip initialization */
-    lwip_sock_init();
-
     /* wait stack thread and kernel_event thread init finish */
     wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
     if (g_init_fail) {
