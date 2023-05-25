@@ -25,16 +25,10 @@
     return -1; \
 } while (0)
 
-#define NODE_ENTRY(node, type, member) \
-    ((type*)((char*)(node) - (size_t)&((type*)0)->member))
-
 int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size, int32_t max_value);
 
 int32_t check_and_set_run_dir(void);
 
 int32_t filename_check(const char* args);
-
-#undef container_of
-#define container_of(ptr, type, field) ((type *)(void*)(((char *)(ptr)) - offsetof(type, field)))
 
 #endif /* ifndef __GAZELLE_BASE_FUNC_H__ */
