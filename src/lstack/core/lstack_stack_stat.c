@@ -128,12 +128,13 @@ static void set_latency_start_flag(bool start)
 static void get_wakeup_stat(struct protocol_stack_group *stack_group, struct protocol_stack *stack,
     struct gazelle_wakeup_stat *stat)
 {
-    struct list_node *node, *temp;
+    struct wakeup_poll *wakeup;
+    struct list_node *node, *next;
 
     pthread_spin_lock(&stack_group->poll_list_lock);
 
-    list_for_each_safe(node, temp, &stack_group->poll_list) {
-        struct wakeup_poll *wakeup = container_of(node, struct wakeup_poll, poll_list);
+    list_for_each_node(node, next, &stack_group->poll_list) {
+        wakeup = list_entry(node, struct wakeup_poll, poll_list);
 
         if (wakeup->bind_stack == stack) {
             stat->app_events += wakeup->stat.app_events;
