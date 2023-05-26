@@ -42,7 +42,7 @@ struct gazelle_stack_htable *gazelle_stack_htable_create(uint32_t max_stack_num)
     }
 
     for (i = 0; i < GAZELLE_MAX_STACK_HTABLE_SIZE; i++) {
-        INIT_HLIST_HEAD(&stack_htable->array[i].chain);
+        hlist_init_head(&stack_htable->array[i].chain);
         stack_htable->array[i].chain_size = 0;
     }
     stack_htable->cur_stack_num = 0;
@@ -67,7 +67,7 @@ void gazelle_stack_htable_destroy(void)
         while (node != NULL) {
             stack = hlist_entry(node, typeof(*stack), stack_node);
             node = node->next;
-            hlist_del_init(&stack->stack_node);
+            hlist_del_node(&stack->stack_node);
             free(stack);
         }
     }
@@ -87,7 +87,6 @@ const struct gazelle_stack *gazelle_stack_get_by_tid(const struct gazelle_stack_
     uint32_t index;
     const struct gazelle_stack *stack = NULL;
     const struct gazelle_stack_hbucket *stack_hbucket = NULL;
-    struct hlist_node *node = NULL;
     const struct hlist_head *head = NULL;
 
     index = tid_hash_fn(tid) % GAZELLE_MAX_STACK_HTABLE_SIZE;
@@ -97,7 +96,7 @@ const struct gazelle_stack *gazelle_stack_get_by_tid(const struct gazelle_stack_
     }
 
     head = &stack_hbucket->chain;
-    hlist_for_each_entry(stack, node, head, stack_node) {
+    hlist_for_each_entry(stack, head, stack_node) {
         if ((stack->tid == tid) && INSTANCE_IS_ON(stack)) {
             return stack;
         }
@@ -144,7 +143,6 @@ void gazelle_stack_del_by_tid(struct gazelle_stack_htable *stack_htable, uint32_
 {
     struct gazelle_stack *stack = NULL;
     struct gazelle_stack_hbucket *stack_hbucket = NULL;
-    struct hlist_node *node = NULL;
     struct hlist_head *head = NULL;
     uint32_t backup_size;
     uint32_t index;
@@ -156,7 +154,7 @@ void gazelle_stack_del_by_tid(struct gazelle_stack_htable *stack_htable, uint32_
     }
 
     head = &stack_hbucket->chain;
-    hlist_for_each_entry(stack, node, head, stack_node) {
+    hlist_for_each_entry(stack, head, stack_node) {
         if (stack->tid == tid) {
             break;
         }
@@ -180,7 +178,7 @@ void gazelle_stack_del_by_tid(struct gazelle_stack_htable *stack_htable, uint32_
         }
     }
 
-    hlist_del_init(&stack->stack_node);
+    hlist_del_node(&stack->stack_node);
     stack_htable->cur_stack_num--;
     stack_hbucket->chain_size--;
 

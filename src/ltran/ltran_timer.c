@@ -62,7 +62,7 @@ void gazelle_detect_sock_logout(struct gazelle_tcp_sock_htable *tcp_sock_htable)
             tcp_sock = hlist_entry(node, typeof(*tcp_sock), tcp_sock_node);
             node = node->next;
             if (!INSTANCE_IS_ON(tcp_sock)) {
-                hlist_del_init(&tcp_sock->tcp_sock_node);
+                hlist_del_node(&tcp_sock->tcp_sock_node);
                 tcp_sock_htable->cur_tcp_sock_num--;
                 tcp_sock_htable->array[i].chain_size--;
                 LTRAN_DEBUG("delete the tcp sock htable: tid %u ip %u port %u\n",
@@ -98,7 +98,7 @@ void gazelle_detect_conn_logout(struct gazelle_tcp_conn_htable *conn_htable)
             conn = hlist_entry(node, typeof(*conn), conn_node);
             node = node->next;
             if (!INSTANCE_IS_ON(conn)) {
-                hlist_del_init(&conn->conn_node);
+                hlist_del_node(&conn->conn_node);
                 conn_htable->cur_conn_num--;
                 conn_htable->array[i].chain_size--;
                 LTRAN_DEBUG("delete the tcp conn htable: tid %u quintuple[%u %u %u %u %u]\n",
@@ -145,7 +145,7 @@ void gazelle_delete_aging_conn(struct gazelle_tcp_conn_htable *conn_htable)
                 continue;
             }
 
-            hlist_del_init(&conn->conn_node);
+            hlist_del_node(&conn->conn_node);
             conn_htable->cur_conn_num--;
             conn_htable->array[i].chain_size--;
             if (conn->sock) {

@@ -214,7 +214,6 @@ void handle_resp_ltran_total(int32_t fd)
 void handle_resp_ltran_sock(int32_t fd)
 {
     struct gazelle_tcp_sock *tcp_sock = NULL;
-    struct hlist_node *node = NULL;
     struct hlist_head *head = NULL;
     struct gazelle_tcp_sock_htable *sock_htable = gazelle_get_tcp_sock_htable();
     struct gazelle_stat_forward_table forward_table = {0};
@@ -227,7 +226,7 @@ void handle_resp_ltran_sock(int32_t fd)
 
     for (int32_t i = 0; i < GAZELLE_MAX_TCP_SOCK_HTABLE_SIZE; i++) {
         head = &sock_htable->array[i].chain;
-        hlist_for_each_entry(tcp_sock, node, head, tcp_sock_node) {
+        hlist_for_each_entry(tcp_sock, head, tcp_sock_node) {
             if (index < GAZELLE_LSTACK_MAX_CONN) {
                 forward_table.conn_list[index].dst_ip = tcp_sock->ip;
                 forward_table.conn_list[index].tid = tcp_sock->tid;
@@ -248,7 +247,6 @@ void handle_resp_ltran_sock(int32_t fd)
 
 void handle_resp_ltran_conn(int32_t fd)
 {
-    struct hlist_node *node = NULL;
     struct hlist_head *head = NULL;
     struct gazelle_tcp_conn_htable *conn_htable = gazelle_get_tcp_conn_htable();
     struct gazelle_tcp_sock_htable *sock_htable = gazelle_get_tcp_sock_htable();
@@ -263,7 +261,7 @@ void handle_resp_ltran_conn(int32_t fd)
 
     for (int32_t i = 0; i < GAZELLE_MAX_CONN_HTABLE_SIZE; i++) {
         head = &conn_htable->array[i].chain;
-        hlist_for_each_entry(conn, node, head, conn_node) {
+        hlist_for_each_entry(conn, head, conn_node) {
             if (index < GAZELLE_LSTACK_MAX_CONN) {
                 forward_table.conn_list[index].protocol = conn->quintuple.protocol;
                 forward_table.conn_list[index].tid = conn->tid;
