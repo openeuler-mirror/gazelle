@@ -134,7 +134,7 @@ int32_t eth_dev_poll(void)
     }
 
     if (!cfg->use_ltran && get_protocol_stack_group()->latency_start) {
-        uint64_t time_stamp = get_current_time();
+        uint64_t time_stamp = get_now_us();
         time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
     }
 
@@ -768,7 +768,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
     }
 
     if (!use_ltran_flag && get_protocol_stack_group()->latency_start) {
-        uint64_t time_stamp = get_current_time();
+        uint64_t time_stamp = get_now_us();
         time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
     }
 

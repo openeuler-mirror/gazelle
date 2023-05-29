@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#include <rte_cycles.h>
 #include <rte_kni.h>
 #include <rte_bus_pci.h>
 #include <rte_ethdev.h>
@@ -33,6 +34,16 @@
 #define  COMMON_ERR(fmt, ...)    LSTACK_LOG(ERR, LSTACK, fmt, ##__VA_ARGS__)
 #define  COMMON_INFO(fmt, ...)   LSTACK_LOG(INFO, LSTACK, fmt, ##__VA_ARGS__)
 #endif
+
+uint64_t get_now_us(void)
+{
+    static uint64_t g_cycles_per_us = 0;
+    if (unlikely(g_cycles_per_us == 0)) {
+        g_cycles_per_us = (rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S;;
+    }
+
+    return (rte_rdtsc() / g_cycles_per_us);
+}
 
 struct rte_kni *g_pkni = NULL;
 static volatile bool g_kni_started = false;

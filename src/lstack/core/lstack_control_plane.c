@@ -18,11 +18,14 @@
 #include <sys/socket.h>
 #include <securec.h>
 
-#include <lwip/tcp.h>
+#include <rte_cycles.h>
 #include <rte_eal.h>
 #include <rte_errno.h>
+
+#include <lwip/tcp.h>
 #include <lwip/gazelle_posix_api.h>
 #include <lwip/gazelle_tcp_reg.h>
+#include <lwip/arch/sys_arch.h>
 
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"
@@ -344,7 +347,7 @@ static int32_t client_reg_proc_attach(__attribute__((__unused__)) bool is_reconn
     return 0;
 }
 
-static int32_t reg_conn(enum tcp_list_state table_state, enum reg_ring_type reg_type,
+static int32_t reg_conn(enum GAZELLE_TCP_LIST_STATE table_state, enum reg_ring_type reg_type,
     const struct gazelle_stat_lstack_conn *conn)
 {
     struct gazelle_quintuple qtuple;
@@ -362,7 +365,7 @@ static int32_t reg_conn(enum tcp_list_state table_state, enum reg_ring_type reg_
         qtuple.dst_ip = conn->conn_list[i].rip;
         qtuple.dst_port = lwip_htons(conn->conn_list[i].r_port);
 
-        if ((table_state == LISTEN_LIST) &&
+        if ((table_state == GAZELLE_LISTEN_LIST) &&
             (!match_host_addr(qtuple.src_ip))) {
             continue;
         }
@@ -391,16 +394,16 @@ void thread_register_phase1(struct rpc_msg *msg)
     }
 
     struct gazelle_stat_lstack_conn *conn = (struct gazelle_stat_lstack_conn *)msg->args[MSG_ARG_0].p;
-    ret = reg_conn(ACTIVE_LIST, REG_RING_TCP_CONNECT, conn);
+    ret = reg_conn(GAZELLE_ACTIVE_LIST, REG_RING_TCP_CONNECT, conn);
     if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "ACTIVE_LIST rereg conn fail ret=%d\n", ret);
+        LSTACK_LOG(ERR, LSTACK, "GAZELLE_ACTIVE_LIST rereg conn fail ret=%d\n", ret);
         msg->result = ret;
         return;
     }
 
-    ret = reg_conn(TIME_WAIT_LIST, REG_RING_TCP_CONNECT, conn);
+    ret = reg_conn(GAZELLE_TIME_WAIT_LIST, REG_RING_TCP_CONNECT, conn);
     if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "TIME_WAIT_LIST rereg conn fail ret=%d\n", ret);
+        LSTACK_LOG(ERR, LSTACK, "GAZELLE_TIME_WAIT_LIST rereg conn fail ret=%d\n", ret);
     }
     msg->result = ret;
 }
@@ -409,9 +412,9 @@ void thread_register_phase2(struct rpc_msg *msg)
 {
     struct gazelle_stat_lstack_conn *conn = (struct gazelle_stat_lstack_conn *)msg->args[MSG_ARG_0].p;
 
-    int32_t ret = reg_conn(LISTEN_LIST, REG_RING_TCP_LISTEN, conn);
+    int32_t ret = reg_conn(GAZELLE_LISTEN_LIST, REG_RING_TCP_LISTEN, conn);
     if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "LISTEN_LIST rereg conn fail ret=%d\n", ret);
+        LSTACK_LOG(ERR, LSTACK, "GAZELLE_LISTEN_LIST rereg conn fail ret=%d\n", ret);
     }
 
     msg->result = ret;

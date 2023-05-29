@@ -12,17 +12,16 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
-
+#include <securec.h>
+#include <numa.h>
 #include <rte_kni.h>
 
 #include <lwip/sockets.h>
-#include <lwip/tcpip.h>
+#include <lwip/init.h>
 #include <lwip/tcp.h>
 #include <lwip/memp_def.h>
 #include <lwipsock.h>
 #include <lwip/gazelle_posix_api.h>
-#include <securec.h>
-#include <numa.h>
 
 #include "common/gazelle_base_func.h"
 #include "lstack_thread_rpc.h"
@@ -292,9 +291,6 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
     list_init_head(&stack->same_node_recv_list);
     list_init_head(&stack->wakeup_list);
 
-    sys_calibrate_tsc();
-    stack_stat_init();
-
     stack_group->stacks[t_params->idx] = stack;
     set_stack_idx(t_params->idx);
 
@@ -378,9 +374,9 @@ static struct protocol_stack *stack_thread_init(void *arg)
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
+    sys_timer_init();
     hugepage_init();
-
-    tcpip_init(NULL, NULL);
+    lwip_init();
 
     if (use_ltran()) {
         if (client_reg_thrd_ring() != 0) {
