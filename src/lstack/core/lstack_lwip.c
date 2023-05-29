@@ -743,7 +743,6 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
     uint32_t data_count = rte_ring_count(sock->conn->recvmbox->ring);
     uint32_t read_num = LWIP_MIN(free_count, data_count);
     struct pbuf *pbufs[SOCK_RECV_RING_SIZE];
-    struct netbuf *netbufs[SOCK_RECV_RING_SIZE];
     uint32_t read_count = 0;
     ssize_t recv_len = 0;
 
@@ -751,10 +750,7 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
 
         err_t err = ERR_OK;
         if (NETCONN_IS_UDP(sock)) {
-            err = netconn_recv_udp_raw_netbuf_flags(sock->conn, &netbufs[i], apiflags);
-            pbufs[i] = netbufs[i]->p;
-            pbufs[i]->addr = netbufs[i]->addr;
-            pbufs[i]->port = netbufs[i]->port;
+            err = netconn_recv_udp_raw_pbuf_flags(sock->conn, &pbufs[i], apiflags);
         } else {
             err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
         }
@@ -776,14 +772,9 @@ ssize_t read_lwip_data(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
     }
 
     uint32_t enqueue_num = gazelle_ring_sp_enqueue(sock->recv_ring, (void **)pbufs, read_count);
-    if (NETCONN_IS_UDP(sock)) {
-        for (uint32_t i = 0; i < read_count; i++) {
-            memp_free(MEMP_NETBUF, netbufs[i]);
-        }
-    }
     for (uint32_t i = enqueue_num; i < read_count; i++) {
         if (NETCONN_IS_UDP(sock)) {
-            netbuf_delete(netbufs[i]);
+            pbuf_free(pbufs[i]);
         } else {
             /* update receive window */
             tcp_recved(sock->conn->pcb.tcp, pbufs[i]->tot_len);
@@ -1104,7 +1095,7 @@ ssize_t read_stack_data(int32_t fd, void *buf, size_t len, int32_t flags, struct
         del_data_in_event(sock);
     }
 
-    if (addr && addrlen) {
+    if (pbuf && addr && addrlen) {
         lwip_sock_make_addr(sock->conn, &(pbuf->addr), pbuf->port, addr, addrlen);
     }
 
