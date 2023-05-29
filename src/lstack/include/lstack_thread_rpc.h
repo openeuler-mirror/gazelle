@@ -14,7 +14,6 @@
 #define __GAZELLE_THREAD_RPC_H__
 
 #include <pthread.h>
-#include <arch/sys_arch.h>
 
 #include "lstack_lockless_queue.h"
 

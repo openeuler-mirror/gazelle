@@ -29,25 +29,6 @@
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 
-#define US_PER_SEC  1000000
-
-static uint64_t g_cycles_per_us;
-
-void stack_stat_init(void)
-{
-    uint64_t freq = rte_get_tsc_hz();
-    g_cycles_per_us = (freq + US_PER_SEC - 1) / US_PER_SEC;
-}
-
-uint64_t get_current_time(void)
-{
-    if (g_cycles_per_us == 0) {
-        return 0;
-    }
-
-    return (rte_rdtsc() / g_cycles_per_us);
-}
-
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
     enum GAZELLE_LATENCY_TYPE type)
 {
@@ -62,7 +43,7 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
     if (lt->stamp != ~(lt->check) || lt->stamp < stack_latency->start_time) {
         return;
     }
-    latency = get_current_time() - lt->stamp;
+    latency = get_now_us() - lt->stamp;
 
     struct stack_latency *latency_stat = (type == GAZELLE_LATENCY_LWIP) ?
         &stack_latency->lwip_latency : &stack_latency->read_latency;
@@ -117,7 +98,7 @@ static void set_latency_start_flag(bool start)
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "memset_s faile\n");
         }
-        stack->latency.start_time = get_current_time();
+        stack->latency.start_time = get_now_us();
         stack->latency.lwip_latency.latency_min = ~((uint64_t)0);
         stack->latency.read_latency.latency_min = ~((uint64_t)0);
         memset_s(&stack->aggregate_stats, sizeof(struct gazelle_stack_aggregate_stats),

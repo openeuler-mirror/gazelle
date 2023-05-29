@@ -623,22 +623,19 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
     return lstack_sigaction(signum, act, oldact);
 }
 
-#define WRAP_VA_PARAM(_fd, _cmd, _lwip_fcntl, _fcntl_fn) \
+#define POSIX_VA_PARAM(fd, cmd, type, lwip_fn, kernel_fn) \
     do { \
-        unsigned long val; \
-        va_list ap; \
-        va_start(ap, _cmd); \
-        val = va_arg(ap, typeof(val)); \
-        va_end(ap); \
-        struct lwip_sock *sock = NULL; \
-        if (select_path(_fd, &sock) == PATH_KERNEL) \
-            return _fcntl_fn(_fd, _cmd, val); \
-        int32_t ret = _fcntl_fn(_fd, _cmd, val); \
-        if (ret == -1) \
-            return ret; \
-        return _lwip_fcntl(_fd, _cmd, val); \
+        unsigned long __val;    \
+        va_list __ap;           \
+        va_start(__ap, cmd);    \
+        __val = va_arg(__ap, typeof(__val)); \
+        va_end(__ap);           \
+                                \
+        int __ret = kernel_fn(fd, cmd, __val); \
+        if (__ret == -1 || select_path(fd, NULL) == PATH_KERNEL) \
+            return __ret;         \
+        return lwip_fn(fd, cmd, (type)__val); \
     } while (0)
-
 
 /*  --------------------------------------------------------
  *  -------  LD_PRELOAD mode replacement interface  --------
@@ -662,15 +659,15 @@ int32_t epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, 
 }
 int32_t fcntl64(int32_t s, int32_t cmd, ...)
 {
-    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl64_fn);
+    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl64_fn);
 }
 int32_t fcntl(int32_t s, int32_t cmd, ...)
 {
-    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl_fn);
+    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl_fn);
 }
 int32_t ioctl(int32_t s, int32_t cmd, ...)
 {
-    WRAP_VA_PARAM(s, cmd, lwip_ioctl, posix_api->ioctl_fn);
+    POSIX_VA_PARAM(s, cmd, void*, lwip_ioctl, posix_api->ioctl_fn);
 }
 int32_t accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
 {
@@ -806,15 +803,15 @@ int32_t __wrap_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
 }
 int32_t __wrap_fcntl64(int32_t s, int32_t cmd, ...)
 {
-    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl64_fn);
+    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl64_fn);
 }
 int32_t __wrap_fcntl(int32_t s, int32_t cmd, ...)
 {
-    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl_fn);
+    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl_fn);
 }
 int32_t __wrap_ioctl(int32_t s, int32_t cmd, ...)
 {
-    WRAP_VA_PARAM(s, cmd, lwip_ioctl, posix_api->ioctl_fn);
+    POSIX_VA_PARAM(s, cmd, void*, lwip_ioctl, posix_api->ioctl_fn);
 }
 
 int32_t __wrap_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)

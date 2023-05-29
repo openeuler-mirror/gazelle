@@ -29,8 +29,6 @@
 #include <lwip/def.h>
 #include <lwip/init.h>
 #include <lwip/lwipsock.h>
-#include <lwip/tcpip.h>
-#include <lwip/memp_def.h>
 #include <lwip/lwipopts.h>
 #include <lwip/gazelle_posix_api.h>
 

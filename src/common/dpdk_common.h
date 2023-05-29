@@ -94,6 +94,7 @@ static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct r
     }
 }
 
+uint64_t get_now_us(void);
 bool get_kni_started(void);
 struct rte_kni* get_gazelle_kni(void);
 int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool);

@@ -37,7 +37,7 @@ ssize_t lwip_recvfrom(int s, void *mem, size_t len, int flags, void *from, void 
 ssize_t lwip_recv(int s, void *mem, size_t len, int flags);
 
 int lwip_fcntl(int s, int cmd, int val);
-int lwip_ioctl(int s, int cmd, ...);
+int lwip_ioctl(int s, long cmd, void *argp);
 
 #ifdef __cplusplus
 }
