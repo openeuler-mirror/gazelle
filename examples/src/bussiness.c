@@ -178,6 +178,8 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
     }
 
     if (strcmp(api, "recvfrom") == 0) {
+        free(buffer_in);
+        free(buffer_out);
         return PROGRAM_OK;
     }
 

@@ -358,6 +358,9 @@ void program_params_print(struct ProgramParams *params)
     printf("[program parameters]: \n");
     printf("--> [as]:                       %s \n", params->as);
     printf("--> [server ip]:                %s \n", params->ip);
+    if ((strcmp(params->as, "server") == 0 && strcmp(params->groupip, PARAM_DEFAULT_GROUPIP)) != 0) {
+        printf("--> [server group ip]:          %s \n", params->groupip);
+    }
     printf("--> [server port]:              %u \n", params->port);
     if (params->sport && strcmp(params->as, "client") == 0) {
         printf("--> [client sport]:             %u \n", params->sport);
