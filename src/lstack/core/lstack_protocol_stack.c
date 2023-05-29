@@ -19,7 +19,6 @@
 #include <lwip/sockets.h>
 #include <lwip/init.h>
 #include <lwip/tcp.h>
-#include <lwip/memp_def.h>
 #include <lwipsock.h>
 #include <lwip/gazelle_posix_api.h>
 
@@ -374,8 +373,6 @@ static struct protocol_stack *stack_thread_init(void *arg)
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
-    sys_timer_init();
-    hugepage_init();
     lwip_init();
 
     if (use_ltran()) {
