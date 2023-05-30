@@ -98,11 +98,6 @@ GAZELLE_BIND_PROCNAME环境变量指定进程名，LD_PRELOAD指定Gazelle库路
 ```
 GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 ```
-- 使用GAZELLE_THREAD_NAME指定Gazelle绑定的线程名  
-同一进程中的多个线程中，仅有某个线程满足gazelle的使用条件时，可以使用GAZELLE_THREAD_NAME来指定仅由对应的线程名使用gazelle，而其他线程走内核态协议栈。
-```sh
-GAZELLE_BIND_PROCNAME=test GAZELLE_THREAD_NAME=test_thread LD_PRELOAD=/usr/lib64/liblstack.so ./test
-```
 
 ### 6. 配置文件  
 - lstack.conf用于指定lstack的启动参数，默认路径为/etc/gazelle/lstack.conf, 配置文件参数如下  
@@ -237,10 +232,6 @@ Usage: gazellectl [-h | help]
 **抓包工具**  
 gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle的数据包。作为替代，gazelle使用dpdk-tools软件包中提供的gazelle-pdump作为数据包捕获工具，它使用dpdk的多进程模式和lstack/ltran进程共享内存。在ltran模式下，gazelle-pdump只能抓取和网卡直接通信的ltran的数据包，通过tcpdump的数据包过滤，可以过滤特定lstack的数据包。
 [详细使用方法](https://gitee.com/openeuler/gazelle/blob/master/doc/pdump/pdump.md)
-
-**线程名绑定**  
-lstack启动时可以通过指定环境变量GAZELLE_THREAD_NAME来指定lstack绑定的线程名，在业务进程中有多个不同线程时，可以通过使用此参数来指定需要lstack接管网络接口的线程名，未指定的线程将走内核态协议栈。默认为空，即绑定进程内的所有线程。
-
 
 ### 10. 使用注意
 #### 1. dpdk配置文件的位置
