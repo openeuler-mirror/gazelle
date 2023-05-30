@@ -950,6 +950,11 @@ static inline void thread_bind_stack(struct lwip_sock *sock)
         return;
     }
     sock->already_bind_numa = 1;
+
+    if (get_global_cfg_params()->app_bind_numa == 0) {
+        return;
+    }
+
     stack_sock_num[sock->stack->stack_idx]++;
     if (stack_sock_num[sock->stack->stack_idx] > max_sock_stack) {
         max_sock_stack = stack_sock_num[sock->stack->stack_idx];
