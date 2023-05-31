@@ -434,7 +434,6 @@ static void* gazelle_stack_thread(void *arg)
     uint32_t read_connect_number = cfg->read_connect_number;
     uint32_t rpc_number = cfg->rpc_number;
     uint32_t nic_read_number = cfg->nic_read_number;
-    uint16_t low_power_mod = cfg->low_power_mod;
     uint32_t wakeup_tick = 0;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
@@ -484,7 +483,7 @@ static void* gazelle_stack_thread(void *arg)
 
         sys_timer_run();
 
-        if (low_power_mod != 0) {
+        if (cfg->low_power_mod != 0) {
             low_power_idling(stack);
         }
     }
