@@ -108,7 +108,7 @@ struct protocol_stack *get_protocol_stack(void)
 struct protocol_stack *get_protocol_stack_by_fd(int32_t fd)
 {
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         return NULL;
     }
 
@@ -683,7 +683,7 @@ void stack_accept(struct rpc_msg *msg)
     }
 
     struct lwip_sock *sock = lwip_get_socket_nouse(accept_fd);
-    if (sock == NULL || sock->stack == NULL) {
+    if (sock == NULL || sock->conn == NULL || sock->stack == NULL) {
         lwip_close(accept_fd);
         gazelle_clean_sock(accept_fd);
         posix_api->close_fn(accept_fd);
@@ -815,7 +815,7 @@ int32_t stack_broadcast_close(int32_t fd)
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     int32_t ret = 0;
 
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         return -1;
     }
 
@@ -850,7 +850,7 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
     int32_t ret, clone_fd;
 
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, %d get sock null\n", get_stack_tid(), fd);
         GAZELLE_RETURN(EINVAL);
     }
@@ -895,8 +895,11 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 
 static struct lwip_sock *get_min_accept_sock(int32_t fd)
 {
-    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     struct lwip_sock *min_sock = NULL;
+    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
+    if (sock == NULL || sock->conn == NULL) {
+        return NULL;
+    }
 
     while (sock) {
         if (!NETCONN_IS_ACCEPTIN(sock)) {
@@ -934,7 +937,7 @@ int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *ad
     int32_t ret = -1;
 
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         errno = EINVAL;
         return -1;
     }

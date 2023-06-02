@@ -173,7 +173,7 @@ void gazelle_init_sock(int32_t fd)
     static _Atomic uint32_t name_tick = 0;
     struct protocol_stack *stack = get_protocol_stack();
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         return;
     }
 
@@ -687,7 +687,7 @@ void stack_send(struct rpc_msg *msg)
     bool replenish_again;
 
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "stack_send: sock error!\n");
         rpc_msg_free(msg);
@@ -1251,7 +1251,7 @@ int32_t gazelle_socket(int domain, int type, int protocol)
     gazelle_init_sock(fd);
 
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL || sock->stack == NULL) {
+    if (sock == NULL || sock->conn == NULL || sock->stack == NULL) {
         lwip_close(fd);
         gazelle_clean_sock(fd);
         posix_api->close_fn(fd);
