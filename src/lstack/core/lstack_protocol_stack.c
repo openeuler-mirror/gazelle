@@ -639,10 +639,6 @@ void stack_close(struct rpc_msg *msg)
     if (msg->result != 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
-
-    gazelle_clean_sock(fd);
-
-    posix_api->close_fn(fd);
 }
 
 void stack_bind(struct rpc_msg *msg)
@@ -685,8 +681,6 @@ void stack_accept(struct rpc_msg *msg)
     struct lwip_sock *sock = lwip_get_socket_nouse(accept_fd);
     if (sock == NULL || sock->conn == NULL || sock->stack == NULL) {
         lwip_close(accept_fd);
-        gazelle_clean_sock(accept_fd);
-        posix_api->close_fn(accept_fd);
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
     }

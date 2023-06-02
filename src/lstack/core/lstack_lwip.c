@@ -173,7 +173,7 @@ void gazelle_init_sock(int32_t fd)
     static _Atomic uint32_t name_tick = 0;
     struct protocol_stack *stack = get_protocol_stack();
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL || sock->conn == NULL) {
+    if (sock == NULL) {
         return;
     }
 
@@ -1248,13 +1248,9 @@ int32_t gazelle_socket(int domain, int type, int protocol)
         return fd;
     }
 
-    gazelle_init_sock(fd);
-
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
     if (sock == NULL || sock->conn == NULL || sock->stack == NULL) {
         lwip_close(fd);
-        gazelle_clean_sock(fd);
-        posix_api->close_fn(fd);
         return -1;
     }
 
