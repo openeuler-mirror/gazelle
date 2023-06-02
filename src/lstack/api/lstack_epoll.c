@@ -313,7 +313,7 @@ int32_t lstack_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_even
 
     struct wakeup_poll *wakeup = epoll_sock->wakeup;
     struct lwip_sock *sock = lwip_get_socket_nouse(fd);
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 

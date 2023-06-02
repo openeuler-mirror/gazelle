@@ -288,7 +288,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     }
 
     sock = lwip_get_socket_nouse(s);
-    if (sock == NULL) {
+    if (sock == NULL || sock->conn == NULL) {
         return posix_api->connect_fn(s, name, namelen);
     }
 
