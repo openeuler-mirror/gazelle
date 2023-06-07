@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#define _GNU_SOURCE
 #include <sched.h>
 #include <stdbool.h>
 #include <securec.h>
@@ -29,16 +30,17 @@
 #include <rte_kni.h>
 #include <rte_pdump.h>
 #include <rte_thash.h>
+#include <lwip/posix_api.h>
+#include <lwipopts.h>
+#include <lwip/pbuf.h>
+#include <lwip/reg_sock.h>
+#include <lwip/priv/tcp_priv.h>
 #include <rte_eth_bond_8023ad.h>
 #include <rte_eth_bond.h>
 #include <rte_ethdev.h>
 
-#include <lwip/pbuf.h>
-#include <lwip/gazelle_tcp_reg.h>
-#include <lwip/priv/tcp_priv.h>
-
 #include "lstack_log.h"
-#include "common/dpdk_common.h"
+#include "dpdk_common.h"
 #include "lstack_lockless_queue.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"

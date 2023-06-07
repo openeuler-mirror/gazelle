@@ -13,11 +13,11 @@
 #ifndef __GAZELLE_TCP_SOCK_H__
 #define __GAZELLE_TCP_SOCK_H__
 
-#include <lwip/gazelle_hlist.h>
+#include <lwip/hlist.h>
 #include <pthread.h>
 #include <stdint.h>
 
-#include "common/gazelle_opt.h"
+#include "gazelle_opt.h"
 
 struct gazelle_stack;
 struct gazelle_tcp_sock {

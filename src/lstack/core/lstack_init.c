@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#define _GNU_SOURCE
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,8 +30,10 @@
 #include <lwip/def.h>
 #include <lwip/init.h>
 #include <lwip/lwipsock.h>
+#include <lwip/tcpip.h>
+#include <lwip/memp_def.h>
 #include <lwip/lwipopts.h>
-#include <lwip/gazelle_posix_api.h>
+#include <lwip/posix_api.h>
 
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
@@ -38,10 +41,10 @@
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 #include "lstack_log.h"
-#include "common/dpdk_common.h"
+#include "dpdk_common.h"
 #include "posix/lstack_epoll.h"
 #include "posix/lstack_unistd.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_base_func.h"
 #include "lstack_protocol_stack.h"
 
 #define LSTACK_PRELOAD_ENV_SYS      "LD_PRELOAD"
@@ -178,7 +181,7 @@ static int32_t check_preload_bind_proc(void)
 
 __attribute__((destructor)) void gazelle_network_exit(void)
 {
-    if (posix_api != NULL && !posix_api->use_kernel) {
+    if (posix_api != NULL && !posix_api->ues_posix) {
         lwip_exit();
     }
 
@@ -357,6 +360,9 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
+    /* lwip initialization */
+    lwip_sock_init();
+
     /* wait stack thread and kernel_event thread init finish */
     wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
     if (g_init_fail) {
@@ -371,7 +377,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
         LSTACK_EXIT(1, "set_process_start_flag failed\n");
     }
 
-    posix_api->use_kernel = 0;
+    posix_api->ues_posix = 0;
     LSTACK_LOG(INFO, LSTACK, "gazelle_network_init success\n");
     rte_smp_mb();
 }

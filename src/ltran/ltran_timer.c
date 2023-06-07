@@ -15,7 +15,8 @@
 
 #include <rte_malloc.h>
 #include <rte_errno.h>
-#include <lwip/gazelle_hlist.h>
+#include <rte_cycles.h>
+#include <lwip/hlist.h>
 
 #include "ltran_param.h"
 #include "ltran_log.h"
@@ -23,6 +24,22 @@
 #include "ltran_tcp_conn.h"
 #include "ltran_instance.h"
 #include "ltran_timer.h"
+
+static uint64_t g_cycles_per_us = 0;
+
+uint64_t get_current_time(void)
+{
+    if (g_cycles_per_us == 0) {
+        return 0;
+    }
+
+    return (rte_rdtsc() / g_cycles_per_us);
+}
+
+void calibrate_time(void)
+{
+    g_cycles_per_us = (rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S;
+}
 
 void gazelle_detect_sock_logout(struct gazelle_tcp_sock_htable *tcp_sock_htable)
 {
@@ -45,7 +62,7 @@ void gazelle_detect_sock_logout(struct gazelle_tcp_sock_htable *tcp_sock_htable)
             tcp_sock = hlist_entry(node, typeof(*tcp_sock), tcp_sock_node);
             node = node->next;
             if (!INSTANCE_IS_ON(tcp_sock)) {
-                hlist_del_node(&tcp_sock->tcp_sock_node);
+                hlist_del_init(&tcp_sock->tcp_sock_node);
                 tcp_sock_htable->cur_tcp_sock_num--;
                 tcp_sock_htable->array[i].chain_size--;
                 LTRAN_DEBUG("delete the tcp sock htable: tid %u ip %u port %u\n",
@@ -81,7 +98,7 @@ void gazelle_detect_conn_logout(struct gazelle_tcp_conn_htable *conn_htable)
             conn = hlist_entry(node, typeof(*conn), conn_node);
             node = node->next;
             if (!INSTANCE_IS_ON(conn)) {
-                hlist_del_node(&conn->conn_node);
+                hlist_del_init(&conn->conn_node);
                 conn_htable->cur_conn_num--;
                 conn_htable->array[i].chain_size--;
                 LTRAN_DEBUG("delete the tcp conn htable: tid %u quintuple[%u %u %u %u %u]\n",
@@ -128,7 +145,7 @@ void gazelle_delete_aging_conn(struct gazelle_tcp_conn_htable *conn_htable)
                 continue;
             }
 
-            hlist_del_node(&conn->conn_node);
+            hlist_del_init(&conn->conn_node);
             conn_htable->cur_conn_num--;
             conn_htable->array[i].chain_size--;
             if (conn->sock) {

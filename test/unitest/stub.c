@@ -13,7 +13,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-uint64_t get_now_us(void)
+uint64_t get_current_time(void)
 {
     return 0;
 }

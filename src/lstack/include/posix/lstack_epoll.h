@@ -18,10 +18,10 @@
 #include <semaphore.h>
 #include <pthread.h>
 
-#include <lwip/gazelle_list.h>
+#include <lwip/list.h>
 
-#include "common/gazelle_dfx_msg.h"
-#include "common/gazelle_opt.h"
+#include "gazelle_dfx_msg.h"
+#include "gazelle_opt.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -13,7 +13,7 @@
 #ifndef __GAZELLE_STACK_H__
 #define __GAZELLE_STACK_H__
 
-#include <lwip/gazelle_hlist.h>
+#include <lwip/hlist.h>
 
 #include "ltran_stat.h"
 

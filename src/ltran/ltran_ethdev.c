@@ -25,13 +25,13 @@
 #include <syslog.h>
 #include <securec.h>
 
-#include "common/dpdk_common.h"
+#include "dpdk_common.h"
 #include "ltran_param.h"
 #include "ltran_log.h"
 #include "ltran_base.h"
-#include "common/gazelle_opt.h"
+#include "gazelle_opt.h"
 #include "ltran_errno.h"
-#include "common/gazelle_reg_msg.h"
+#include "gazelle_reg_msg.h"
 
 uint32_t g_bond_num = 0;
 FILE* g_log_file = NULL;

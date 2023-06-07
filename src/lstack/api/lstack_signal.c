@@ -16,10 +16,10 @@
 #include <execinfo.h>
 #include <unistd.h>
 #include <lwip/lwipsock.h>
-#include <lwip/gazelle_posix_api.h>
+#include <lwip/posix_api.h>
 
 #include "lstack_cfg.h"
-#include "common/dpdk_common.h"
+#include "dpdk_common.h"
 #include "lstack_log.h"
 #include "lstack_control_plane.h"
 

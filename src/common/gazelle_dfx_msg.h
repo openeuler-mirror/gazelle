@@ -53,12 +53,6 @@ enum GAZELLE_LATENCY_TYPE {
     GAZELLE_LATENCY_READ,
 };
 
-enum GAZELLE_TCP_LIST_STATE {
-    GAZELLE_ACTIVE_LIST,
-    GAZELLE_LISTEN_LIST,
-    GAZELLE_TIME_WAIT_LIST,
-};
-
 struct gazelle_stack_stat {
     uint64_t wakeup_events;
     uint64_t write_lwip_cnt;
@@ -152,6 +146,7 @@ struct gazelle_stat_lstack_snmp {
     uint32_t icmp_out_echo_reps;
 };
 
+/* same as define in lwip/tcp.h - struct tcp_pcb_dp */
 struct gazelle_stat_lstack_conn_info {
     uint32_t state;
     uint32_t rip;
@@ -163,7 +158,6 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t send_ring_cnt;
     uint32_t recv_ring_cnt;
     uint32_t tcp_sub_state;
-
     uint32_t cwn;
     uint32_t rcv_wnd;
     uint32_t snd_wnd;

@@ -19,7 +19,7 @@
 #include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_control_plane.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_base_func.h"
 #include "lstack_dpdk.h"
 #include "lstack_thread_rpc.h"
 

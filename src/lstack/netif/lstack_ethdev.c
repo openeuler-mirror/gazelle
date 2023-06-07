@@ -19,7 +19,7 @@
 
 #include <lwip/debug.h>
 #include <lwip/etharp.h>
-#include <lwip/gazelle_posix_api.h>
+#include <lwip/posix_api.h>
 #include <netif/ethernet.h>
 #include <lwip/tcp.h>
 #include <lwip/prot/tcp.h>
@@ -34,7 +34,7 @@
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_lwip.h"
-#include "common/dpdk_common.h"
+#include "dpdk_common.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_ethdev.h"
@@ -134,7 +134,7 @@ int32_t eth_dev_poll(void)
     }
 
     if (!cfg->use_ltran && get_protocol_stack_group()->latency_start) {
-        uint64_t time_stamp = get_now_us();
+        uint64_t time_stamp = get_current_time();
         time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
     }
 
@@ -768,7 +768,7 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
     }
 
     if (!use_ltran_flag && get_protocol_stack_group()->latency_start) {
-        uint64_t time_stamp = get_now_us();
+        uint64_t time_stamp = get_current_time();
         time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
     }
 
