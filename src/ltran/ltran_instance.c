@@ -25,10 +25,10 @@
 #include "ltran_stat.h"
 #include "ltran_log.h"
 #include "ltran_base.h"
-#include "common/gazelle_opt.h"
+#include "gazelle_opt.h"
 #include "ltran_errno.h"
-#include "common/gazelle_dfx_msg.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_dfx_msg.h"
+#include "gazelle_base_func.h"
 #include "ltran_instance.h"
 
 volatile unsigned long g_tx_loop_count __rte_cache_aligned;

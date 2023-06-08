@@ -13,12 +13,12 @@
 #ifndef __GAZELLE_TCP_CONN_H__
 #define __GAZELLE_TCP_CONN_H__
 
-#include <lwip/gazelle_hlist.h>
+#include <lwip/hlist.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <lwip/gazelle_tcp_reg.h>
+#include <lwip/reg_sock.h>
 
-#include "common/gazelle_opt.h"
+#include "gazelle_opt.h"
 
 struct gazelle_tcp_conn {
     uint32_t tid;

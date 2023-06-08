@@ -29,8 +29,8 @@
 #include "ltran_log.h"
 #include "ltran_stat.h"
 #include "ltran_instance.h"
-#include "common/gazelle_dfx_msg.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_dfx_msg.h"
+#include "gazelle_base_func.h"
 #include "ltran_param.h"
 #include "ltran_monitor.h"
 

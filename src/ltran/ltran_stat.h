@@ -17,7 +17,7 @@
 
 #include <rte_common.h>
 
-#include "common/gazelle_opt.h"
+#include "gazelle_opt.h"
 
 /*
  * When doing reads from the NIC or the client queues,
@@ -34,6 +34,12 @@ enum GAZELLE_CLIENT_STATE {
     GAZELLE_CLIENT_STATE_CONNECTING,
     GAZELLE_CLIENT_STATE_RECONNECTING,
     GAZELLE_CLIENT_STATE_MAX
+};
+
+enum GAZELLE_TCP_LIST_STATE {
+    GAZELLE_ACTIVE_LIST,
+    GAZELLE_LISTEN_LIST,
+    GAZELLE_TIME_WAIT_LIST,
 };
 
 enum GAZELLE_TCP_STATE {

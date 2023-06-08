@@ -15,7 +15,7 @@
 
 #include <stdint.h>
 
-#include "common/gazelle_opt.h"
+#include "gazelle_opt.h"
 
 struct port_info {
     uint16_t num_ports;

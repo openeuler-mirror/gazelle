@@ -12,13 +12,13 @@
 
 #include <stdlib.h>
 
-#include <lwip/gazelle_hlist.h>
+#include <lwip/hlist.h>
 
 #include "ltran_tcp_conn.h"
 #include "ltran_instance.h"
 #include "ltran_base.h"
 #include "ltran_jhash.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_base_func.h"
 #include "ltran_tcp_sock.h"
 
 struct gazelle_tcp_sock_htable *g_tcp_sock_htable = NULL;
@@ -51,7 +51,7 @@ struct gazelle_tcp_sock_htable *gazelle_tcp_sock_htable_create(uint32_t max_tcp_
     }
 
     for (i = 0; i < GAZELLE_MAX_TCP_SOCK_HTABLE_SIZE; i++) {
-        hlist_init_head(&tcp_sock_htable->array[i].chain);
+        INIT_HLIST_HEAD(&tcp_sock_htable->array[i].chain);
         tcp_sock_htable->array[i].chain_size = 0;
     }
     tcp_sock_htable->cur_tcp_sock_num = 0;
@@ -77,7 +77,7 @@ void gazelle_tcp_sock_htable_destroy(void)
         while (node != NULL) {
             tcp_sock = hlist_entry(node, typeof(*tcp_sock), tcp_sock_node);
             node = node->next;
-            hlist_del_node(&tcp_sock->tcp_sock_node);
+            hlist_del_init(&tcp_sock->tcp_sock_node);
             free(tcp_sock);
         }
     }
@@ -96,13 +96,14 @@ static void recover_sock_info_from_conn(struct gazelle_tcp_sock *tcp_sock)
 {
     uint32_t count = 0;
     struct gazelle_tcp_conn *conn = NULL;
+    struct hlist_node *node = NULL;
     struct hlist_head *head = NULL;
     struct gazelle_tcp_conn_htable *conn_htable = gazelle_get_tcp_conn_htable();
 
     for (int32_t i = 0; i < GAZELLE_MAX_CONN_HTABLE_SIZE; i++) {
         head = &conn_htable->array[i].chain;
 
-        hlist_for_each_entry(conn, head, conn_node) {
+        hlist_for_each_entry(conn, node, head, conn_node) {
             if ((conn->quintuple.dst_ip != tcp_sock->ip) || (conn->quintuple.dst_port != tcp_sock->port) ||
                 (conn->tid != tcp_sock->tid)) {
                 continue;
@@ -121,6 +122,7 @@ struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_h
     uint16_t port, uint32_t tid)
 {
     struct gazelle_tcp_sock *tcp_sock = NULL;
+    struct hlist_node *node = NULL;
     struct hlist_head *head = NULL;
     struct gazelle_tcp_sock_hbucket *tcp_sock_hbucket = NULL;
 
@@ -131,7 +133,7 @@ struct gazelle_tcp_sock *gazelle_sock_add_by_ipporttid(struct gazelle_tcp_sock_h
 
     /* avoid reinit */
     head = &tcp_sock_hbucket->chain;
-    hlist_for_each_entry(tcp_sock, head, tcp_sock_node) {
+    hlist_for_each_entry(tcp_sock, node, head, tcp_sock_node) {
         if ((tcp_sock->tid == tid) && INSTANCE_IS_ON(tcp_sock)) {
             return tcp_sock;
         }
@@ -164,6 +166,7 @@ void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htab
     uint32_t tid)
 {
     struct gazelle_tcp_sock *tcp_sock = NULL;
+    struct hlist_node *node = NULL;
     struct hlist_head *head = NULL;
     struct gazelle_tcp_sock_hbucket *tcp_sock_hbucket = NULL;
 
@@ -173,7 +176,7 @@ void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htab
     }
 
     head = &tcp_sock_hbucket->chain;
-    hlist_for_each_entry(tcp_sock, head, tcp_sock_node) {
+    hlist_for_each_entry(tcp_sock, node, head, tcp_sock_node) {
         if (tcp_sock->tid == tid) {
             break;
         }
@@ -183,7 +186,7 @@ void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htab
         return;
     }
 
-    hlist_del_node(&tcp_sock->tcp_sock_node);
+    hlist_del_init(&tcp_sock->tcp_sock_node);
     free(tcp_sock);
     tcp_sock_htable->cur_tcp_sock_num--;
     tcp_sock_hbucket->chain_size--;
@@ -195,6 +198,7 @@ struct gazelle_tcp_sock *gazelle_sock_get_by_min_conn(struct gazelle_tcp_sock_ht
     struct gazelle_tcp_sock_hbucket *tcp_sock_hbucket = NULL;
     struct gazelle_tcp_sock *tcp_sock_tmp = NULL;
     struct gazelle_tcp_sock *tcp_sock = NULL;
+    struct hlist_node *node = NULL;
     struct hlist_head *head = NULL;
     uint32_t min_tcp_con = GAZELLE_STACK_MAX_TCP_CON_NUM;
 
@@ -205,7 +209,7 @@ struct gazelle_tcp_sock *gazelle_sock_get_by_min_conn(struct gazelle_tcp_sock_ht
 
     head = &tcp_sock_hbucket->chain;
 
-    hlist_for_each_entry(tcp_sock, head, tcp_sock_node) {
+    hlist_for_each_entry(tcp_sock, node, head, tcp_sock_node) {
         if (!INSTANCE_IS_ON(tcp_sock)) {
             continue;
         }

@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -24,11 +25,12 @@
 #include <sched.h>
 
 #include <lwip/lwipsock.h>
+#include <lwip/posix_api.h>
 #include <lwip/inet.h>
 
-#include "common/gazelle_reg_msg.h"
+#include "gazelle_reg_msg.h"
 #include "lstack_log.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_base_func.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
 

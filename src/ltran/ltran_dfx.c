@@ -27,7 +27,7 @@
 
 #include "ltran_stat.h"
 #include "ltran_base.h"
-#include "common/gazelle_dfx_msg.h"
+#include "gazelle_dfx_msg.h"
 
 /* seeing show_usage() */
 #define GAZELLE_TARGET_ARG_IDX   1

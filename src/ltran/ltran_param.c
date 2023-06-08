@@ -23,8 +23,8 @@
 #include "ltran_errno.h"
 #include "ltran_base.h"
 #include "ltran_log.h"
-#include "common/gazelle_dfx_msg.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_dfx_msg.h"
+#include "gazelle_base_func.h"
 #include "ltran_param.h"
 
 #define HEX_BASE 16

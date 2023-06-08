@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <string.h>
 
@@ -25,7 +26,7 @@
 #include <net/if.h>
 #include <securec.h>
 
-#include <lwip/gazelle_posix_api.h>
+#include <lwip/posix_api.h>
 #include <lwip/lwipsock.h>
 #include <lwip/tcp.h>
 
@@ -36,7 +37,7 @@
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
-#include "common/gazelle_base_func.h"
+#include "gazelle_base_func.h"
 #include "lstack_thread_rpc.h"
 
 #ifndef SOCK_TYPE_MASK
@@ -62,18 +63,18 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
         return PATH_KERNEL;
     }
 
-    if (unlikely(posix_api->use_kernel)) {
+    if (unlikely(posix_api->ues_posix)) {
         return PATH_KERNEL;
     }
 
-    struct lwip_sock *sock = lwip_get_socket_nouse(fd);
+    struct lwip_sock *sock = get_socket_by_fd(fd);
 
     /* AF_UNIX case */
-    if (!sock || !sock->conn || POSIX_IS_TYPE(sock, POSIX_KERNEL)) {
+    if (!sock || !sock->conn || CONN_TYPE_IS_HOST(sock->conn)) {
         return PATH_KERNEL;
     }
 
-    if (likely(POSIX_IS_TYPE(sock, POSIX_LWIP))) {
+    if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
         if (socket) {
             *socket = sock;
         }
@@ -110,7 +111,7 @@ static inline int32_t do_epoll_create1(int32_t flags)
         return posix_api->epoll_create1_fn(flags);
     }
 
-    if (unlikely(posix_api->use_kernel)) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_create1_fn(flags);
     }
 
@@ -127,7 +128,7 @@ static inline int32_t do_epoll_create(int32_t size)
         return posix_api->epoll_create_fn(size);
     }
 
-    if (unlikely(posix_api->use_kernel)) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_create_fn(size);
     }
 
@@ -136,7 +137,7 @@ static inline int32_t do_epoll_create(int32_t size)
 
 static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
 {
-    if (unlikely(posix_api->use_kernel)) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -145,7 +146,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
-    if (unlikely(posix_api->use_kernel)) {
+    if (unlikely(posix_api->ues_posix)) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
@@ -287,8 +288,8 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         return posix_api->connect_fn(s, name, namelen);
     }
 
-    sock = lwip_get_socket_nouse(s);
-    if (sock == NULL || sock->conn == NULL) {
+    sock = get_socket(s);
+    if (sock == NULL) {
         return posix_api->connect_fn(s, name, namelen);
     }
 
@@ -303,10 +304,10 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         "listen_rx_ring_%d", remote_port);
     if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
-        POSIX_SET_TYPE(sock, POSIX_KERNEL);
+        SET_CONN_TYPE_HOST(sock->conn);
     } else {
         ret = rpc_call_connect(s, name, namelen);
-        POSIX_SET_TYPE(sock, POSIX_LWIP);
+        SET_CONN_TYPE_LIBOS(sock->conn);
     }
 
     return ret;
@@ -402,7 +403,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
 static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     if ((domain != AF_INET && domain != AF_UNSPEC)
-        || posix_api->use_kernel) {
+        || posix_api->ues_posix) {
         return posix_api->socket_fn(domain, type, protocol);
     }
 
@@ -518,7 +519,7 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
         return recvmsg_from_stack(s, message, flags);
     }
 
-    return posix_api->recvmsg_fn(s, message, flags);
+    return posix_api->recv_msg(s, message, flags);
 }
 
 static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
@@ -532,7 +533,7 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
         return sendmsg_to_stack(sock, s, message, flags);
     }
 
-    return posix_api->sendmsg_fn(s, message, flags);
+    return posix_api->send_msg(s, message, flags);
 }
 
 static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
@@ -551,7 +552,7 @@ static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t
         return read_stack_data(sockfd, buf, len, flags, addr, addrlen);
     }
 
-    return posix_api->recvfrom_fn(sockfd, buf, len, flags, addr, addrlen);
+    return posix_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
 }
 
 static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
@@ -559,7 +560,7 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
 {
     struct lwip_sock *sock = NULL;
     if (select_path(sockfd, &sock) != PATH_LWIP) {
-        return posix_api->sendto_fn(sockfd, buf, len, flags, addr, addrlen);
+        return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
     }
 
     return gazelle_send(sockfd, buf, len, flags, addr, addrlen);
@@ -570,7 +571,7 @@ static inline int32_t do_close(int32_t s)
     struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_KERNEL) {
         /* we called lwip_socket, even if kernel fd */
-        if (posix_api != NULL && !posix_api->use_kernel &&
+        if (posix_api != NULL && !posix_api->ues_posix &&
             /* contain posix_api->close_fn if success */
             stack_broadcast_close(s) == 0) {
             return 0;
@@ -586,7 +587,7 @@ static inline int32_t do_close(int32_t s)
 
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
-    if (unlikely(posix_api->use_kernel) || fds == NULL || nfds == 0) {
+    if (unlikely(posix_api->ues_posix) || fds == NULL || nfds == 0) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 
@@ -623,19 +624,22 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
     return lstack_sigaction(signum, act, oldact);
 }
 
-#define POSIX_VA_PARAM(fd, cmd, type, lwip_fn, kernel_fn) \
+#define WRAP_VA_PARAM(_fd, _cmd, _lwip_fcntl, _fcntl_fn) \
     do { \
-        unsigned long __val;    \
-        va_list __ap;           \
-        va_start(__ap, cmd);    \
-        __val = va_arg(__ap, typeof(__val)); \
-        va_end(__ap);           \
-                                \
-        int __ret = kernel_fn(fd, cmd, __val); \
-        if (__ret == -1 || select_path(fd, NULL) == PATH_KERNEL) \
-            return __ret;         \
-        return lwip_fn(fd, cmd, (type)__val); \
+        unsigned long val; \
+        va_list ap; \
+        va_start(ap, _cmd); \
+        val = va_arg(ap, typeof(val)); \
+        va_end(ap); \
+        struct lwip_sock *sock = NULL; \
+        if (select_path(_fd, &sock) == PATH_KERNEL) \
+            return _fcntl_fn(_fd, _cmd, val); \
+        int32_t ret = _fcntl_fn(_fd, _cmd, val); \
+        if (ret == -1) \
+            return ret; \
+        return _lwip_fcntl(_fd, _cmd, val); \
     } while (0)
+
 
 /*  --------------------------------------------------------
  *  -------  LD_PRELOAD mode replacement interface  --------
@@ -659,15 +663,15 @@ int32_t epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, 
 }
 int32_t fcntl64(int32_t s, int32_t cmd, ...)
 {
-    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl64_fn);
+    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl64_fn);
 }
 int32_t fcntl(int32_t s, int32_t cmd, ...)
 {
-    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl_fn);
+    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl_fn);
 }
 int32_t ioctl(int32_t s, int32_t cmd, ...)
 {
-    POSIX_VA_PARAM(s, cmd, void*, lwip_ioctl, posix_api->ioctl_fn);
+    WRAP_VA_PARAM(s, cmd, lwip_ioctl, posix_api->ioctl_fn);
 }
 int32_t accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
 {
@@ -803,15 +807,15 @@ int32_t __wrap_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxe
 }
 int32_t __wrap_fcntl64(int32_t s, int32_t cmd, ...)
 {
-    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl64_fn);
+    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl64_fn);
 }
 int32_t __wrap_fcntl(int32_t s, int32_t cmd, ...)
 {
-    POSIX_VA_PARAM(s, cmd, int, lwip_fcntl, posix_api->fcntl_fn);
+    WRAP_VA_PARAM(s, cmd, lwip_fcntl, posix_api->fcntl_fn);
 }
 int32_t __wrap_ioctl(int32_t s, int32_t cmd, ...)
 {
-    POSIX_VA_PARAM(s, cmd, void*, lwip_ioctl, posix_api->ioctl_fn);
+    WRAP_VA_PARAM(s, cmd, lwip_ioctl, posix_api->ioctl_fn);
 }
 
 int32_t __wrap_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)

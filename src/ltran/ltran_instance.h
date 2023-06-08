@@ -13,12 +13,12 @@
 #ifndef __GAZELLE_INSTANCE_H__
 #define __GAZELLE_INSTANCE_H__
 
-#include <lwip/gazelle_hlist.h>
+#include <lwip/hlist.h>
 #include <netinet/in.h>
 #include <limits.h>
 
-#include "common/gazelle_opt.h"
-#include "common/gazelle_reg_msg.h"
+#include "gazelle_opt.h"
+#include "gazelle_reg_msg.h"
 
 struct gazelle_stack;
 struct gazelle_instance {

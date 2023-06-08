@@ -8,21 +8,31 @@
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-ROOT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+LSTACK_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ROOT_DIR := $(dir $(abspath $(LSTACK_DIR)))
 
-LIB_PATH ?= /usr/lib64
 LWIP_INCLUDE_FILE ?= /usr/include/lwip
-
-include $(ROOT_DIR)/Printlog.mk
+LIB_PATH ?= /usr/lib64
 
 AR = ar
 ARFLAGS = crDP
 CC ?= gcc
-RM = rm -f
 OPTIMIZATION = -O2 -g
+RM = rm -f
 LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
-CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing
-CFLAGS += -D__USE_GNU=1 -D_GNU_SOURCE=1
+
+ifneq ($(CC),clang)
+	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
+else
+	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -fPIC
+endif
+$(info $(CC):$(SEC_FLAGS))
+
+INC = -I$(LSTACK_DIR)/include   \
+      -I$(LSTACK_DIR)/../common \
+      -I$(LWIP_INCLUDE_FILE)
+
+CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC)
 
 ifeq ($(GAZELLE_COVERAGE_ENABLE), 1)
 	LDFLAGS += -fprofile-arcs -ftest-coverage
@@ -33,21 +43,17 @@ ifeq ($(shell $(CC) -dumpmachine | cut -d"-" -f1), x86_64)
 	CFLAGS += -mssse3
 endif
 
-ifneq ($(CC),clang)
-	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
-else
-	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -fPIC
-endif
 CFLAGS += $(SEC_FLAGS)
 
-INC = -I$(ROOT_DIR)/include \
-      -I$(ROOT_DIR)/../     \
-      -I$(LWIP_INCLUDE_FILE)
+SRCS =
+DIRS = core netif api ../common
 
-$(info $(CC):$(CFLAGS))
-CFLAGS += $(INC)
+define register_dir
+SRCS += $(patsubst %, $(1)/%, $(2))
+endef
 
-SRCS = $(wildcard  ./api/*.c  ./core/*.c  ./netif/*.c  ../common/*.c)
+include $(patsubst %, %/dir.mk, $(DIRS))
+
 # Linking object and library
 OBJS = $(subst .c,.o,$(SRCS))
 
@@ -90,17 +96,19 @@ LDFLAGS += -Wl,--whole-archive $(DEP_LIBS) $(OBJS) -Wl,--no-whole-archive
 LSTACK_SHARED_LIB = liblstack.so
 LSTACK_STATIC_LIB = liblstack.a
 
-.PHONY: all clean
+.PHONY: all
 all: $(LSTACK_SHARED_LIB)
 
-$(LSTACK_SHARED_LIB): $(OBJS)
-	$(call printlog, BUILD, $@)
-	$(QUIET) $(CC) $(LDFLAGS) -Wl,--whole-archive -Wl,--no-whole-archive -o $@
+depend: .depend
 
-%.o: %.c
-	$(call printlog, BUILD, $@)
-	$(QUIET) $(CC) $(CFLAGS) -c $(filter %.c,$^) -o $@
+.depend: $(SRCS)
+	rm -f ./.depend
+	$(foreach SRC,$(SRCS),$(CC) $(CFLAGS) -MM -MT $(SRC:.c=.o) $(SRC)  >> .depend;)
+
+-include .depend
+
+$(LSTACK_SHARED_LIB): $(OBJS)
+	$(CC) $(LDFLAGS) -Wl,--whole-archive -Wl,--no-whole-archive -o $@
 
 clean:
-	$(call printlog, CLEAN, $(LSTACK_SHARED_LIB))
-	$(QUIET) $(RM) $(LSTACK_SHARED_LIB) $(OBJS)
+	$(RM) $(LSTACK_SHARED_LIB) $(OBJS) .depend
