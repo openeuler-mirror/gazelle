@@ -204,6 +204,7 @@ Gazelle wrap应用程序POSIX接口，应用程序无需修改代码。
 
 ### 9. 调测命令
 - 不使用ltran模式时不支持gazellectl ltran xxx命令，以及lstack -r命令
+- -u参数指定gazelle进程间通信的unix socket前缀，和需要通信的ltran.conf或lstack.conf的unix_prefix配置一致。
 ```
 Usage: gazellectl [-h | help]
   or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time] [-u UNIX_PREFIX]
@@ -216,6 +217,7 @@ Usage: gazellectl [-h | help]
   -r, rate        show ltran statistics per second
   -i, instance    show ltran instance register info
   -b, burst       show ltran NIC packet len per second
+  -t, table       {socktable | conntable}  show ltran sock or conn table
   -l, latency     show ltran latency
 
   where  LSTACK_OPTIONS :=
@@ -224,10 +226,13 @@ Usage: gazellectl [-h | help]
   -s, snmp        show lstack snmp
   -c, connetct    show lstack connect
   -l, latency     show lstack latency
-
+  -x, xstats      show lstack xstats
+  -a, aggregatin  [time]   show lstack send/recv aggregation
+  set:
+  loglevel        {error | info | debug}  set lstack loglevel
+  lowpower        {0 | 1}  set lowpower enable
   [time]          measure latency time default 1S
 ```
--u参数指定gazelle进程间通信的unix socket前缀，和需要通信的ltran.conf或lstack.conf的unix_prefix配置一致。
 
 **抓包工具**  
 gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle的数据包。作为替代，gazelle使用dpdk-tools软件包中提供的gazelle-pdump作为数据包捕获工具，它使用dpdk的多进程模式和lstack/ltran进程共享内存。在ltran模式下，gazelle-pdump只能抓取和网卡直接通信的ltran的数据包，通过tcpdump的数据包过滤，可以过滤特定lstack的数据包。
