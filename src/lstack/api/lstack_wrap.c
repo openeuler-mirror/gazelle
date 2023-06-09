@@ -242,12 +242,21 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
 bool is_dst_ip_localhost(const struct sockaddr *addr)
 {
     struct sockaddr_in *servaddr = (struct sockaddr_in *) addr;
-    FILE *ifh = fopen("/proc/net/dev", "r");
     char *line = NULL;
     char *p;
     size_t linel = 0;
     int linenum = 0;
+    FILE *ifh = fopen("/proc/net/dev", "r");
+    if (ifh == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "failed to open /proc/net/dev, errno is %d\n", errno);
+        return false;
+    }
     struct sockaddr_in* sin = malloc(sizeof(struct sockaddr_in));
+    if (sin == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "sockaddr_in malloc failed\n");
+        fclose(ifh);
+        return false;
+    }
 
     while (getdelim(&line, &linel, '\n', ifh) > 0) {
         /* 2: skip the first two lines, which are not nic name */
@@ -268,13 +277,16 @@ bool is_dst_ip_localhost(const struct sockaddr *addr)
         int ret = get_addr(sin, interface);
         if (ret == 0) {
             if (sin->sin_addr.s_addr == servaddr->sin_addr.s_addr) {
-                return 1;
+                free(sin);
+                fclose(ifh);
+                return true;
             }
         }
     }
     free(sin);
+    fclose(ifh);
 
-    return 0;
+    return false;
 }
 
 static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
