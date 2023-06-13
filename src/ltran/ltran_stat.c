@@ -402,6 +402,10 @@ void handle_resp_lstack_transfer(const struct gazelle_stat_msg_request *msg, int
         return;
     }
 
+    if (!INSTANCE_IS_ON(instance)) {
+        return;
+    }
+
     int32_t lstack_fd = instance->sockfd;
     if (lstack_fd < 0) {
         return;
