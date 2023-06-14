@@ -15,6 +15,7 @@
 
 #include <pthread.h>
 #include <arch/sys_arch.h>
+#include <rte_mempool.h>
 
 #include "lstack_lockless_queue.h"
 
@@ -53,9 +54,7 @@ struct rpc_msg {
 };
 
 struct rpc_msg_pool {
-    struct rpc_msg msgs[RPC_MSG_MAX];
-    uint32_t prod __rte_cache_aligned;
-    uint32_t cons __rte_cache_aligned;
+    struct rte_mempool *rpc_pool;
 };
 
 struct protocol_stack;
@@ -99,7 +98,7 @@ static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *m
 
     msg->self_release = 0;
 
-    __atomic_fetch_add((_Atomic uint32_t *)&msg->pool->cons, 1, __ATOMIC_SEQ_CST);
+    rte_mempool_put(msg->pool->rpc_pool, (void *)msg);
 }
 
 #endif

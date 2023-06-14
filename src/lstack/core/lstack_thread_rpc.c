@@ -27,15 +27,15 @@ static PER_THREAD struct rpc_msg_pool *g_rpc_pool = NULL;
 
 static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct rpc_msg_pool *rpc_pool)
 {
-    uint32_t cons = __atomic_load_n(&rpc_pool->cons, __ATOMIC_ACQUIRE);
-    uint32_t prod = rpc_pool->prod + 1;
-
-    if (prod - cons >= RPC_MSG_MAX) {
+    int ret;
+    struct rpc_msg *msg = NULL;
+    ret = rte_mempool_get(rpc_pool->rpc_pool, (void **)&msg);
+    if (ret < 0) {
+        LSTACK_LOG(INFO, LSTACK, "rpc pool empty!\n");
+        errno = ENOMEM;
         return NULL;
     }
-
-    rpc_pool->prod = prod;
-    return &rpc_pool->msgs[prod & RPC_MSG_MASK];
+    return msg;
 }
 
 static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func func)
@@ -49,6 +49,14 @@ static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func 
     if (g_rpc_pool == NULL) {
         g_rpc_pool = calloc(1, sizeof(struct rpc_msg_pool));
         if (g_rpc_pool == NULL) {
+            LSTACK_LOG(INFO, LSTACK, "g_rpc_pool calloc failed\n");
+            get_protocol_stack_group()->call_alloc_fail++;
+            return NULL;
+        }
+
+        g_rpc_pool->rpc_pool = create_mempool("rpc_pool", RPC_MSG_MAX, sizeof(struct rpc_msg),
+            0, rte_gettid());
+        if (g_rpc_pool->rpc_pool == NULL) {
             get_protocol_stack_group()->call_alloc_fail++;
             return NULL;
         }
