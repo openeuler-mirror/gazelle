@@ -236,7 +236,11 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         }
     }
 
-    return rpc_call_bind(s, name, namelen);
+    if (NETCONN_IS_UDP(sock) && get_global_cfg_params()->listen_shadow) {
+        return stack_broadcast_bind(s, name, namelen);
+    } else {
+        return stack_single_bind(s, name, namelen);
+    }
 }
 
 bool is_dst_ip_localhost(const struct sockaddr *addr)
@@ -548,6 +552,31 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
     return posix_api->send_msg(s, message, flags);
 }
 
+static inline ssize_t udp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void *buf, size_t len, int32_t flags,
+                                   struct sockaddr *addr, socklen_t *addrlen)
+{
+    int32_t ret;
+
+    do {
+        ret = read_stack_data(sockfd, buf, len, flags, addr, addrlen);
+        if (ret > 0) {
+            return ret;
+        }
+        if (ret <= 0 && errno != EAGAIN) {
+            return -1;
+        }
+        sock = sock->listen_next;
+        sockfd = sock->conn->socket;
+    } while (sock != NULL);
+    GAZELLE_RETURN(EAGAIN);
+}
+
+static inline ssize_t tcp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void *buf, size_t len, int32_t flags,
+                                   struct sockaddr *addr, socklen_t *addrlen)
+{
+    return read_stack_data(sockfd, buf, len, flags, addr, addrlen);
+}
+
 static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
                                   struct sockaddr *addr, socklen_t *addrlen)
 {
@@ -561,7 +590,11 @@ static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t
 
     struct lwip_sock *sock = NULL;
     if (select_path(sockfd, &sock) == PATH_LWIP) {
-        return read_stack_data(sockfd, buf, len, flags, addr, addrlen);
+        if (NETCONN_IS_UDP(sock)) {
+            return udp_recvfrom(sock, sockfd, buf, len, flags, addr, addrlen);
+        } else {
+            return tcp_recvfrom(sock, sockfd, buf, len, flags, addr, addrlen);
+        }
     }
 
     return posix_api->recv_from(sockfd, buf, len, flags, addr, addrlen);

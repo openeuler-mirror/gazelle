@@ -128,6 +128,10 @@ int32_t stack_broadcast_close(int32_t fd);
 int32_t stack_broadcast_listen(int32_t fd, int backlog);
 int32_t stack_single_listen(int32_t fd, int32_t backlog);
 
+/* bind sync to all protocol stack thread, only for udp protocol */
+int32_t stack_broadcast_bind(int32_t fd, const struct sockaddr *name, socklen_t namelen);
+int32_t stack_single_bind(int32_t fd, const struct sockaddr *name, socklen_t namelen);
+
 /* ergodic the protocol stack thread to find the connection, because all threads are listening */
 int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *addrlen, int32_t flags);
