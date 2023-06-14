@@ -1230,13 +1230,19 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
     dst_sock->conn->pcb.ip->so_options = src_sock->conn->pcb.ip->so_options;
     dst_sock->conn->pcb.ip->ttl = src_sock->conn->pcb.ip->ttl;
     dst_sock->conn->pcb.ip->tos = src_sock->conn->pcb.ip->tos;
-    dst_sock->conn->pcb.tcp->netif_idx = src_sock->conn->pcb.tcp->netif_idx;
-    dst_sock->conn->pcb.tcp->flags = src_sock->conn->pcb.tcp->flags;
-    dst_sock->conn->pcb.tcp->keep_idle = src_sock->conn->pcb.tcp->keep_idle;
-    dst_sock->conn->pcb.tcp->keep_idle = src_sock->conn->pcb.tcp->keep_idle;
-    dst_sock->conn->pcb.tcp->keep_intvl = src_sock->conn->pcb.tcp->keep_intvl;
-    dst_sock->conn->pcb.tcp->keep_cnt = src_sock->conn->pcb.tcp->keep_cnt;
     dst_sock->conn->flags = src_sock->conn->flags;
+    if (NETCONN_IS_UDP(src_sock)) {
+        dst_sock->conn->pcb.udp->flags = src_sock->conn->pcb.udp->flags;
+        dst_sock->conn->pcb.udp->mcast_ifindex = src_sock->conn->pcb.udp->mcast_ifindex;
+        dst_sock->conn->pcb.udp->mcast_ttl = src_sock->conn->pcb.udp->mcast_ttl;
+    } else {
+        dst_sock->conn->pcb.tcp->netif_idx = src_sock->conn->pcb.tcp->netif_idx;
+        dst_sock->conn->pcb.tcp->flags = src_sock->conn->pcb.tcp->flags;
+        dst_sock->conn->pcb.tcp->keep_idle = src_sock->conn->pcb.tcp->keep_idle;
+        dst_sock->conn->pcb.tcp->keep_idle = src_sock->conn->pcb.tcp->keep_idle;
+        dst_sock->conn->pcb.tcp->keep_intvl = src_sock->conn->pcb.tcp->keep_intvl;
+        dst_sock->conn->pcb.tcp->keep_cnt = src_sock->conn->pcb.tcp->keep_cnt;
+    }
 }
 
 int32_t gazelle_socket(int domain, int type, int protocol)
@@ -1265,16 +1271,28 @@ void create_shadow_fd(struct rpc_msg *msg)
     struct sockaddr *addr = msg->args[MSG_ARG_1].p;
     socklen_t addr_len = msg->args[MSG_ARG_2].socklen;
 
-    int32_t clone_fd = gazelle_socket(AF_INET, SOCK_STREAM, 0);
+    int32_t clone_fd = 0;
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+    if (sock == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "get sock null fd=%d\n", fd);
+        msg->result = -1;
+        return;
+    }
+
+    if (NETCONN_IS_UDP(sock)) {
+        clone_fd = gazelle_socket(AF_INET, SOCK_DGRAM, 0);
+    } else {
+        clone_fd = gazelle_socket(AF_INET, SOCK_STREAM, 0);
+    }
+
     if (clone_fd < 0) {
         LSTACK_LOG(ERR, LSTACK, "clone socket failed clone_fd=%d errno=%d\n", clone_fd, errno);
         msg->result = clone_fd;
         return;
     }
 
-    struct lwip_sock *sock = get_socket_by_fd(fd);
     struct lwip_sock *clone_sock = get_socket_by_fd(clone_fd);
-    if (sock == NULL || clone_sock == NULL) {
+    if (clone_sock == NULL) {
         LSTACK_LOG(ERR, LSTACK, "get sock null fd=%d clone_fd=%d\n", fd, clone_fd);
         msg->result = -1;
         return;

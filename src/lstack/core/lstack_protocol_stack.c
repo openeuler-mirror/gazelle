@@ -935,6 +935,45 @@ static void inline del_accept_in_event(struct lwip_sock *sock)
     pthread_spin_unlock(&sock->wakeup->event_list_lock);
 }
 
+/* choice one stack bind */
+int32_t stack_single_bind(int32_t fd, const struct sockaddr *name, socklen_t namelen)
+{
+    return rpc_call_bind(fd, name, namelen);
+}
+
+/* bind sync to all protocol stack thread, so that any protocol stack thread can build connect */
+int32_t stack_broadcast_bind(int32_t fd, const struct sockaddr *name, socklen_t namelen)
+{
+    struct protocol_stack *cur_stack = get_protocol_stack_by_fd(fd);
+    struct protocol_stack *stack = NULL;
+    int32_t ret, clone_fd;
+
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, %d get sock null\n", get_stack_tid(), fd);
+        GAZELLE_RETURN(EINVAL);
+    }
+
+    ret = rpc_call_bind(fd, name, namelen);
+    if (ret < 0) {
+        close(fd);
+        return ret;
+    }
+
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    for (int32_t i = 0; i < stack_group->stack_num; ++i) {
+        stack = stack_group->stacks[i];
+        if (stack != cur_stack) {
+            clone_fd = rpc_call_shadow_fd(stack, fd, name, namelen);
+            if (clone_fd < 0) {
+                stack_broadcast_close(fd);
+                return clone_fd;
+            }
+        }
+    }
+    return 0;
+}
+
 /* ergodic the protocol stack thread to find the connection, because all threads are listening */
 int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
 {

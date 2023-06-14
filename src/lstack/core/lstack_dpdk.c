@@ -362,7 +362,7 @@ uint64_t get_eth_params_tx_ol(void)
 static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
 {
     int rss_enable = 0;
-    uint64_t def_rss_hf = ETH_RSS_TCP | ETH_RSS_IP;
+    uint64_t def_rss_hf = ETH_RSS_TCP | ETH_RSS_UDP | ETH_RSS_IP;
     struct rte_eth_rss_conf rss_conf = {
         g_default_rss_key,
         RSS_HASH_KEY_LEN,
