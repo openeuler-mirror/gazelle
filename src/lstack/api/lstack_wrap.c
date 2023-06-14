@@ -54,9 +54,9 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
 {
     if (unlikely(posix_api == NULL)) {
         /*
-	 * posix api maybe call before gazelle init
-	 * So, we must call posix_api_init at the head of select_path
-	 */
+        * posix api maybe call before gazelle init
+        * So, we must call posix_api_init at the head of select_path
+        */
         if (posix_api_init() != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
         }
@@ -74,26 +74,21 @@ static inline enum KERNEL_LWIP_PATH select_path(int fd, struct lwip_sock **socke
         return PATH_KERNEL;
     }
 
+    if (socket) {
+        *socket = sock;
+    }
+
     if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
-        if (socket) {
-            *socket = sock;
-        }
         return PATH_LWIP;
     }
 
     if (NETCONN_IS_UDP(sock)) {
-        if (socket) {
-            *socket = sock;
-        }
         return PATH_LWIP;
     } else {
         struct tcp_pcb *pcb = sock->conn->pcb.tcp;
         /* after lwip connect, call send immediately, pcb->state is SYN_SENT, need return PATH_LWIP */
         /* pcb->state default value is CLOSED when call socket, need return PATH_UNKNOW */
         if (pcb != NULL && pcb->state <= ESTABLISHED && pcb->state >= LISTEN) {
-            if (socket) {
-                *socket = sock;
-            }
             return PATH_LWIP;
         }
     }
