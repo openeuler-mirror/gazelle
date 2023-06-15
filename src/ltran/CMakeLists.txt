@@ -27,12 +27,40 @@ if($ENV{GAZELLE_COVERAGE_ENABLE})
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ftest-coverage -fprofile-arcs")
 endif($ENV{GAZELLE_COVERAGE_ENABLE})
 
+if($ENV{DPDK_VERSION_1911})
+    set(DPDK_DIR /usr/include/dpdk)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDPDK_VERSION_1911=1")
+    set(DPDK_LINK_FLAGS "-Wl,-lrte_pmd_af_packet -Wl,-lrte_pmd_ark -Wl,-lrte_pmd_atlantic -Wl,-lrte_pmd_axgbe \
+    -Wl,-lrte_pmd_bnxt -Wl,-lrte_pmd_bond -Wl,-lrte_pmd_cxgbe -Wl,-lrte_pmd_dpaa -Wl,-lrte_pmd_dpaa2 \
+    -Wl,-lrte_pmd_e1000 -Wl,-lrte_pmd_ena -Wl,-lrte_pmd_enetc -Wl,-lrte_pmd_enic -Wl,-lrte_pmd_failsafe \
+    -Wl,-lrte_pmd_i40e -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe -Wl,-lrte_pmd_kni \
+    -Wl,-lrte_pmd_nfp -Wl,-lrte_pmd_null -Wl,-lpcap -Wl,-lrte_pmd_qede -Wl,-lrte_pmd_ring -Wl,-lrte_pmd_softnic \
+    -Wl,-lrte_pmd_pcap -Wl,-lrte_pmd_tap -Wl,-lrte_pmd_vdev_netvsc -Wl,-lrte_pmd_virtio -Wl,-lrte_pmd_vhost \
+    -Wl,-lrte_mempool_octeontx -Wl,-lrte_pmd_octeontx -Wl,-lrte_bus_vmbus -Wl,-lrte_pmd_netvsc \
+    -Wl,-lrte_pmd_vmxnet3_uio -Wl,-lrte_pmd_bbdev_null \
+    -Wl,-lrte_pmd_null_crypto -Wl,-lrte_pmd_octeontx_crypto -Wl,-lrte_pmd_crypto_scheduler \
+    -Wl,-lrte_pmd_dpaa2_sec -Wl,-lrte_pmd_dpaa_sec -Wl,-lrte_pmd_caam_jr -Wl,-lrte_pmd_virtio_crypto \
+    -Wl,-lrte_pmd_octeontx_zip -Wl,-lrte_pmd_qat -Wl,-lrte_pmd_skeleton_event -Wl,-lrte_pmd_sw_event \
+    -Wl,-lrte_pmd_dsw_event -Wl,-lrte_pmd_octeontx_ssovf -Wl,-lrte_pmd_dpaa_event -Wl,-lrte_pmd_dpaa2_event \
+    -Wl,-lrte_pmd_opdl_event -Wl,-lrte_pmd_lio -Wl,-lrte_pmd_thunderx_nicvf -Wl,-lrte_pmd_ifc")
+else()
+    set(DPDK_DIR /usr/local/include/)
+    set(DPDK_LINK_FLAGS "-Wl,-lrte_net_af_packet -Wl,-lrte_net_ark -Wl,-lrte_net_atlantic -Wl,-lrte_net_axgbe \
+    -Wl,-lrte_net_bnxt -Wl,-lrte_net_bond -Wl,-lrte_net_cxgbe -Wl,-lrte_net_dpaa -Wl,-lrte_net_dpaa2 \
+    -Wl,-lrte_net_e1000 -Wl,-lrte_net_ena -Wl,-lrte_net_enetc -Wl,-lrte_net_enic -Wl,-lrte_net_failsafe \
+    -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe -Wl,-lrte_net_kni \
+    -Wl,-lrte_net_nfp -Wl,-lrte_net_null -Wl,-lpcap -Wl,-lrte_net_qede -Wl,-lrte_net_ring -Wl,-lrte_net_softnic \
+    -Wl,-lrte_net_pcap -Wl,-lrte_net_tap -Wl,-lrte_net_vdev_netvsc -Wl,-lrte_net_virtio -Wl,-lrte_net_vhost \
+    -Wl,-lrte_mempool_octeontx -Wl,-lrte_net_octeontx -Wl,-lrte_bus_vmbus -Wl,-lrte_net_netvsc \
+    -Wl,-lrte_telemetry")
+endif($ENV{DPDK_VERSION_1911})
+
 add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_stat.c ltran_errno.c
 				ltran_monitor.c ltran_instance.c ltran_stack.c ltran_tcp_conn.c ltran_tcp_sock.c
 				ltran_forward.c ltran_timer.c ${COMMON_DIR}/gazelle_dfx_msg.c ${COMMON_DIR}/dpdk_common.c
                 ${COMMON_DIR}/gazelle_parse_config.c)
 
-target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR} ${LWIP_DIR})
+target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR} ${LWIP_DIR} ${DPDK_DIR})
 target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_FEATURE_CRC32=1 -DRTE_MACHINE_CPUFLAG_NEON
                -DRTE_MACHINE_CPUFLAG_CRC32 -DRTE_MACHINE_CPUFLAG_PMULL -DRTE_MACHINE_CPUFLAG_AES
                -DRTE_MACHINE_CPUFLAG_SHA1 -DRTE_MACHINE_CPUFLAG_SHA2 -include rte_config.h
@@ -51,16 +79,11 @@ set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--w
     -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic -Wl,-lrte_cmdline \
     -Wl,-lrte_sched -Wl,-lrte_reorder -Wl,-lrte_kni -Wl,-lrte_common_cpt -Wl,-lrte_common_octeontx -Wl,-lrte_common_dpaax -Wl,-lrte_bus_pci \
     -Wl,-lrte_bus_dpaa -Wl,-lrte_bus_vdev -Wl,-lrte_bus_fslmc -Wl,-lrte_mempool_bucket -Wl,-lrte_mempool_stack -Wl,-lrte_mempool_dpaa \
-    -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_net_af_packet -Wl,-lrte_net_ark -Wl,-lrte_net_atlantic -Wl,-lrte_net_axgbe \
-    -Wl,-lrte_net_bnxt -Wl,-lrte_net_bond -Wl,-lrte_net_cxgbe -Wl,-lrte_net_dpaa -Wl,-lrte_net_dpaa2 -Wl,-lrte_net_e1000 -Wl,-lrte_net_ena \
-    -Wl,-lrte_net_enetc -Wl,-lrte_net_enic -Wl,-lrte_net_failsafe -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe -Wl,-lrte_net_kni \
-    -Wl,-lrte_net_nfp -Wl,-lrte_net_null -Wl,-lpcap -Wl,-lrte_net_qede -Wl,-lrte_net_ring -Wl,-lrte_net_softnic -Wl,-lrte_net_pcap \
-    -Wl,-lrte_net_tap -Wl,-lrte_net_vdev_netvsc -Wl,-lrte_net_virtio -Wl,-lrte_net_vhost \
-    -Wl,-lrte_bus_vmbus -Wl,-lrte_net_netvsc -Wl,-lrte_mempool_octeontx -Wl,-lrte_net_octeontx \
-    -Wl,-lrte_bus_ifpga -Wl,-lrte_stack -Wl,-lrte_telemetry\
+    -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_bus_ifpga -Wl,-lrte_stack \
+    ${DPDK_LINK_FLAGS} \
     -Wl,--no-whole-archive -Wl,-lm -Wl,-lrt -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic -Wl,-export-dynamic \
     -Wl,--as-needed -Wl,-export-dynamic -Wl,-Map=ltran.map -Wl,--cref")
 
 add_executable(gazellectl ltran_dfx.c ${COMMON_DIR}/gazelle_dfx_msg.c)
-target_include_directories(gazellectl PRIVATE $ENV{DPDK_INCLUDE_FILE} ${COMMON_DIR})
+target_include_directories(gazellectl PRIVATE $ENV{DPDK_INCLUDE_FILE} ${COMMON_DIR} ${DPDK_DIR})
 target_link_libraries(gazellectl PRIVATE boundscheck -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)

@@ -10,10 +10,10 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/time.h>
-
 #include <arpa/inet.h>
 #include <getopt.h>
 #include <errno.h>
