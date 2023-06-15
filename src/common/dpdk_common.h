@@ -17,6 +17,7 @@
 #include <rte_mbuf.h>
 #include <rte_ring.h>
 #include <lwip/pbuf.h>
+#include <lwip/dpdk_version.h>
 
 #include "gazelle_opt.h"
 

@@ -13,6 +13,7 @@
 #ifndef __GAZELLE_PARAM_H__
 #define __GAZELLE_PARAM_H__
 
+#include <stdbool.h>
 #include <netinet/in.h>
 #include <rte_ether.h>
 

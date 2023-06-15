@@ -14,6 +14,12 @@ ROOT_DIR := $(dir $(abspath $(LSTACK_DIR)))
 LWIP_INCLUDE_FILE ?= /usr/include/lwip
 LIB_PATH ?= /usr/lib64
 
+ifeq ($(DPDK_VERSION_1911), 1)
+	DPDK_INCLUDE_FILE ?= /usr/include/dpdk
+else
+	DPDK_INCLUDE_FILE ?= /usr/local/include/
+endif
+
 AR = ar
 ARFLAGS = crDP
 CC ?= gcc
@@ -30,7 +36,8 @@ $(info $(CC):$(SEC_FLAGS))
 
 INC = -I$(LSTACK_DIR)/include   \
       -I$(LSTACK_DIR)/../common \
-      -I$(LWIP_INCLUDE_FILE)
+      -I$(LWIP_INCLUDE_FILE)    \
+      -I$(DPDK_INCLUDE_FILE)
 
 CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC)
 
@@ -58,8 +65,8 @@ include $(patsubst %, %/dir.mk, $(DIRS))
 OBJS = $(subst .c,.o,$(SRCS))
 
 LWIP_LIB = $(LIB_PATH)/liblwip.a
-LIBRTE_LIB = $(LIB_PATH)/librte_bus_pci.so \
-             $(LIB_PATH)/librte_pci.so \
+LIBRTE_LIB = $(LIB_PATH)/librte_pci.so \
+             $(LIB_PATH)/librte_bus_pci.so \
              $(LIB_PATH)/librte_cmdline.so \
              $(LIB_PATH)/librte_hash.so \
              $(LIB_PATH)/librte_mempool.so \
@@ -69,25 +76,35 @@ LIBRTE_LIB = $(LIB_PATH)/librte_bus_pci.so \
              $(LIB_PATH)/librte_gro.so \
              $(LIB_PATH)/librte_ring.so \
              $(LIB_PATH)/librte_mbuf.so \
-             $(LIB_PATH)/librte_telemetry.so \
              $(LIB_PATH)/librte_kni.so \
-             $(LIB_PATH)/librte_net_ixgbe.so \
              $(LIB_PATH)/librte_kvargs.so \
-             $(LIB_PATH)/librte_net_hinic.so \
-             $(LIB_PATH)/librte_net_i40e.so \
-             $(LIB_PATH)/librte_net_virtio.so \
              $(LIB_PATH)/librte_bus_vdev.so \
              $(LIB_PATH)/librte_net.so \
-             $(LIB_PATH)/librte_rcu.so \
              $(LIB_PATH)/librte_ethdev.so \
              $(LIB_PATH)/librte_pdump.so \
-             $(LIB_PATH)/librte_bpf.so \
-             $(LIB_PATH)/librte_pcapng.so \
-             $(LIB_PATH)/librte_security.so \
-             $(LIB_PATH)/librte_cryptodev.so \
-	     $(LIB_PATH)/librte_net_pcap.so \
-	     $(LIB_PATH)/librte_net_bond.so
 
+ifeq ($(DPDK_VERSION_1911), 1)
+	CFLAGS += -DDPDK_VERSION_1911=1
+	LIBRTE_LIB += $(LIB_PATH)/librte_pmd_pcap.so \
+	              $(LIB_PATH)/librte_pmd_bond.so \
+	              $(LIB_PATH)/librte_pmd_hinic.so \
+	              $(LIB_PATH)/librte_pmd_i40e.so \
+	              $(LIB_PATH)/librte_pmd_ixgbe.so \
+	              $(LIB_PATH)/librte_pmd_virtio.so
+else
+	LIBRTE_LIB += $(LIB_PATH)/librte_net_pcap.so \
+	              $(LIB_PATH)/librte_net_bond.so \
+	              $(LIB_PATH)/librte_net_hinic.so \
+	              $(LIB_PATH)/librte_net_i40e.so \
+	              $(LIB_PATH)/librte_net_ixgbe.so \
+	              $(LIB_PATH)/librte_net_virtio.so \
+	              $(LIB_PATH)/librte_pcapng.so \
+	              $(LIB_PATH)/librte_rcu.so \
+	              $(LIB_PATH)/librte_telemetry.so \
+	              $(LIB_PATH)/librte_bpf.so \
+	              $(LIB_PATH)/librte_security.so \
+	              $(LIB_PATH)/librte_cryptodev.so
+endif
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
 LDFLAGS += -Wl,--whole-archive $(DEP_LIBS) $(OBJS) -Wl,--no-whole-archive

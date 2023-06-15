@@ -780,7 +780,11 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
             struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
                 stack_broadcast_arp(stack->pkts[i], stack);
-                if (!use_ltran_flag && !rte_is_broadcast_ether_addr(&ethh->dst_addr)) {
+#if DPDK_VERSION_1911
+                if (!rte_is_broadcast_ether_addr(&ethh->d_addr)) {
+#else /* DPDK_VERSION_1911 */
+                if (!rte_is_broadcast_ether_addr(&ethh->dst_addr)) {
+#endif /* DPDK_VERSION_1911 */
                     // copy arp into other process
                     transfer_arp_to_other_process(stack->pkts[i]);
                     transfer_type = TRANSFER_KERNEL;

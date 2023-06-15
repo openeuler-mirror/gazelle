@@ -13,6 +13,8 @@
 #ifndef __GAZELLE_LOCKLESS_QUEUE_H__
 #define __GAZELLE_LOCKLESS_QUEUE_H__
 
+#include <stdbool.h>
+
 typedef struct lockless_queue_node {
     struct lockless_queue_node *volatile next;
 } lockless_queue_node;
