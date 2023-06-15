@@ -263,7 +263,9 @@ static void* gazelle_kernelevent_thread(void *arg)
     struct thread_params *t_params = (struct thread_params*) arg;
     uint16_t idx = t_params->idx;
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[idx];
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
+    sem_post(&stack_group->thread_phase1);
     bind_to_stack_numa(stack);
 
     LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", idx);
@@ -358,23 +360,22 @@ static struct protocol_stack *stack_thread_init(void *arg)
     struct protocol_stack *stack = calloc(1, sizeof(*stack));
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
-        sem_post(&stack_group->thread_phase1);
-        return NULL;
+        goto END2;
     }
 
     if (init_stack_value(stack, arg) != 0) {
-        goto END;
+        goto END2;
     }
 
     if (init_stack_numa_cpuset(stack) < 0) {
-        goto END;
+        goto END2;
     }
     if (create_affiliate_thread(arg) < 0) {
-        goto END;
+        goto END2;
     }
 
     if (thread_affinity_init(stack->cpu_id) != 0) {
-        goto END;
+        goto END1;
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
@@ -384,7 +385,7 @@ static struct protocol_stack *stack_thread_init(void *arg)
 
     if (use_ltran()) {
         if (client_reg_thrd_ring() != 0) {
-            goto END;
+            goto END1;
         }
     }
 
@@ -397,14 +398,18 @@ static struct protocol_stack *stack_thread_init(void *arg)
     usleep(SLEEP_US_BEFORE_LINK_UP);
 
     if (ethdev_init(stack) != 0) {
-        free(stack);
-        return NULL;
+        goto END1;
     }
 
     return stack;
-END:
+/* kernel event thread dont create, stack thread post sem twice */
+END2:
     sem_post(&stack_group->thread_phase1);
-    free(stack);
+END1:
+    sem_post(&stack_group->thread_phase1);
+    if (stack != NULL) {
+        free(stack);
+    }
     return NULL;
 }
 
@@ -597,7 +602,8 @@ int32_t init_protocol_stack(void)
         }
     }
 
-    wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num);
+    /* stack_num * 2: stack thread and kernel event thread will post sem */
+    wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num * 2);
 
     for (int idx = 0; idx < queue_num; idx++){
         free(t_params[idx]);
