@@ -71,6 +71,7 @@ static int32_t parse_seperate_sendrecv_args(void);
 static int32_t parse_tuple_filter(void);
 static int32_t parse_use_bond4(void);
 static int32_t parse_bond4_slave_mac(void);
+static int32_t parse_use_sockmap(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -125,6 +126,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "tuple_filter", parse_tuple_filter },
     { "use_bond4", parse_use_bond4 },
     { "bond4_slave_mac", parse_bond4_slave_mac },
+    { "use_sockmap", parse_use_sockmap },
     { NULL,           NULL }
 };
 
@@ -1106,3 +1108,9 @@ static int32_t parse_bond4_slave_mac(void)
     return ret;
 }
 
+static int32_t parse_use_sockmap(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.use_sockmap, "use_sockmap", 0, 0, 1, ret);
+    return ret;
+}
