@@ -108,7 +108,6 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |use_ltran| 0/1 | 是否使用ltran |
 |listen_shadow| 0/1 | 是否使用影子fd监听，单个listen线程多个协议栈线程时使用 |
 |num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量)。可按NUMA选择cpu|
-|num_wakeup|"1,3,5 ..."|wakeup线程绑定的cpu编号，编号的数量为wakeup线程个数，与lstack线程的数量保持一致。与numcpus选择对应NUMA的cpu。不配置则为不使用唤醒线程|
 |low_power_mode|0/1|是否开启低功耗模式，暂不支持|
 |kni_swith|0/1|rte_kni开关，默认为0。只有不使用ltran时才能开启|
 |unix_prefix|"string"|gazelle进程间通信使用的unix socket文件前缀字符串，默认为空，和需要通信的ltran.conf的unix_prefix或gazellectl的-u参数配置一致。不能含有特殊字符，最大长度为128。|
@@ -134,7 +133,6 @@ kni_switch=0
 low_power_mode=0
 
 num_cpus="2,22"
-num_wakeup="3,23"
 
 host_addr="192.168.1.10"
 mask_addr="255.255.255.0"
