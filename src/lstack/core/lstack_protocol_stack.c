@@ -443,6 +443,7 @@ static void* gazelle_stack_thread(void *arg)
     struct cfg_params *cfg = get_global_cfg_params();
     uint8_t use_ltran_flag = cfg->use_ltran;
     bool kni_switch = cfg->kni_switch;
+    bool use_sockmap = cfg->use_sockmap;
     uint32_t read_connect_number = cfg->read_connect_number;
     uint32_t rpc_number = cfg->rpc_number;
     uint32_t nic_read_number = cfg->nic_read_number;
@@ -471,9 +472,12 @@ static void* gazelle_stack_thread(void *arg)
 
         gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
 
-        /* reduce traversal times */
-        if ((wakeup_tick & 0xff) == 0) {
-            read_same_node_recv_list(stack);
+        if (use_sockmap) {
+            netif_poll(&stack->netif);
+            /* reduce traversal times */
+            if ((wakeup_tick & 0xff) == 0) {
+                read_same_node_recv_list(stack);
+            }
         }
         read_recv_list(stack, read_connect_number);
 

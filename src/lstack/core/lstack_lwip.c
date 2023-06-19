@@ -1545,6 +1545,11 @@ err_t same_node_memzone_create(const struct rte_memzone **zone, int size, int po
 
 err_t same_node_ring_create(struct rte_ring **ring, int size, int port, char *name, char *rx)
 {
+    if (!get_global_cfg_params()->use_sockmap) {
+        *ring = NULL;
+        return -1;
+    }
+
     unsigned flags;
     char ring_name[RING_NAME_LEN] = {0};
     if (strcmp(name, "listen") == 0) {

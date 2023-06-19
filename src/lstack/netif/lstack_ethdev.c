@@ -761,7 +761,6 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
 {
     uint32_t nr_pkts;
 
-    netif_poll(&stack->netif);
     nr_pkts = stack->dev_ops.rx_poll(stack, stack->pkts, nic_read_number);
     if (nr_pkts == 0) {
         return 0;
