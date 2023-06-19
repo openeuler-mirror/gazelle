@@ -552,7 +552,7 @@ static inline ssize_t udp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void 
 {
     int32_t ret;
 
-    do {
+    while (1) {
         ret = read_stack_data(sockfd, buf, len, flags, addr, addrlen);
         if (ret > 0) {
             return ret;
@@ -561,9 +561,16 @@ static inline ssize_t udp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void 
             return -1;
         }
         sock = sock->listen_next;
-        sockfd = sock->conn->socket;
-    } while (sock != NULL);
-    GAZELLE_RETURN(EAGAIN);
+        if (sock != NULL && sock->conn != NULL) {
+            sockfd = sock->conn->socket;
+        } else {
+            if (sock == NULL) {
+                GAZELLE_RETURN(EAGAIN);
+            } else {
+                GAZELLE_RETURN(ENOTCONN);
+            }
+        }
+    }
 }
 
 static inline ssize_t tcp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void *buf, size_t len, int32_t flags,
