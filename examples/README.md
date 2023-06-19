@@ -2,10 +2,10 @@
 
 ## 功能
 
-* 支持 TCP 、 unix 非阻塞通讯。
+* 支持 TCP 、UDP、 unix 非阻塞通讯。
 * 支持多线程网络 IO 复用模型，线程之间相互独立。TCP 的 `listen` 、`epoll` 、`read` 、`write` 、`connect` 等接口都在同一线程内。`connect` 连接数可配。
 * 支持多线程网络非对称模型，一个 listen 线程，若干个读写线程。listen 线程和读写线程使用 `poll` / `epoll` 监听事件。
-* 支持 `recvmsg` 、`sendmsg` 、`recv` 、`send` 、`getpeername` 、`getsockopt` 、`epoll_ctl` 等 posix 接口。
+* 支持 `recvmsg` 、`sendmsg` 、`recv` 、`send` 、`recvfrom`、`sendto`、`getpeername` 、`getsockopt` 、`epoll_ctl` 等 posix 接口。
 * 网络通讯报文采用问答方式，丢包或者内容错误则报错并停止通讯。报文内容有变化，长度可配。
 
 ## 网络模型
@@ -104,19 +104,23 @@
   * `server`：作为服务端。
   * `client`：作为客户端。
 * `-i, --ip [xxx.xxx.xxx.xxx]`：IP地址。
+* `-g, --groupip [xxx.xxx.xxx.xxx]`：UDP组播地址。
 * `-p, --port [xxxx]`：端口。
 * `-m, --model [mum | mud]`：采用的网络模型类型。
   * `mum (multi thread, unblock, multiplexing IO)`：多线程非阻塞IO复用。
   * `mud (multi thread, unblock, dissymmetric)`：多线程非阻塞非对称。
 * `-t, --threadnum`：线程数设置。
-* `-c, --connectnum`：连接数设置。
-* `-D, --domain [unix | posix]`：通信协议。
+* `-c, --connectnum`：连接数设置。当 `domain` 设置为 `udp` 时，`connectnum` 会被设置为1。
+* `-D, --domain [unix | tcp | udp]`：通信协议。
   * `unix`：基于 unix 协议实现。
-  * `posix`：基于 posix 协议实现。
-* `-A, --api [readwrite | recvsend | recvsendmsg | readvwritev]`：内部实现的接口类型。
+  * `tcp`：基于 tcp 协议实现。
+  * `udp`：基于 udp 协议实现。
+* `-A, --api [readwrite | recvsend | recvsendmsg | readvwritev | recvfromsendto | recvfrom]`：内部实现的接口类型。
   * `readwrite` ：使用 `read` 和 `write` 接口。
   * `recvsend` ：使用 `recv` 和 `send` 接口。
   * `recvsendmsg` ：使用 `recvmsg` 和 `sendmsg` 接口。
+  * `recvfromsendto`：使用 `recvfrom` 和 `sendto` 接口。
+  * `recvfrom`：仅使用 `recvfrom` 接口，用于udp组播的多服务端模型。
 * `-P, --pktlen [xxxx]`：报文长度配置。
 * `-v, --verify`：是否校验报文。
 * `-r, --ringpmd`：是否基于dpdk ring PMD 收发环回。
@@ -160,11 +164,14 @@ make
 -c, --connectnum [???]: set connection number of each thread. 
 -D, --domain [unix | posix]: set domain type is server or client. 
     unix: use unix's api. 
-    posix: use posix api. 
--A, --api [readwrite | recvsend | recvsendmsg]: set api type is server or client. 
+    tcp: use tcp api. 
+    udp: use udp api.
+-A, --api [readwrite | recvsend | recvsendmsg | recvfromsendto | recvfrom]: set api type is server or client. 
     readwrite: use `read` and `write`. 
     recvsend: use `recv and `send`. 
     recvsendmsg: use `recvmsg` and `sendmsg`. 
+    recvfromsendto: use `recvfrom` and `sendto`.
+    recvfrom: just use `recvfrom`, used by the server to receive group messages.
 -P, --pktlen [????]: set packet length in range of 2 - 10485760. 
 -v, --verify: set to verifying the message packet. 
 -r, --ringpmd: set to use ringpmd. 
@@ -178,7 +185,7 @@ make
     ac4: use accept4(int sockfd, struct sockaddr *addr,socklen_t *addrlen, int flags) to accept a connection on a socket, flags=SOCK_CLOEXEC.
  ```
 
- * 创建服务端
+ * 创建tcp服务端
 
 ```
 ./example --as server --verify
@@ -188,8 +195,8 @@ make
 --> [server ip]:                127.0.0.1 
 --> [server port]:              5050 
 --> [model]:                    mum 
---> [thread number]:            8 
---> [domain]:                   posix 
+--> [thread number]:            1 
+--> [domain]:                   tcp 
 --> [api]:                      read & write 
 --> [packet length]:            1024 
 --> [verify]:                   on 
@@ -202,7 +209,7 @@ make
 --> <server>: [connect num]: 0, [receive]: 0.000 B/s
 ```
 
- * 创建客户端
+ * 创建tcp客户端
 
 ```
 ./example --as client --verify
@@ -211,9 +218,9 @@ make
 --> [as]:                       client 
 --> [server ip]:                127.0.0.1 
 --> [server port]:              5050 
---> [thread number]:            8 
---> [connection number]:        10 
---> [domain]:                   posix 
+--> [thread number]:            1 
+--> [connection number]:        1 
+--> [domain]:                   tcp 
 --> [api]:                      read & write 
 --> [packet length]:            1024 
 --> [verify]:                   on 
@@ -223,4 +230,53 @@ make
 
 [program informations]: 
 --> <client>: [connect num]: 80, [send]: 357.959 MB/s
+```
+
+ * 创建udp组播服务端
+
+```
+./example -A server -D udp -i 192.168.0.1 -g 225.0.0.1 -A recvfromsendto
+
+[program parameters]: 
+--> [as]:                       server 
+--> [server ip]:                192.168.0.1
+--> [server group ip]:          225.0.0.1
+--> [server port]:              5050 
+--> [model]:                    mum 
+--> [thread number]:            1 
+--> [domain]:                   udp 
+--> [api]:                      recvfrom & sendto 
+--> [packet length]:            1024 
+--> [verify]:                   on 
+--> [ringpmd]:                  off 
+--> [debug]:                    off 
+--> [epoll create]:             ec
+--> [accept]:                   ac
+
+[program informations]: 
+--> <server>: [connect num]: 0, [receive]: 0.000 B/s
+```
+
+ * 创建udp组播客户端
+
+```
+./example -A client -D udp -i 192.168.0.1 -g 225.0.0.1 -A recvfromsendto
+
+[program parameters]: 
+--> [as]:                       server 
+--> [server ip]:                225.0.0.1
+--> [client send ip]:           192.168.0.1
+--> [server port]:              5050 
+--> [thread number]:            1
+--> [connection number]:        1 
+--> [domain]:                   udp 
+--> [api]:                      recvfrom & sendto 
+--> [packet length]:            1024 
+--> [verify]:                   on 
+--> [ringpmd]:                  off 
+--> [epoll create]:             ec
+--> [accept]:                   ac
+
+[program informations]: 
+--> <client>: [connect num]: 0, [send]: 0.000 B/s
 ```

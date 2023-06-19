@@ -205,6 +205,7 @@ Gazelle wrap应用程序POSIX接口，应用程序无需修改代码。
 ### 9. 调测命令
 - 不使用ltran模式时不支持gazellectl ltran xxx命令，以及lstack -r命令
 - -u参数指定gazelle进程间通信的unix socket前缀，和需要通信的ltran.conf或lstack.conf的unix_prefix配置一致。
+- 对于udp连接，目前gazellectl lstack xxx 命令目前仅支持无LSTACK_OPTIONS参数的。
 ```
 Usage: gazellectl [-h | help]
   or:  gazellectl ltran  {quit | show} [LTRAN_OPTIONS] [time] [-u UNIX_PREFIX]

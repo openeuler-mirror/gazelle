@@ -205,7 +205,8 @@ void program_param_parse_accept(struct ProgramParams *params)
 // set `group ip` parameter
 void program_param_parse_groupip(struct ProgramParams *params)
 {
-    if (inet_addr(optarg) != INADDR_NONE) {
+    in_addr_t ip = inet_addr(optarg);
+    if (ip != INADDR_NONE && ip >= inet_addr("224.0.0.0") && ip <= inet_addr("239.255.255.255")) {
         params->groupip = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
@@ -242,6 +243,7 @@ void program_params_help(void)
     printf("    server: as server. \n");
     printf("    client: as client. \n");
     printf("-i, --ip [???.???.???.???]: set ip address. \n");
+    printf("-g, --groupip [???.???.???.???]: set group ip address. \n");
     printf("-p, --port [????]: set port number in range of %d - %d. \n", UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX);
     printf("-s, --sport [????]: set sport number in range of %d - %d. \n", UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX);
     printf("-m, --model [mum | mud]: set the network model. \n");
@@ -357,7 +359,17 @@ void program_params_print(struct ProgramParams *params)
     printf("\n");
     printf("[program parameters]: \n");
     printf("--> [as]:                       %s \n", params->as);
-    printf("--> [server ip]:                %s \n", params->ip);
+    if (strcmp(params->groupip, PARAM_DEFAULT_GROUPIP) != 0) {
+        if (strcmp(params->as, "server") == 0) {
+            printf("--> [server ip]:                %s \n", params->ip);
+            printf("--> [server group ip]:          %s \n", params->groupip);
+        } else {
+            printf("--> [server ip]:                %s \n", params->groupip);
+            printf("--> [client send ip]:           %s \n", params->ip);
+        }
+    } else {
+        printf("--> [server ip]:                %s \n", params->ip);
+    }
     if ((strcmp(params->as, "server") == 0 && strcmp(params->groupip, PARAM_DEFAULT_GROUPIP)) != 0) {
         printf("--> [server group ip]:          %s \n", params->groupip);
     }

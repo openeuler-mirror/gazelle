@@ -12,6 +12,7 @@
 
 
 #include "bussiness.h"
+#include "client.h"
 
 
 static const char bussiness_messages_low[] = "abcdefghijklmnopqrstuvwxyz";  // the lower charactors of business message
