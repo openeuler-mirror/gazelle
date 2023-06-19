@@ -277,7 +277,6 @@ yum -y install gazelle dpdk libconfig numactl libboundscheck libcap
 | use_ltran     | 0                                                            | 不使用ltran                                                  |
 | listen_shadow | 1                                                            | 使用listen影子fd，因为mysql一个listen线程对应4个协议栈线程   |
 | num_cpus      | "18,38,58,78"                                                | 每个NUMA选择一个cpu                                          |
-| num_wakeup    | 删除此参数                                                   | 唤醒合并在协议栈线程足够支撑此流量处理，多空出cpu用于处理业务，总体性能更好 |
 
 <img src="test/lstack_mysql_conf.png">
 
