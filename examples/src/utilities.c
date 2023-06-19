@@ -106,7 +106,7 @@ int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, in_addr_t gro
 }
 
 // create the socket and connect
-int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t port, uint16_t sport, const char *domain, const char *api)
+int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, uint16_t sport, const char *domain, const char *api)
 {
     if (strcmp(domain, "tcp") == 0 || strcmp(domain, "udp") == 0) {
 	if (strcmp(domain, "tcp") == 0) {
@@ -137,6 +137,15 @@ int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, uint16_t por
         }
         server_addr.sin_addr.s_addr = ip;
         server_addr.sin_port = port;
+        if (strcmp(domain, "udp") == 0) {
+            if (groupip) {
+                server_addr.sin_addr.s_addr = groupip;
+                if (setsockopt(*socket_fd, IPPROTO_IP, IP_MULTICAST_IF, &ip, sizeof(ip)) != 0) {
+                    PRINT_ERROR("can't set the multicast interface %d! ", errno);
+                    return PROGRAM_FAULT;
+                }
+            }
+        }
         if (strcmp(domain, "udp") != 0 || strcmp(api, "recvfromsendto") != 0) {
             if (connect(*socket_fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in)) < 0) {
                 if (errno == EINPROGRESS) {

@@ -85,9 +85,9 @@ void client_info_print(struct Client *client)
 }
 
 // the single thread, client try to connect to server, register to epoll
-int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, uint16_t port, uint16_t sport, const char *domain, const char *api)
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, uint16_t sport, const char *domain, const char *api)
 {
-    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, port, sport, domain, api);
+    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, groupip, port, sport, domain, api);
     if (create_socket_and_connect_ret == PROGRAM_INPROGRESS) {
         return PROGRAM_OK;
     }
@@ -97,7 +97,7 @@ int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t 
 // the single thread, client retry to connect to server, register to epoll
 int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler)
 {
-    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, client_unit->ip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api);
+    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api);
     if (clithd_try_cnntask_ret < 0) {
         if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
             return PROGRAM_OK;
@@ -122,7 +122,7 @@ int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct Clien
     }
     client_debug_print("client unit", "connect", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
 
-    int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->ip, client_unit->port);
+    int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip, client_unit->port);
     if (client_ask_ret == PROGRAM_FAULT) {
         --client_unit->curr_connect;
         struct epoll_event ep_ev;
@@ -162,7 +162,7 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
     }
 
     for (uint32_t i = 0; i < connect_num; ++i) {
-        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api);
+        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api);
         if (clithd_try_cnntask_ret < 0) {
             if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
                 continue;
@@ -181,7 +181,7 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
 
             client_debug_print("client unit", "connect", client_unit->ip, client_unit->port, client_unit->debug);
 
-            int32_t client_ask_ret = client_ask(client_unit->handlers + i, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->ip, client_unit->port);
+            int32_t client_ask_ret = client_ask(client_unit->handlers + i, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip, client_unit->port);
             if (client_ask_ret == PROGRAM_FAULT) {
                 --client_unit->curr_connect;
                 struct epoll_event ep_ev;
@@ -249,7 +249,7 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
                 }
                 client_debug_print("client unit", "connect", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
                 
-                int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->ip, client_unit->port);
+                int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip, client_unit->port);
                 if (client_ask_ret == PROGRAM_FAULT) {
                     --client_unit->curr_connect;
                     struct epoll_event ep_ev;
@@ -270,7 +270,7 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
                 }
             }
         } else if (curr_epev->events == EPOLLIN) {
-            int32_t client_chkans_ret = client_chkans((struct ClientHandler *)curr_epev->data.ptr, client_unit->pktlen, client_unit->verify, client_unit->api, client_unit->domain, client_unit->ip);
+            int32_t client_chkans_ret = client_chkans((struct ClientHandler *)curr_epev->data.ptr, client_unit->pktlen, client_unit->verify, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip);
             if (client_chkans_ret == PROGRAM_FAULT) {
                 --client_unit->curr_connect;
                 struct epoll_event ep_ev;
@@ -344,6 +344,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->curr_connect = 0;
         client_unit->send_bytes = 0;
         client_unit->ip = inet_addr(params->ip);
+        client_unit->groupip = inet_addr(params->groupip);
         client_unit->port = htons(params->port);
         client_unit->sport = htons(params->sport);
         client_unit->connect_num = params->connect_num;
