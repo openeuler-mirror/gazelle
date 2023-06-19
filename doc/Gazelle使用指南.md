@@ -245,6 +245,12 @@ gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle�
 - 如果XDG_RUNTIME_DIR不为空，dpdk配置文件放到变量XDG_RUNTIME_DIR下；
 - 注意有些机器会默认设置XDG_RUNTIME_DIR
 
+#### 2. retbleed漏洞补丁影响gazelle性能
+- 内核在5.10.0-60.57.0.85版本合入retbleed漏洞补丁，该补丁导致X86架构下gazelle性能下降，可以在启动参数内增加**retbleed=off mitigations=off** 来规避此CVE带来的性能损耗，用户可以根据自身产品特性来选择是否规避，出于安全考虑，默认是不规避的。
+- 测试场景为发送端内核态，接收端用户态ltran模式，收发1024字节，性能由17000Mb/s下降至5000Mb/s。
+- 受影响的版本包括openEuler-22.03-LTS(内核版本高于等于5.10.0-60.57.0.85) 及其之后的SP版本。
+- 具体详情可参考：https:/gitee.com/openeuler/kernel/pulls/110
+
 ## 约束限制
 
 使用 Gazelle 存在一些约束限制：
