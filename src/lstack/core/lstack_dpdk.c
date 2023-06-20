@@ -566,6 +566,8 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
         }
     }
 
+    rte_eth_allmulticast_enable(port_id);
+
     return 0;
 }
 
