@@ -47,6 +47,8 @@ static config_t g_config;
 static int32_t parse_host_addr(void);
 static int32_t parse_low_power_mode(void);
 static int32_t parse_stack_cpu_number(void);
+static int32_t parse_app_bind_numa(void);
+static int32_t parse_app_exclude_cpus(void);
 static int32_t parse_use_ltran(void);
 static int32_t parse_mask_addr(void);
 static int32_t parse_devices(void);
@@ -54,7 +56,6 @@ static int32_t parse_dpdk_args(void);
 static int32_t parse_gateway_addr(void);
 static int32_t parse_kni_switch(void);
 static int32_t parse_listen_shadow(void);
-static int32_t parse_app_bind_numa(void);
 static int32_t parse_main_thread_affinity(void);
 static int32_t parse_unix_prefix(void);
 static int32_t parse_read_connect_number(void);
@@ -111,6 +112,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
     { "app_bind_numa",  parse_app_bind_numa },
+    { "app_exclude_cpus",   parse_app_exclude_cpus },
     { "main_thread_affinity",  parse_main_thread_affinity },
     { "unix_prefix",    parse_unix_prefix },
     { "tcp_conn_count", parse_tcp_conn_count },
@@ -391,6 +393,46 @@ static int32_t parse_stack_cpu_number(void)
     return 0;
 }
 
+static int32_t parse_app_bind_numa(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.app_bind_numa, "app_bind_numa", 1, 0, 1, ret);
+    return ret;
+}
+
+static int32_t parse_app_exclude_cpus(void)
+{
+    const config_setting_t *num_cpus = NULL;
+    const char *args = NULL;
+    char *tmp_arg;
+    int32_t cnt;
+
+    g_config_params.app_exclude_num_cpu = 0;
+    if (!g_config_params.app_bind_numa) {
+        return 0;
+    }
+
+    num_cpus = config_lookup(&g_config, "app_exclude_cpus");
+    if (num_cpus == NULL) {
+        return 0;
+    }
+
+    args = config_setting_get_string(num_cpus);
+    if (args == NULL) {
+        return -EINVAL;
+    }
+
+    tmp_arg = strdup(args);
+    cnt = separate_str_to_array(tmp_arg, g_config_params.app_exclude_cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
+    free(tmp_arg);
+    if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
+        return -EINVAL;
+    }
+
+    g_config_params.app_exclude_num_cpu = cnt;
+    return 0;
+}
+
 static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t num)
 {
     char path[PATH_MAX] = {0};
@@ -456,6 +498,10 @@ int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
             CPU_SET(cfg->send_cpus[idx], &stack_cpuset);
             CPU_SET(cfg->recv_cpus[idx], &stack_cpuset);
         }
+    }
+
+    for (int32_t idx = 0; idx < cfg->app_exclude_num_cpu; ++idx) {
+        CPU_SET(cfg->app_exclude_cpus[idx], &stack_cpuset);
     }
 
     ret = stack_idle_cpuset(stack, &stack_cpuset);
@@ -833,13 +879,6 @@ static int32_t parse_listen_shadow(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.listen_shadow, "listen_shadow", 0, 0, 1, ret);
-    return ret;
-}
-
-static int32_t parse_app_bind_numa(void)
-{
-    int32_t ret;
-    PARSE_ARG(g_config_params.app_bind_numa, "app_bind_numa", 1, 0, 1, ret);
     return ret;
 }
 

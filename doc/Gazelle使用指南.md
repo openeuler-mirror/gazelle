@@ -108,6 +108,8 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |use_ltran| 0/1 | 是否使用ltran |
 |listen_shadow| 0/1 | 是否使用影子fd监听，单个listen线程多个协议栈线程时使用 |
 |num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量)。可按NUMA选择cpu|
+|app_bind_numa|0/1|应用的epoll和poll线程是否绑定到协议栈所在的numa，默认值是1，即绑定|
+|app_exclude_cpus|"7,8,9 ..."|应用的epoll和poll线程不会绑定到的cpu编号，app_bind_numa = 1时才生效|
 |low_power_mode|0/1|是否开启低功耗模式，暂不支持|
 |kni_swith|0/1|rte_kni开关，默认为0。只有不使用ltran时才能开启|
 |unix_prefix|"string"|gazelle进程间通信使用的unix socket文件前缀字符串，默认为空，和需要通信的ltran.conf的unix_prefix或gazellectl的-u参数配置一致。不能含有特殊字符，最大长度为128。|
@@ -115,7 +117,6 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |mask_addr|"255.255.xx.xx"|掩码地址|
 |gateway_addr|"192.168.xx.1"|网关地址|
 |devices|"aa:bb:cc:dd:ee:ff"|网卡通信的mac地址，需要与ltran.conf的bond_macs配置一致|
-|app_bind_numa|0/1|应用的epoll和poll线程是否绑定到协议栈所在的numa，默认值是1，即绑定|
 |send_connect_number|4|设置为正整数，表示每次协议栈循环中发包处理的连接个数|
 |read_connect_number|4|设置为正整数，表示每次协议栈循环中收包处理的连接个数|
 |rpc_number|4|设置为正整数，表示每次协议栈循环中rpc消息处理的个数|
