@@ -92,9 +92,16 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
         COMMON_INFO("DEV_RX_OFFLOAD_IPV4_CKSUM\n");
     }
 
+    // rx tcp
     if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
         rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
         COMMON_INFO("DEV_RX_OFFLOAD_TCP_CKSUM\n");
+    }
+
+    // rx udp
+    if (rx_ol_capa & DEV_RX_OFFLOAD_UDP_CKSUM) {
+        rx_ol |= DEV_RX_OFFLOAD_UDP_CKSUM;
+        COMMON_INFO("DEV_RX_OFFLOAD_UDP_CKSUM\n");
     }
 
     // tx ip
@@ -109,15 +116,26 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
         COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
     }
 
+    // tx udp
+    if (tx_ol_capa & DEV_TX_OFFLOAD_UDP_CKSUM) {
+        tx_ol |= DEV_TX_OFFLOAD_UDP_CKSUM;
+        COMMON_INFO("DEV_TX_OFFLOAD_UDP_CKSUM\n");
+    }
+
+    // tx tso
     if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
         tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
         COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
     }
 
-    if (!(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) || !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
+    if (!(rx_ol & DEV_RX_OFFLOAD_UDP_CKSUM) ||
+        !(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) ||
+        !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
         rx_ol = 0;
     }
-    if (!(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) || !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
+    if (!(tx_ol & DEV_TX_OFFLOAD_UDP_CKSUM) ||
+        !(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) ||
+        !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
         tx_ol = 0;
     }
 
