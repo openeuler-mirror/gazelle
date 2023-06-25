@@ -82,6 +82,11 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
         return pkt_num;
     }
 
+    /* skip gro when tcp/ip cksum offloads disable */
+    if (get_protocol_stack_group()->rx_offload == 0) {
+        return pkt_num;
+    }
+
     for (uint32_t i = 0; i < pkt_num; i++) {
         struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
         if (unlikely(RTE_BE16(RTE_ETHER_TYPE_IPV4) != ethh->ether_type)) {
