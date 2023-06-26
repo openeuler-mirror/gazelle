@@ -379,7 +379,10 @@ static struct protocol_stack *stack_thread_init(void *arg)
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
-    hugepage_init();
+    if (hugepage_init() != 0) {
+        LSTACK_LOG(ERR, LSTACK, "hugepage init failed\n");
+        goto END1;
+    }
 
     tcpip_init(NULL, NULL);
 
