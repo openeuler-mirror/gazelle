@@ -495,13 +495,32 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
         for (int i = 0; i < slave_num; i++) {
             ret = dpdk_ethdev_init(slave_port_id[i], 0);
             if (ret != 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
+                LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
                 return -1;
             }
             ret = rte_eth_promiscuous_enable(slave_port_id[i]);
-            rte_eth_allmulticast_enable(slave_port_id[i]);
+	    if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk slave enable promiscuous failed ret = %d\n", ret);
+                return -1;
+            }
+
+            ret = rte_eth_allmulticast_enable(slave_port_id[i]);
+	    if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk slave enable allmulticast failed ret = %d\n", ret);
+                return -1;
+            }
+
             ret = rte_eth_bond_slave_add(port_id, slave_port_id[i]);
+	    if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk add slave port failed ret = %d\n", ret);
+                return -1;
+            }
+
             ret = rte_eth_dev_start(slave_port_id[i]);
+	    if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk start slave port failed ret = %d\n", ret);
+                return -1;
+            }
         }
     }
 
@@ -670,27 +689,41 @@ int32_t init_dpdk_ethdev(void)
         }
 
         ret = dpdk_ethdev_init(bond_port_id, 1);
+	if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
+            return -1;
+        }
+
         ret = rte_eth_bond_xmit_policy_set(bond_port_id, BALANCE_XMIT_POLICY_LAYER34);
         if (ret < 0) {
+	    LSTACK_LOG(ERR, LSTACK, "dpdk set bond xmit policy failed ret = %d\n", ret);
             return -1;
         }
 
         ret = rte_eth_bond_8023ad_dedicated_queues_enable(bond_port_id);
         if (ret < 0) {
+	    LSTACK_LOG(ERR, LSTACK, "dpdk enable 8023 dedicated queues failed ret = %d\n", ret);
             return -1;
         }
 
         ret = rte_eth_promiscuous_enable(bond_port_id);
         if (ret < 0) {
+	    LSTACK_LOG(ERR, LSTACK, "dpdk enable promiscuous failed ret = %d\n", ret);
             return -1;
         }
 
         ret = rte_eth_allmulticast_enable(bond_port_id);
         if (ret < 0) {
+	    LSTACK_LOG(ERR, LSTACK, "dpdk enable allmulticast failed ret = %d\n", ret);
             return -1;
         }
 
         ret = rte_eth_dev_start(bond_port_id);
+	if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk start bond port failed ret = %d\n", ret);
+            return -1;
+        }
+
         /* 20: sleep for lacp ,this is a temp plan, it will be changed in future */
         int wait_lacp = 20;
         sleep(wait_lacp);
