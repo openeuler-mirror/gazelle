@@ -414,6 +414,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
 static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     if ((domain != AF_INET && domain != AF_UNSPEC)
+        || ((type & SOCK_DGRAM) && !get_global_cfg_params()->udp_enable)
         || posix_api->ues_posix) {
         return posix_api->socket_fn(domain, type, protocol);
     }
