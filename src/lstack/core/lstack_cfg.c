@@ -73,6 +73,7 @@ static int32_t parse_tuple_filter(void);
 static int32_t parse_use_bond4(void);
 static int32_t parse_bond4_slave_mac(void);
 static int32_t parse_use_sockmap(void);
+static int32_t parse_udp_enable(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -129,6 +130,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "use_bond4", parse_use_bond4 },
     { "bond4_slave_mac", parse_bond4_slave_mac },
     { "use_sockmap", parse_use_sockmap },
+    { "udp_enable", parse_udp_enable },
     { NULL,           NULL }
 };
 
@@ -1095,6 +1097,13 @@ static int parse_tuple_filter(void)
     }
 
     return 0;
+}
+
+static int32_t parse_udp_enable(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.udp_enable, "udp_enable", 1, 0, 1, ret);
+    return ret;
 }
 
 static int32_t parse_use_bond4(void)
