@@ -490,7 +490,16 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
         int slave_num = 2;
         int32_t slave_port_id[2];
         slave_port_id[0] = ethdev_port_id(get_global_cfg_params()->bond4_slave1_mac_addr);
+	if (slave_port_id[0] < 0) {
+	    LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[0]);
+            return slave_port_id[0];
+        }
+
         slave_port_id[1] = ethdev_port_id(get_global_cfg_params()->bond4_slave2_mac_addr);
+	if (slave_port_id[1] < 0) {
+	    LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[1]);
+            return slave_port_id[1];
+        }
 
         for (int i = 0; i < slave_num; i++) {
             ret = dpdk_ethdev_init(slave_port_id[i], 0);
@@ -532,7 +541,15 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     if (bond_port) {
         struct rte_eth_dev_info slave_dev_info;
         int slave_id = rte_eth_bond_primary_get(port_id);
-        rte_eth_dev_info_get(slave_id, &slave_dev_info);
+	if (slave_id < 0) {
+	    LSTACK_LOG(ERR, LSTACK, "dpdk get bond primary port failed port = %d\n", slave_id);
+	    return slave_id;
+	}
+        ret = rte_eth_dev_info_get(slave_id, &slave_dev_info);
+	if (ret != 0) {
+	    LSTACK_LOG(ERR, LSTACK, "dpdk get bond dev info failed ret = %d\n", ret);
+            return ret;
+	}
         dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
         dev_info.tx_offload_capa = slave_dev_info.tx_offload_capa;
     }
