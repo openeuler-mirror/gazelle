@@ -645,7 +645,7 @@ static inline bool replenish_send_ring(struct protocol_stack *stack, struct lwip
 
     replenish_again = replenish_send_idlembuf(stack, sock);
 
-    if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
+    if (NETCONN_IS_OUTIDLE(sock)) {
         add_sock_event(sock, EPOLLOUT);
     }
 
