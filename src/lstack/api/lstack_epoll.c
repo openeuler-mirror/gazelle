@@ -140,6 +140,11 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
         event |= EPOLLIN;
     }
 
+    if (sock->errevent > 0) {
+        event |= EPOLLERR | EPOLLIN;
+    }
+
+    pthread_spin_lock(&wakeup->event_list_lock);
     if (NETCONN_IS_OUTIDLE(sock)) {
         /* lwip_netconn_do_connected set LIBOS FLAGS when connected */
         if (sock->conn && CONN_TYPE_IS_LIBOS(sock->conn)) {
@@ -147,19 +152,14 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
         }
     }
 
-    if (sock->errevent > 0) {
-        event |= EPOLLERR | EPOLLIN;
-    }
-
     if (event) {
-        pthread_spin_lock(&wakeup->event_list_lock);
         sock->events = event;
         if (wakeup->type == WAKEUP_EPOLL && (sock->events & sock->epoll_events) &&
             list_is_null(&sock->event_list)) {
             list_add_node(&wakeup->event_list, &sock->event_list);
         }
-        pthread_spin_unlock(&wakeup->event_list_lock);
     }
+    pthread_spin_unlock(&wakeup->event_list_lock);
 }
 
 int32_t lstack_do_epoll_create(int32_t fd)
