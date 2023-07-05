@@ -98,12 +98,8 @@ else
 	              $(LIB_PATH)/librte_net_i40e.so \
 	              $(LIB_PATH)/librte_net_ixgbe.so \
 	              $(LIB_PATH)/librte_net_virtio.so \
-	              $(LIB_PATH)/librte_pcapng.so \
-	              $(LIB_PATH)/librte_rcu.so \
 	              $(LIB_PATH)/librte_telemetry.so \
-	              $(LIB_PATH)/librte_bpf.so \
-	              $(LIB_PATH)/librte_security.so \
-	              $(LIB_PATH)/librte_cryptodev.so
+	              $(LIB_PATH)/librte_pcapng.so
 endif
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)

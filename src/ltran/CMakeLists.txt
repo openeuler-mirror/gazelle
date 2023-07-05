@@ -30,29 +30,12 @@ endif($ENV{GAZELLE_COVERAGE_ENABLE})
 if($ENV{DPDK_VERSION_1911})
     set(DPDK_DIR /usr/include/dpdk)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDPDK_VERSION_1911=1")
-    set(DPDK_LINK_FLAGS "-Wl,-lrte_pmd_af_packet -Wl,-lrte_pmd_ark -Wl,-lrte_pmd_atlantic -Wl,-lrte_pmd_axgbe \
-    -Wl,-lrte_pmd_bnxt -Wl,-lrte_pmd_bond -Wl,-lrte_pmd_cxgbe -Wl,-lrte_pmd_dpaa -Wl,-lrte_pmd_dpaa2 \
-    -Wl,-lrte_pmd_e1000 -Wl,-lrte_pmd_ena -Wl,-lrte_pmd_enetc -Wl,-lrte_pmd_enic -Wl,-lrte_pmd_failsafe \
-    -Wl,-lrte_pmd_i40e -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe -Wl,-lrte_pmd_kni \
-    -Wl,-lrte_pmd_nfp -Wl,-lrte_pmd_null -Wl,-lpcap -Wl,-lrte_pmd_qede -Wl,-lrte_pmd_ring -Wl,-lrte_pmd_softnic \
-    -Wl,-lrte_pmd_pcap -Wl,-lrte_pmd_tap -Wl,-lrte_pmd_vdev_netvsc -Wl,-lrte_pmd_virtio -Wl,-lrte_pmd_vhost \
-    -Wl,-lrte_mempool_octeontx -Wl,-lrte_pmd_octeontx -Wl,-lrte_bus_vmbus -Wl,-lrte_pmd_netvsc \
-    -Wl,-lrte_pmd_vmxnet3_uio -Wl,-lrte_pmd_bbdev_null \
-    -Wl,-lrte_pmd_null_crypto -Wl,-lrte_pmd_octeontx_crypto -Wl,-lrte_pmd_crypto_scheduler \
-    -Wl,-lrte_pmd_dpaa2_sec -Wl,-lrte_pmd_dpaa_sec -Wl,-lrte_pmd_caam_jr -Wl,-lrte_pmd_virtio_crypto \
-    -Wl,-lrte_pmd_octeontx_zip -Wl,-lrte_pmd_qat -Wl,-lrte_pmd_skeleton_event -Wl,-lrte_pmd_sw_event \
-    -Wl,-lrte_pmd_dsw_event -Wl,-lrte_pmd_octeontx_ssovf -Wl,-lrte_pmd_dpaa_event -Wl,-lrte_pmd_dpaa2_event \
-    -Wl,-lrte_pmd_opdl_event -Wl,-lrte_pmd_lio -Wl,-lrte_pmd_thunderx_nicvf -Wl,-lrte_pmd_ifc")
+    set(DPDK_LINK_FLAGS "-Wl,-lrte_pmd_bond -Wl,-lrte_pmd_i40e -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe \
+    -Wl,-lrte_pmd_pcap -Wl,-lrte_pmd_virtio")
 else()
     set(DPDK_DIR /usr/local/include/)
-    set(DPDK_LINK_FLAGS "-Wl,-lrte_net_af_packet -Wl,-lrte_net_ark -Wl,-lrte_net_atlantic -Wl,-lrte_net_axgbe \
-    -Wl,-lrte_net_bnxt -Wl,-lrte_net_bond -Wl,-lrte_net_cxgbe -Wl,-lrte_net_dpaa -Wl,-lrte_net_dpaa2 \
-    -Wl,-lrte_net_e1000 -Wl,-lrte_net_ena -Wl,-lrte_net_enetc -Wl,-lrte_net_enic -Wl,-lrte_net_failsafe \
-    -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe -Wl,-lrte_net_kni \
-    -Wl,-lrte_net_nfp -Wl,-lrte_net_null -Wl,-lpcap -Wl,-lrte_net_qede -Wl,-lrte_net_ring -Wl,-lrte_net_softnic \
-    -Wl,-lrte_net_pcap -Wl,-lrte_net_tap -Wl,-lrte_net_vdev_netvsc -Wl,-lrte_net_virtio -Wl,-lrte_net_vhost \
-    -Wl,-lrte_mempool_octeontx -Wl,-lrte_net_octeontx -Wl,-lrte_bus_vmbus -Wl,-lrte_net_netvsc \
-    -Wl,-lrte_telemetry")
+    set(DPDK_LINK_FLAGS "-Wl,-lrte_net_bond -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe \
+    -Wl,-lpcap -Wl,-lrte_net_pcap -Wl,-lrte_net_virtio -Wl,-lrte_pcapng -Wl,-lrte_telemetry")
 endif($ENV{DPDK_VERSION_1911})
 
 add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_stat.c ltran_errno.c
@@ -69,18 +52,11 @@ target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_
                -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2)
 
 target_link_libraries(ltran PRIVATE config boundscheck rte_pdump -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines)
-set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--whole-archive -Wl,-lrte_pipeline \
-    -Wl,--no-whole-archive -Wl,-lrte_table -Wl,--whole-archive -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_port -Wl,--no-whole-archive \
-    -Wl,-lrte_distributor -Wl,-lrte_meter -Wl,-lrte_ip_frag -Wl,-lrte_lpm -Wl,--whole-archive -Wl,-lrte_acl -Wl,--no-whole-archive \
-    -Wl,-lrte_jobstats -Wl,-lrte_bitratestats -Wl,-lrte_metrics -Wl,-lrte_latencystats -Wl,-lrte_power -Wl,-lrte_efd -Wl,-lrte_bpf \
-    -Wl,--whole-archive -Wl,-lrte_gro -Wl,-lrte_cfgfile -Wl,-lrte_gso -Wl,-lrte_hash -Wl,-lrte_member -Wl,-lrte_vhost -Wl,-lrte_kvargs \
-    -Wl,-lrte_mbuf -Wl,-lrte_ethdev -Wl,-lrte_net -Wl,-lrte_bbdev -Wl,-lrte_cryptodev -Wl,-lrte_security -Wl,-lrte_compressdev -Wl,-lrte_eventdev \
-    -Wl,-lrte_rawdev -Wl,-lrte_timer -Wl,-lrte_mempool -Wl,-lrte_mempool_ring -Wl,-lrte_ring -Wl,-lrte_pci \
-    -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic -Wl,-lrte_cmdline \
-    -Wl,-lrte_sched -Wl,-lrte_reorder -Wl,-lrte_kni -Wl,-lrte_common_cpt -Wl,-lrte_common_octeontx -Wl,-lrte_common_dpaax -Wl,-lrte_bus_pci \
-    -Wl,-lrte_bus_dpaa -Wl,-lrte_bus_vdev -Wl,-lrte_bus_fslmc -Wl,-lrte_mempool_bucket -Wl,-lrte_mempool_stack -Wl,-lrte_mempool_dpaa \
-    -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_bus_ifpga -Wl,-lrte_stack \
-    ${DPDK_LINK_FLAGS} \
+set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--no-whole-archive \
+    -Wl,-lrte_meter -Wl,--whole-archive -Wl,-lrte_gro -Wl,-lrte_hash -Wl,-lrte_kvargs -Wl,-lrte_mbuf -Wl,-lrte_ethdev \
+    -Wl,-lrte_net -Wl,-lrte_timer -Wl,-lrte_mempool -Wl,-lrte_mempool_ring -Wl,-lrte_ring -Wl,-lrte_pci \
+    -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic -Wl,-lrte_cmdline -Wl,-lrte_kni -Wl,-lrte_bus_pci \
+    -Wl,-lrte_bus_vdev ${DPDK_LINK_FLAGS} \
     -Wl,--no-whole-archive -Wl,-lm -Wl,-lrt -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic -Wl,-export-dynamic \
     -Wl,--as-needed -Wl,-export-dynamic -Wl,-Map=ltran.map -Wl,--cref")
 
