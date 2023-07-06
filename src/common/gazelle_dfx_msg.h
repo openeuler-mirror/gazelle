@@ -78,11 +78,11 @@ struct gazelle_wakeup_stat {
 };
 
 struct gazelle_stat_pkts {
-    uint64_t call_msg_cnt;
     uint16_t conn_num;
+    uint32_t mempool_freecnt;
+    uint64_t call_msg_cnt;
     uint64_t recv_list_cnt;
     uint64_t call_alloc_fail;
-    uint32_t mempool_freecnt;
     struct gazelle_stack_stat stack_stat;
     struct gazelle_wakeup_stat wakeup_stat;
 };
@@ -193,9 +193,9 @@ struct gazelle_stack_latency {
 
 struct gazelle_stat_low_power_info {
     uint16_t low_power_mod;
+    uint16_t lpm_rx_pkts;
     uint32_t lpm_pkts_in_detect;
     uint32_t lpm_detect_ms;
-    uint16_t lpm_rx_pkts;
 };
 
 #define RTE_ETH_XSTATS_NAME_SIZE 64
