@@ -245,6 +245,10 @@ bool is_dst_ip_localhost(const struct sockaddr *addr)
     char *p;
     size_t linel = 0;
     int linenum = 0;
+    if (get_global_cfg_params()->host_addr.addr == servaddr->sin_addr.s_addr) {
+        return true;
+    }
+
     FILE *ifh = fopen("/proc/net/dev", "r");
     if (ifh == NULL) {
         LSTACK_LOG(ERR, LSTACK, "failed to open /proc/net/dev, errno is %d\n", errno);
