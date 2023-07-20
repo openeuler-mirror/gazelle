@@ -129,8 +129,6 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
         return PROGRAM_FAULT;
     }
 
-    server_debug_print("server mud listener", "waiting", server_mud->ip, server_mud->port, server_mud->debug);
-
     return PROGRAM_OK;
 }
 
@@ -289,9 +287,15 @@ void *sermud_listener_create_and_run(void *arg)
 {
     struct ServerMud *server_mud = (struct ServerMud *)arg;
 
-    if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->groupip, server_mud->port, server_mud->domain) < 0) {
-        exit(PROGRAM_FAULT);
+    uint32_t port = 0;
+    for (; port < UNIX_TCP_PORT_MAX; port++) {
+        if ((server_mud->port)[port]) {
+            if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->groupip, port, server_mud->domain) < 0) {
+                exit(PROGRAM_FAULT);
+	    }
+        }
     }
+
     if (sermud_listener_create_epfd_and_reg(server_mud) < 0) {
        exit(PROGRAM_FAULT);
     }
@@ -325,7 +329,7 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->curr_connect = 0;
     server_mud->ip = inet_addr(params->ip);
     server_mud->groupip = inet_addr(params->groupip);
-    server_mud->port = htons(params->port);
+    server_mud->port = params->port;
     server_mud->pktlen = params->pktlen;
     server_mud->domain = params->domain;
     server_mud->api = params->api;
@@ -568,6 +572,7 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
 
     server_mum->uints = server_unit;
     server_mum->debug = params->debug;
+    uint32_t port = UNIX_TCP_PORT_MIN;
 
     for (uint32_t i = 0; i < thread_num; ++i) {
         server_unit->listener.fd = -1;
@@ -577,7 +582,12 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->recv_bytes = 0;
         server_unit->ip = inet_addr(params->ip);
 	server_unit->groupip = inet_addr(params->groupip);
-        server_unit->port = htons(params->port);
+
+	/* loop to set ports to each server_mums */
+        while (!((params->port)[port])) {
+            port = (port + 1) % UNIX_TCP_PORT_MAX;
+        }
+        server_unit->port = htons(port++);
         server_unit->pktlen = params->pktlen;
         server_unit->domain = params->domain;
         server_unit->api = params->api;
@@ -599,8 +609,11 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
     if (server_mum->debug == false) {
         printf("[program informations]: \n\n");
     }
-    while (true) {
-        sermum_info_print(server_mum);
+
+    if (strcmp(params->as, "server") == 0) {
+        while (true) {
+            sermum_info_print(server_mum);
+        }
     }
 
     pthread_mutex_destroy(&server_debug_mutex);

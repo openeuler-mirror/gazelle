@@ -31,8 +31,13 @@ int32_t main(int argc, char *argv[])
 
     if (strcmp(prog_params.as, "server") == 0) {
         server_create_and_run(&prog_params);
-    } else {
+    } else if (strcmp(prog_params.as, "client") == 0) {
         client_create_and_run(&prog_params);
+    } else if (strcmp(prog_params.as, "loop") == 0) {
+	server_create_and_run(&prog_params);
+	/* sleep to wait server creating */
+	sleep(1);
+	client_create_and_run(&prog_params);
     }
 
     return ret;

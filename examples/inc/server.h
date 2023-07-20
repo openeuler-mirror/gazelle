@@ -85,7 +85,7 @@ struct ServerMud
     uint32_t curr_connect;                  ///< current connection number
     in_addr_t ip;                           ///< server ip
     in_addr_t groupip;                      ///< server group ip
-    uint16_t port;                          ///< server port
+    bool* port;                             ///< server port point to parameter's port
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
