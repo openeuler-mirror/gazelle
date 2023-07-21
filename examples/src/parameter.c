@@ -65,7 +65,7 @@ int getopt_long(int argc, char * const argv[], const char *optstring, const stru
 // set `as` parameter
 void program_param_parse_as(struct ProgramParams *params)
 {
-    if (strcmp(optarg, "server") == 0 || strcmp(optarg, "client") == 0) {
+    if (strcmp(optarg, "server") == 0 || strcmp(optarg, "client") == 0 || strcmp(optarg, "loop") == 0) {
         params->as = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
@@ -87,26 +87,37 @@ void program_param_parse_ip(struct ProgramParams *params)
 // set `port` parameter
 void program_param_parse_port(struct ProgramParams *params)
 {
-    int32_t port_arg = strtol(optarg, NULL, 0);
-    printf("%d\n", port_arg);
-    if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
-        params->port = (uint32_t)port_arg;
-    } else {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
-        exit(PROGRAM_ABORT);
+    char* port_list = optarg;
+    char* token = NULL;
+    int32_t port_arg = 0;
+    params->port[PARAM_DEFAULT_PORT] = 0;
+
+    while ((token = strtok_r(port_list, ",", &port_list))) {
+        port_arg = strtol(token, NULL, 0);
+        if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
+            params->port[port_arg] = 1;
+        } else {
+            PRINT_ERROR("illigal argument -- %s \n", optarg);
+            exit(PROGRAM_ABORT);
+        }
     }
 }
 
 // set `sport` parameter
 void program_param_parse_sport(struct ProgramParams *params)
 {
-    int32_t sport_arg = strtol(optarg, NULL, 0);
-    printf("%d\n", sport_arg);
-    if (CHECK_VAL_RANGE(sport_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
-        params->sport = (uint32_t)sport_arg;
-    } else {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
-        exit(PROGRAM_ABORT);
+    char* port_list = optarg;
+    char* token = NULL;
+    int32_t port_arg = 0;
+
+    while ((token = strtok_r(port_list, ",", &port_list))) {
+        port_arg = strtol(token, NULL, 0);
+        if (CHECK_VAL_RANGE(port_arg, UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX) == true) {
+            params->sport[port_arg] = 1;
+        } else {
+            PRINT_ERROR("illigal argument -- %s \n", optarg);
+            exit(PROGRAM_ABORT);
+        }
     }
 }
 
@@ -219,8 +230,9 @@ void program_params_init(struct ProgramParams *params)
 {
     params->as = PARAM_DEFAULT_AS;
     params->ip = PARAM_DEFAULT_IP;
-    params->port = PARAM_DEFAULT_PORT;
-    params->sport = PARAM_DEFAULT_SPORT;
+    memset_s(params->port, sizeof(bool)*UNIX_TCP_PORT_MAX, 0, sizeof(bool)*UNIX_TCP_PORT_MAX);
+    memset_s(params->sport, sizeof(bool)*UNIX_TCP_PORT_MAX, 0, sizeof(bool)*UNIX_TCP_PORT_MAX);
+    (params->port)[PARAM_DEFAULT_PORT] = 1;
     params->model = PARAM_DEFAULT_MODEL;
     params->thread_num = PARAM_DEFAULT_THREAD_NUM;
     params->connect_num = PARAM_DEFAULT_CONNECT_NUM;
@@ -239,9 +251,10 @@ void program_params_init(struct ProgramParams *params)
 void program_params_help(void)
 {
     printf("\n");
-    printf("-a, --as [server | client]: set programas server or client. \n");
+    printf("-a, --as [server | client | loop]: set programas server, client or loop. \n");
     printf("    server: as server. \n");
     printf("    client: as client. \n");
+    printf("    loop: as server and client. \n");
     printf("-i, --ip [???.???.???.???]: set ip address. \n");
     printf("-g, --groupip [???.???.???.???]: set group ip address. \n");
     printf("-p, --port [????]: set port number in range of %d - %d. \n", UNIX_TCP_PORT_MIN, UNIX_TCP_PORT_MAX);
@@ -346,7 +359,6 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
     }
 
     if (strcmp(params->domain, "tcp") != 0) {
-        params->thread_num = 1;
         params->connect_num = 1;
     }
 
@@ -370,13 +382,36 @@ void program_params_print(struct ProgramParams *params)
     } else {
         printf("--> [server ip]:                %s \n", params->ip);
     }
-    if ((strcmp(params->as, "server") == 0 && strcmp(params->groupip, PARAM_DEFAULT_GROUPIP)) != 0) {
-        printf("--> [server group ip]:          %s \n", params->groupip);
+
+    printf("--> [server port]:              ");
+    uint32_t comma = 0;
+    uint32_t sport = 0;
+
+    /* use comma to print port list */
+    for (uint32_t i = UNIX_TCP_PORT_MIN; i < UNIX_TCP_PORT_MAX; i++) {
+        if ((params->port)[i]) {
+            printf("%s%u", comma?",":"", i);
+	    comma = 1;
+	}
+	if ((params->sport)[i]) {
+            sport = i;
+	}
     }
-    printf("--> [server port]:              %u \n", params->port);
-    if (params->sport && strcmp(params->as, "client") == 0) {
-        printf("--> [client sport]:             %u \n", params->sport);
+    printf(" \n");
+
+    /* use comma to print sport list */
+    if (sport && strcmp(params->as, "client") == 0) {
+        printf("--> [client sport]:             ");
+	comma = 0;
+	for (uint32_t i = UNIX_TCP_PORT_MIN; i < sport; i++) {
+            if ((params->sport)[i]) {
+                printf("%s%u", comma?",":"", i);
+                comma = 1;
+            }
+	}
+	printf(" \n");
     }
+
     if (strcmp(params->as, "server") == 0) {
         printf("--> [model]:                    %s \n", params->model);
     }

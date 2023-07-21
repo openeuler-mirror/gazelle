@@ -96,8 +96,8 @@ struct ProgramOption {
 struct ProgramParams {
     char*               as;                 ///< as server or client
     char*               ip;                 ///< IP address
-    uint32_t            port;               ///< port
-    uint32_t            sport;               ///< sport
+    bool                port[UNIX_TCP_PORT_MAX];       ///< index:port list; value:port is set or not
+    bool                sport[UNIX_TCP_PORT_MAX];       ///< index:sport list; value:sport is set or not
     char*               model;              ///< model type
     uint32_t            thread_num;         ///< the number of threads
     uint32_t            connect_num;        ///< the connection number

@@ -85,9 +85,9 @@ void client_info_print(struct Client *client)
 }
 
 // the single thread, client try to connect to server, register to epoll
-int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, uint16_t sport, const char *domain, const char *api)
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop)
 {
-    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, groupip, port, sport, domain, api);
+    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, groupip, port, sport, domain, api, loop);
     if (create_socket_and_connect_ret == PROGRAM_INPROGRESS) {
         return PROGRAM_OK;
     }
@@ -97,7 +97,7 @@ int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t 
 // the single thread, client retry to connect to server, register to epoll
 int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler)
 {
-    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api);
+    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
     if (clithd_try_cnntask_ret < 0) {
         if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
             return PROGRAM_OK;
@@ -162,7 +162,7 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
     }
 
     for (uint32_t i = 0; i < connect_num; ++i) {
-        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api);
+        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
         if (clithd_try_cnntask_ret < 0) {
             if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
                 continue;
@@ -324,6 +324,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
     pthread_t *tids = (pthread_t *)malloc(thread_num * sizeof(pthread_t));
     struct Client *client = (struct Client *)malloc(sizeof(struct Client));
     struct ClientUnit *client_unit = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
+    memset_s(client_unit, sizeof(struct ClientUnit), 0, sizeof(struct ClientUnit));
 
     if (pthread_mutex_init(&client_debug_mutex, NULL) < 0) {
         PRINT_ERROR("client can't init posix mutex %d! ", errno);
@@ -332,6 +333,10 @@ int32_t client_create_and_run(struct ProgramParams *params)
 
     client->uints = client_unit;
     client->debug = params->debug;
+
+    uint32_t port = UNIX_TCP_PORT_MIN;
+    uint32_t sport = 0;
+    uint32_t sp = 0;
 
     for (uint32_t i = 0; i < thread_num; ++i) {
         client_unit->handlers = (struct ClientHandler *)malloc(connect_num * sizeof(struct ClientHandler));
@@ -345,10 +350,27 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->send_bytes = 0;
         client_unit->ip = inet_addr(params->ip);
         client_unit->groupip = inet_addr(params->groupip);
-        client_unit->port = htons(params->port);
-        client_unit->sport = htons(params->sport);
+
+	/* loop to set ports to each client_units */
+        while (!((params->port)[port])) {
+            port = (port + 1) % UNIX_TCP_PORT_MAX;
+        }
+        client_unit->port = htons(port++);
+
+        sp = sport;
+	sport++;
+        while (!((params->sport)[sport]) && (sport != sp)) {
+            sport = (sport + 1) % UNIX_TCP_PORT_MAX;
+        }
+
+        client_unit->sport = htons(sport);
         client_unit->connect_num = params->connect_num;
         client_unit->pktlen = params->pktlen;
+	if (strcmp(params->as, "loop") == 0) {
+	    client_unit->loop = 1;
+	} else {
+	    client_unit->loop = 0;
+	}
         client_unit->verify = params->verify;
         client_unit->domain = params->domain;
         client_unit->api = params->api;
