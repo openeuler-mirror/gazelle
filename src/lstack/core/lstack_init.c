@@ -118,29 +118,6 @@ static int32_t check_process_conflict(void)
     return 0;
 }
 
-static int32_t check_preload_bind_proc(void)
-{
-    char proc_path[PATH_MAX] = {0};
-
-    if (!g_preload_info.preload_switch) {
-        return 0;
-    }
-
-    if (readlink("/proc/self/exe", proc_path, PATH_MAX - 1) <= 0) {
-        return -1;
-    }
-
-    char *proc_name = strrchr(proc_path, '/');
-    if (!proc_name) {
-        return -1;
-    }
-
-    if (strncmp(++proc_name, g_preload_info.env_procname, PATH_MAX) == 0) {
-        return 0;
-    }
-    return -1;
-}
-
 __attribute__((destructor)) void gazelle_network_exit(void)
 {
     if (posix_api != NULL && !posix_api->ues_posix) {
@@ -260,9 +237,6 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     /* Init LD_PRELOAD */
     if (preload_info_init() < 0) {
-        return;
-    }
-    if (check_preload_bind_proc() < 0) {
         return;
     }
 
