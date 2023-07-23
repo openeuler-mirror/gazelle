@@ -13,6 +13,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "securec.h"
+
+#include "lstack_log.h"
 #include "lstack_preload.h"
 
 #define LSTACK_PRELOAD_ENV_SYS      "LD_PRELOAD"
@@ -49,7 +52,7 @@ static int32_t preload_check_bind_proc(void)
     return -1;
 }
 
-static int32_t preload_info_init(void)
+int preload_info_init(void)
 {
     char *enval = NULL;
 
