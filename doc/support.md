@@ -1,6 +1,6 @@
-<img src="logo.png" alt=Gazelle style="zoom:20%"> 
+<img src="images/logo.png" alt=Gazelle style="zoom:20%"> 
 
-# 用户态协议栈Gazelle支持posix接口列表
+# Gazelle支持posix接口列表
 - int32_t epoll_create1(int32_t flags)
 - int32_t epoll_create(int32_t size)
 - int32_t epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
@@ -32,6 +32,6 @@
 - int32_t sigaction(int32_t signum, const struct sigaction *act, struct sigaction *oldact)
 - pid_t fork(void)
 
-# 用户态协议栈Gazelle支持应用列表
+# Gazelle支持应用列表
 - mysql 8.0.20
 - ceph client 14.2.8
