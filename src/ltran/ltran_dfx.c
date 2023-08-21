@@ -836,7 +836,7 @@ static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_d
     printf("ip_in_deliver: %u\n",    snmp->ip_in_deliver);
     printf("ip_out_req: %u\n",       snmp->ip_out_req);
     printf("ip_out_discard: %u\n",   snmp->ip_out_discard);
-    printf("ip_outnort: %u\n",       snmp->ip_out_discard);
+    printf("ip_outnort: %u\n",       snmp->ip_outnort);
     printf("ip_reasm_ok: %u\n",      snmp->ip_reasm_ok);
     printf("ip_reasm_fail: %u\n",    snmp->ip_reasm_fail);
     printf("ip_frag_ok: %u\n",       snmp->ip_frag_ok);
