@@ -1239,7 +1239,6 @@ static inline void clone_lwip_socket_opt(struct lwip_sock *dst_sock, struct lwip
         dst_sock->conn->pcb.tcp->netif_idx = src_sock->conn->pcb.tcp->netif_idx;
         dst_sock->conn->pcb.tcp->flags = src_sock->conn->pcb.tcp->flags;
         dst_sock->conn->pcb.tcp->keep_idle = src_sock->conn->pcb.tcp->keep_idle;
-        dst_sock->conn->pcb.tcp->keep_idle = src_sock->conn->pcb.tcp->keep_idle;
         dst_sock->conn->pcb.tcp->keep_intvl = src_sock->conn->pcb.tcp->keep_intvl;
         dst_sock->conn->pcb.tcp->keep_cnt = src_sock->conn->pcb.tcp->keep_cnt;
     }

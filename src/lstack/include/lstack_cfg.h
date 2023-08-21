@@ -82,7 +82,7 @@ struct cfg_params {
     uint32_t read_connect_number;
     uint32_t rpc_number;
     uint32_t nic_read_number;
-    uint8_t use_ltran; // ture:lstack read from nic false:read form ltran
+    uint8_t use_ltran; // false:lstack read from nic. true:lstack read form ltran process.
 
     uint16_t num_process;
     uint16_t num_listen_port;
