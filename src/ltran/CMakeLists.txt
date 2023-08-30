@@ -30,12 +30,18 @@ endif($ENV{GAZELLE_COVERAGE_ENABLE})
 if($ENV{DPDK_VERSION_1911})
     set(DPDK_DIR /usr/include/dpdk)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDPDK_VERSION_1911=1")
-    set(DPDK_LINK_FLAGS "-Wl,-lrte_pmd_bond -Wl,-lrte_pmd_i40e -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe \
+    set(DPDK_LINK_FLAGS "-Wl,-lrte_pmd_bond -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe \
     -Wl,-lrte_pmd_pcap -Wl,-lrte_pmd_virtio")
+    if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64")
+        set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lrte_pmd_i40e")
+    endif()
 else()
     set(DPDK_DIR /usr/local/include/)
-    set(DPDK_LINK_FLAGS "-Wl,-lrte_net_bond -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe \
+    set(DPDK_LINK_FLAGS "-Wl,-lrte_net_bond -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe \
     -Wl,-lpcap -Wl,-lrte_net_pcap -Wl,-lrte_net_virtio -Wl,-lrte_pcapng -Wl,-lrte_telemetry")
+    if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64")
+        set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lrte_net_i40e")
+    endif()
 endif($ENV{DPDK_VERSION_1911})
 
 add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_stat.c ltran_errno.c
@@ -44,12 +50,15 @@ add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_st
                 ${COMMON_DIR}/gazelle_parse_config.c)
 
 target_include_directories(ltran PRIVATE ${COMMON_DIR} ${PROJECT_SOURCE_DIR} ${LWIP_DIR} ${DPDK_DIR})
-target_compile_options(ltran PRIVATE -march=native -fno-strict-aliasing -D__ARM_FEATURE_CRC32=1 -DRTE_MACHINE_CPUFLAG_NEON
+target_compile_options(ltran PRIVATE -fno-strict-aliasing -D__ARM_FEATURE_CRC32=1 -DRTE_MACHINE_CPUFLAG_NEON
                -DRTE_MACHINE_CPUFLAG_CRC32 -DRTE_MACHINE_CPUFLAG_PMULL -DRTE_MACHINE_CPUFLAG_AES
                -DRTE_MACHINE_CPUFLAG_SHA1 -DRTE_MACHINE_CPUFLAG_SHA2 -include rte_config.h
                -D_GNU_SOURCE -W -Wall -Wstrict-prototypes -Wmissing-declarations -Wmissing-prototypes -Wold-style-definition
-               -Wpointer-arith -Wcast-align -Wcast-qual -Wnested-externs -Wformat-nonliteral -Wformat-security -Wundef
+               -Wpointer-arith -Wcast-qual -Wnested-externs -Wformat-nonliteral -Wformat-security -Wundef
                -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2)
+if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "sw_64")
+    target_compile_options(ltran PRIVATE -march=native -Wcast-align)
+endif()
 
 target_link_libraries(ltran PRIVATE config boundscheck rte_pdump -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines)
 set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--no-whole-archive \

@@ -26,6 +26,7 @@ CC ?= gcc
 OPTIMIZATION = -O2 -g
 RM = rm -f
 LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
+ARCH := $(shell uname -m)
 
 ifneq ($(CC),clang)
 	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
@@ -88,18 +89,22 @@ ifeq ($(DPDK_VERSION_1911), 1)
 	LIBRTE_LIB += $(LIB_PATH)/librte_pmd_pcap.so \
 	              $(LIB_PATH)/librte_pmd_bond.so \
 	              $(LIB_PATH)/librte_pmd_hinic.so \
-	              $(LIB_PATH)/librte_pmd_i40e.so \
 	              $(LIB_PATH)/librte_pmd_ixgbe.so \
 	              $(LIB_PATH)/librte_pmd_virtio.so
+	ifneq ($(ARCH), loongarch64)
+		LIBRTE_LIB += $(LIB_PATH)/librte_pmd_i40e.so
+	endif
 else
 	LIBRTE_LIB += $(LIB_PATH)/librte_net_pcap.so \
 	              $(LIB_PATH)/librte_net_bond.so \
 	              $(LIB_PATH)/librte_net_hinic.so \
-	              $(LIB_PATH)/librte_net_i40e.so \
 	              $(LIB_PATH)/librte_net_ixgbe.so \
 	              $(LIB_PATH)/librte_net_virtio.so \
 	              $(LIB_PATH)/librte_telemetry.so \
 	              $(LIB_PATH)/librte_pcapng.so
+	ifneq ($(ARCH), loongarch64)
+		LIBRTE_LIB += $(LIB_PATH)/librte_net_i40e.so
+	endif
 endif
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)

@@ -47,12 +47,15 @@ set_target_properties(ltran_test PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -W
     -Wl,-lrte_bus_dpaa -Wl,-lrte_bus_vdev -Wl,-lrte_bus_fslmc -Wl,-lrte_mempool_bucket -Wl,-lrte_mempool_stack -Wl,-lrte_mempool_dpaa \
     -Wl,-lrte_mempool_dpaa2 -Wl,-lrte_net_af_packet -Wl,-lrte_net_ark -Wl,-lrte_net_atlantic -Wl,-lrte_net_axgbe \
     -Wl,-lrte_net_bnxt -Wl,-lrte_net_bond -Wl,-lrte_net_cxgbe -Wl,-lrte_net_dpaa -Wl,-lrte_net_dpaa2 -Wl,-lrte_net_e1000 -Wl,-lrte_net_ena \
-    -Wl,-lrte_net_enetc -Wl,-lrte_net_enic -Wl,-lrte_net_failsafe -Wl,-lrte_net_i40e -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe -Wl,-lrte_net_kni \
+    -Wl,-lrte_net_enetc -Wl,-lrte_net_enic -Wl,-lrte_net_failsafe -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe -Wl,-lrte_net_kni \
     -Wl,-lrte_net_nfp -Wl,-lrte_net_null -Wl,-lpcap -Wl,-lrte_net_qede -Wl,-lrte_net_ring -Wl,-lrte_net_softnic \
     -Wl,-lrte_net_tap -Wl,-lrte_net_vdev_netvsc -Wl,-lrte_net_virtio -Wl,-lrte_net_vhost \
     -Wl,-lrte_bus_vmbus -Wl,-lrte_net_netvsc -Wl,-lrte_mempool_octeontx -Wl,-lrte_net_octeontx \
     -Wl,-lrte_bus_ifpga -Wl,-lrte_stack -Wl,-lrte_telemetry\
     -Wl,--no-whole-archive -Wl,-lm -Wl,-lrt -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic -Wl,-export-dynamic \
     -Wl,--as-needed -Wl,-export-dynamic -Wl,-Map=ltran.map -Wl,--cref")
+if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64")
+    set_target_properties(ltran_test PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-lrte_net_i40e")
+endif()
 target_include_directories(ltran_test PRIVATE ${LIB_PATH})
 target_link_libraries(ltran_test PRIVATE config boundscheck cunit pthread)
