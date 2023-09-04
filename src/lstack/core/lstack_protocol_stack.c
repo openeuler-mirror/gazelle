@@ -38,7 +38,7 @@
 #include "lstack_stack_stat.h"
 #include "lstack_protocol_stack.h"
 
-#define KERNEL_EVENT_100us              100
+#define KERNEL_EVENT_10us               10
 
 static PER_THREAD struct protocol_stack *g_stack_p = NULL;
 static struct protocol_stack_group g_stack_group = {0};
@@ -258,6 +258,29 @@ static int32_t create_thread(void *arg, char *thread_name, stack_thread_func fun
     return 0;
 }
 
+static void wakeup_kernel_event(struct protocol_stack *stack)
+{
+    if (stack->kernel_event_num <= 0) {
+        return;
+    }
+
+    for (int32_t i = 0; i < stack->kernel_event_num; i++) {
+        struct wakeup_poll *wakeup = stack->kernel_events[i].data.ptr;
+        if (wakeup->type == WAKEUP_CLOSE) {
+            continue;
+        }
+
+         __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
+        if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
+             __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+            rte_mb();
+            pthread_mutex_unlock(&wakeup->wait);
+        }
+    }
+
+    return;
+}
+
 static void* gazelle_kernelevent_thread(void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
@@ -272,8 +295,9 @@ static void* gazelle_kernelevent_thread(void *arg)
 
     for (;;) {
         stack->kernel_event_num = posix_api->epoll_wait_fn(stack->epollfd, stack->kernel_events, KERNEL_EPOLL_MAX, -1);
-        while (stack->kernel_event_num > 0) {
-            usleep(KERNEL_EVENT_100us);
+        if (stack->kernel_event_num > 0) {
+            wakeup_kernel_event(stack);
+            usleep(KERNEL_EVENT_10us);
         }
     }
 
@@ -416,28 +440,6 @@ END1:
     return NULL;
 }
 
-static void wakeup_kernel_event(struct protocol_stack *stack)
-{
-    if (stack->kernel_event_num == 0) {
-        return;
-    }
-
-    for (int32_t i = 0; i < stack->kernel_event_num; i++) {
-        struct wakeup_poll *wakeup = stack->kernel_events[i].data.ptr;
-        if (wakeup->type == WAKEUP_CLOSE) {
-            continue;
-        }
-
-        __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
-        if (list_is_null(&wakeup->wakeup_list[stack->stack_idx])) {
-            list_add_node(&stack->wakeup_list, &wakeup->wakeup_list[stack->stack_idx]);
-        }
-    }
-
-    stack->kernel_event_num = 0;
-}
-
-
 static void* gazelle_stack_thread(void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
@@ -485,7 +487,6 @@ static void* gazelle_stack_thread(void *arg)
         read_recv_list(stack, read_connect_number);
 
         if ((wakeup_tick & 0xf) == 0) {
-            wakeup_kernel_event(stack);
             wakeup_stack_epoll(stack);
         }
 
