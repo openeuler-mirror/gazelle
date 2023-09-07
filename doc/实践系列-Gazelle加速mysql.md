@@ -147,13 +147,13 @@ rm -fr /data/mysql/data/*
 #启动服务
 /usr/local/mysql-8.0.20/support-files/mysql.server start
 
-#完成初始化后会随机生成一个密码，用其登陆mysql
+#完成初始化后会随机生成一个密码，用其登录mysql
 /usr/local/mysql-8.0.20/bin/mysql -u root -p
 alter user 'root'@'localhost' identified by '123456';
 flush privileges;
 quit
 
-#再次登陆数据库，密码123456，更新root账号能够访问的域为%，从而可以支持远程访问
+#再次登录数据库，密码123456，更新root账号能够访问的域为%，从而可以支持远程访问
 /usr/local/mysql-8.0.20/bin/mysql -u root -p
 use mysql;
 update user set host='%' where user='root';
