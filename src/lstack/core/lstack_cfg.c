@@ -770,6 +770,8 @@ static int32_t parse_dpdk_args(void)
     }
     start_index = 1;
 
+    struct cfg_params *global_params = get_global_cfg_params();
+    global_params->is_primary = 1;
     for (i = 0; i < g_config_params.dpdk_argc; i++) {
         arg = config_setting_get_string_elem(args, i);
         if (arg == NULL)
@@ -780,10 +782,9 @@ static int32_t parse_dpdk_args(void)
         }
         g_config_params.dpdk_argv[start_index + i] = p;
 
-        const char *primary = "primary";
-        if (strcmp(p, primary) == 0) {
-            struct cfg_params *global_params = get_global_cfg_params();
-            global_params->is_primary = 1;
+        const char *secondary = "secondary";
+        if (strcmp(p, secondary) == 0) {
+            global_params->is_primary = 0;
         }
 
         (void)fprintf(stderr, "%s ", g_config_params.dpdk_argv[start_index + i]);
