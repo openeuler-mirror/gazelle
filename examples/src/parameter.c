@@ -30,8 +30,8 @@ const char prog_short_opts[] = \
     "r"         // ringpmd
     "d"         // debug
     "h"         // help
-    "E"         // epollcreate
-    "C"         // accept
+    "E:"         // epollcreate
+    "C:"         // accept
     "g:"        // group address
     ;
 
