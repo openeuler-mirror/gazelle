@@ -108,7 +108,7 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |use_ltran| 0/1 | 是否使用ltran |
 |listen_shadow| 0/1 | 是否使用影子fd监听，单个listen线程多个协议栈线程时使用 |
 |num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量)。可按NUMA选择cpu|
-|app_bind_numa|0/1|应用的epoll和poll线程是否绑定到协议栈所在的numa，默认值是1，即绑定|
+|app_bind_numa|0/1|应用的epoll和poll线程是否绑定到协议栈所在的numa，缺省值是1，即绑定|
 |app_exclude_cpus|"7,8,9 ..."|应用的epoll和poll线程不会绑定到的cpu编号，app_bind_numa = 1时才生效|
 |low_power_mode|0/1|是否开启低功耗模式，暂不支持|
 |kni_swith|0/1|rte_kni开关，默认为0。只有不使用ltran时才能开启|
@@ -285,7 +285,7 @@ Gazelle可能存在如下安全风险，用户需要根据使用场景评估风�
   大页内存 mount 至 /mnt/hugepages-lstack 目录，链接 liblstack.so 的进程初始化时在 /mnt/hugepages-lstack 目录下创建文件，每个文件对应 2M 大页内存，并 mmap 这些文件。ltran 在收到 lstask 的注册信息后，根据大页内存配置信息也 mmap 目录下文件，实现大页内存共享。
   ltran 在 /mnt/hugepages-ltran 目录的大页内存同理。
 - 当前消减措施
-  大页文件权限 600，只有 OWNER 用户才能访问文件，默认 root 用户，支持配置成其它用户； 
+  大页文件权限 600，只有 OWNER 用户才能访问文件，默认 root 用户，支持配置成其他用户； 
   大页文件有 DPDK 文件锁，不能直接写或者映射。
 - 风险点 
   属于同一用户的恶意进程模仿DPDK实现逻辑，通过大页文件共享大页内存，写破坏大页内存，导致Gazelle程序crash。建议用户下的进程属于同一信任域。
