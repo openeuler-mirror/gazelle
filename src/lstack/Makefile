@@ -40,7 +40,7 @@ INC = -I$(LSTACK_DIR)/include   \
       -I$(LWIP_INCLUDE_FILE)    \
       -I$(DPDK_INCLUDE_FILE)
 
-CFLAGS = $(OPTIMIZATION) -fno-strict-aliasing $(INC)
+CFLAGS += $(OPTIMIZATION) -fno-strict-aliasing $(INC) -Wno-error=unused-function
 
 ifeq ($(GAZELLE_COVERAGE_ENABLE), 1)
 	LDFLAGS += -fprofile-arcs -ftest-coverage
