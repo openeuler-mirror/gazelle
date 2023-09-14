@@ -259,7 +259,7 @@ gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle�
 - 不支持accept阻塞模式或者connect阻塞模式。
 - 最多支持1500个TCP连接。
 - 当前仅支持TCP、ICMP、ARP、IPv4 协议。
-- 在对端ping Gazelle时，要求指定报文长度小于等于14000B。
+- 在对端ping Gazelle时，要求指定报文长度小于等于14792B。
 - 不支持使用透明大页。
 - ltran不支持使用多种类型的网卡混合组bond。
 - ltran的bond1主备模式，只支持链路层故障主备切换（例如网线断开），不支持物理层故障主备切换（例如网卡下电、拔网卡）。
@@ -272,7 +272,7 @@ gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle�
 - 每个应用实例协议栈线程最低大页内存为800MB 。
 - 仅支持64位系统。
 - 构建x86版本的Gazelle使用了-march=native选项，基于构建环境的CPU（Intel® Xeon® Gold 5118 CPU @ 2.30GHz指令集进行优化。要求运行环境CPU支持 SSE4.2、AVX、AVX2、AVX-512 指令集。
-- 最大IP分片数为10（ping 最大包长14790B），TCP协议不使用IP分片。
+- IP数据报重组的最大IP分片数为10（ping 最大包长14792B），TCP协议不使用IP分片。
 - sysctl配置网卡rp_filter参数为1，否则可能不按预期使用Gazelle协议栈，而是依然使用内核协议栈。
 - 不使用ltran模式，KNI网口不可配置只支持本地通讯使用，且需要启动前配置NetworkManager不管理KNI网卡。
 - 虚拟KNI网口的IP及mac地址，需要与lstack.conf配置文件保持一致 。
