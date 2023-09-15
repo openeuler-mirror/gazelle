@@ -96,6 +96,7 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
             break;
         }
         next->tot_len = pkt_len;
+        pkt_len -= len;
 #if CHECKSUM_CHECK_IP_HW || CHECKSUM_CHECK_TCP_HW
         next->ol_flags = m->ol_flags;
 #endif
