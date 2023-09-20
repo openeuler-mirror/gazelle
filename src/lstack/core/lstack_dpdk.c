@@ -281,6 +281,16 @@ int32_t create_shared_ring(struct protocol_stack *stack)
     return 0;
 }
 
+int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
+{
+    int32_t ret = rte_pktmbuf_alloc_bulk(pool, mbufs, num);
+    if (ret != 0) {
+        return ret;
+    }
+
+    return 0;
+}
+
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num)
 {
     int32_t ret;
@@ -291,7 +301,7 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
     while (remain > 0) {
         batch = LWIP_MIN(remain, RING_SIZE(FREE_RX_QUEUE_SZ));
 
-        ret = gazelle_alloc_pktmbuf(mempool, free_buf, batch);
+        ret = dpdk_alloc_pktmbuf(mempool, free_buf, batch);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %u ret=%d\n", batch, ret);
             return -1;

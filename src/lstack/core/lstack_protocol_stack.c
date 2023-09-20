@@ -484,7 +484,7 @@ static void* gazelle_stack_thread(void *arg)
                 read_same_node_recv_list(stack);
             }
         }
-        read_recv_list(stack, read_connect_number);
+        do_lwip_read_recvlist(stack, read_connect_number);
 
         if ((wakeup_tick & 0xf) == 0) {
             wakeup_stack_epoll(stack);
@@ -643,9 +643,9 @@ void stack_arp(struct rpc_msg *msg)
 
 void stack_socket(struct rpc_msg *msg)
 {
-    msg->result = gazelle_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
+    msg->result = do_lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
     if (msg->result < 0) {
-        msg->result = gazelle_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
+        msg->result = do_lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
         if (msg->result < 0) {
             LSTACK_LOG(ERR, LSTACK, "tid %ld, %ld socket failed\n", get_stack_tid(), msg->result);
         }
@@ -661,7 +661,7 @@ void stack_close(struct rpc_msg *msg)
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 
-    gazelle_clean_sock(fd);
+    do_lwip_clean_sock(fd);
 
     posix_api->close_fn(fd);
 }
@@ -706,7 +706,7 @@ void stack_accept(struct rpc_msg *msg)
     struct lwip_sock *sock = get_socket(accept_fd);
     if (sock == NULL || sock->stack == NULL) {
         lwip_close(accept_fd);
-        gazelle_clean_sock(accept_fd);
+        do_lwip_clean_sock(accept_fd);
         posix_api->close_fn(accept_fd);
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
@@ -715,7 +715,7 @@ void stack_accept(struct rpc_msg *msg)
     msg->result = accept_fd;
     sock->stack->conn_num++;
     if (rte_ring_count(sock->conn->recvmbox->ring)) {
-        add_recv_list(accept_fd);
+        do_lwip_add_recvlist(accept_fd);
     }
 }
 
@@ -783,6 +783,37 @@ void stack_recv(struct rpc_msg *msg)
         msg->args[MSG_ARG_3].i);
 }
 
+void stack_send(struct rpc_msg *msg)
+{
+    int32_t fd = msg->args[MSG_ARG_0].i;
+    size_t len = msg->args[MSG_ARG_1].size;
+    struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
+    bool replenish_again;
+
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        msg->result = -1;
+        LSTACK_LOG(ERR, LSTACK, "stack_send: sock error!\n");
+        rpc_msg_free(msg);
+        return;
+    }
+
+    replenish_again = do_lwip_send(stack, sock->conn->socket, sock, len, 0);
+    __sync_fetch_and_sub(&sock->call_num, 1);
+    if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
+        rpc_msg_free(msg);
+        return;
+    } else {
+        if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 0) {
+            rpc_call(&stack->rpc_queue, msg);
+             __sync_fetch_and_add(&sock->call_num, 1);
+        } else {
+            rpc_msg_free(msg);
+            return;
+        }
+    }
+}
+
 /* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
 void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack)
 {
@@ -797,7 +828,7 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
             continue;
         }
 
-        ret = gazelle_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
         if (ret != 0) {
             stack->stats.rx_allocmbuf_fail++;
             return;
@@ -828,6 +859,99 @@ void stack_clean_epoll(struct rpc_msg *msg)
     struct wakeup_poll *wakeup = (struct wakeup_poll *)msg->args[MSG_ARG_0].p;
 
     list_del_node_null(&wakeup->wakeup_list[stack->stack_idx]);
+}
+
+void stack_mempool_size(struct rpc_msg *msg)
+{
+    struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_0].p;
+
+    msg->result = rte_mempool_avail_count(stack->rxtx_pktmbuf_pool);
+}
+
+void stack_create_shadow_fd(struct rpc_msg *msg)
+{
+    int32_t fd = msg->args[MSG_ARG_0].i;
+    struct sockaddr *addr = msg->args[MSG_ARG_1].p;
+    socklen_t addr_len = msg->args[MSG_ARG_2].socklen;
+
+    int32_t clone_fd = 0;
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+    if (sock == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "get sock null fd=%d\n", fd);
+        msg->result = -1;
+        return;
+    }
+
+    if (NETCONN_IS_UDP(sock)) {
+        clone_fd = do_lwip_socket(AF_INET, SOCK_DGRAM, 0);
+    } else {
+        clone_fd = do_lwip_socket(AF_INET, SOCK_STREAM, 0);
+    }
+
+    if (clone_fd < 0) {
+        LSTACK_LOG(ERR, LSTACK, "clone socket failed clone_fd=%d errno=%d\n", clone_fd, errno);
+        msg->result = clone_fd;
+        return;
+    }
+
+    struct lwip_sock *clone_sock = get_socket_by_fd(clone_fd);
+    if (clone_sock == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "get sock null fd=%d clone_fd=%d\n", fd, clone_fd);
+        msg->result = -1;
+        return;
+    }
+
+    do_lwip_clone_sockopt(clone_sock, sock);
+
+    while (sock->listen_next) {
+        sock = sock->listen_next;
+    }
+    sock->listen_next = clone_sock;
+
+    int32_t ret = lwip_bind(clone_fd, addr, addr_len);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "clone bind failed clone_fd=%d errno=%d\n", clone_fd, errno);
+        msg->result = ret;
+        return;
+    }
+
+    msg->result = clone_fd;
+}
+
+void stack_replenish_sendring(struct rpc_msg *msg)
+{
+    struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_0].p;
+    struct lwip_sock *sock = (struct lwip_sock *)msg->args[MSG_ARG_1].p;
+
+    msg->result = do_lwip_replenish_sendring(stack, sock);
+}
+
+void stack_get_conntable(struct rpc_msg *msg)
+{
+    struct gazelle_stat_lstack_conn_info *conn = (struct gazelle_stat_lstack_conn_info *)msg->args[MSG_ARG_0].p;
+    uint32_t max_num = msg->args[MSG_ARG_1].u;
+
+    msg->result = do_lwip_get_conntable(conn, max_num);
+}
+
+void stack_get_connnum(struct rpc_msg *msg)
+{
+    msg->result = do_lwip_get_connnum();
+}
+
+void stack_recvlist_count(struct rpc_msg *msg)
+{
+    struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_0].p;
+    struct list_node *list = &stack->recv_list;
+    uint32_t count = 0;
+    struct list_node *node;
+    struct list_node *temp;
+
+    list_for_each_safe(node, temp, list) {
+        count++;
+    }
+    
+    msg->result = count;
 }
 
 /* when fd is listenfd, listenfd of all protocol stack thread will be closed */
