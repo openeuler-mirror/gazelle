@@ -568,18 +568,6 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     stack_group->nb_queues = nb_queues;
 
     if (get_global_cfg_params()->is_primary) {
-        for (uint32_t i = 0; i < stack_group->stack_num; i++) {
-            struct protocol_stack *stack = stack_group->stacks[i];
-            if (likely(stack)) {
-                    stack->port_id = stack_group->port_id;
-            } else {
-                LSTACK_LOG(ERR, LSTACK, "empty stack at stack_num %d\n", i);
-                stack_group->eth_params = NULL;
-                free(eth_params);
-                return -EINVAL;
-            }
-        }
-
         ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
@@ -760,8 +748,6 @@ int32_t init_dpdk_ethdev(void)
         }
     }
 
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    sem_post(&stack_group->ethdev_init);
     return 0;
 }
 

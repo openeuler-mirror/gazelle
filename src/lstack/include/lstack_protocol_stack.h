@@ -85,9 +85,6 @@ struct eth_params;
 struct protocol_stack_group {
     uint16_t stack_num;
     uint16_t port_id;
-    sem_t thread_phase1;
-    sem_t ethdev_init;
-    sem_t all_init;
     uint64_t rx_offload;
     uint64_t tx_offload;
     uint32_t reta_mask;
@@ -112,7 +109,9 @@ struct protocol_stack *get_protocol_stack_by_fd(int32_t fd);
 struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
-int32_t init_protocol_stack(void);
+int32_t stack_group_init(void);
+int32_t stack_thread_setup(void);
+
 void bind_to_stack_numa(struct protocol_stack *stack);
 int32_t init_dpdk_ethdev(void);
 
