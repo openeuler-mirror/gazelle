@@ -41,7 +41,7 @@ ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, uint8_t ap
 /* app write/read ring */
 ssize_t do_lwip_sendmsg_to_stack(struct lwip_sock *sock, int32_t s,
                                  const struct msghdr *message, int32_t flags);
-ssize_t do_lwip_recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags);
+ssize_t do_lwip_recvmsg_from_stack(int32_t s, const struct msghdr *message, int32_t flags);
 
 ssize_t do_lwip_send_to_stack(int32_t fd, const void *buf, size_t len, int32_t flags,
                               const struct sockaddr *addr, socklen_t addrlen);

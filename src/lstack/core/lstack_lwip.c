@@ -744,7 +744,7 @@ static int32_t check_msg_vaild(const struct msghdr *message)
     return 0;
 }
 
-ssize_t do_lwip_recvmsg_from_stack(int32_t s, struct msghdr *message, int32_t flags)
+ssize_t do_lwip_recvmsg_from_stack(int32_t s, const struct msghdr *message, int32_t flags)
 {
     ssize_t buflen = 0;
 

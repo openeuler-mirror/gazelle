@@ -12,17 +12,12 @@
 
 #define _GNU_SOURCE
 #include <dlfcn.h>
-#include <string.h>
 
 #include <signal.h>
-#include <sys/socket.h>
 #include <fcntl.h>
-#include <sys/socket.h>
-#include <stdarg.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/epoll.h>
-#include <unistd.h>
 #include <net/if.h>
 #include <securec.h>
 
@@ -30,21 +25,86 @@
 #include <lwip/lwipsock.h>
 #include <lwip/tcp.h>
 
-#include "posix/lstack_epoll.h"
 #include "posix/lstack_unistd.h"
-#include "posix/lstack_socket.h"
 #include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
-#include "lstack_protocol_stack.h"
 #include "gazelle_base_func.h"
-#include "lstack_thread_rpc.h"
-
 #include "lstack_preload.h"
+
+#include "lstack_rtc_api.h"
+#include "lstack_rtw_api.h"
 
 #ifndef SOCK_TYPE_MASK
 #define SOCK_TYPE_MASK 0xf
 #endif
+
+posix_api_t g_wrap_api_value;
+posix_api_t *g_wrap_api;
+
+void wrap_api_init(void)
+{
+    if (g_wrap_api != NULL) {
+        return;
+    }
+
+    g_wrap_api = &g_wrap_api_value;
+    if (get_global_cfg_params()->stack_mode_rtc) {
+        g_wrap_api->socket_fn        = rtc_socket;
+        g_wrap_api->accept_fn        = lwip_accept;
+        g_wrap_api->accept4_fn       = lwip_accept4;
+        g_wrap_api->bind_fn          = lwip_bind;
+        g_wrap_api->listen_fn        = lwip_listen;
+        g_wrap_api->connect_fn       = lwip_connect;
+        g_wrap_api->setsockopt_fn    = lwip_setsockopt;
+        g_wrap_api->getsockopt_fn    = lwip_getsockopt;
+        g_wrap_api->getpeername_fn   = lwip_getpeername;
+        g_wrap_api->getsockname_fn   = lwip_getsockname;
+        g_wrap_api->read_fn          = lwip_read;
+        g_wrap_api->readv_fn         = lwip_readv;
+        g_wrap_api->write_fn         = lwip_write;
+        g_wrap_api->writev_fn        = lwip_writev;
+        g_wrap_api->recv_fn          = lwip_recv;
+        g_wrap_api->send_fn          = lwip_send;
+        g_wrap_api->recv_msg         = lwip_recvmsg;
+        g_wrap_api->send_msg         = lwip_sendmsg;
+        g_wrap_api->recv_from        = lwip_recvfrom;
+        g_wrap_api->send_to          = lwip_sendto;
+        g_wrap_api->epoll_wait_fn    = rtc_epoll_wait;
+        g_wrap_api->poll_fn          = rtc_poll;
+        g_wrap_api->close_fn         = rtc_close;
+        g_wrap_api->epoll_ctl_fn     = rtc_epoll_ctl;
+        g_wrap_api->epoll_create1_fn = rtc_epoll_create1;
+        g_wrap_api->epoll_create_fn  = rtc_epoll_create;
+    } else {
+        g_wrap_api->socket_fn        = rtw_socket;
+        g_wrap_api->accept_fn        = rtw_accept;
+        g_wrap_api->accept4_fn       = rtw_accept4;
+        g_wrap_api->bind_fn          = rtw_bind;
+        g_wrap_api->listen_fn        = rtw_listen;
+        g_wrap_api->connect_fn       = rtw_connect;
+        g_wrap_api->setsockopt_fn    = rtw_setsockopt;
+        g_wrap_api->getsockopt_fn    = rtw_getsockopt;
+        g_wrap_api->getpeername_fn   = rtw_getpeername;
+        g_wrap_api->getsockname_fn   = rtw_getsockname;
+        g_wrap_api->read_fn          = rtw_read;
+        g_wrap_api->readv_fn         = rtw_readv;
+        g_wrap_api->write_fn         = rtw_write;
+        g_wrap_api->writev_fn        = rtw_writev;
+        g_wrap_api->recv_fn          = rtw_recv;
+        g_wrap_api->send_fn          = rtw_send;
+        g_wrap_api->recv_msg         = rtw_recvmsg;
+        g_wrap_api->send_msg         = rtw_sendmsg;
+        g_wrap_api->recv_from        = rtw_recvfrom;
+        g_wrap_api->send_to          = rtw_sendto;
+        g_wrap_api->epoll_wait_fn    = rtw_epoll_wait;
+        g_wrap_api->poll_fn          = rtw_poll;
+        g_wrap_api->close_fn         = rtw_close;
+        g_wrap_api->epoll_ctl_fn     = rtw_epoll_ctl;
+        g_wrap_api->epoll_create1_fn = rtw_epoll_create1;
+        g_wrap_api->epoll_create_fn  = rtw_epoll_create;
+    }
+}
 
 static inline int32_t do_epoll_create1(int32_t flags)
 {
@@ -52,7 +112,7 @@ static inline int32_t do_epoll_create1(int32_t flags)
         return posix_api->epoll_create1_fn(flags);
     }
 
-    return lstack_epoll_create1(flags);
+    return g_wrap_api->epoll_create1_fn(flags);
 }
 
 static inline int32_t do_epoll_create(int32_t size)
@@ -61,7 +121,7 @@ static inline int32_t do_epoll_create(int32_t size)
         return posix_api->epoll_create_fn(size);
     }
 
-    return lstack_epoll_create(size);
+    return g_wrap_api->epoll_create_fn(size);
 }
 
 static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
@@ -70,7 +130,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
-    return lstack_epoll_ctl(epfd, op, fd, event);
+    return g_wrap_api->epoll_ctl_fn(epfd, op, fd, event);
 }
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
@@ -87,7 +147,7 @@ static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, in
         GAZELLE_RETURN(EINVAL);
     }
 
-    return lstack_epoll_wait(epfd, events, maxevents, timeout);
+    return g_wrap_api->epoll_wait_fn(epfd, events, maxevents, timeout);
 }
 
 static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
@@ -96,7 +156,7 @@ static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *add
         return posix_api->accept_fn(s, addr, addrlen);
     }
 
-    int32_t fd = stack_broadcast_accept(s, addr, addrlen);
+    int32_t fd = g_wrap_api->accept_fn(s, addr, addrlen);
     if (fd >= 0) {
         return fd;
     }
@@ -114,7 +174,7 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
         return posix_api->accept4_fn(s, addr, addrlen, flags);
     }
 
-    int32_t fd = stack_broadcast_accept4(s, addr, addrlen, flags);
+    int32_t fd = g_wrap_api->accept4_fn(s, addr, addrlen, flags);
     if (fd >= 0) {
         return fd;
     }
@@ -158,11 +218,7 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
     if (match_host_addr(((struct sockaddr_in *)name)->sin_addr.s_addr)) {
         /* maybe kni addr */
         posix_api->bind_fn(s, name, namelen);
-        if (NETCONN_IS_UDP(sock) && get_global_cfg_params()->listen_shadow) {
-            return stack_broadcast_bind(s, name, namelen);
-        } else {
-            return stack_single_bind(s, name, namelen);
-        }
+        return g_wrap_api->bind_fn(s, name, namelen);
     } else {
         SET_CONN_TYPE_HOST(sock->conn);
         return posix_api->bind_fn(s, name, namelen);
@@ -253,7 +309,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         ret = posix_api->connect_fn(s, name, namelen);
         SET_CONN_TYPE_HOST(sock->conn);
     } else {
-        ret = rpc_call_connect(s, name, namelen);
+        ret = g_wrap_api->connect_fn(s, name, namelen);
         SET_CONN_TYPE_LIBOS(sock->conn);
     }
 
@@ -266,13 +322,7 @@ static inline int32_t do_listen(int32_t s, int32_t backlog)
         return posix_api->listen_fn(s, backlog);
     }
 
-    int32_t ret;
-    if (!get_global_cfg_params()->tuple_filter &&
-        !get_global_cfg_params()->listen_shadow) {
-        ret = stack_single_listen(s, backlog);
-    } else {
-        ret = stack_broadcast_listen(s, backlog);
-    }
+    int32_t ret = g_wrap_api->listen_fn(s, backlog);
     if (ret != 0) {
         return ret;
     }
@@ -287,7 +337,7 @@ static inline int32_t do_getpeername(int32_t s, struct sockaddr *name, socklen_t
     }
 
     if (select_fd_posix_path(s, NULL) == PATH_LWIP) {
-        return rpc_call_getpeername(s, name, namelen);
+        return g_wrap_api->getpeername_fn(s, name, namelen);
     }
 
     return posix_api->getpeername_fn(s, name, namelen);
@@ -300,7 +350,7 @@ static inline int32_t do_getsockname(int32_t s, struct sockaddr *name, socklen_t
     }
 
     if (select_fd_posix_path(s, NULL) == PATH_LWIP) {
-        return rpc_call_getsockname(s, name, namelen);
+        return g_wrap_api->getsockname_fn(s, name, namelen);
     }
 
     return posix_api->getsockname_fn(s, name, namelen);
@@ -321,7 +371,7 @@ static bool unsupport_optname(int32_t optname)
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
     if (select_fd_posix_path(s, NULL) == PATH_LWIP && !unsupport_optname(optname)) {
-        return rpc_call_getsockopt(s, level, optname, optval, optlen);
+        return g_wrap_api->getsockopt_fn(s, level, optname, optval, optlen);
     }
 
     return posix_api->getsockopt_fn(s, level, optname, optval, optlen);
@@ -339,7 +389,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
         return ret;
     }
 
-    return rpc_call_setsockopt(s, level, optname, optval, optlen);
+    return g_wrap_api->setsockopt_fn(s, level, optname, optval, optlen);
 }
 
 static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
@@ -355,7 +405,7 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
         return posix_api->socket_fn(domain, type, protocol);
     }
 
-    ret = rpc_call_socket(domain, type, protocol);
+    ret = g_wrap_api->socket_fn(domain, type, protocol);
     /* if udp_enable = 1 in lstack.conf, udp protocol must be in user path currently */
     if ((ret >= 0) && (type & SOCK_DGRAM)) {
         struct lwip_sock *sock = get_socket(ret);
@@ -382,7 +432,7 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
         return posix_api->recv_fn(sockfd, buf, len, flags);
     }
 
-    return do_lwip_read_from_stack(sockfd, buf, len, flags, NULL, NULL);
+    return g_wrap_api->recv_fn(sockfd, buf, len, flags);
 }
 
 static inline ssize_t do_read(int32_t s, void *mem, size_t len)
@@ -400,7 +450,7 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
         return posix_api->read_fn(s, mem, len);
     }
 
-    return do_lwip_read_from_stack(s, mem, len, 0, NULL, NULL);
+    return g_wrap_api->read_fn(s, mem, len);
 }
 
 static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
@@ -410,21 +460,7 @@ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
         return posix_api->readv_fn(s, iov, iovcnt);
     }
 
-    struct msghdr msg;
-
-    msg.msg_name = NULL;
-    msg.msg_namelen = 0;
-    msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
-    msg.msg_iovlen = iovcnt;
-    msg.msg_control = NULL;
-    msg.msg_controllen = 0;
-    msg.msg_flags = 0;
-    ssize_t result = do_lwip_recvmsg_from_stack(s, &msg, 0);
-    if (result == -1 && errno == EAGAIN) {
-        errno = 0;
-        return 0;
-    }
-    return result;
+    return g_wrap_api->readv_fn(s, iov, iovcnt);
 }
 
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
@@ -434,7 +470,7 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
         return posix_api->send_fn(sockfd, buf, len, flags);
     }
 
-    return do_lwip_send_to_stack(sockfd, buf, len, flags, NULL, 0);
+    return g_wrap_api->send_fn(sockfd, buf, len, flags);
 }
 
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
@@ -444,7 +480,7 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
         return posix_api->write_fn(s, mem, size);
     }
 
-    return do_lwip_send_to_stack(s, mem, size, 0, NULL, 0);
+    return g_wrap_api->write_fn(s, mem, size);
 }
 
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
@@ -455,16 +491,7 @@ static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
         return posix_api->writev_fn(s, iov, iovcnt);
     }
 
-    struct msghdr msg;
-
-    msg.msg_name = NULL;
-    msg.msg_namelen = 0;
-    msg.msg_iov = LWIP_CONST_CAST(struct iovec *, iov);
-    msg.msg_iovlen = iovcnt;
-    msg.msg_control = NULL;
-    msg.msg_controllen = 0;
-    msg.msg_flags = 0;
-    return do_lwip_sendmsg_to_stack(sock, s, &msg, 0);
+    return g_wrap_api->writev_fn(s, iov, iovcnt);
 }
 
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)
@@ -478,7 +505,7 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
         return posix_api->recv_msg(s, message, flags);
     }
 
-    return do_lwip_recvmsg_from_stack(s, message, flags);
+    return g_wrap_api->recv_msg(s, message, flags);
 }
 
 static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
@@ -493,39 +520,7 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
         return posix_api->send_msg(s, message, flags);
     }
 
-    return do_lwip_sendmsg_to_stack(sock, s, message, flags);
-}
-
-static inline ssize_t udp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void *buf, size_t len, int32_t flags,
-                                   struct sockaddr *addr, socklen_t *addrlen)
-{
-    int32_t ret;
-
-    while (1) {
-        ret = do_lwip_read_from_stack(sockfd, buf, len, flags, addr, addrlen);
-        if (ret > 0) {
-            return ret;
-        }
-        if (ret <= 0 && errno != EAGAIN) {
-            return -1;
-        }
-        sock = sock->listen_next;
-        if (sock != NULL && sock->conn != NULL) {
-            sockfd = sock->conn->socket;
-        } else {
-            if (sock == NULL) {
-                GAZELLE_RETURN(EAGAIN);
-            } else {
-                GAZELLE_RETURN(ENOTCONN);
-            }
-        }
-    }
-}
-
-static inline ssize_t tcp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void *buf, size_t len, int32_t flags,
-                                   struct sockaddr *addr, socklen_t *addrlen)
-{
-    return do_lwip_read_from_stack(sockfd, buf, len, flags, addr, addrlen);
+    return g_wrap_api->send_msg(s, message, flags);
 }
 
 static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
@@ -541,11 +536,7 @@ static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t
 
     struct lwip_sock *sock = NULL;
     if (select_fd_posix_path(sockfd, &sock) == PATH_LWIP) {
-        if (NETCONN_IS_UDP(sock)) {
-            return udp_recvfrom(sock, sockfd, buf, len, flags, addr, addrlen);
-        } else {
-            return tcp_recvfrom(sock, sockfd, buf, len, flags, addr, addrlen);
-        }
+        return g_wrap_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
     }
 
     return posix_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
@@ -559,7 +550,7 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
         return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
     }
 
-    return do_lwip_send_to_stack(sockfd, buf, len, flags, addr, addrlen);
+    return g_wrap_api->send_to(sockfd, buf, len, flags, addr, addrlen);
 }
 
 static inline int32_t do_close(int32_t s)
@@ -570,16 +561,13 @@ static inline int32_t do_close(int32_t s)
         /* we called lwip_socket, even if kernel fd */
         if (posix_api != NULL && !posix_api->ues_posix &&
             /* contain posix_api->close_fn if success */
-            stack_broadcast_close(s) == 0) {
+            g_wrap_api->close_fn(s) == 0) {
             return 0;
         } else {
             return posix_api->close_fn(s);
         }
     }
-    if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
-        return lstack_epoll_close(s);
-    }
-    return stack_broadcast_close(s);
+    return g_wrap_api->close_fn(s);
 }
 
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
@@ -588,7 +576,7 @@ static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 
-    return lstack_poll(fds, nfds, timeout);
+    return g_wrap_api->poll_fn(fds, nfds, timeout);
 }
 
 static int32_t do_ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo_p, const sigset_t *sigmask)
