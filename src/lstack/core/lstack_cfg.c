@@ -76,6 +76,7 @@ static int32_t parse_use_sockmap(void);
 static int32_t parse_udp_enable(void);
 static int32_t parse_nic_rxqueue_size(void);
 static int32_t parse_nic_txqueue_size(void);
+static int32_t parse_stack_thread_mode(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -135,6 +136,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "udp_enable", parse_udp_enable },
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
     { "nic_txqueue_size", parse_nic_txqueue_size},
+    { "stack_thread_mode", parse_stack_thread_mode },
     { NULL,           NULL }
 };
 
@@ -1182,4 +1184,32 @@ static int32_t parse_nic_txqueue_size(void)
     PARSE_ARG(g_config_params.nic.txqueue_size, "nic_txqueue_size", 2048,
               NIC_QUEUE_SIZE_MIN, NIC_QUEUE_SIZE_MAX, ret);
     return ret;
+}
+
+static int32_t parse_stack_thread_mode(void)
+{
+    const config_setting_t *thread_mode = NULL;
+    const char *args = NULL;
+
+    thread_mode = config_lookup(&g_config, "stack_thread_mode");
+    if (thread_mode == NULL) {
+        g_config_params.stack_mode_rtc = false;
+        return 0;
+    }
+
+    args = config_setting_get_string(thread_mode);
+    if (args == NULL) {
+        return -EINVAL;
+    }
+
+    if (strncmp(args, "run-to-completion", strlen("run-to-completion") + 1) == 0) {
+        g_config_params.stack_mode_rtc = true;
+    } else if (strncmp(args, "run-to-wakeup", strlen("run-to-wakeup") + 1) == 0) {
+        g_config_params.stack_mode_rtc = false;
+    } else {
+        LSTACK_LOG(ERR, LSTACK, "stack_mode_rtc only support run-to-completion or run-to-wakeup\n");
+        return -EINVAL;
+    }
+
+    return 0;
 }
