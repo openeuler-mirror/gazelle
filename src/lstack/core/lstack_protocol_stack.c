@@ -432,18 +432,60 @@ END:
     return NULL;
 }
 
+void stack_polling(uint32_t wakeup_tick)
+{
+    struct cfg_params *cfg = get_global_cfg_params();
+    uint8_t use_ltran_flag = cfg->use_ltran;
+    bool kni_switch = cfg->kni_switch;
+    bool use_sockmap = cfg->use_sockmap;
+    bool stack_mode_rtc = cfg->stack_mode_rtc;
+    uint32_t rpc_number = cfg->rpc_number;
+    uint32_t nic_read_number = cfg->nic_read_number;
+    uint32_t read_connect_number = cfg->read_connect_number;
+    struct protocol_stack *stack = get_protocol_stack();
+
+    poll_rpc_msg(stack, rpc_number);
+    gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
+    sys_timer_run();
+    if (cfg->low_power_mod != 0) {
+        low_power_idling(stack);
+    }
+
+    if (stack_mode_rtc) {
+        return;
+    }
+
+    do_lwip_read_recvlist(stack, read_connect_number);
+    if ((wakeup_tick & 0xf) == 0) {
+        wakeup_stack_epoll(stack);
+    }
+
+    /* run to completion mode currently does not support sockmap */
+    if (use_sockmap) {
+        netif_poll(&stack->netif);
+        /* reduce traversal times */
+        if ((wakeup_tick & 0xff) == 0) {
+            read_same_node_recv_list(stack);
+        }
+    }
+
+    /* run to completion mode currently does not support kni */
+    /* KNI requests are generally low-rate I/Os,
+    * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
+    if (kni_switch && !stack->queue_id && !(wakeup_tick & 0xfff)) {
+        rte_kni_handle_request(get_gazelle_kni());
+        if (get_kni_started()) {
+            kni_handle_rx(get_port_id());
+        }
+    }
+    return;
+}
+
 static void* gazelle_stack_thread(void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
 
     uint16_t queue_id = t_params->queue_id;
-    struct cfg_params *cfg = get_global_cfg_params();
-    uint8_t use_ltran_flag = cfg->use_ltran;
-    bool kni_switch = cfg->kni_switch;
-    bool use_sockmap = cfg->use_sockmap;
-    uint32_t read_connect_number = cfg->read_connect_number;
-    uint32_t rpc_number = cfg->rpc_number;
-    uint32_t nic_read_number = cfg->nic_read_number;
     uint32_t wakeup_tick = 0;
 
     struct protocol_stack *stack = stack_thread_init(arg);
@@ -461,39 +503,8 @@ static void* gazelle_stack_thread(void *arg)
     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
 
     for (;;) {
-        poll_rpc_msg(stack, rpc_number);
-
-        gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
-
-        if (use_sockmap) {
-            netif_poll(&stack->netif);
-            /* reduce traversal times */
-            if ((wakeup_tick & 0xff) == 0) {
-                read_same_node_recv_list(stack);
-            }
-        }
-        do_lwip_read_recvlist(stack, read_connect_number);
-
-        if ((wakeup_tick & 0xf) == 0) {
-            wakeup_stack_epoll(stack);
-        }
-
-        /* KNI requests are generally low-rate I/Os,
-        * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
-        if (kni_switch && !queue_id && !(wakeup_tick & 0xfff)) {
-            rte_kni_handle_request(get_gazelle_kni());
-            if (get_kni_started()) {
-                kni_handle_rx(get_port_id());
-            }
-        }
-
+        stack_polling(wakeup_tick);
         wakeup_tick++;
-
-        sys_timer_run();
-
-        if (cfg->low_power_mod != 0) {
-            low_power_idling(stack);
-        }
     }
 
     return NULL;
