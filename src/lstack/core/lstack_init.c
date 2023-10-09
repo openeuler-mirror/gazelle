@@ -285,7 +285,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
     }
 
     if (stack_thread_setup() != 0) {
-        LSTACK_EXIT(1, "stack_init_in_setup failed\n");
+        LSTACK_EXIT(1, "stack_thread_setup failed\n");
     }
 
     /* lwip initialization */

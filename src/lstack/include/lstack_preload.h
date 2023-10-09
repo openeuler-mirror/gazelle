@@ -11,6 +11,15 @@
 */
 #ifndef __LSTACK_PRELOAD_H__
 #define __LSTACK_PRELOAD_H__
+#include <stdbool.h>
 
+enum KERNEL_LWIP_PATH {
+    PATH_KERNEL = 0,
+    PATH_LWIP,
+    PATH_UNKNOW,
+};
+
+enum KERNEL_LWIP_PATH select_posix_path(void);
+enum KERNEL_LWIP_PATH select_fd_posix_path(int32_t fd, struct lwip_sock **socket);
 int preload_info_init(void);
 #endif

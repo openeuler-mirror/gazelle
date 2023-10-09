@@ -223,7 +223,8 @@ static int32_t parse_host_addr(void)
 int32_t match_host_addr(uint32_t addr)
 {
     /* network byte order */
-    if (addr == g_config_params.host_addr.addr) {
+    if (addr == g_config_params.host_addr.addr ||
+        addr == INADDR_ANY) {
         return 1;
     }
     return 0;
