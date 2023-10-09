@@ -206,7 +206,7 @@ ssize_t rtw_sendto(int sockfd, const void *buf, size_t len, int flags,
 
 int rtw_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
 {
-    return lstack_epoll_wait(epfd, events, maxevents, timeout);
+    return lstack_rtw_epoll_wait(epfd, events, maxevents, timeout);
 }
 
 int rtw_poll(struct pollfd *fds, nfds_t nfds, int timeout)
@@ -225,7 +225,7 @@ int rtw_close(int s)
 
 int rtw_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
-    return lstack_epoll_ctl(epfd, op, fd, event);
+    return lstack_rtw_epoll_ctl(epfd, op, fd, event);
 }
 
 int rtw_epoll_create1(int flags)
