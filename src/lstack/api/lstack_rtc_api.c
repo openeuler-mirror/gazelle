@@ -35,6 +35,10 @@ int rtc_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int time
 int rtc_socket(int domain, int type, int protocol)
 {
     int ret;
+
+    if (stack_setup_app_thread() < 0) {
+        LSTACK_EXIT(1, "stack_setup_app_thread failed!\n");
+    }
     
     /* need call stack thread init function */
     ret = lwip_socket(domain, type, protocol);
@@ -56,13 +60,19 @@ int rtc_close(int s)
 
 int rtc_epoll_create(int flags)
 {
-    /* need call stack thread init function */
+    if (stack_setup_app_thread() < 0) {
+        LSTACK_EXIT(1, "stack_setup_app_thread failed!\n");
+    }
+
     return lstack_epoll_create(flags);
 }
 
 int rtc_epoll_create1(int flags)
 {
-    /* need call stack thread init function */
+    if (stack_setup_app_thread() < 0) {
+        LSTACK_EXIT(1, "stack_setup_app_thread failed!\n");
+    }
+
     return lstack_epoll_create1(flags);
 }
 

@@ -110,7 +110,8 @@ struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
 int32_t stack_group_init(void);
-int32_t stack_thread_setup(void);
+int32_t stack_setup_thread(void);
+int32_t stack_setup_app_thread(void);
 
 void bind_to_stack_numa(struct protocol_stack *stack);
 int32_t init_dpdk_ethdev(void);
