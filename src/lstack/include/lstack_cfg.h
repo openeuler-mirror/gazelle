@@ -59,6 +59,11 @@ struct secondary_attach_arg {
     char file_prefix[PATH_MAX];
 };
 
+struct cfg_nic_params {
+    uint32_t rxqueue_size;
+    uint32_t txqueue_size;
+};
+
 struct cfg_params {
     ip4_addr_t host_addr;
     ip4_addr_t netmask;
@@ -110,6 +115,7 @@ struct cfg_params {
     uint8_t bond4_slave2_mac_addr[ETHER_ADDR_LEN];
     bool use_sockmap;
     bool udp_enable;
+    struct cfg_nic_params nic;
 };
 
 struct cfg_params *get_global_cfg_params(void);

@@ -74,6 +74,8 @@ static int32_t parse_use_bond4(void);
 static int32_t parse_bond4_slave_mac(void);
 static int32_t parse_use_sockmap(void);
 static int32_t parse_udp_enable(void);
+static int32_t parse_nic_rxqueue_size(void);
+static int32_t parse_nic_txqueue_size(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -131,6 +133,8 @@ static struct config_vector_t g_config_tbl[] = {
     { "bond4_slave_mac", parse_bond4_slave_mac },
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
+    { "nic_rxqueue_size", parse_nic_rxqueue_size},
+    { "nic_txqueue_size", parse_nic_txqueue_size},
     { NULL,           NULL }
 };
 
@@ -1161,5 +1165,21 @@ static int32_t parse_use_sockmap(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.use_sockmap, "use_sockmap", 0, 0, 1, ret);
+    return ret;
+}
+
+static int32_t parse_nic_rxqueue_size(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.nic.rxqueue_size, "nic_rxqueue_size", 4096,
+              NIC_QUEUE_SIZE_MIN, NIC_QUEUE_SIZE_MAX, ret);
+    return ret;
+}
+
+static int32_t parse_nic_txqueue_size(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.nic.txqueue_size, "nic_txqueue_size", 2048,
+              NIC_QUEUE_SIZE_MIN, NIC_QUEUE_SIZE_MAX, ret);
     return ret;
 }
