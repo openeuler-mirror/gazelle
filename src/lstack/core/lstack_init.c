@@ -48,18 +48,6 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_preload.h"
 
-static volatile bool g_init_fail = false;
-
-void set_init_fail(void)
-{
-    g_init_fail = true;
-}
-
-bool get_init_fail(void)
-{
-    return g_init_fail;
-}
-
 static void check_process_start(void)
 {
     if (get_global_cfg_params()->is_primary) {
@@ -286,8 +274,8 @@ __attribute__((constructor)) void gazelle_network_init(void)
     lstack_log_level_init();
     lstack_prelog_uninit();
 
-    if (init_protocol_stack() != 0) {
-        LSTACK_EXIT(1, "init_protocol_stack failed\n");
+    if (stack_group_init() != 0) {
+        LSTACK_EXIT(1, "stack_group_init failed\n");
     }
 
     if (!use_ltran()) {
@@ -296,14 +284,12 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
+    if (stack_thread_setup() != 0) {
+        LSTACK_EXIT(1, "stack_init_in_setup failed\n");
+    }
+
     /* lwip initialization */
     lwip_sock_init();
-
-    /* wait stack thread and kernel_event thread init finish */
-    wait_sem_value(&get_protocol_stack_group()->all_init, get_protocol_stack_group()->stack_num);
-    if (g_init_fail) {
-        LSTACK_EXIT(1, "stack thread or kernel_event thread failed\n");
-    }
 
     if (get_global_cfg_params()->kni_switch) {
         set_kni_ip_mac();

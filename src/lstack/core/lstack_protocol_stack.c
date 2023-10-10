@@ -43,8 +43,6 @@
 static PER_THREAD struct protocol_stack *g_stack_p = NULL;
 static struct protocol_stack_group g_stack_group = {0};
 
-void set_init_fail(void);
-bool get_init_fail(void);
 typedef void *(*stack_thread_func)(void *arg);
 
 
@@ -286,12 +284,11 @@ static void* gazelle_kernelevent_thread(void *arg)
     struct thread_params *t_params = (struct thread_params*) arg;
     uint16_t idx = t_params->idx;
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[idx];
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    sem_post(&stack_group->thread_phase1);
     bind_to_stack_numa(stack);
 
     LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", idx);
+    free(arg);
 
     for (;;) {
         stack->kernel_event_num = posix_api->epoll_wait_fn(stack->epollfd, stack->kernel_events, KERNEL_EPOLL_MAX, -1);
@@ -311,6 +308,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
 
     stack->tid = rte_gettid();
     stack->queue_id = t_params->queue_id;
+    stack->port_id = stack_group->port_id;
     stack->stack_idx = t_params->idx;
     stack->lwip_stats = &lwip_stats;
 
@@ -370,7 +368,12 @@ void wait_sem_value(sem_t *sem, int32_t wait_value)
 
 static int32_t create_affiliate_thread(void *arg)
 {
-    if (create_thread(arg, "gazellekernel", gazelle_kernelevent_thread) != 0) {
+    struct thread_params *params = malloc(sizeof(struct thread_params));
+    if (params == NULL) {
+        return -1;
+    }
+    memcpy_s(params, sizeof(*params), arg, sizeof(struct thread_params));
+    if (create_thread((void *)params, "gazellekernel", gazelle_kernelevent_thread) != 0) {
         LSTACK_LOG(ERR, LSTACK, "gazellekernel errno=%d\n", errno);
         return -1;
     }
@@ -380,60 +383,49 @@ static int32_t create_affiliate_thread(void *arg)
 
 static struct protocol_stack *stack_thread_init(void *arg)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
     struct protocol_stack *stack = calloc(1, sizeof(*stack));
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "malloc stack failed\n");
-        goto END2;
+        goto END;
     }
 
     if (init_stack_value(stack, arg) != 0) {
-        goto END2;
+        goto END;
     }
 
     if (init_stack_numa_cpuset(stack) < 0) {
-        goto END2;
+        goto END;
     }
     if (create_affiliate_thread(arg) < 0) {
-        goto END2;
+        goto END;
     }
 
     if (thread_affinity_init(stack->cpu_id) != 0) {
-        goto END1;
+        goto END;
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
     if (hugepage_init() != 0) {
         LSTACK_LOG(ERR, LSTACK, "hugepage init failed\n");
-        goto END1;
+        goto END;
     }
 
     tcpip_init(NULL, NULL);
 
     if (use_ltran()) {
         if (client_reg_thrd_ring() != 0) {
-            goto END1;
+            goto END;
         }
-    }
-
-    sem_post(&stack_group->thread_phase1);
-
-    if (!use_ltran()) {
-        wait_sem_value(&stack_group->ethdev_init, 1);
     }
 
     usleep(SLEEP_US_BEFORE_LINK_UP);
 
     if (ethdev_init(stack) != 0) {
-        goto END1;
+        goto END;
     }
 
     return stack;
-/* kernel event thread dont create, stack thread post sem twice */
-END2:
-    sem_post(&stack_group->thread_phase1);
-END1:
-    sem_post(&stack_group->thread_phase1);
+END:
     if (stack != NULL) {
         free(stack);
     }
@@ -453,22 +445,18 @@ static void* gazelle_stack_thread(void *arg)
     uint32_t rpc_number = cfg->rpc_number;
     uint32_t nic_read_number = cfg->nic_read_number;
     uint32_t wakeup_tick = 0;
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     struct protocol_stack *stack = stack_thread_init(arg);
 
+    free(arg);
     if (stack == NULL) {
-        /* exit in main thread, avoid create mempool and exit at the same time */
-        set_init_fail();
-        sem_post(&stack_group->all_init);
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
-        return NULL;
+        /* exit in signal thread */
+        raise(SIGTERM);
     }
     if (!use_ltran() && queue_id == 0) {
         init_listen_and_user_ports();
     }
-
-    sem_post(&stack_group->all_init);
 
     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
 
@@ -517,40 +505,9 @@ static void libnet_listen_thread(void *arg)
     recv_pkts_from_other_process(cfg_param->process_idx, arg);
 }
 
-static int32_t init_protocol_sem(void)
-{
-    int32_t ret;
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-
-    if (!use_ltran()) {
-        ret = sem_init(&stack_group->ethdev_init, 0, 0);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
-            return -1;
-        }
-    }
-
-    ret = sem_init(&stack_group->thread_phase1, 0, 0);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
-        return -1;
-    }
-
-    ret = sem_init(&stack_group->all_init, 0, 0);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, PORT, "sem_init failed ret=%d errno=%d\n", ret, errno);
-        return -1;
-    }
-
-    return 0;
-}
-
-int32_t init_protocol_stack(void)
+int32_t stack_group_init(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    int32_t ret;
-    char name[PATH_MAX];
-
     if (!get_global_cfg_params()->seperate_send_recv) {
         stack_group->stack_num = get_global_cfg_params()->num_cpu;
     } else {
@@ -560,13 +517,6 @@ int32_t init_protocol_stack(void)
     init_list_node(&stack_group->poll_list);
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
     pthread_spin_init(&stack_group->socket_lock, PTHREAD_PROCESS_PRIVATE);
-    
-    if (init_protocol_sem() != 0) {
-        return -1;
-    }
-    int queue_num = get_global_cfg_params()->num_queue;
-    struct thread_params *t_params[queue_num];
-    int process_index = get_global_cfg_params()->process_idx;
 
     if (get_global_cfg_params()->is_primary) {
         uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
@@ -579,6 +529,27 @@ int32_t init_protocol_stack(void)
             get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx] = rxtx_mbuf;
         }
     }
+
+    if (!use_ltran()) {
+        char name[PATH_MAX];
+        sem_init(&stack_group->sem_listen_thread, 0, 0);
+        sprintf_s(name, sizeof(name), "%s", "listen_thread");
+        struct sys_thread *thread = sys_thread_new(name, libnet_listen_thread,
+            (void*)(&stack_group->sem_listen_thread), 0, 0);
+        free(thread);
+        sem_wait(&stack_group->sem_listen_thread);
+    }
+
+    return 0;
+}
+
+int32_t stack_thread_setup(void)
+{
+    int32_t ret;
+    char name[PATH_MAX];
+    int queue_num = get_global_cfg_params()->num_queue;
+    struct thread_params *t_params[queue_num];
+    int process_index = get_global_cfg_params()->process_idx;
 
     for (uint32_t i = 0; i < queue_num; i++) {
         if (get_global_cfg_params()->seperate_send_recv) {
@@ -608,26 +579,6 @@ int32_t init_protocol_stack(void)
         if (ret != 0) {
             return ret;
         }
-    }
-
-    /* stack_num * 2: stack thread and kernel event thread will post sem */
-    wait_sem_value(&stack_group->thread_phase1, stack_group->stack_num * 2);
-
-    for (int idx = 0; idx < queue_num; idx++){
-        free(t_params[idx]);
-    }
-
-    if (!use_ltran()) {
-        ret = sem_init(&stack_group->sem_listen_thread, 0, 0);
-        ret = sprintf_s(name, sizeof(name), "%s", "listen_thread");
-        struct sys_thread *thread = sys_thread_new(name, libnet_listen_thread,
-            (void*)(&stack_group->sem_listen_thread), 0, 0);
-        free(thread);
-        sem_wait(&stack_group->sem_listen_thread);
-    }
-
-    if (get_init_fail()) {
-        return -1;
     }
 
     return 0;
