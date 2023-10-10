@@ -122,7 +122,7 @@ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
 
 int32_t rpc_call_conntable(struct protocol_stack *stack, void *conn_table, uint32_t max_conn)
 {
-    struct rpc_msg *msg = rpc_msg_alloc(stack, get_lwip_conntable);
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_get_conntable);
     if (msg == NULL) {
         return -1;
     }
@@ -135,7 +135,7 @@ int32_t rpc_call_conntable(struct protocol_stack *stack, void *conn_table, uint3
 
 int32_t rpc_call_connnum(struct protocol_stack *stack)
 {
-    struct rpc_msg *msg = rpc_msg_alloc(stack, get_lwip_connnum);
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_get_connnum);
     if (msg == NULL) {
         return -1;
     }
@@ -145,7 +145,7 @@ int32_t rpc_call_connnum(struct protocol_stack *stack)
 
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen)
 {
-    struct rpc_msg *msg = rpc_msg_alloc(stack, create_shadow_fd);
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_create_shadow_fd);
     if (msg == NULL) {
         return -1;
     }
@@ -434,7 +434,7 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp)
 
 int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock)
 {
-    struct rpc_msg *msg = rpc_msg_alloc(stack, rpc_replenish);
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_replenish_sendring);
     if (msg == NULL) {
         return -1;
     }

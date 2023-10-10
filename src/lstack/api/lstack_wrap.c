@@ -438,7 +438,7 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
 
     struct lwip_sock *sock = NULL;
     if (select_path(sockfd, &sock) == PATH_LWIP) {
-        return read_stack_data(sockfd, buf, len, flags, NULL, NULL);
+        return do_lwip_read_from_stack(sockfd, buf, len, flags, NULL, NULL);
     }
 
     return posix_api->recv_fn(sockfd, buf, len, flags);
@@ -456,7 +456,7 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 
     struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_LWIP) {
-        return read_stack_data(s, mem, len, 0, NULL, NULL);
+        return do_lwip_read_from_stack(s, mem, len, 0, NULL, NULL);
     }
     return posix_api->read_fn(s, mem, len);
 }
@@ -477,7 +477,7 @@ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
     msg.msg_flags = 0;
-    ssize_t result = recvmsg_from_stack(s, &msg, 0);
+    ssize_t result = do_lwip_recvmsg_from_stack(s, &msg, 0);
     if (result == -1 && errno == EAGAIN) {
         errno = 0;
         return 0;
@@ -492,7 +492,7 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
         return posix_api->send_fn(sockfd, buf, len, flags);
     }
 
-    return gazelle_send(sockfd, buf, len, flags, NULL, 0);
+    return do_lwip_send_to_stack(sockfd, buf, len, flags, NULL, 0);
 }
 
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
@@ -502,7 +502,7 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
         return posix_api->write_fn(s, mem, size);
     }
 
-    return gazelle_send(s, mem, size, 0, NULL, 0);
+    return do_lwip_send_to_stack(s, mem, size, 0, NULL, 0);
 }
 
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
@@ -521,7 +521,7 @@ static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
     msg.msg_flags = 0;
-    return sendmsg_to_stack(sock, s, &msg, 0);
+    return do_lwip_sendmsg_to_stack(sock, s, &msg, 0);
 }
 
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)
@@ -532,7 +532,7 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
 
     struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_LWIP) {
-        return recvmsg_from_stack(s, message, flags);
+        return do_lwip_recvmsg_from_stack(s, message, flags);
     }
 
     return posix_api->recv_msg(s, message, flags);
@@ -546,7 +546,7 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
 
     struct lwip_sock *sock = NULL;
     if (select_path(s, &sock) == PATH_LWIP) {
-        return sendmsg_to_stack(sock, s, message, flags);
+        return do_lwip_sendmsg_to_stack(sock, s, message, flags);
     }
 
     return posix_api->send_msg(s, message, flags);
@@ -558,7 +558,7 @@ static inline ssize_t udp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void 
     int32_t ret;
 
     while (1) {
-        ret = read_stack_data(sockfd, buf, len, flags, addr, addrlen);
+        ret = do_lwip_read_from_stack(sockfd, buf, len, flags, addr, addrlen);
         if (ret > 0) {
             return ret;
         }
@@ -581,7 +581,7 @@ static inline ssize_t udp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void 
 static inline ssize_t tcp_recvfrom(struct lwip_sock *sock, int32_t sockfd, void *buf, size_t len, int32_t flags,
                                    struct sockaddr *addr, socklen_t *addrlen)
 {
-    return read_stack_data(sockfd, buf, len, flags, addr, addrlen);
+    return do_lwip_read_from_stack(sockfd, buf, len, flags, addr, addrlen);
 }
 
 static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
@@ -615,7 +615,7 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
         return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
     }
 
-    return gazelle_send(sockfd, buf, len, flags, addr, addrlen);
+    return do_lwip_send_to_stack(sockfd, buf, len, flags, addr, addrlen);
 }
 
 static inline int32_t do_close(int32_t s)
