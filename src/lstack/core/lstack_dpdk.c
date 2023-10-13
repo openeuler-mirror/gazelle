@@ -370,8 +370,8 @@ static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
 
     eth_params->port_id = port_id;
     eth_params->nb_queues = nb_queues;
-    eth_params->nb_rx_desc = RTE_TEST_RX_DESC_DEFAULT;
-    eth_params->nb_tx_desc = RTE_TEST_TX_DESC_DEFAULT;
+    eth_params->nb_rx_desc = get_global_cfg_params()->nic.rxqueue_size;
+    eth_params->nb_tx_desc = get_global_cfg_params()->nic.txqueue_size;
     eth_params->conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
     eth_params->conf.txmode.mq_mode = ETH_MQ_TX_NONE;
     eth_params->conf.rxmode.mq_mode = ETH_MQ_RX_NONE;

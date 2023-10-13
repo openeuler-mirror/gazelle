@@ -42,8 +42,8 @@
 #define VDEV_TX_QUEUE_SZ            DEFAULT_RING_SIZE
 #define FREE_RX_QUEUE_SZ            DPDK_PKT_BURST_SIZE
 
-#define RTE_TEST_TX_DESC_DEFAULT    2048
-#define RTE_TEST_RX_DESC_DEFAULT    4096
+#define NIC_QUEUE_SIZE_MAX          8192
+#define NIC_QUEUE_SIZE_MIN          512
 
 #define TCP_CONN_COUNT              1500
 #define MBUF_COUNT_PER_CONN         170
