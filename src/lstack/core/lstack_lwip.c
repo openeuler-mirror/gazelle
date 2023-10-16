@@ -317,22 +317,6 @@ void do_lwip_get_from_sendring_over(struct lwip_sock *sock)
     sock->stack->stats.write_lwip_cnt++;
 }
 
-static inline void del_data_out_event(struct lwip_sock *sock)
-{
-    pthread_spin_lock(&sock->wakeup->event_list_lock);
-
-    /* check again avoid cover event add in stack thread */
-    if (!NETCONN_IS_OUTIDLE(sock)) {
-        sock->events &= ~EPOLLOUT;
-
-        if (sock->events == 0) {
-            list_del_node_null(&sock->event_list);
-        }
-    }
-
-    pthread_spin_unlock(&sock->wakeup->event_list_lock);
-}
-
 static ssize_t do_app_write(struct pbuf *pbufs[], void *buf, size_t len, uint32_t write_num)
 {
     ssize_t send_len = 0;
@@ -617,8 +601,9 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
         wakeup->stat.app_write_cnt += write_num;
     }
 
-    if (wakeup && wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLOUT)) {
-        del_data_out_event(sock);
+    if (wakeup && wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLOUT)
+        && !NETCONN_IS_OUTIDLE(sock)) {
+        del_sock_event(sock, EPOLLOUT);
     }
 
 END:
@@ -801,22 +786,6 @@ static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t
     }
 }
 
-static inline void del_data_in_event(struct lwip_sock *sock)
-{
-    pthread_spin_lock(&sock->wakeup->event_list_lock);
-
-    /* check again avoid cover event add in stack thread */
-    if (!NETCONN_IS_DATAIN(sock)) {
-        sock->events &= ~EPOLLIN;
-
-        if (sock->events == 0) {
-            list_del_node_null(&sock->event_list);
-        }
-    }
-
-    pthread_spin_unlock(&sock->wakeup->event_list_lock);
-}
-
 /* process on same node use ring to recv data */
 ssize_t gazelle_same_node_ring_recv(struct lwip_sock *sock, const void *buf, size_t len, int32_t flags)
 {
@@ -847,8 +816,9 @@ ssize_t gazelle_same_node_ring_recv(struct lwip_sock *sock, const void *buf, siz
 
 END:
     /* rte_ring_count reduce lock */
-    if (sock->wakeup && sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLIN)) {
-        del_data_in_event(sock);
+    if (sock->wakeup && sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLIN)
+        && (!NETCONN_IS_DATAIN(sock))) {
+        del_sock_event(sock, EPOLLIN);
     }
     return act_len;
 }
@@ -1042,8 +1012,9 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
     }
 
     /* rte_ring_count reduce lock */
-    if (sock->wakeup && sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLIN)) {
-        del_data_in_event(sock);
+    if (sock->wakeup && sock->wakeup->type == WAKEUP_EPOLL && (sock->events & EPOLLIN)
+        && (!NETCONN_IS_DATAIN(sock))) {
+        del_sock_event(sock, EPOLLIN);
     }
 
     if (pbuf && addr && addrlen) {
