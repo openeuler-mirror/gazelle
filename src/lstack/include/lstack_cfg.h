@@ -116,6 +116,7 @@ struct cfg_params {
     bool use_sockmap;
     bool udp_enable;
     struct cfg_nic_params nic;
+    bool stack_mode_rtc;
 };
 
 struct cfg_params *get_global_cfg_params(void);
