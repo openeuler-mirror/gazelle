@@ -231,18 +231,18 @@ install_nic_mod() {
 }
 
 create_mnt_huge() {
-    msg_show "Creating /mnt/hugepages and mounting as hugetlbfs"
-    sudo mkdir -p /mnt/hugepages
-    sudo mkdir -p /mnt/hugepages-2M
+    msg_show "Creating /mnt/hugepages-ltran and mounting as hugetlbfs"
+    sudo mkdir -p /mnt/hugepages-ltran
+    sudo mkdir -p /mnt/hugepages-lstack
 
-    grep -s "/mnt/hugepages " /proc/mounts > /dev/null
+    grep -s "/mnt/hugepages-ltran " /proc/mounts > /dev/null
     if [ $? -ne 0 ]; then
-        sudo mount -t hugetlbfs nodev /mnt/hugepages
+        sudo mount -t hugetlbfs nodev /mnt/hugepages-ltran
     fi
 
-    grep -s "/mnt/hugepages-2M " /proc/mounts > /dev/null
+    grep -s "/mnt/hugepages-lstack " /proc/mounts > /dev/null
     if [ $? -ne 0 ]; then
-        sudo mount -t hugetlbfs nodev /mnt/hugepages-2M
+        sudo mount -t hugetlbfs nodev /mnt/hugepages-lstack
     fi
 }
 
@@ -285,21 +285,21 @@ set_numa_pages() {
 
 # Removes all reserved hugepages.
 clear_huge_pages() {
-    msg_show "Unmounting /mnt/hugepages and removing directory"
-    grep -s "/mnt/hugepages " /proc/mounts > /dev/null
+    msg_show "Unmounting /mnt/hugepages-ltran and removing directory"
+    grep -s "/mnt/hugepages-ltran " /proc/mounts > /dev/null
     if [ $? -eq 0 ]; then
-        sudo umount /mnt/hugepages
+        sudo umount /mnt/hugepages-ltran
         if [ $? -ne 0 ]; then
-            msg_err "sudo umount /mnt/hugepages failed!"
+            msg_err "sudo umount /mnt/hugepages-ltran failed!"
             return 1
         fi
     fi
 
-    grep -s "/mnt/hugepages-2M " /proc/mounts > /dev/null
+    grep -s "/mnt/hugepages-lstack " /proc/mounts > /dev/null
     if [ $? -eq 0 ]; then
-        sudo umount /mnt/hugepages-2M
+        sudo umount /mnt/hugepages-lstack
         if [ $? -ne 0 ]; then
-            msg_err "sudo umount /mnt/hugepages-2M failed!"
+            msg_err "sudo umount /mnt/hugepages-lstack failed!"
             return 1
         fi
     fi
@@ -312,17 +312,17 @@ clear_huge_pages() {
     sudo sh .echo_tmp
     rm -f .echo_tmp
 
-    if [ -d /mnt/hugepages ]; then
-        sudo rm -R /mnt/hugepages
+    if [ -d /mnt/hugepages-ltran ]; then
+        sudo rm -R /mnt/hugepages-ltran
         if [ $? -ne 0 ]; then
-            msg_err "sudo rm -R /mnt/hugepages failed!"
+            msg_err "sudo rm -R /mnt/hugepages-ltran failed!"
             return 1
         fi
     fi
-    if [ -d /mnt/hugepages-2M ]; then
-        sudo rm -R /mnt/hugepages-2M
+    if [ -d /mnt/hugepages-lstack ]; then
+        sudo rm -R /mnt/hugepages-lstack
         if [ $? -ne 0 ]; then
-            msg_err "sudo rm -R /mnt/hugepages failed!"
+            msg_err "sudo rm -R /mnt/hugepages-lstack failed!"
             return 1
         fi
     fi
