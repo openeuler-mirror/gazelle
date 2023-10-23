@@ -167,5 +167,6 @@ void stack_replenish_sendring(struct rpc_msg *msg);
 void stack_get_conntable(struct rpc_msg *msg);
 void stack_get_connnum(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);
+void stack_polling(uint32_t wakeup_tick);
 void kni_handle_tx(struct rte_mbuf *mbuf);
 #endif
