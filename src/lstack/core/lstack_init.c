@@ -47,6 +47,7 @@
 #include "gazelle_base_func.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_preload.h"
+#include "lstack_wrap.h"
 
 static void check_process_start(void)
 {
@@ -234,6 +235,8 @@ __attribute__((constructor)) void gazelle_network_init(void)
         LSTACK_EXIT(1, "cfg_init failed\n");
     }
     LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
+
+    wrap_api_init();
 
     /* check primary process start */
     check_process_start();
