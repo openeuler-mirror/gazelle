@@ -501,6 +501,9 @@ static void* gazelle_stack_thread(void *arg)
     }
 
     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
+    if (get_global_cfg_params()->stack_mode_rtc) {
+        return NULL;
+    }
 
     for (;;) {
         stack_polling(wakeup_tick);
@@ -510,7 +513,7 @@ static void* gazelle_stack_thread(void *arg)
     return NULL;
 }
 
-static void libnet_listen_thread(void *arg)
+static void gazelle_listen_thread(void *arg)
 {
     struct cfg_params *cfg_param = get_global_cfg_params();
     recv_pkts_from_other_process(cfg_param->process_idx, arg);
@@ -541,11 +544,12 @@ int32_t stack_group_init(void)
         }
     }
 
-    if (!use_ltran()) {
+    /* run to completion mode does not currently support multiple process */
+    if (!use_ltran() && !get_global_cfg_params()->stack_mode_rtc) {
         char name[PATH_MAX];
         sem_init(&stack_group->sem_listen_thread, 0, 0);
         sprintf_s(name, sizeof(name), "%s", "listen_thread");
-        struct sys_thread *thread = sys_thread_new(name, libnet_listen_thread,
+        struct sys_thread *thread = sys_thread_new(name, gazelle_listen_thread,
             (void*)(&stack_group->sem_listen_thread), 0, 0);
         free(thread);
         sem_wait(&stack_group->sem_listen_thread);
@@ -554,7 +558,33 @@ int32_t stack_group_init(void)
     return 0;
 }
 
-int32_t stack_thread_setup(void)
+int32_t stack_setup_app_thread(void)
+{
+    static PER_THREAD int first_flags = 1;
+    static _Atomic uint32_t queue_id = 0;
+
+    if (likely(first_flags == 0)) {
+        return 0;
+    }
+    first_flags=0;
+
+    uint32_t cur_queue_id = atomic_fetch_add(&queue_id, 1);
+    struct thread_params *t_params = malloc(sizeof(struct thread_params));
+    if (t_params == NULL) {
+        return -1;
+    }
+    t_params->idx = cur_queue_id;
+    t_params->queue_id = cur_queue_id;
+
+    if (stack_thread_init(t_params) == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "stack setup failed in app thread\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+int32_t stack_setup_thread(void)
 {
     int32_t ret;
     char name[PATH_MAX];
@@ -787,6 +817,11 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
         if (cur_stack == stack) {
+            continue;
+        }
+
+        /* stack maybe not init in app thread yet */
+        if (stack == NULL || !(netif_is_up(&stack->netif))) {
             continue;
         }
 

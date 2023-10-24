@@ -287,8 +287,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
-    if (stack_thread_setup() != 0) {
-        LSTACK_EXIT(1, "stack_thread_setup failed\n");
+    if (!get_global_cfg_params()->stack_mode_rtc) {
+        if (stack_setup_thread() != 0) {
+            LSTACK_EXIT(1, "stack_setup_thread failed\n");
+        }
     }
 
     /* lwip initialization */
