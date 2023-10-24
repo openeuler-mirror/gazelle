@@ -786,7 +786,7 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
 
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
-        if (cur_stack == stack && use_ltran()) {
+        if (cur_stack == stack) {
             continue;
         }
 
