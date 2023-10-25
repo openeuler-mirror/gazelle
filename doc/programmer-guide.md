@@ -103,7 +103,7 @@
 
     注意：需要创建一个`memp_list`存储协议栈线程的所有memp，用于释放。
 
-* mbuf_alloc：每个queue_id绑定了mbufpool，申请mbuf用于收发报文。
+* mbuf_get：每个queue_id绑定了mbufpool，申请mbuf用于收发报文。
 
     注意：当发生**软件转发**或**进程间loopback**时，会导致mbuf跨进程传递。进程异常退出时需要回收mbuf。
 
@@ -115,7 +115,32 @@
 
 * memp_free：遍历`memp_list`释放所有的memp。
 
-* mbuf_free：通过`rte_mempool_walk()`遍历mbufpool，通过`rte_mempool_obj_iter`遍历mbufpool的所有mbuf，回收未释放的mbuf。
+* mbuf_put：通过`rte_mempool_walk()`遍历mbufpool，通过`rte_mempool_obj_iter`遍历mbufpool的所有mbuf，回收未释放的mbuf。
+
+
+
+## mbuf内存管理
+
+![img](images/programmer_mbufpool.png)  
+
+报文数据流：
+
+* `#1`接收报文
+
+  每个网卡队列绑定了一个L1_mbufpool，由网卡驱动申请mbuf，gazelle释放mbuf。
+
+* `#2`发送报文
+
+  gazelle从L1_mbufpool申请mbuf，网卡发送结束后释放mbuf。
+
+* `#3`发送报文
+
+  当连接数较多内存紧张时，即L1_mbufpool内存池低于`low watermark`，创建L2_mbufpool内存池用于发送。
+
+mbufpool竞争问题：
+
+* 不再使用per connection cache，启用per cpu cache，参考`rte_mempool_default_cache()`
+* mbufpool内存池低于`low watermark`时，关闭`rte_lcore_id()`标记，扫描回收per cpu cache的内存。
 
 
 
