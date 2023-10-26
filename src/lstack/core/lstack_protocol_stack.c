@@ -837,6 +837,14 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
             return;
         }
     }
+    ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+    if (ret != 0) {
+        stack->stats.rx_allocmbuf_fail++;
+        return;
+    }
+    copy_mbuf(mbuf_copy, mbuf);
+    kni_handle_tx(mbuf_copy);
+    return;
 }
 
 void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup)
