@@ -189,7 +189,7 @@ void delete_rule(char* rule_key)
 {
     struct flow_rule *rule = NULL;
     HASH_FIND_STR(g_flow_rules, rule_key, rule);
-    if (rule == NULL) {
+    if (rule != NULL) {
         HASH_DEL(g_flow_rules, rule);
         free(rule);
     }
