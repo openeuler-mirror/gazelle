@@ -289,6 +289,7 @@ static void* gazelle_kernelevent_thread(void *arg)
 
     LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", idx);
     free(arg);
+    sem_post(&g_stack_group.sem_stack_setup);
 
     for (;;) {
         stack->kernel_event_num = posix_api->epoll_wait_fn(stack->epollfd, stack->kernel_events, KERNEL_EPOLL_MAX, -1);
@@ -493,9 +494,12 @@ static void* gazelle_stack_thread(void *arg)
     free(arg);
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
-        /* exit in signal thread */
-        raise(SIGTERM);
+        g_stack_group.stack_setup_fail = 1;
+        sem_post(&g_stack_group.sem_stack_setup);
+        return NULL;
     }
+    sem_post(&g_stack_group.sem_stack_setup);
+
     if (!use_ltran() && queue_id == 0) {
         init_listen_and_user_ports();
     }
@@ -531,6 +535,11 @@ int32_t stack_group_init(void)
     init_list_node(&stack_group->poll_list);
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
     pthread_spin_init(&stack_group->socket_lock, PTHREAD_PROCESS_PRIVATE);
+    if (sem_init(&stack_group->sem_stack_setup, 0, 0) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "sem_init failed errno=%d\n", errno);
+        return -1;
+    }
+    stack_group->stack_setup_fail = 0;
 
     if (get_global_cfg_params()->is_primary) {
         uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
@@ -620,6 +629,12 @@ int32_t stack_setup_thread(void)
         if (ret != 0) {
             return ret;
         }
+    }
+
+    /* 2: wait stack thread and kernel_event thread init finish */
+    wait_sem_value(&g_stack_group.sem_stack_setup, g_stack_group.stack_num * 2);
+    if (g_stack_group.stack_setup_fail) {
+        return -1;
     }
 
     return 0;

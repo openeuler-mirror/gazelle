@@ -96,6 +96,8 @@ struct protocol_stack_group {
     pthread_spinlock_t poll_list_lock;
     sem_t sem_listen_thread;
     struct rte_mempool *total_rxtx_pktmbuf_pool[PROTOCOL_STACK_MAX];
+    sem_t sem_stack_setup;
+    bool stack_setup_fail;
 
     /* dfx stats */
     bool latency_start;
