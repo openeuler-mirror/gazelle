@@ -66,8 +66,10 @@ show_usage() {
     echo "          [-l|--lowpower=<low power mode>]"
     echo "          [--ltrancore=<ltran core>]"
     echo "          [--lstackcore=<ltran core>]"
+    echo "          [--useltran=<use ltran>]"
+    echo "          [--listenshadow=<listen shadow>]"
     echo "examples:"
-    echo "       $0 -i eth0 -n 1024,1024 -d 1/0 -k 1/0 -l 1/0 --ltrancore 0,1 --lstackcore 2-3"
+    echo "       $0 -i eth0 -n 1024,1024 -d 1/0 -k 1/0 -l 1/0 --ltrancore 0,1 --lstackcore 2-3 --useltran 0/1 --listenshadow 0/1"
 }
 
 check_init() {
@@ -155,14 +157,13 @@ check_args() {
     g_low_power=${g_low_power:-0}
     check_switch_param $g_low_power
     ret=$(($? + ret))
-    g_useltran=${g_useltran:-1}
+    g_useltran=${g_useltran:-0}
     check_switch_param $g_useltran
-    g_listen_shadow=${g_listen_shadow:-0}
+    g_listen_shadow=${g_listen_shadow:-1}
     check_switch_param $g_listen_shadow
     ret=$(($? + ret))
     g_ltrancore=${g_ltrancore:-0,1}
     g_lstackcore=${g_lstackcore:-2}
-    g_wakeupcpus=${g_lstackcore}
     if [ $ret -eq 0 ]; then
         msg_show "the args is reasonable..."
     else
@@ -278,6 +279,12 @@ gen_lstack_conf() {
     sed -i "/^gateway_addr/c gateway_addr=\"$g_gateway\"" $CONF_DIR/lstack.conf
     sed -i "/^devices/c devices=\"$g_kni_mac\"" $CONF_DIR/lstack.conf
 
+    if [ ${g_useltran} -eq 0 ]; then
+        sed -i "/^kni_switch/c kni_switch = $g_kni_switch" $CONF_DIR/lstack.conf
+    else 
+        sed -i "/^kni_switch/c kni_switch = 0" $CONF_DIR/lstack.conf
+    fi
+
     shadow_exist=$(grep listen_shadow $CONF_DIR/lstack.conf)
     if [ -n "${shadow_exist}" ];then
         sed -i "/^listen_shadow/c listen_shadow = $g_listen_shadow" $CONF_DIR/lstack.conf
@@ -289,20 +296,15 @@ gen_lstack_conf() {
     local old_lstackcore=$(grep num_cpus $CONF_DIR/lstack.conf | awk -F= '{print $2}' | awk -F "\"" '{print $2}')
     sed -i "/^num_cpus/s/${old_lstackcore}/${g_lstackcore}/" $CONF_DIR/lstack.conf
 
-    # wakeup_cpus
-    local old_wakeupcpus=$(grep wakeup_cpus $CONF_DIR/lstack.conf | awk -F= '{print $2}' | awk -F "\"" '{print $2}')
-    if [ -n "${g_wakeupcpus}" ]; then
-        sed -i "/^wakeup_cpus/s/${old_wakeupcpus}/${g_wakeupcpus}/" $CONF_DIR/lstack.conf
-    fi
-
     local old_numa=$(grep dpdk_args $CONF_DIR/lstack.conf | awk -F "-socket-mem" '{print $2}' | awk '{print $2}' | awk -F "\"" '{print $2}')
     old_numa="\"${old_numa}\","
     sed -i "/^dpdk_args/s/${old_numa}/\"${g_hugepages}\",/" $CONF_DIR/lstack.conf
     local cpu_count=$(parse_cpu_count ${g_lstackcore})
-    local mbuf_pool_size=$(expr 200000 \* ${cpu_count} + 8192)
-    sed -i "/^mbuf_pool_size/c mbuf_pool_size=${mbuf_pool_size}" $CONF_DIR/lstack.conf
+    tcp_conn_count=1500
+    mbuf_count_per_conn=$(expr 170 \* ${cpu_count})
 
-    # export LSTACK_CONF_PATH=$CONF_DIR/lstack.conf
+    sed -i "/^tcp_conn_count/c tcp_conn_count=${tcp_conn_count}" $CONF_DIR/lstack.conf
+    sed -i "/^mbuf_count_per_conn/c mbuf_count_per_conn=${mbuf_count_per_conn}" $CONF_DIR/lstack.conf
 }
 
 gen_run_param() {
@@ -399,10 +401,6 @@ while true; do
             g_lstackcore=$2
             shift 2
             ;;
-        --wakeupcpus)
-            g_wakeupcpus=$2
-            shift 2
-            ;;
         -h | --help)
             show_usage
             shift 1
@@ -458,8 +456,8 @@ gen_run_param
 msg_show "-----------------"
 msg_show "start dpdk"
 setup_dpdk
-__chown /mnt/hugepages
-__chown /mnt/hugepages-2M
+__chown /mnt/hugepages-ltran
+__chown /mnt/hugepages-lstack
 
 ##############################################
 # generate the conf file
@@ -504,7 +502,7 @@ fi
 ##############################################
 # start ltran
 if [ $g_useltran -eq 0 ];then
-    msg_show "only gen lstack conf"
+    msg_show "gen lstack conf success"
     exit 0
 fi
 msg_show "start ltran on $g_conn_if"
