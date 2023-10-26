@@ -740,10 +740,6 @@ int32_t init_dpdk_ethdev(void)
             return -1;
         }
 
-        /* 20: sleep for lacp ,this is a temp plan, it will be changed in future */
-        int wait_lacp = 20;
-        sleep(wait_lacp);
-
     } else {
         ret = dpdk_ethdev_init(0, 0);
         if (ret != 0) {
