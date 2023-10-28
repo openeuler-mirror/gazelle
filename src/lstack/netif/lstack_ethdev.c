@@ -319,7 +319,7 @@ struct rte_flow *create_flow_director(uint16_t port_id, uint16_t queue_id,
     if (!res) {
         flow = rte_flow_create(port_id, &attr, pattern, action, error);
     } else {
-        LSTACK_LOG(ERR, PORT, "rte_flow_create.rte_flow_validate error, res %d \n", res);
+        LSTACK_LOG(ERR, LSTACK, "rte_flow_create.rte_flow_validate error, res %d \n", res);
     }
 
     return flow;
@@ -364,7 +364,7 @@ void delete_flow_director(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port)
         struct rte_flow_error error;
         int ret = rte_flow_destroy(port_id, fl->flow, &error);
         if(ret != 0){
-            LSTACK_LOG(ERR, PORT, "Flow can't be delete %d message: %s\n",
+            LSTACK_LOG(ERR, LSTACK, "Flow can't be delete %d message: %s\n",
                        error.type, error.message ? error.message : "(no stated reason)");
         }
         delete_rule(rule_key);
