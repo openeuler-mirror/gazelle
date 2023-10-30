@@ -110,9 +110,9 @@ struct cfg_params {
     uint16_t send_ring_size;
     bool expand_send_ring;
     bool tuple_filter;
-    bool use_bond4;
-    uint8_t bond4_slave1_mac_addr[ETHER_ADDR_LEN];
-    uint8_t bond4_slave2_mac_addr[ETHER_ADDR_LEN];
+    int8_t bond_mode;
+    uint8_t bond_slave1_mac_addr[ETHER_ADDR_LEN];
+    uint8_t bond_slave2_mac_addr[ETHER_ADDR_LEN];
     bool use_sockmap;
     bool udp_enable;
     struct cfg_nic_params nic;

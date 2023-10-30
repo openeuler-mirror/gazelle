@@ -463,7 +463,6 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
 int32_t dpdk_ethdev_init(int port_id, bool bond_port)
 {
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
-    int32_t use_bond4 = get_global_cfg_params()->use_bond4;
     if (get_global_cfg_params()->seperate_send_recv) {
         nb_queues = get_global_cfg_params()->num_cpu * 2;
     }
@@ -474,7 +473,7 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    if (!use_bond4) {
+    if (get_global_cfg_params()->bond_mode < 0) {
         port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
         if (port_id < 0) {
             return port_id;
@@ -499,13 +498,13 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     if (bond_port) {
         int slave_num = 2;
         int32_t slave_port_id[2];
-        slave_port_id[0] = ethdev_port_id(get_global_cfg_params()->bond4_slave1_mac_addr);
+        slave_port_id[0] = ethdev_port_id(get_global_cfg_params()->bond_slave1_mac_addr);
 	if (slave_port_id[0] < 0) {
 	    LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[0]);
             return slave_port_id[0];
         }
 
-        slave_port_id[1] = ethdev_port_id(get_global_cfg_params()->bond4_slave2_mac_addr);
+        slave_port_id[1] = ethdev_port_id(get_global_cfg_params()->bond_slave2_mac_addr);
 	if (slave_port_id[1] < 0) {
 	    LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[1]);
             return slave_port_id[1];
@@ -648,7 +647,7 @@ int32_t dpdk_ethdev_start(void)
         }
     }
 
-    if (get_global_cfg_params()->use_bond4) {
+    if (get_global_cfg_params()->bond_mode >= 0) {
         return 0;
     }
 
@@ -697,15 +696,16 @@ int32_t init_dpdk_ethdev(void)
 {
     int32_t ret;
 
-    if (get_global_cfg_params()->use_bond4) {
-        int bond_port_id = rte_eth_bond_create("net_bonding0", 4, (uint8_t)rte_socket_id());
+    if (get_global_cfg_params()->bond_mode >= 0) {
+        uint8_t socket_id = rte_socket_id();
+        int bond_port_id = rte_eth_bond_create("net_bonding0", get_global_cfg_params()->bond_mode, socket_id);
         if (bond_port_id < 0) {
             LSTACK_LOG(ERR, LSTACK, "get bond port id failed ret=%d\n", bond_port_id);
             return bond_port_id;
         }
 
         ret = dpdk_ethdev_init(bond_port_id, 1);
-	if (ret != 0) {
+        if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
             return -1;
         }
@@ -716,10 +716,17 @@ int32_t init_dpdk_ethdev(void)
             return -1;
         }
 
-        ret = rte_eth_bond_8023ad_dedicated_queues_enable(bond_port_id);
-        if (ret < 0) {
-	    LSTACK_LOG(ERR, LSTACK, "dpdk enable 8023 dedicated queues failed ret = %d\n", ret);
-            return -1;
+	if (get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) {
+            ret = rte_eth_bond_8023ad_dedicated_queues_enable(bond_port_id);
+            if (ret < 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk enable 8023 dedicated queues failed ret = %d\n", ret);
+                return -1;
+            }
+        } else {
+            ret = rte_eth_bond_mode_set(bond_port_id, get_global_cfg_params()->bond_mode);
+            if (ret < 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk enable mode set failed ret = %d\n", ret);
+            }
         }
 
         ret = rte_eth_promiscuous_enable(bond_port_id);
@@ -735,7 +742,7 @@ int32_t init_dpdk_ethdev(void)
         }
 
         ret = rte_eth_dev_start(bond_port_id);
-	if (ret < 0) {
+        if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk start bond port failed ret = %d\n", ret);
             return -1;
         }
