@@ -936,10 +936,11 @@ void stack_create_shadow_fd(struct rpc_msg *msg)
         return;
     }
 
+    int domain = addr->sa_family;
     if (NETCONN_IS_UDP(sock)) {
-        clone_fd = do_lwip_socket(AF_INET, SOCK_DGRAM, 0);
+        clone_fd = do_lwip_socket(domain, SOCK_DGRAM, 0);
     } else {
-        clone_fd = do_lwip_socket(AF_INET, SOCK_STREAM, 0);
+        clone_fd = do_lwip_socket(domain, SOCK_STREAM, 0);
     }
 
     if (clone_fd < 0) {

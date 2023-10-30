@@ -46,6 +46,7 @@ static struct cfg_params g_config_params;
 static config_t g_config;
 
 static int32_t parse_host_addr(void);
+static int32_t parse_host_addr6(void);
 static int32_t parse_low_power_mode(void);
 static int32_t parse_stack_cpu_number(void);
 static int32_t parse_app_bind_numa(void);
@@ -75,6 +76,7 @@ static int32_t parse_bond_mode(void);
 static int32_t parse_bond_slave_mac(void);
 static int32_t parse_use_sockmap(void);
 static int32_t parse_udp_enable(void);
+static int32_t parse_ipv6_enable(void);
 static int32_t parse_nic_rxqueue_size(void);
 static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
@@ -107,6 +109,7 @@ struct config_vector_t {
 
 static struct config_vector_t g_config_tbl[] = {
     { "host_addr",    parse_host_addr },
+    { "host_addr6",    parse_host_addr6 },
     { "gateway_addr", parse_gateway_addr },
     { "mask_addr",    parse_mask_addr },
     { "use_ltran",    parse_use_ltran },
@@ -136,6 +139,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "bond_slave_mac", parse_bond_slave_mac },
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
+    { "ipv6_enable", parse_ipv6_enable },
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
     { "nic_txqueue_size", parse_nic_txqueue_size},
     { "stack_thread_mode", parse_stack_thread_mode },
@@ -221,15 +225,29 @@ static int32_t parse_host_addr(void)
     if (g_config_params.host_addr.addr == INADDR_NONE) {
         return -EINVAL;
     }
+    return 0;
+}
 
+static int32_t parse_host_addr6(void)
+{
+    char *value = NULL;
+    bool ok;
+
+    ok = config_lookup_string(&g_config, "host_addr6", (const char **)&value);
+    if (!ok) {
+        return 0;
+    }
+
+    if (ip6addr_aton(value, &g_config_params.host_addr6) == 0) {
+        return -EINVAL;
+    }
     return 0;
 }
 
 int32_t match_host_addr(uint32_t addr)
 {
     /* network byte order */
-    if (addr == g_config_params.host_addr.addr ||
-        addr == INADDR_ANY) {
+    if (addr == g_config_params.host_addr.addr || addr == INADDR_ANY) {
         return 1;
     }
     return 0;
@@ -1249,5 +1267,12 @@ static int32_t parse_nic_vlan_mode(void)
         LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid vlan mode value %d ret=%d. only support 0~4094\n", \
                             g_config_params.nic.vlan_mode, ret);
     }
+    return ret;
+}
+
+static int32_t parse_ipv6_enable(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.ipv6_enable, "ipv6_enable", 0, 0, 1, ret);
     return ret;
 }

@@ -13,6 +13,7 @@
 #ifndef _GAZELLE_DPDK_H_
 #define _GAZELLE_DPDK_H_
 
+#include <lwip/ip_addr.h>
 #include "gazelle_opt.h"
 #include "gazelle_dfx_msg.h"
 
@@ -53,7 +54,7 @@ int dpdk_ethdev_start(void);
 void dpdk_skip_nic_init(void);
 int32_t dpdk_init_lstack_kni(void);
 void dpdk_restore_pci(void);
-bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
+bool port_in_stack_queue(ip_addr_t src_ip, ip_addr_t dst_ip, uint16_t src_port, uint16_t dst_port);
 uint16_t get_port_id(void);
 struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
                                            uint32_t mbuf_cache_size, uint16_t queue_id, unsigned numa_id);

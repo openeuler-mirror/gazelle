@@ -16,9 +16,11 @@
 #include <rte_kni.h>
 #include <rte_ethdev.h>
 #include <rte_malloc.h>
+#include <rte_ether.h>
 
 #include <lwip/debug.h>
 #include <lwip/etharp.h>
+#include <lwip/ethip6.h>
 #include <lwip/posix_api.h>
 #include <netif/ethernet.h>
 #include <lwip/tcp.h>
@@ -664,57 +666,92 @@ void concat_mbuf_and_queue_id(struct rte_mbuf *mbuf, uint16_t queue_id,
     sprintf_s(mbuf_and_queue_id, write_len, "%lu%s%u", mbuf, SPLIT_DELIM, queue_id);
 }
 
-int distribute_pakages(struct rte_mbuf *mbuf)
+static int mbuf_to_idx(struct rte_mbuf *mbuf, uint16_t *dst_port)
 {
-    struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
-    uint8_t ip_version = (iph->version_ihl & 0xf0) >> IPV4_VERSION_OFFSET;
-    if (likely(ip_version == IPV4_VERSION)) {
-        if (likely(iph->next_proto_id == IPPROTO_TCP)) {
-            int each_process_queue_num = get_global_cfg_params()->num_queue;
+    struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
+    u16_t type  = rte_be_to_cpu_16(ethh->ether_type);
+    uint32_t index = 0;
+    if (type == RTE_ETHER_TYPE_IPV4) {
+        struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+        uint8_t ip_version = (iph->version_ihl & 0xf0) >> IPV4_VERSION_OFFSET;
+        if (likely(ip_version == IPV4_VERSION)) {
+            if (likely(iph->next_proto_id == IPPROTO_TCP)) {
+                struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_tcp_hdr *,
+                    sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
+                *dst_port = tcp_hdr->dst_port;
 
-            struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_tcp_hdr *,
-                sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
-            uint16_t dst_port = tcp_hdr->dst_port;
-            uint32_t user_process_idx;
-
-            if (g_listen_ports[dst_port] != INVAILD_PROCESS_IDX) {
-                user_process_idx = g_listen_ports[dst_port];
-            } else {
-                user_process_idx = g_user_ports[dst_port];
-            }
-
-            if (user_process_idx == INVAILD_PROCESS_IDX) {
-                return TRANSFER_KERNEL;
-            }
-            if (unlikely(tcp_hdr->tcp_flags == TCP_SYN)) {
-                uint32_t src_ip = iph->src_addr;
-                uint16_t src_port = tcp_hdr->src_port;
-                uint32_t index = rte_jhash_3words(src_ip, src_port | ((dst_port) << 16), 0, 0);
-                index = index % each_process_queue_num;
-                uint16_t queue_id = 0;
-                if (get_global_cfg_params()->seperate_send_recv) {
-                    queue_id = user_process_idx * each_process_queue_num + (index / 2) * 2;
+                if (unlikely(tcp_hdr->tcp_flags == TCP_SYN)) {
+                    uint32_t src_ip = iph->src_addr;
+                    uint16_t src_port = tcp_hdr->src_port;
+                    index = rte_jhash_3words(src_ip, src_port | ((*dst_port) << 16), 0, 0);
                 } else {
-                    queue_id = user_process_idx * each_process_queue_num + index;
+                    return -1;
                 }
-                if (queue_id != 0) {
-                    if (user_process_idx == 0) {
-                        transfer_tcp_to_thread(mbuf, queue_id);
-                    } else {
-                        char mbuf_and_queue_id[TRANSFER_TCP_MUBF_LEN];
-                        concat_mbuf_and_queue_id(mbuf, queue_id, mbuf_and_queue_id, TRANSFER_TCP_MUBF_LEN);
-                        transfer_pkt_to_other_process(mbuf_and_queue_id, user_process_idx,
-                            TRANSFER_TCP_MUBF_LEN, false);
-                    }
-                    return TRANSFER_OTHER_THREAD;
-                } else {
-                    return TRANSFER_CURRENT_THREAD;
-                }
-            } else {
-                return TRANSFER_CURRENT_THREAD;
             }
         }
+    } else if (type == RTE_ETHER_TYPE_IPV6) {
+        struct rte_ipv6_hdr *iph = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv6_hdr *, sizeof(struct rte_ether_hdr));
+        if (likely(iph->proto == IPPROTO_TCP)) {
+            struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_tcp_hdr *,
+                sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv6_hdr));
+            *dst_port = tcp_hdr->dst_port;
+
+            if (unlikely(tcp_hdr->tcp_flags == TCP_SYN)) {
+                uint32_t *src_ip = (uint32_t *) &iph->src_addr;
+                uint16_t src_port = tcp_hdr->src_port;
+                uint32_t v = rte_jhash_3words(src_ip[0], src_ip[1], src_ip[2], 0);
+                index = rte_jhash_3words(src_ip[3], src_port | ((*dst_port) << 16), v, 0);
+            } else {
+                return -1;
+            }
+        }
+    } else {
+        return -1;
     }
+    return index;
+}
+
+int distribute_pakages(struct rte_mbuf *mbuf)
+{
+    uint16_t dst_port = 0;
+    uint32_t index = mbuf_to_idx(mbuf, &dst_port);
+    if (index == -1) {
+        return TRANSFER_CURRENT_THREAD;
+    }
+
+    uint16_t queue_id = 0;
+    uint32_t user_process_idx = 0;
+    int each_process_queue_num = get_global_cfg_params()->num_queue;
+    index = index % each_process_queue_num;
+    if (g_listen_ports[dst_port] != INVAILD_PROCESS_IDX) {
+        user_process_idx = g_listen_ports[dst_port];
+    } else {
+        user_process_idx = g_user_ports[dst_port];
+    }
+
+    if (user_process_idx == INVAILD_PROCESS_IDX) {
+        return TRANSFER_KERNEL;
+    }
+
+    if (get_global_cfg_params()->seperate_send_recv) {
+        queue_id = user_process_idx * each_process_queue_num + (index / 2) * 2;
+    } else {
+        queue_id = user_process_idx * each_process_queue_num + index;
+    }
+    if (queue_id != 0) {
+        if (user_process_idx == 0) {
+            transfer_tcp_to_thread(mbuf, queue_id);
+        } else {
+            char mbuf_and_queue_id[TRANSFER_TCP_MUBF_LEN];
+            concat_mbuf_and_queue_id(mbuf, queue_id, mbuf_and_queue_id, TRANSFER_TCP_MUBF_LEN);
+            transfer_pkt_to_other_process(mbuf_and_queue_id, user_process_idx,
+                TRANSFER_TCP_MUBF_LEN, false);
+        }
+        return TRANSFER_OTHER_THREAD;
+    } else {
+        return TRANSFER_CURRENT_THREAD;
+    }
+    
     return TRANSFER_KERNEL;
 }
 
@@ -874,10 +911,11 @@ static err_t eth_dev_init(struct netif *netif)
 
     netif->name[0] = 'e';
     netif->name[1] = 't';
-    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP;
+    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_MLD6;
     netif->mtu = FRAME_MTU;
     netif->output = etharp_output;
     netif->linkoutput = eth_dev_output;
+    netif->output_ip6 = ethip6_output;
 
     int32_t ret;
     ret = memcpy_s(netif->hwaddr, sizeof(netif->hwaddr), cfg->mac_addr, ETHER_ADDR_LEN);
@@ -914,11 +952,20 @@ int32_t ethdev_init(struct protocol_stack *stack)
 
     netif_set_default(&stack->netif);
 
-    struct netif *netif = netif_add(&stack->netif, &cfg->host_addr, &cfg->netmask, &cfg->gateway_addr, NULL,
-        eth_dev_init, ethernet_input);
+    struct netif *netif;
+    if (!ip4_addr_isany(&cfg->host_addr)) {
+        netif = netif_add(&stack->netif, &cfg->host_addr, &cfg->netmask,
+            &cfg->gateway_addr, NULL, eth_dev_init, ethernet_input);
+    } else {
+        netif = netif_add(&stack->netif, NULL, NULL, NULL, NULL, eth_dev_init, ethernet_input);
+    }
     if (netif == NULL) {
         LSTACK_LOG(ERR, LSTACK, "netif_add failed\n");
-        return ERR_IF;
+	return ERR_IF;
+    }
+    if (!ip6_addr_isany(&cfg->host_addr6)) {
+        netif_ip6_addr_set(&stack->netif, 0, &cfg->host_addr6);
+	netif_ip6_addr_set_state(&stack->netif, 0, IP6_ADDR_VALID);
     }
 
     netif_set_link_up(&stack->netif);

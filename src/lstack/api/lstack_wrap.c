@@ -12,6 +12,8 @@
 
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <netdb.h>
+#include <ifaddrs.h>
 
 #include <signal.h>
 #include <fcntl.h>
@@ -184,28 +186,6 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
     return posix_api->accept4_fn(s, addr, addrlen, flags);
 }
 
-#define SIOCGIFADDR        0x8915
-static int get_addr(struct sockaddr_in *sin, char *interface)
-{
-    int sockfd = 0;
-    struct ifreq ifr;
-
-    if ((sockfd = posix_api->socket_fn(AF_INET, SOCK_STREAM, 0)) < 0) return -1;
-
-    memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
-    snprintf_s(ifr.ifr_name, sizeof(ifr.ifr_name), (sizeof(ifr.ifr_name) - 1), "%s", interface);
-
-    if (posix_api->ioctl_fn(sockfd, SIOCGIFADDR, &ifr) < 0) {
-        posix_api->close_fn(sockfd);
-        return -1;
-    }
-    posix_api->close_fn(sockfd);
-
-    memcpy_s(sin, sizeof(struct sockaddr_in), &ifr.ifr_addr, sizeof(struct sockaddr_in));
-
-    return 0;
-}
-
 static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen)
 {
     if (name == NULL) {
@@ -229,55 +209,39 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
 
 bool is_dst_ip_localhost(const struct sockaddr *addr)
 {
-    struct sockaddr_in *servaddr = (struct sockaddr_in *) addr;
-    char *line = NULL;
-    char *p;
-    size_t linel = 0;
-    int linenum = 0;
-    if (get_global_cfg_params()->host_addr.addr == servaddr->sin_addr.s_addr) {
-        return true;
+    struct ifaddrs *ifap;
+    struct ifaddrs *ifa;
+
+    if (addr->sa_family == AF_INET) {
+        if (get_global_cfg_params()->host_addr.addr == ((struct sockaddr_in *)addr)->sin_addr.s_addr) {
+            return true;
+        }
     }
 
-    FILE *ifh = fopen("/proc/net/dev", "r");
-    if (ifh == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "failed to open /proc/net/dev, errno is %d\n", errno);
-        return false;
-    }
-    struct sockaddr_in* sin = malloc(sizeof(struct sockaddr_in));
-    if (sin == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "sockaddr_in malloc failed\n");
-        fclose(ifh);
+    if (getifaddrs(&ifap) == -1) {
+        LSTACK_LOG(ERR, LSTACK, "get interface IP address failed\n");
         return false;
     }
 
-    while (getdelim(&line, &linel, '\n', ifh) > 0) {
-        /* 2: skip the first two lines, which are not nic name */
-        if (linenum++ < 2) {
+    for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) {
             continue;
         }
-
-        p = line;
-        while (isspace(*p)) {
-            ++p;
-        }
-        int n = strcspn(p, ": \t");
-
-        char interface[20] = {0}; /* 20: nic name len */
-        strncpy_s(interface, sizeof(interface), p, n);
-
-        memset_s(sin, sizeof(struct sockaddr_in), 0, sizeof(struct sockaddr_in));
-        int ret = get_addr(sin, interface);
-        if (ret == 0) {
-            if (sin->sin_addr.s_addr == servaddr->sin_addr.s_addr) {
-                free(sin);
-                fclose(ifh);
+        if (ifa->ifa_addr->sa_family == AF_INET && addr->sa_family == AF_INET) {
+            struct sockaddr_in *if_addr = (struct sockaddr_in *)ifa->ifa_addr;
+            if (memcmp(&if_addr->sin_addr, &((struct sockaddr_in *)addr)->sin_addr, sizeof(struct in_addr)) == 0) {
+                freeifaddrs(ifap);
+                return true;
+            }
+        } else if (ifa->ifa_addr->sa_family == AF_INET6 && addr->sa_family == AF_INET6) {
+            struct sockaddr_in6 *if_addr = (struct sockaddr_in6 *)ifa->ifa_addr;
+            if (memcmp(&if_addr->sin6_addr, &((struct sockaddr_in6 *)addr)->sin6_addr, sizeof(struct in6_addr)) == 0) {
+                freeifaddrs(ifap);
                 return true;
             }
         }
     }
-    free(sin);
-    fclose(ifh);
-
+    freeifaddrs(ifap);
     return false;
 }
 
@@ -303,11 +267,15 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     }
 
     int32_t ret = 0;
+    int32_t remote_port;
+    bool is_local = is_dst_ip_localhost(name);
+    
+    remote_port = htons(((struct sockaddr_in *)name)->sin_port);
+
     char listen_ring_name[RING_NAME_LEN];
-    int remote_port = htons(((struct sockaddr_in *)name)->sin_port);
     snprintf_s(listen_ring_name, sizeof(listen_ring_name), sizeof(listen_ring_name) - 1,
         "listen_rx_ring_%d", remote_port);
-    if (is_dst_ip_localhost(name) && rte_ring_lookup(listen_ring_name) == NULL) {
+    if (is_local && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
         SET_CONN_TYPE_HOST(sock->conn);
     } else {
@@ -403,6 +371,7 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
     }
 
     if ((domain != AF_INET && domain != AF_UNSPEC) ||
+        ((domain == AF_INET6) && !get_global_cfg_params()->ipv6_enable) ||
         ((type & SOCK_DGRAM) && !get_global_cfg_params()->udp_enable)) {
         return posix_api->socket_fn(domain, type, protocol);
     }

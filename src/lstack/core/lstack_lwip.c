@@ -123,7 +123,7 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
         pbuf->allow_in = 1;
         pbuf->head = 0;
         pbuf->last = pbuf;
-        pbuf->addr.addr = 0;
+        pbuf->addr = *IP_ANY_TYPE;
         pbuf->port = 0;
         pthread_spin_init(&pbuf->pbuf_lock, PTHREAD_PROCESS_SHARED);
     }
@@ -441,10 +441,21 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
     ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
 
     if (addr) {
-        struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-        for (int i = 0; i < write_num; i++) {
-            pbufs[i]->addr.addr = saddr->sin_addr.s_addr;
-            pbufs[i]->port = lwip_ntohs((saddr)->sin_port);
+        if (addr->sa_family == AF_INET) {
+            struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+            for (int i = 0; i < write_num; i++) {
+                pbufs[i]->addr.u_addr.ip4.addr = saddr->sin_addr.s_addr;
+                pbufs[i]->port = lwip_ntohs((saddr)->sin_port);
+            }
+        } else if (addr->sa_family == AF_INET6) {
+            struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+            for (int i = 0; i < write_num; i++) {
+                memcpy_s(pbufs[i]->addr.u_addr.ip6.addr, sizeof(pbufs[i]->addr.u_addr.ip6.addr),
+                    saddr->sin6_addr.s6_addr, sizeof(saddr->sin6_addr.s6_addr));
+                pbufs[i]->port = lwip_ntohs((saddr)->sin6_port);
+            }
+        } else {
+            return 0;
         }
     }
 
@@ -573,10 +584,15 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
             if (wakeup) {
                 wakeup->stat.app_write_cnt += write_num;
             }
-            if (addr) {
+            if (addr->sa_family == AF_INET) {
                 struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-                last_pbuf->addr.addr = saddr->sin_addr.s_addr;
+                last_pbuf->addr.u_addr.ip4.addr = saddr->sin_addr.s_addr;
                 last_pbuf->port = lwip_ntohs((saddr)->sin_port);
+            } else if (addr->sa_family == AF_INET6) {
+                struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+                memcpy_s(last_pbuf->addr.u_addr.ip6.addr, sizeof(last_pbuf->addr.u_addr.ip6.addr),
+                    saddr->sin6_addr.s6_addr, sizeof(saddr->sin6_addr.s6_addr));
+                last_pbuf->port = lwip_ntohs((saddr)->sin6_port);
             }
         } else {
             (void)rpc_call_replenish(stack, sock);
@@ -1122,8 +1138,8 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
 {
     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
 
-    conn->lip = pcb->local_ip.addr;
-    conn->rip = pcb->remote_ip.addr;
+    conn->lip = ip_2_ip4(&pcb->local_ip)->addr;
+    conn->rip = ip_2_ip4(&pcb->remote_ip)->addr;
     conn->l_port = pcb->local_port;
     conn->r_port = pcb->remote_port;
     conn->in_send = pcb->snd_queuelen;
@@ -1173,7 +1189,7 @@ void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_soc
 
 int32_t do_lwip_socket(int domain, int type, int protocol)
 {
-    int32_t fd = lwip_socket(AF_INET, type, 0);
+    int32_t fd = lwip_socket(domain, type, 0);
     if (fd < 0) {
         return fd;
     }
@@ -1216,7 +1232,7 @@ uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn,
     for (struct tcp_pcb_listen *pcbl = tcp_listen_pcbs.listen_pcbs; pcbl != NULL && conn_num < max_num;
         pcbl = pcbl->next) {
         conn[conn_num].state = LISTEN_LIST;
-        conn[conn_num].lip = pcbl->local_ip.addr;
+        conn[conn_num].lip = ip_2_ip4(&pcbl->local_ip)->addr;
         conn[conn_num].l_port = pcbl->local_port;
         conn[conn_num].tcp_sub_state = pcbl->state;
         struct netconn *netconn = (struct netconn *)pcbl->callback_arg;
