@@ -468,21 +468,21 @@ int32_t epoll_lwip_event_nolock(struct wakeup_poll *wakeup, struct epoll_event *
             continue;
         }
 
+        events[event_num].events = sock->events & sock->epoll_events;
+        events[event_num].data = sock->ep_data;
+        event_num++;
+
         if (sock->epoll_events & EPOLLET) {
             list_del_node_null(node);
             sock->events = 0;
         }
 
         /* EPOLLONESHOT: generate event after epoll_ctl add/mod event again
-           epoll_event set 0 avoid generating event util epoll_ctl set epoll_event a valu */
+           epoll_event set 0 avoid generating event util epoll_ctl reset epoll_event */
         if (sock->epoll_events & EPOLLONESHOT) {
             list_del_node_null(node);
             sock->epoll_events = 0;
         }
-
-        events[event_num].events = sock->events & sock->epoll_events;
-        events[event_num].data = sock->ep_data;
-        event_num++;
 
         if (event_num >= maxevents) {
             /* move list head after the current node, and start traversing from this node next time */
