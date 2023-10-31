@@ -15,6 +15,7 @@
 #include <stdbool.h>
 
 #include <lwip/ip_addr.h>
+#include <rte_ether.h>
 
 #include "lstack_protocol_stack.h"
 #include "gazelle_opt.h"
@@ -111,8 +112,7 @@ struct cfg_params {
     bool expand_send_ring;
     bool tuple_filter;
     int8_t bond_mode;
-    uint8_t bond_slave1_mac_addr[ETHER_ADDR_LEN];
-    uint8_t bond_slave2_mac_addr[ETHER_ADDR_LEN];
+    struct rte_ether_addr bond_slave_mac_addr[GAZELLE_MAX_BOND_NUM];
     bool use_sockmap;
     bool udp_enable;
     struct cfg_nic_params nic;

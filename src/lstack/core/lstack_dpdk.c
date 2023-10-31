@@ -496,46 +496,41 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     }
 
     if (bond_port) {
-        int slave_num = 2;
-        int32_t slave_port_id[2];
-        slave_port_id[0] = ethdev_port_id(get_global_cfg_params()->bond_slave1_mac_addr);
-	if (slave_port_id[0] < 0) {
-	    LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[0]);
-            return slave_port_id[0];
-        }
-
-        slave_port_id[1] = ethdev_port_id(get_global_cfg_params()->bond_slave2_mac_addr);
-	if (slave_port_id[1] < 0) {
-	    LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[1]);
-            return slave_port_id[1];
-        }
-
-        for (int i = 0; i < slave_num; i++) {
+        int32_t slave_port_id[GAZELLE_MAX_BOND_NUM];
+        for (int i = 0; i < GAZELLE_MAX_BOND_NUM; i++) {
+            if (rte_is_zero_ether_addr(&get_global_cfg_params()->bond_slave_mac_addr[i])) {
+                break;
+            }
+            slave_port_id[i] = ethdev_port_id(get_global_cfg_params()->bond_slave_mac_addr[i].addr_bytes);
+            if (slave_port_id[i] < 0) {
+                LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[1]);
+                return slave_port_id[i];
+            }
             ret = dpdk_ethdev_init(slave_port_id[i], 0);
             if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
                 return -1;
             }
             ret = rte_eth_promiscuous_enable(slave_port_id[i]);
-	    if (ret != 0) {
+            if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk slave enable promiscuous failed ret = %d\n", ret);
                 return -1;
             }
 
             ret = rte_eth_allmulticast_enable(slave_port_id[i]);
-	    if (ret != 0) {
+            if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk slave enable allmulticast failed ret = %d\n", ret);
                 return -1;
             }
 
             ret = rte_eth_bond_slave_add(port_id, slave_port_id[i]);
-	    if (ret != 0) {
+            if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk add slave port failed ret = %d\n", ret);
                 return -1;
             }
 
             ret = rte_eth_dev_start(slave_port_id[i]);
-	    if (ret != 0) {
+            if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk start slave port failed ret = %d\n", ret);
                 return -1;
             }
@@ -550,15 +545,15 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     if (bond_port) {
         struct rte_eth_dev_info slave_dev_info;
         int slave_id = rte_eth_bond_primary_get(port_id);
-	if (slave_id < 0) {
-	    LSTACK_LOG(ERR, LSTACK, "dpdk get bond primary port failed port = %d\n", slave_id);
-	    return slave_id;
-	}
+        if (slave_id < 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk get bond primary port failed port = %d\n", slave_id);
+            return slave_id;
+        }
         ret = rte_eth_dev_info_get(slave_id, &slave_dev_info);
-	if (ret != 0) {
-	    LSTACK_LOG(ERR, LSTACK, "dpdk get bond dev info failed ret = %d\n", ret);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk get bond dev info failed ret = %d\n", ret);
             return ret;
-	}
+        }
         dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
         dev_info.tx_offload_capa = slave_dev_info.tx_offload_capa;
         dev_info.reta_size = slave_dev_info.reta_size;

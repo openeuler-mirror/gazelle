@@ -1137,40 +1137,40 @@ static int32_t parse_bond_slave_mac(void)
         return 0;
     }
 
-    int32_t ret;
-    const char *slave_mac1 = NULL;
-    const char *slave_mac2 = NULL;
+    int32_t ret = 0;
+    const char *bond_slave_mac = NULL;
     const config_setting_t *devs = NULL;
 
-    devs = config_lookup(&g_config, "slave_mac1");
+    devs = config_lookup(&g_config, "bond_slave_mac");
     if (devs == NULL) {
         return -EINVAL;
     }
-    slave_mac1 = config_setting_get_string(devs);
-    if (slave_mac1 == NULL) {
+    bond_slave_mac = config_setting_get_string(devs);
+    if (bond_slave_mac == NULL) {
         return 0;
     }
 
-    devs = config_lookup(&g_config, "slave_mac2");
-    if (devs == NULL) {
-        return -EINVAL;
+    int32_t k = 0;
+    char *bond_slave_mac_tmp = strdup(bond_slave_mac);
+    char *tmp = NULL;
+    const char *delim = ";";
+    
+    char *mac_addr = strtok_s(bond_slave_mac_tmp, delim, &tmp);
+    while (mac_addr != NULL) {
+        if (k >= GAZELLE_MAX_BOND_NUM) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg: too many slave mac address. The maximum number of mac address is %d.\n",
+                GAZELLE_MAX_BOND_NUM);
+            return -EINVAL;
+        }
+        ret = str_to_eth_addr(mac_addr, g_config_params.bond_slave_mac_addr[k].addr_bytes);
+        if (ret != 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", mac_addr, ret);
+            return ret;
+        }
+        mac_addr = strtok_s(NULL, delim, &tmp);
+        k = k + 1;
     }
-    slave_mac2 = config_setting_get_string(devs);
-    if (slave_mac2 == NULL) {
-        return 0;
-    }
-
-    /* add dev */
-    ret = str_to_eth_addr(slave_mac1, g_config_params.bond_slave1_mac_addr);
-    if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac1, ret);
-        return ret;
-    }
-
-    ret = str_to_eth_addr(slave_mac2, g_config_params.bond_slave2_mac_addr);
-    if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac2, ret);
-    }
+    free(bond_slave_mac_tmp);
     return ret;
 }
 
