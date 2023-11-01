@@ -18,7 +18,7 @@
 
 #define GAZELLE_CLIENT_NUM_MIN           1
 #define GAZELLE_LOG_LEVEL_MAX            10
-
+#define GAZELLECTL_TIMEOUT               5000 // millisecond
 /* maybe it should be consistent with MEMP_NUM_TCP_PCB */
 #define GAZELLE_LSTACK_MAX_CONN          (20000 + 2000) // same as MAX_CLIENTS + RESERVED_CLIENTS in lwipopts.h
 
