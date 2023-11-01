@@ -110,7 +110,7 @@ int32_t dpdk_eal_init(void)
 {
     int32_t ret;
     struct cfg_params *global_params = get_global_cfg_params();
-    
+
     ret = rte_eal_init(global_params->dpdk_argc, global_params->dpdk_argv);
     if (ret < 0) {
         if (rte_errno == EALREADY) {
@@ -137,7 +137,7 @@ int32_t dpdk_eal_init(void)
 }
 
 struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
-    uint32_t mbuf_cache_size, uint16_t queue_id)
+    uint32_t mbuf_cache_size, uint16_t queue_id, unsigned numa_id)
 {
     int32_t ret;
     char pool_name[PATH_MAX];
@@ -145,12 +145,13 @@ struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
 
     ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
     if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d \n", ret);
         return NULL;
     }
 
     /* time stamp before pbuf_custom as priv_data */
     uint16_t private_size = RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
-    pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size, private_size, MBUF_SZ, rte_socket_id());
+    pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size, private_size, MBUF_SZ, numa_id);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
     }
@@ -611,7 +612,7 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t i
     int32_t ret;
 
     struct rte_mempool *rxtx_pktmbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx];
-    
+
     uint16_t socket_id = 0;
     struct cfg_params *cfg = get_global_cfg_params();
     if (!cfg->use_ltran && cfg->num_process == 1) {
@@ -664,7 +665,7 @@ int32_t dpdk_ethdev_start(void)
 int32_t dpdk_init_lstack_kni(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, 0, 0);
+    stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, 0, 0, rte_socket_id());
     if (stack_group->kni_pktmbuf_pool == NULL) {
         return -1;
     }

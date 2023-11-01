@@ -56,7 +56,7 @@ void dpdk_restore_pci(void);
 bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);
 uint16_t get_port_id(void);
 struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
-                                           uint32_t mbuf_cache_size, uint16_t queue_id);
+                                           uint32_t mbuf_cache_size, uint16_t queue_id, unsigned numa_id);
 
 void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
 int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num);
