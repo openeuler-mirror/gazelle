@@ -14,6 +14,7 @@
 #define _LSTACK_RTW_API_H_
 
 #include <sys/epoll.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 
 int rtw_socket(int domain, int type, int protocol);
@@ -44,4 +45,6 @@ int rtw_close(int s);
 int rtw_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 int rtw_epoll_create1(int flags);
 int rtw_epoll_create(int flags);
+int rtw_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+
 #endif /* _LSTACK_RTW_API_H_ */

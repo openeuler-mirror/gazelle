@@ -13,6 +13,7 @@
 #include <string.h>
 #include <securec.h>
 #include <sys/epoll.h>
+#include <sys/select.h>
 #include <time.h>
 #include <poll.h>
 #include <stdatomic.h>
@@ -870,3 +871,90 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
     return lwip_num + kernel_num;
 }
+
+static void select_set_revent_fdset(struct pollfd *fds, nfds_t nfds, fd_set *eventfds, uint32_t event)
+{
+    FD_ZERO(eventfds);
+
+    /* Set the fd_set parameter based on the actual revents. */
+    for (int i = 0; i < nfds; i++) {
+        if (fds[i].revents & event) {
+            FD_SET(fds[i].fd, eventfds);
+        }
+    }
+}
+
+static void fds_poll2select(struct pollfd *fds, nfds_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds)
+{
+    if (fds == NULL || nfds == 0) {
+        return;
+    }
+    
+    if (readfds) {
+        select_set_revent_fdset(fds, nfds, readfds, EPOLLIN);
+    }
+    if (writefds) {
+        select_set_revent_fdset(fds, nfds, writefds, EPOLLOUT);
+    }
+    if (exceptfds) {
+        select_set_revent_fdset(fds, nfds, exceptfds, EPOLLERR);
+    }
+}
+
+static inline int timeval_to_ms(struct timeval *timeval)
+{
+    if (timeval == NULL) {
+        return -1;
+    }
+
+    return (timeval->tv_sec * 1000 + timeval->tv_usec / 1000);
+}
+
+static nfds_t fds_select2poll(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct pollfd **fds)
+{
+    struct pollfd pollfds[FD_SETSIZE] = { 0 };
+    nfds_t nfds = 0;
+
+    for (int i = 0; i < maxfd; i++) {
+        if (readfds && FD_ISSET(i, readfds)) {
+            pollfds[nfds].events = POLLIN;
+        }
+        if (writefds && FD_ISSET(i, writefds)) {
+            pollfds[nfds].events |= POLLOUT;
+        }
+        if (exceptfds && FD_ISSET(i, exceptfds)) {
+            pollfds[nfds].events |= POLLERR;
+        }
+        if (pollfds[nfds].events > 0) {
+            pollfds[nfds].fd = i;
+            nfds++;
+        }
+    }
+
+    *fds = pollfds;
+    return nfds;
+}
+
+int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeval)
+{
+    if (maxfd == 0) {
+        return 0;
+    }
+
+    if (maxfd < 0 || maxfd > FD_SETSIZE || (readfds == NULL && writefds == NULL && exceptfds == NULL)) {
+        GAZELLE_RETURN(EINVAL);
+    }
+    
+    /* Convert the select parameter to the poll parameter. */
+    struct pollfd *fds = NULL;
+    nfds_t nfds = fds_select2poll(maxfd, readfds, writefds, exceptfds, &fds);
+    int timeout = timeval_to_ms(timeval);
+
+    int event_num = lstack_poll(fds, nfds, timeout);
+    
+    /* After poll, set select fd_set by fds.revents. */
+    fds_poll2select(fds, nfds, readfds, writefds, exceptfds);
+
+    return event_num;
+}
+

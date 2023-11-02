@@ -76,6 +76,7 @@ void wrap_api_init(void)
         g_wrap_api->epoll_ctl_fn     = rtc_epoll_ctl;
         g_wrap_api->epoll_create1_fn = rtc_epoll_create1;
         g_wrap_api->epoll_create_fn  = rtc_epoll_create;
+        g_wrap_api->select_fn        = rtc_select;
     } else {
         g_wrap_api->socket_fn        = rtw_socket;
         g_wrap_api->accept_fn        = rtw_accept;
@@ -103,6 +104,7 @@ void wrap_api_init(void)
         g_wrap_api->epoll_ctl_fn     = rtw_epoll_ctl;
         g_wrap_api->epoll_create1_fn = rtw_epoll_create1;
         g_wrap_api->epoll_create_fn  = rtw_epoll_create;
+        g_wrap_api->select_fn        = rtw_select;
     }
 }
 
@@ -609,6 +611,15 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
     return lstack_sigaction(signum, act, oldact);
 }
 
+static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    if (select_posix_path() == PATH_KERNEL) {
+        return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
+    }
+
+    return g_wrap_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
+}
+
 #define WRAP_VA_PARAM(_fd, _cmd, _lwip_fcntl, _fcntl_fn) \
     do { \
         unsigned long val; \
@@ -769,6 +780,10 @@ pid_t fork(void)
 {
     return lstack_fork();
 }
+int32_t select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    return do_select(nfds, readfds, writefds, exceptfds, timeout);
+}
 
 /*  --------------------------------------------------------
  *  -------  Compile mode replacement interface  -----------
@@ -897,4 +912,8 @@ int32_t __wrap_sigaction(int32_t signum, const struct sigaction *act, struct sig
 pid_t __wrap_fork(void)
 {
     return lstack_fork();
+}
+int32_t __wrap_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    return do_select(nfds, readfds, writefds, exceptfds, timeout);
 }

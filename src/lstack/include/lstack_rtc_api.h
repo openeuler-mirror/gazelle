@@ -13,6 +13,7 @@
 #ifndef _LSTACK_RTC_API_H_
 #define _LSTACK_RTC_API_H_
 #include <sys/epoll.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 
 /* don't include lwip/sockets.h, conflict with sys/socket.h */
@@ -51,5 +52,6 @@ int rtc_close(int s);
 int rtc_epoll_create(int flags);
 int rtc_epoll_create1(int flags);
 int rtc_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
+int rtc_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
 
 #endif /* __LSTACK_RTC_API_H_  */
