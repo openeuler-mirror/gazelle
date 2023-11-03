@@ -78,6 +78,7 @@ static int32_t parse_udp_enable(void);
 static int32_t parse_nic_rxqueue_size(void);
 static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
+static int32_t parse_nic_vlan_mode(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -138,6 +139,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
     { "nic_txqueue_size", parse_nic_txqueue_size},
     { "stack_thread_mode", parse_stack_thread_mode },
+    { "nic_vlan_mode", parse_nic_vlan_mode },
     { NULL,           NULL }
 };
 
@@ -1223,4 +1225,15 @@ static int32_t parse_stack_thread_mode(void)
     }
 
     return 0;
+}
+
+static int32_t parse_nic_vlan_mode(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.nic.vlan_mode, "nic_vlan_mode", 0, 0, 4094, ret);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid vlan mode value %d ret=%d. only support 0~4094\n", \
+                            g_config_params.nic.vlan_mode, ret);
+    }
+    return ret;
 }

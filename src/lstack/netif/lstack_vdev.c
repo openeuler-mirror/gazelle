@@ -20,6 +20,7 @@
 #include <rte_ethdev.h>
 #include <rte_gro.h>
 #include <rte_net.h>
+#include <netif/ethernet.h>
 
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"
@@ -83,12 +84,13 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
     }
 
     /* skip gro when tcp/ip cksum offloads disable */
-    if (get_protocol_stack_group()->rx_offload == 0) {
+    if (get_protocol_stack_group()->rx_offload == 0 || get_global_cfg_params()->nic.vlan_mode > 0) {
         return pkt_num;
     }
 
     for (uint32_t i = 0; i < pkt_num; i++) {
         struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
+
         if (unlikely(RTE_BE16(RTE_ETHER_TYPE_IPV4) != ethh->ether_type)) {
             continue;
         }
