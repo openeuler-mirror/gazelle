@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <sched.h>
 
+#include <rte_eth_bond.h>
 #include <lwip/lwipsock.h>
 #include <lwip/posix_api.h>
 #include <lwip/inet.h>
@@ -70,8 +71,8 @@ static int32_t parse_process_numa(void);
 static int32_t parse_process_index(void);
 static int32_t parse_seperate_sendrecv_args(void);
 static int32_t parse_tuple_filter(void);
-static int32_t parse_use_bond4(void);
-static int32_t parse_bond4_slave_mac(void);
+static int32_t parse_bond_mode(void);
+static int32_t parse_bond_slave_mac(void);
 static int32_t parse_use_sockmap(void);
 static int32_t parse_udp_enable(void);
 static int32_t parse_nic_rxqueue_size(void);
@@ -130,8 +131,8 @@ static struct config_vector_t g_config_tbl[] = {
     { "process_numa", parse_process_numa },
     { "process_idx", parse_process_index },
     { "tuple_filter", parse_tuple_filter },
-    { "use_bond4", parse_use_bond4 },
-    { "bond4_slave_mac", parse_bond4_slave_mac },
+    { "bond_mode", parse_bond_mode },
+    { "bond_slave_mac", parse_bond_slave_mac },
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
@@ -1114,16 +1115,25 @@ static int32_t parse_udp_enable(void)
     return ret;
 }
 
-static int32_t parse_use_bond4(void)
+static int32_t parse_bond_mode(void)
 {
-    int32_t ret;
-    PARSE_ARG(g_config_params.use_bond4, "use_bond4", 0, 0, 1, ret);
-    return ret;
+    const config_setting_t *bond_mode = NULL;
+    bond_mode = config_lookup(&g_config, "bond_mode");
+    g_config_params.bond_mode = config_setting_get_int(bond_mode);
+    if (g_config_params.bond_mode == -1) {
+        return 0;
+    }
+    if (g_config_params.bond_mode != BONDING_MODE_8023AD && g_config_params.bond_mode != BONDING_MODE_ALB) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid bond mode = %d. only supports bond mode = 4,6.\n",
+            g_config_params.bond_mode);
+        return -EINVAL;
+    }
+    return 0;
 }
 
-static int32_t parse_bond4_slave_mac(void)
+static int32_t parse_bond_slave_mac(void)
 {
-    if (g_config_params.use_bond4 == 0) {
+    if (g_config_params.bond_mode == -1) {
         return 0;
     }
 
@@ -1151,13 +1161,13 @@ static int32_t parse_bond4_slave_mac(void)
     }
 
     /* add dev */
-    ret = str_to_eth_addr(slave_mac1, g_config_params.bond4_slave1_mac_addr);
+    ret = str_to_eth_addr(slave_mac1, g_config_params.bond_slave1_mac_addr);
     if (ret != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac1, ret);
         return ret;
     }
 
-    ret = str_to_eth_addr(slave_mac2, g_config_params.bond4_slave2_mac_addr);
+    ret = str_to_eth_addr(slave_mac2, g_config_params.bond_slave2_mac_addr);
     if (ret != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", slave_mac2, ret);
     }
