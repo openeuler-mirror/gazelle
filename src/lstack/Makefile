@@ -90,6 +90,7 @@ ifeq ($(DPDK_VERSION_1911), 1)
 	              $(LIB_PATH)/librte_pmd_bond.so \
 	              $(LIB_PATH)/librte_pmd_hinic.so \
 	              $(LIB_PATH)/librte_pmd_ixgbe.so \
+	              $(LIB_PATH)/librte_pmd_mlx5.so \
 	              $(LIB_PATH)/librte_pmd_virtio.so
 	ifneq ($(ARCH), loongarch64)
 		LIBRTE_LIB += $(LIB_PATH)/librte_pmd_i40e.so
@@ -99,6 +100,7 @@ else
 	              $(LIB_PATH)/librte_net_bond.so \
 	              $(LIB_PATH)/librte_net_hinic.so \
 	              $(LIB_PATH)/librte_net_ixgbe.so \
+	              $(LIB_PATH)/librte_net_mlx5.so \
 	              $(LIB_PATH)/librte_net_virtio.so \
 	              $(LIB_PATH)/librte_telemetry.so \
 	              $(LIB_PATH)/librte_pcapng.so
