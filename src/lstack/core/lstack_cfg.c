@@ -1119,6 +1119,11 @@ static int32_t parse_bond_mode(void)
 {
     const config_setting_t *bond_mode = NULL;
     bond_mode = config_lookup(&g_config, "bond_mode");
+    if (bond_mode == NULL) {
+        g_config_params.bond_mode = -1;
+        return 0;
+    }
+
     g_config_params.bond_mode = config_setting_get_int(bond_mode);
     if (g_config_params.bond_mode == -1) {
         return 0;
