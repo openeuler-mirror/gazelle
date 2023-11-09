@@ -142,10 +142,11 @@ static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkt
         stack->stats.tx_prepare_fail++;
         LSTACK_LOG(INFO, LSTACK, "rte_eth_tx_prepare failed\n");
     }
+    const uint32_t tbegin = sys_now();
 
     do {
         sent_pkts += rte_eth_tx_burst(stack->port_id, stack->queue_id, &pkts[sent_pkts], nr_pkts - sent_pkts);
-    } while (sent_pkts < nr_pkts);
+    } while (sent_pkts < nr_pkts && (ENQUEUE_RING_RETRY_TIMEOUT > sys_now() - tbegin));
 
     return sent_pkts;
 }
