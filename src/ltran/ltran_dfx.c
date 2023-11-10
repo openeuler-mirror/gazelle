@@ -846,6 +846,11 @@ static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_d
     printf("ip_fw_dgm: %u\n",        snmp->ip_fw_dgm);
     printf("ip_in_recv: %u\n",       snmp->ip_in_recv);
 
+    printf("udp_in_datagrams: %u\n", snmp->udp_in_datagrams);
+    printf("udp_no_ports: %u\n",     snmp->udp_no_ports);
+    printf("udp_in_errors: %u\n",    snmp->udp_in_errors);
+    printf("udp_out_datagrams: %u\n", snmp->udp_out_datagrams);
+    
     printf("tcp_act_open: %u\n",     snmp->tcp_act_open);
     printf("tcp_passive_open: %u\n", snmp->tcp_passive_open);
     printf("tcp_attempt_fail: %u\n", snmp->tcp_attempt_fail);
