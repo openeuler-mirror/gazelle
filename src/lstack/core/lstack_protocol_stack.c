@@ -852,9 +852,9 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
             return;
         }
     }
-    ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+    ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
     if (ret != 0) {
-        stack->stats.rx_allocmbuf_fail++;
+        cur_stack->stats.rx_allocmbuf_fail++;
         return;
     }
     copy_mbuf(mbuf_copy, mbuf);
