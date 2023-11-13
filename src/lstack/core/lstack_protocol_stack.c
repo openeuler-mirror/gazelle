@@ -523,6 +523,46 @@ static void gazelle_listen_thread(void *arg)
     recv_pkts_from_other_process(cfg_param->process_idx, arg);
 }
 
+int32_t stack_group_init_mempool(void)
+{
+    struct cfg_params *global_cfg_parmas = get_global_cfg_params();
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    struct rte_mempool *rxtx_mbuf = NULL;
+    uint32_t cpu_id = 0;
+    unsigned numa_id = 0;
+    int queue_id = 0;
+
+    LSTACK_LOG(INFO, LSTACK,
+        "config::num_cpu=%d num_process=%d \n", global_cfg_parmas->num_cpu, global_cfg_parmas->num_process);
+
+    uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
+    
+    for (int cpu_idx = 0; cpu_idx < global_cfg_parmas->num_cpu; cpu_idx++) {
+        cpu_id = global_cfg_parmas->cpus[cpu_idx];
+        numa_id = numa_node_of_cpu(cpu_id);
+        
+        for (int process_idx = 0; process_idx < global_cfg_parmas->num_process; process_idx++) {
+            queue_id = cpu_idx * global_cfg_parmas->num_process + process_idx;
+            if (queue_id >= PROTOCOL_STACK_MAX) {
+                LSTACK_LOG(ERR, LSTACK, "index is over\n");
+                return -1;
+            }
+            
+            rxtx_mbuf = create_pktmbuf_mempool(
+                "rxtx_mbuf", total_mbufs / stack_group->stack_num, RXTX_CACHE_SZ, queue_id, numa_id);
+            if (rxtx_mbuf == NULL) {
+                LSTACK_LOG(ERR, LSTACK, "cpuid=%u, numid=%d , rxtx_mbuf idx= %d create_pktmbuf_mempool fail\n",
+                    cpu_id, numa_id, queue_id);
+                return -1;
+            }
+            
+            get_protocol_stack_group()->total_rxtx_pktmbuf_pool[queue_id] = rxtx_mbuf;
+        }
+    }
+
+    return 0;
+}
+
 int32_t stack_group_init(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
@@ -542,14 +582,8 @@ int32_t stack_group_init(void)
     stack_group->stack_setup_fail = 0;
 
     if (get_global_cfg_params()->is_primary) {
-        uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
-        for (uint16_t idx = 0; idx < get_global_cfg_params()->tot_queue_num; idx++) {
-            struct rte_mempool* rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf",
-                total_mbufs / stack_group->stack_num, RXTX_CACHE_SZ, idx);
-            if (rxtx_mbuf == NULL) {
-                return -1;
-            }
-            get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx] = rxtx_mbuf;
+        if (stack_group_init_mempool() != 0) {
+            return -1;
         }
     }
 
@@ -970,7 +1004,7 @@ void stack_recvlist_count(struct rpc_msg *msg)
     list_for_each_safe(node, temp, list) {
         count++;
     }
-    
+
     msg->result = count;
 }
 
