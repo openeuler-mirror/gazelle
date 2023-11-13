@@ -214,6 +214,11 @@ int rtw_poll(struct pollfd *fds, nfds_t nfds, int timeout)
     return lstack_poll(fds, nfds, timeout);
 }
 
+int rtw_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    return lstack_select(nfds, readfds, writefds, exceptfds, timeout);
+}
+
 int rtw_close(int s)
 {
     struct lwip_sock *sock = get_socket(s);

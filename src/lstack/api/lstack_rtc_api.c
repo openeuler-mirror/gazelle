@@ -24,6 +24,13 @@
 
 int rtc_poll(struct pollfd *fds, nfds_t nfds, int timeout)
 {
+    LSTACK_LOG(ERR, LSTACK, "rtc_poll: rtc currently does not support poll\n");
+    return -1;
+}
+
+int rtc_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    LSTACK_LOG(ERR, LSTACK, "rtc_select: rtc currently does not support select\n");
     return -1;
 }
 

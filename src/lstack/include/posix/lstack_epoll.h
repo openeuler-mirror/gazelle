@@ -78,6 +78,7 @@ int32_t lstack_rtc_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_
 int32_t lstack_rtw_epoll_wait(int32_t epfd, struct epoll_event *events, int32_t maxevents, int32_t timeout);
 int32_t lstack_rtc_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout);
 int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout);
+int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeval);
 
 #ifdef __cplusplus
 }
