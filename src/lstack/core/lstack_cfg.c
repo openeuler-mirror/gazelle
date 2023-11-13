@@ -1191,6 +1191,10 @@ static int32_t parse_nic_rxqueue_size(void)
     int32_t ret;
     PARSE_ARG(g_config_params.nic.rxqueue_size, "nic_rxqueue_size", 4096,
               NIC_QUEUE_SIZE_MIN, NIC_QUEUE_SIZE_MAX, ret);
+    if (!rte_is_power_of_2(g_config_params.nic.rxqueue_size)) {
+        LSTACK_LOG(ERR, LSTACK, "nic queue size only support power of two\n");
+        return -1;
+    }
     return ret;
 }
 
@@ -1199,6 +1203,10 @@ static int32_t parse_nic_txqueue_size(void)
     int32_t ret;
     PARSE_ARG(g_config_params.nic.txqueue_size, "nic_txqueue_size", 2048,
               NIC_QUEUE_SIZE_MIN, NIC_QUEUE_SIZE_MAX, ret);
+    if (!rte_is_power_of_2(g_config_params.nic.txqueue_size)) {
+        LSTACK_LOG(ERR, LSTACK, "nic queue size only support power of two\n");
+        return -1;
+    }
     return ret;
 }
 
