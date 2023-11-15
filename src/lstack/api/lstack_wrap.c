@@ -219,7 +219,20 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
 
     if (match_host_addr(((struct sockaddr_in *)name)->sin_addr.s_addr)) {
         /* maybe kni addr */
-        posix_api->bind_fn(s, name, namelen);
+        if (posix_api->bind_fn(s, name, namelen) != 0) {
+            SET_CONN_TYPE_LIBOS(sock->conn);
+        } else {
+            /* reuse the port allocated by kernel when port == 0 */
+            if (((struct sockaddr_in *)name)->sin_port == 0) {
+                struct sockaddr_in kerneladdr;
+                socklen_t len = sizeof(kerneladdr);
+                if (posix_api->getsockname_fn(s, (struct sockaddr *)&kerneladdr, &len) < 0) {
+                    LSTACK_LOG(ERR, LSTACK, "kernel getsockname failed, fd=%d, errno=%d\n", s, errno);
+                    return -1;
+                }
+                ((struct sockaddr_in *)name)->sin_port = kerneladdr.sin_port;
+            }
+        }
         return g_wrap_api->bind_fn(s, name, namelen);
     } else {
         SET_CONN_TYPE_HOST(sock->conn);
