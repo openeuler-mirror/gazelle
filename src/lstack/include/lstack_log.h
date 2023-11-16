@@ -32,7 +32,7 @@ do { \
 
 static inline void lstack_prelog_init(const char *name)
 {
-    openlog(name, LOG_CONS | LOG_PID, LOG_USER);
+    openlog(name, LOG_PERROR | LOG_PID, LOG_USER);
 }
 static inline void lstack_prelog_uninit(void)
 {
