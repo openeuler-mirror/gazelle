@@ -809,10 +809,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
     struct rte_mbuf *pre_mbuf = NULL;
     struct rte_mbuf *first_mbuf = NULL;
     struct pbuf *first_pbuf = pbuf;
-    uint16_t header_len = 0;
-    if (likely(first_pbuf != NULL)) {
-        header_len = first_pbuf->l2_len + first_pbuf->l3_len + first_pbuf->l4_len;
-    }
+    void *buf_addr;
 
     while (likely(pbuf != NULL)) {
         struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
@@ -821,26 +818,23 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
         mbuf->pkt_len = pbuf->tot_len;
         mbuf->ol_flags = pbuf->ol_flags;
         mbuf->next = NULL;
+        buf_addr = rte_pktmbuf_mtod(mbuf, void *);
+
+        /*
+         * |rte_mbuf | mbuf_private | data_off | data |
+         *                          ^          ^
+         *                       buf_addr    payload
+         * m->buf_addr pointer pbuf->payload
+         */
+        mbuf->data_off += (uint8_t *)pbuf->payload - (uint8_t *)buf_addr;
 
         if (first_mbuf == NULL) {
             first_mbuf = mbuf;
             first_pbuf = pbuf;
             first_mbuf->nb_segs = 1;
-            if (pbuf->header_off > 0) {
-                mbuf->data_off -= header_len;
-                pbuf->header_off = 0;
-            }
         } else {
             first_mbuf->nb_segs++;
             pre_mbuf->next = mbuf;
-            if (pbuf->header_off == 0) {
-                mbuf->data_off += header_len;
-                pbuf->header_off = header_len;
-            }
-        }
-
-        if (first_pbuf->l4_len == 8) {
-            mbuf->data_off += 12;
         }
 
         if (likely(first_mbuf->pkt_len > MBUF_MAX_LEN)) {
