@@ -778,7 +778,13 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
         /* copy arp into other stack */
         if (!use_ltran_flag) {
             struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
-            if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
+	    u16_t type;
+	    type = ethh->ether_type;
+	    if (type == PP_HTONS(ETHTYPE_VLAN)) {
+		struct eth_vlan_hdr *vlan = (struct eth_vlan_hdr *)(((char *)ethh) + SIZEOF_ETH_HDR);
+		type = vlan->tpid;
+	    }
+            if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == type)) {
                 stack_broadcast_arp(stack->pkts[i], stack);
                 /* copy arp into other process */
                 transfer_arp_to_other_process(stack->pkts[i]);

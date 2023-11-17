@@ -196,6 +196,10 @@ void do_lwip_init_sock(int32_t fd)
     (void)replenish_send_idlembuf(stack, sock);
 
     sock->stack = stack;
+    if (get_global_cfg_params()->nic.vlan_mode > 0 && get_global_cfg_params()->nic.vlan_mode < 4095) {
+	sock->conn->pcb.udp->netif_hints.tci = get_global_cfg_params()->nic.vlan_mode;
+    }
+
     init_list_node_null(&sock->recv_list);
     init_list_node_null(&sock->event_list);
 }

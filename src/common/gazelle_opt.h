@@ -52,7 +52,9 @@
 #define STACK_THREAD_DEFAULT        4
 #define STACK_NIC_READ_DEFAULT      128
 
-#define MBUF_MAX_DATA_LEN           1460
+#define MTU_DEFAULT_DATA_LEN        1460
+#define VLAN_HEAD_LEN               4
+#define MBUF_MAX_DATA_LEN           (MTU_DEFAULT_DATA_LEN - VLAN_HEAD_LEN)
 
 #define DPDK_PKT_BURST_SIZE         512
 
