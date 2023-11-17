@@ -125,12 +125,14 @@ int32_t dpdk_eal_init(void)
         LSTACK_PRE_LOG(LSTACK_INFO, "dpdk_eal_init success\n");
     }
 
-    ret = rte_pdump_init();
-    if (ret < 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "rte_pdump_init failed init, rte_errno %d\n", rte_errno);
-	/* We do not care whether the pdump is successfully loaded. So, just print an alarm. */
-    } else {
-        LSTACK_PRE_LOG(LSTACK_INFO, "rte_pdump_init success\n");
+    if (get_global_cfg_params()->is_primary) {
+        ret = rte_pdump_init();
+        if (ret < 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "rte_pdump_init failed init, rte_errno %d\n", rte_errno);
+	    /* We do not care whether the pdump is successfully loaded. So, just print an alarm. */
+        } else {
+            LSTACK_PRE_LOG(LSTACK_INFO, "rte_pdump_init success\n");
+        }
     }
 
     return ret;

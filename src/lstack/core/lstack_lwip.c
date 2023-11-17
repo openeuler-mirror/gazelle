@@ -1220,7 +1220,7 @@ uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn,
         conn[conn_num].l_port = pcbl->local_port;
         conn[conn_num].tcp_sub_state = pcbl->state;
         struct netconn *netconn = (struct netconn *)pcbl->callback_arg;
-        conn[conn_num].fd = netconn->socket;
+	conn[conn_num].fd = netconn != NULL ? netconn->socket : -1;
         if (netconn != NULL && netconn->acceptmbox != NULL) {
             conn[conn_num].recv_cnt = rte_ring_count(netconn->acceptmbox->ring);
         }
