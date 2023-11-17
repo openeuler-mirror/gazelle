@@ -31,7 +31,7 @@ if($ENV{DPDK_VERSION_1911})
     set(DPDK_DIR /usr/include/dpdk)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDPDK_VERSION_1911=1")
     set(DPDK_LINK_FLAGS "-Wl,-lrte_pmd_bond -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe \
-    -Wl,-lrte_pmd_pcap -Wl,-lrte_pmd_virtio -Wl, -lrte_pmd_mlx5")
+    -Wl,-lrte_pmd_pcap -Wl,-lrte_pmd_virtio -Wl,-lrte_pmd_mlx5")
     if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64")
         set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lrte_pmd_i40e")
     endif()
