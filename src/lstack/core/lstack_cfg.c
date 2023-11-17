@@ -1026,6 +1026,7 @@ static int32_t parse_seperate_sendrecv_args(void)
 static int32_t parse_num_process(void)
 {
     if (g_config_params.use_ltran) {
+        g_config_params.num_process = 1;
         return 0;
     }
 
