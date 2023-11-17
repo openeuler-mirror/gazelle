@@ -370,7 +370,7 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
         return posix_api->socket_fn(domain, type, protocol);
     }
 
-    if ((domain != AF_INET && domain != AF_UNSPEC) ||
+    if ((domain != AF_INET && domain != AF_UNSPEC && domain != AF_INET6) ||
         ((domain == AF_INET6) && !get_global_cfg_params()->ipv6_enable) ||
         ((type & SOCK_DGRAM) && !get_global_cfg_params()->udp_enable)) {
         return posix_api->socket_fn(domain, type, protocol);
