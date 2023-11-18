@@ -910,9 +910,9 @@ static inline int timeval_to_ms(struct timeval *timeval)
     return (timeval->tv_sec * 1000 + timeval->tv_usec / 1000);
 }
 
-static nfds_t fds_select2poll(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct pollfd **fds)
+static nfds_t fds_select2poll(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct pollfd *fds)
 {
-    struct pollfd pollfds[FD_SETSIZE] = { 0 };
+    struct pollfd *pollfds = fds;
     nfds_t nfds = 0;
 
     for (int i = 0; i < maxfd; i++) {
@@ -930,8 +930,6 @@ static nfds_t fds_select2poll(int maxfd, fd_set *readfds, fd_set *writefds, fd_s
             nfds++;
         }
     }
-
-    *fds = pollfds;
     return nfds;
 }
 
@@ -946,8 +944,8 @@ int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfd
     }
     
     /* Convert the select parameter to the poll parameter. */
-    struct pollfd *fds = NULL;
-    nfds_t nfds = fds_select2poll(maxfd, readfds, writefds, exceptfds, &fds);
+    struct pollfd fds[FD_SETSIZE] = { 0 };
+    nfds_t nfds = fds_select2poll(maxfd, readfds, writefds, exceptfds, fds);
     int timeout = timeval_to_ms(timeval);
 
     int event_num = lstack_poll(fds, nfds, timeout);
