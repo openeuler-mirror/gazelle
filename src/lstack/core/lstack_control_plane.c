@@ -134,11 +134,13 @@ static int32_t msg_proc_init(enum request_type rqt_type, struct reg_request_msg 
 
     ret = strncpy_s(conf->file_prefix, PATH_MAX, global_params->sec_attach_arg.file_prefix, PATH_MAX - 1);
     if (ret != EOK) {
+        LSTACK_LOG(ERR, LSTACK, "strncpy_s fail ret=%d \n", ret);
         return ret;
     }
 
     ret = memcpy_s(conf->mac_addr, ETHER_ADDR_LEN, global_params->mac_addr, ETHER_ADDR_LEN);
     if (ret != EOK) {
+        LSTACK_LOG(ERR, LSTACK, "memcpy_s fail ret=%d \n", ret);
         return ret;
     }
     switch (rqt_type) {
@@ -153,14 +155,17 @@ static int32_t msg_proc_init(enum request_type rqt_type, struct reg_request_msg 
             conf->argc = 0;
             ret = gazelle_copy_param(OPT_SOCKET_MEM, true, (int32_t *)&conf->argc, conf->argv);
             if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "gazelle_copy_param OPT_SOCKET_MEM fail ret=%d \n", ret);
                 return ret;
             }
             ret = gazelle_copy_param(OPT_FILE_PREFIX, true, (int32_t *)&conf->argc, conf->argv);
             if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "gazelle_copy_param OPT_FILE_PREFIX fail ret=%d \n", ret);
                 return ret;
             }
             ret = gazelle_copy_param(OPT_LEGACY_MEM, false, (int32_t *)&conf->argc, conf->argv);
             if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "gazelle_copy_param OPT_LEGACY_MEM fail ret=%d \n", ret);
                 return ret;
             }
 
@@ -494,6 +499,7 @@ int32_t control_init_client(bool is_reconnect)
 
     ret = client_reg_proc_memory(is_reconnect);
     if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "client_reg_proc_memory ret=%d \n", ret);
         posix_api->close_fn(g_data_fd);
         g_data_fd = -1;
         return -1;
@@ -501,6 +507,7 @@ int32_t control_init_client(bool is_reconnect)
 
     ret = client_reg_proc_attach(is_reconnect);
     if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "client_reg_proc_memory ret=%d \n", ret);
         posix_api->close_fn(g_data_fd);
         g_data_fd = -1;
         return -1;
@@ -636,12 +643,14 @@ static int32_t client_reg_proc_reconnect(int32_t epfd)
     /* longterm connect g_data_fd; init process info */
     ret = control_init_client(true);
     if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "control_init_client fail ret=%d\n", ret);
         return -1;
     }
     sockfd = g_data_fd;
 
     ret = thread_register();
     if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "thread_register fail ret=%d\n", ret);
         posix_api->close_fn(sockfd);
         g_data_fd = -1;
         return -1;
