@@ -68,6 +68,7 @@ struct cfg_nic_params {
 
 struct cfg_params {
     ip4_addr_t host_addr;
+    ip6_addr_t host_addr6;
     ip4_addr_t netmask;
     ip4_addr_t gateway_addr;
     uint8_t mac_addr[ETHER_ADDR_LEN];
@@ -116,6 +117,7 @@ struct cfg_params {
     struct rte_ether_addr bond_slave_mac_addr[GAZELLE_MAX_BOND_NUM];
     bool use_sockmap;
     bool udp_enable;
+    bool ipv6_enable;
     struct cfg_nic_params nic;
     bool stack_mode_rtc;
 };

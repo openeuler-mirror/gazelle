@@ -763,20 +763,33 @@ int32_t init_dpdk_ethdev(void)
     return 0;
 }
 
-bool port_in_stack_queue(uint32_t src_ip, uint32_t dst_ip, uint16_t src_port, uint16_t dst_port)
+bool port_in_stack_queue(ip_addr_t src_ip, ip_addr_t dst_ip, uint16_t src_port, uint16_t dst_port)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     if (stack_group->reta_mask == 0 || stack_group->nb_queues <= 1) {
         return true;
     }
 
-    struct rte_ipv4_tuple tuple = {0};
-    tuple.src_addr = rte_be_to_cpu_32(src_ip);
-    tuple.dst_addr = rte_be_to_cpu_32(dst_ip);
-    tuple.sport = src_port;
-    tuple.dport = dst_port;
-
-    uint32_t hash = rte_softrss((uint32_t *)&tuple, RTE_THASH_V4_L4_LEN, g_default_rss_key);
+    union rte_thash_tuple tuple;
+    uint32_t hash = 0;
+    if (IP_IS_V4_VAL(src_ip)) {
+        tuple.v4.src_addr = rte_be_to_cpu_32(ip_2_ip4(&src_ip)->addr);
+        tuple.v4.dst_addr = rte_be_to_cpu_32(ip_2_ip4(&dst_ip)->addr);
+        tuple.v4.sport = src_port;
+        tuple.v4.dport = dst_port;
+        hash = rte_softrss((uint32_t *)&tuple, RTE_THASH_V4_L4_LEN, g_default_rss_key);
+    } else {
+        int i;
+        for (i = 0; i < 4; i++) {
+            *((uint32_t *)tuple.v6.src_addr + i) =
+                rte_be_to_cpu_32(*((const uint32_t *)src_ip.u_addr.ip6.addr + i));
+            *((uint32_t *)tuple.v6.dst_addr + i) =
+                rte_be_to_cpu_32(*((const uint32_t *)dst_ip.u_addr.ip6.addr + i));
+        }
+        tuple.v6.sport = src_port;
+        tuple.v6.dport = dst_port;
+        hash = rte_softrss((uint32_t *)&tuple, RTE_THASH_V6_L4_LEN, g_default_rss_key);
+    }
 
     uint32_t reta_index = hash & stack_group->reta_mask;
 
