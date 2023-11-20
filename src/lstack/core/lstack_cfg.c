@@ -946,6 +946,7 @@ static int32_t parse_conf_file(const char *path)
     int32_t ret;
 
     if (realpath(path, real_path) == NULL) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "Config path error. Errno: %d. Please check conf file path: %s\n", errno, path);
         return -1;
     }
 
@@ -953,7 +954,7 @@ static int32_t parse_conf_file(const char *path)
 
     ret = config_read_file(&g_config, real_path);
     if (ret == 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "Config file path error, Please check conf file path.\n");
+        LSTACK_PRE_LOG(LSTACK_ERR, "Read config file \"%s\" error: %s\n", real_path, config_error_text(&g_config));
         config_destroy(&g_config);
         return -EINVAL;
     }
@@ -961,7 +962,7 @@ static int32_t parse_conf_file(const char *path)
     for (int32_t i = 0; g_config_tbl[i].name && g_config_tbl[i].f; ++i) {
         ret = g_config_tbl[i].f();
         if (ret != 0) {
-            LSTACK_PRE_LOG(LSTACK_ERR, "error parsing parameter '%s' ret=%d\n.", g_config_tbl[i].name, ret);
+            LSTACK_PRE_LOG(LSTACK_ERR, "error parsing parameter '%s' ret=%d.\n", g_config_tbl[i].name, ret);
             config_destroy(&g_config);
             return ret;
         }
