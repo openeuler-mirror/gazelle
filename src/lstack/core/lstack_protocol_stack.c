@@ -325,6 +325,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
 
     stack->epollfd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
     if (stack->epollfd < 0) {
+        LSTACK_LOG(ERR, LSTACK, "kernel epoll_create failed\n");
         return -1;
     }
 
@@ -349,10 +350,12 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
     }
 
     if (pktmbuf_pool_init(stack, stack_group->stack_num) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "pktmbuf_pool_init failed\n");
         return -1;
     }
 
     if (create_shared_ring(stack) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "create_shared_ring failed\n");
         return -1;
     }
 
@@ -583,6 +586,7 @@ int32_t stack_group_init(void)
 
     if (get_global_cfg_params()->is_primary) {
         if (stack_group_init_mempool() != 0) {
+            LSTACK_LOG(ERR, LSTACK, "stack group init mempool failed\n");
             return -1;
         }
     }
@@ -789,7 +793,8 @@ void stack_getsockopt(struct rpc_msg *msg)
     msg->result = lwip_getsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
         msg->args[MSG_ARG_3].p, msg->args[MSG_ARG_4].p);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d, level %d, optname %d, fail %ld\n", get_stack_tid(),
+                   msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i, msg->result);
     }
 }
 
@@ -798,7 +803,8 @@ void stack_setsockopt(struct rpc_msg *msg)
     msg->result = lwip_setsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
         msg->args[MSG_ARG_3].cp, msg->args[MSG_ARG_4].socklen);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d, level %d, optname %d, fail %ld\n", get_stack_tid(),
+                   msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i, msg->result);
     }
 }
 
@@ -834,7 +840,7 @@ void stack_send(struct rpc_msg *msg)
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
-        LSTACK_LOG(ERR, LSTACK, "stack_send: sock error!\n");
+        LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
         rpc_msg_free(msg);
         return;
     }
