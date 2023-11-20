@@ -335,14 +335,15 @@ static int32_t lstack_req_mode_process(int32_t fd, const struct gazelle_stat_msg
         case GAZELLE_STAT_LSTACK_LOG_LEVEL_SET:
             handle_resp_lstack_transfer(req_msg, -1);
             break;
-        case GAZELLE_STAT_LSTACK_SHOW_RATE:
+        case GAZELLE_STAT_LTRAN_SHOW_LB_RATE:
             handle_resp_lstack_total(req_msg, fd);
             break;
         case GAZELLE_STAT_LSTACK_SHOW:
             handle_resp_lstack_total(req_msg, fd);
             handle_resp_lstack_transfer(req_msg, fd);
             break;
-        case GAZELLE_STAT_LSTACK_SHOW_SNMP:  // fall through
+	case GAZELLE_STAT_LSTACK_SHOW_RATE:  // fall through
+        case GAZELLE_STAT_LSTACK_SHOW_SNMP:
         case GAZELLE_STAT_LSTACK_SHOW_CONN:
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
         case GAZELLE_STAT_LSTACK_LOW_POWER_MDF:

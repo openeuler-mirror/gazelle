@@ -25,6 +25,7 @@
 enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LTRAN_SHOW = 0,
     GAZELLE_STAT_LTRAN_SHOW_RATE,
+    GAZELLE_STAT_LTRAN_SHOW_LB_RATE,
     GAZELLE_STAT_LTRAN_SHOW_INSTANCE,
     GAZELLE_STAT_LTRAN_SHOW_BURST,
     GAZELLE_STAT_LTRAN_SHOW_LATENCY,
@@ -78,6 +79,18 @@ struct gazelle_wakeup_stat {
     uint64_t kernel_events;
 };
 
+struct gazelle_stack_aggregate_stats {
+    /* 0: RX, 1: TX, 2: APP_TX */
+    uint32_t size_1_64[3];
+    uint32_t size_65_512[3];
+    uint32_t size_513_1460[3];
+    uint32_t size_1461_8192[3];
+    uint32_t size_8193_max[3];
+
+    uint64_t rx_bytes;
+    uint64_t tx_bytes;
+};
+
 struct gazelle_stat_pkts {
     uint16_t conn_num;
     uint32_t mempool_freecnt;
@@ -86,6 +99,7 @@ struct gazelle_stat_pkts {
     uint64_t call_alloc_fail;
     struct gazelle_stack_stat stack_stat;
     struct gazelle_wakeup_stat wakeup_stat;
+    struct gazelle_stack_aggregate_stats aggregate_stats;
 };
 
 /* same as define in lwip/stats.h - struct stats_mib2 */
@@ -218,23 +232,12 @@ struct nic_eth_xstats {
     uint16_t port_id;
 };
 
-struct gazelle_stack_aggregate_stats {
-    /* 0: RX, 1: TX, 2: APP_TX */
-    uint32_t size_1_64[3];
-    uint32_t size_65_512[3];
-    uint32_t size_513_1460[3];
-    uint32_t size_1461_8192[3];
-    uint32_t size_8193_max[3];
-
-    uint64_t rx_bytes;
-    uint64_t tx_bytes;
-};
-
 struct gazelle_stack_dfx_data {
     /* indicates whether the current message is the last */
     uint32_t eof;
     uint32_t tid;
     int32_t loglevel;
+    uint32_t stack_id;
     struct gazelle_stat_low_power_info low_power_info;
 
     union lstack_msg {
@@ -243,7 +246,6 @@ struct gazelle_stack_dfx_data {
         struct gazelle_stat_lstack_conn conn;
         struct gazelle_stat_lstack_snmp snmp;
         struct nic_eth_xstats nic_xstats;
-        struct gazelle_stack_aggregate_stats aggregate_stats;
     } data;
 };
 
