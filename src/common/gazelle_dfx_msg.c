@@ -32,16 +32,16 @@ int read_specied_len(int fd, char *buf, size_t target_size)
             printf("read_specied_len:: poll ret=%d \n", ret);
             return -1;
         } else if (ret == 0) {
-            printf("read_specied_len:: time out");
+            printf("read_specied_len:: time out \n");
             return -1;
         }
         if (fds[0].revents & POLLIN) {
             int n = read(fd, buf + total_read, target_size - total_read);
             if (n < 0) {
-                printf("read_specied_len:: read ret=%d", ret);
+                printf("read_specied_len:: read ret=%d \n", ret);
                 return -1;
             } else if (n == 0) {
-                printf("read_specied_len:: Connection closed");
+                printf("read_specied_len:: Connection closed \n");
                 return -1;
             }
             total_read += n;

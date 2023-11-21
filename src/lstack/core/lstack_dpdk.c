@@ -75,15 +75,20 @@ int32_t thread_affinity_default(void)
 {
     static cpu_set_t cpuset;
     static bool first_flags = true;
+    int ret = 0;
     if (first_flags) {
         CPU_ZERO(&cpuset);
-        if (pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0) {
+        ret = pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "pthread_getaffinity_np fail ret=%d\n", ret);
             return -1;
         }
         first_flags = false;
     } else {
         /* cancel the core binding from DPDK initialization */
-        if (pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0) {
+        ret = pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "pthread_setaffinity_np fail ret=%d\n", ret);
             return -1;
         }
     }
@@ -169,6 +174,7 @@ static struct rte_mempool* get_pktmbuf_mempool(const char *name, uint16_t queue_
 
     ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
     if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d\n", ret);
         return NULL;
     }
     pool = rte_mempool_lookup(pool_name);
@@ -187,6 +193,7 @@ static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_
 
     ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
     if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d\n", ret);
         return NULL;
     }
 
@@ -207,12 +214,14 @@ int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
 
     stack->rxtx_pktmbuf_pool = get_pktmbuf_mempool("rxtx_mbuf", stack->queue_id);
     if (stack->rxtx_pktmbuf_pool == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "rxtx_pktmbuf_pool is NULL\n");
         return -1;
     }
 
     if (use_ltran()) {
         stack->reg_buf = create_reg_mempool("reg_ring_msg", stack->queue_id);
         if (stack->reg_buf == NULL) {
+            LSTACK_LOG(ERR, LSTACK, "rxtx_pktmbuf_pool is NULL\n");
             return -1;
         }
     }
@@ -228,6 +237,7 @@ struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t si
     int32_t ret = snprintf_s(pool_name, sizeof(pool_name), RTE_MEMPOOL_NAMESIZE - 1,
         "%s_%d", name, idx);
     if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d\n", ret);
         return NULL;
     }
 
@@ -248,6 +258,7 @@ struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, i
     int32_t ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1,
         "%s_%d_%d", name, get_global_cfg_params()->process_idx,  queue_id);
     if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d\n", ret);
         return NULL;
     }
 
@@ -288,6 +299,8 @@ int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, ui
 {
     int32_t ret = rte_pktmbuf_alloc_bulk(pool, mbufs, num);
     if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_alloc_bulk fail allocNum=%d, ret=%d, info:=%s \n",
+                   num, ret, rte_strerror(-ret));
         return ret;
     }
 
@@ -479,6 +492,7 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     if (get_global_cfg_params()->bond_mode < 0) {
         port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
         if (port_id < 0) {
+            LSTACK_LOG(ERR, LSTACK, "ethdev_port_id FAIL port_id=%d\n", port_id);
             return port_id;
         }
     }
@@ -586,7 +600,7 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
 
         ret = dpdk_ethdev_start();
         if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed\n");
+            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed ret=%d\n", ret);
             stack_group->eth_params = NULL;
             free(eth_params);
             return ret;
@@ -641,6 +655,7 @@ int32_t dpdk_ethdev_start(void)
     for (int32_t i = 0; i < get_global_cfg_params()->tot_queue_num; i++) {
         ret = dpdk_ethdev_setup(stack_group->eth_params, i);
         if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_setup fail queueid=%d, ret=%d\n", i, ret);
             return ret;
         }
     }
@@ -663,11 +678,13 @@ int32_t dpdk_init_lstack_kni(void)
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, 0, 0, rte_socket_id());
     if (stack_group->kni_pktmbuf_pool == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "kni_mbuf is NULL\n");
         return -1;
     }
 
     int32_t ret = dpdk_kni_init(stack_group->port_id, stack_group->kni_pktmbuf_pool);
     if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk_kni_init fail ret=%d\n", ret);
         return -1;
     }
 
@@ -703,18 +720,18 @@ int32_t init_dpdk_ethdev(void)
         }
 
         ret = dpdk_ethdev_init(bond_port_id, 1);
-        if (ret != 0) {
+	if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
             return -1;
         }
 
         ret = rte_eth_bond_xmit_policy_set(bond_port_id, BALANCE_XMIT_POLICY_LAYER34);
         if (ret < 0) {
-	    LSTACK_LOG(ERR, LSTACK, "dpdk set bond xmit policy failed ret = %d\n", ret);
+            LSTACK_LOG(ERR, LSTACK, "dpdk set bond xmit policy failed ret = %d\n", ret);
             return -1;
         }
 
-	if (get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) {
+        if (get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) {
             ret = rte_eth_bond_8023ad_dedicated_queues_enable(bond_port_id);
             if (ret < 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk enable 8023 dedicated queues failed ret = %d\n", ret);
@@ -740,7 +757,7 @@ int32_t init_dpdk_ethdev(void)
         }
 
         ret = rte_eth_dev_start(bond_port_id);
-        if (ret < 0) {
+	if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk start bond port failed ret = %d\n", ret);
             return -1;
         }
