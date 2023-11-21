@@ -821,6 +821,7 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
     if (wakeup == NULL) {
         wakeup = calloc(1, sizeof(struct wakeup_poll));
         if (wakeup == NULL) {
+            LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
             GAZELLE_RETURN(EINVAL);
         }
 
@@ -936,10 +937,12 @@ static nfds_t fds_select2poll(int maxfd, fd_set *readfds, fd_set *writefds, fd_s
 int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeval)
 {
     if (maxfd == 0) {
+        LSTACK_LOG(ERR, LSTACK, "select maxfd is zero\n");
         return 0;
     }
 
     if (maxfd < 0 || maxfd > FD_SETSIZE || (readfds == NULL && writefds == NULL && exceptfds == NULL)) {
+        LSTACK_LOG(ERR, LSTACK, "select input param error, fd num=%d\n", maxfd);
         GAZELLE_RETURN(EINVAL);
     }
     
