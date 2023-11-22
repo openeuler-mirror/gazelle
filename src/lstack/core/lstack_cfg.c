@@ -1263,9 +1263,9 @@ static int32_t parse_stack_thread_mode(void)
 static int32_t parse_nic_vlan_mode(void)
 {
     int32_t ret;
-    PARSE_ARG(g_config_params.nic.vlan_mode, "nic_vlan_mode", 0, 0, 4094, ret);
+    PARSE_ARG(g_config_params.nic.vlan_mode, "nic_vlan_mode", -1, -1, 4094, ret);
     if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid vlan mode value %d ret=%d. only support 0~4094\n", \
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid vlan mode value %d ret=%d. only support -1~4094\n", \
                             g_config_params.nic.vlan_mode, ret);
     }
     return ret;

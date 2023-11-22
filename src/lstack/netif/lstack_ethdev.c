@@ -967,6 +967,11 @@ int32_t ethdev_init(struct protocol_stack *stack)
         netif_ip6_addr_set(&stack->netif, 0, &cfg->host_addr6);
 	netif_ip6_addr_set_state(&stack->netif, 0, IP6_ADDR_VALID);
     }
+    
+    /* 0-4094: The vlaue range for VLAN IDs is 0 to 4094. */
+    if (get_global_cfg_params()->nic.vlan_mode >= 0 && get_global_cfg_params()->nic.vlan_mode <= 4094) {
+        netif_set_vlan_tci(&stack->netif, (u16_t)get_global_cfg_params()->nic.vlan_mode);
+    }
 
     netif_set_link_up(&stack->netif);
 

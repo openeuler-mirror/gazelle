@@ -63,7 +63,7 @@ struct secondary_attach_arg {
 struct cfg_nic_params {
     uint32_t rxqueue_size;
     uint32_t txqueue_size;
-    uint16_t vlan_mode;
+    int32_t vlan_mode;
 };
 
 struct cfg_params {
