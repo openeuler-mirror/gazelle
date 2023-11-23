@@ -961,11 +961,11 @@ int32_t ethdev_init(struct protocol_stack *stack)
     }
     if (netif == NULL) {
         LSTACK_LOG(ERR, LSTACK, "netif_add failed\n");
-	return ERR_IF;
+        return ERR_IF;
     }
     if (!ip6_addr_isany(&cfg->host_addr6)) {
         netif_ip6_addr_set(&stack->netif, 0, &cfg->host_addr6);
-	netif_ip6_addr_set_state(&stack->netif, 0, IP6_ADDR_VALID);
+        netif_ip6_addr_set_state(&stack->netif, 0, IP6_ADDR_VALID);
     }
 
     netif_set_link_up(&stack->netif);
