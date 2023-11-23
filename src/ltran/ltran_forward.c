@@ -281,14 +281,26 @@ static __rte_always_inline int32_t tcp_handle(struct rte_mbuf *m, const struct r
     return GAZELLE_OK;
 }
 
+static uint32_t get_vlan_offset(const struct rte_mbuf *m)
+{
+    uint32_t offset = 0;
+    struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+    u16_t type = ethh->ether_type;
+    if (type == PP_HTONS(RTE_ETHER_TYPE_VLAN)) {
+        offset += sizeof(struct rte_vlan_hdr);
+    }
+    return offset;
+}
+
 static struct gazelle_stack* get_icmp_handle_stack(const struct rte_mbuf *m)
 {
     int32_t i;
     struct gazelle_stack** stack_array = NULL;
     struct rte_ipv4_hdr *ipv4_hdr = NULL;
     struct gazelle_instance *instance = NULL;
+    uint32_t offset = get_vlan_offset(m);
 
-    ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+    ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr) + offset);
     instance = gazelle_instance_get_by_ip(get_instance_mgr(), ipv4_hdr->dst_addr);
     if (instance == NULL) {
         return NULL;
@@ -321,10 +333,11 @@ static __rte_always_inline int32_t ipv4_handle(struct rte_mbuf *m, struct rte_ip
 {
     struct rte_tcp_hdr  *tcp_hdr = NULL;
     int32_t ret = -1;
+    uint32_t offset = get_vlan_offset(m);
 
     if (likely(ipv4_hdr->next_proto_id == IPPROTO_TCP)) {
         tcp_hdr = rte_pktmbuf_mtod_offset(m, struct rte_tcp_hdr *, sizeof(struct rte_ether_hdr) +
-                                          sizeof(struct rte_ipv4_hdr));
+                                          sizeof(struct rte_ipv4_hdr) + offset);
         get_statistics()->port_stats[g_port_index].tcp_pkt++;
         ret = tcp_handle(m, ipv4_hdr, tcp_hdr);
     } else if (ipv4_hdr->next_proto_id == IPPROTO_ICMP) {
@@ -336,7 +349,8 @@ static __rte_always_inline int32_t ipv4_handle(struct rte_mbuf *m, struct rte_ip
 
 static __rte_always_inline void arp_handle(struct rte_mbuf *m)
 {
-    struct rte_arp_hdr *arph = rte_pktmbuf_mtod_offset(m, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr));
+    uint32_t offset = get_vlan_offset(m);
+    struct rte_arp_hdr *arph = rte_pktmbuf_mtod_offset(m, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr) + offset);
 
     get_statistics()->port_stats[g_port_index].arp_pkt++;
 
@@ -367,14 +381,14 @@ static __rte_always_inline void arp_handle(struct rte_mbuf *m)
 static __rte_always_inline void upstream_forward_one(struct rte_mbuf *m)
 {
     struct rte_ipv4_hdr *iph = NULL;
-    struct rte_ether_hdr *ethh = NULL;
     uint8_t ip_version;
     const int32_t ipv4_version_offset = 4;
     const int32_t ipv4_version = 4;
+    uint32_t offset = get_vlan_offset(m);
 
     get_statistics()->port_stats[g_port_index].rx_bytes += m->data_len;
 
-    iph = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+    iph = rte_pktmbuf_mtod_offset(m, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr) + offset);
     ip_version = (iph->version_ihl & 0xf0) >> ipv4_version_offset;
     if (likely(ip_version == ipv4_version)) {
         int32_t ret = ipv4_handle(m, iph);
@@ -385,8 +399,15 @@ static __rte_always_inline void upstream_forward_one(struct rte_mbuf *m)
         goto forward_to_kni;
     }
 
-    ethh = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
-    if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == ethh->ether_type)) {
+    uint16_t type = 0;
+    if (offset > 0) {
+        struct rte_vlan_hdr *vlan_hdr = rte_pktmbuf_mtod_offset(m, struct rte_vlan_hdr *, sizeof(struct rte_ether_hdr));
+        type = vlan_hdr->eth_proto;
+    } else {
+        struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+        type = ethh->ether_type;
+    }
+    if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == type)) {
         arp_handle(m);
         // arp packets are sent to kni by default
         goto forward_to_kni;
