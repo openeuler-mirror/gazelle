@@ -76,7 +76,6 @@ static int32_t parse_bond_mode(void);
 static int32_t parse_bond_slave_mac(void);
 static int32_t parse_use_sockmap(void);
 static int32_t parse_udp_enable(void);
-static int32_t parse_ipv6_enable(void);
 static int32_t parse_nic_rxqueue_size(void);
 static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
@@ -139,7 +138,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "bond_slave_mac", parse_bond_slave_mac },
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
-    { "ipv6_enable", parse_ipv6_enable },
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
     { "nic_txqueue_size", parse_nic_txqueue_size},
     { "stack_thread_mode", parse_stack_thread_mode },
@@ -1271,9 +1269,3 @@ static int32_t parse_nic_vlan_mode(void)
     return ret;
 }
 
-static int32_t parse_ipv6_enable(void)
-{
-    int32_t ret;
-    PARSE_ARG(g_config_params.ipv6_enable, "ipv6_enable", 0, 0, 1, ret);
-    return ret;
-}

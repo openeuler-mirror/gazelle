@@ -117,7 +117,6 @@ struct cfg_params {
     struct rte_ether_addr bond_slave_mac_addr[GAZELLE_MAX_BOND_NUM];
     bool use_sockmap;
     bool udp_enable;
-    bool ipv6_enable;
     struct cfg_nic_params nic;
     bool stack_mode_rtc;
 };
