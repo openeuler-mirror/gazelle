@@ -676,7 +676,7 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
     ret = config_read_file(&config, conf_file_path);
     if (ret == 0) {
         config_destroy(&config);
-        syslog(LOG_ERR, "Err: Config file path %s error, Please check conf file path.\n", conf_file_path);
+        syslog(LOG_ERR, "Err: Config file path %s error, please check conf file path.\n", conf_file_path);
         return -GAZELLE_EPATH;
     }
 
