@@ -825,6 +825,22 @@ static void gazelle_print_lstack_stat_rate(void *buf, const struct gazelle_stat_
     } while (true);
 }
 
+static void gazelle_print_lstack_tcp_stat(const struct gazelle_stat_lstack_snmp *snmp)
+{
+    printf("tcp_act_open: %u\n",     snmp->tcp_act_open);
+    printf("tcp_passive_open: %u\n", snmp->tcp_passive_open);
+    printf("tcp_attempt_fail: %u\n", snmp->tcp_attempt_fail);
+    printf("tcp_estab_rst: %u\n",    snmp->tcp_estab_rst);
+    printf("tcp_out_seg: %u\n",      snmp->tcp_out_seg);
+    printf("tcp_retran_seg: %u\n",   snmp->tcp_retran_seg);
+    printf("tcp_in_seg: %u\n",       snmp->tcp_in_seg);
+    printf("tcp_in_err: %u\n",       snmp->tcp_in_err);
+    printf("tcp_out_rst: %u\n",      snmp->tcp_out_rst);
+    printf("tcp_fin_ack_cnt: %u\n",  snmp->tcp_fin_ack_cnt);
+    printf("tcp_delay_ack_cnt: %u\n", snmp->tcp_delay_ack_cnt);
+    printf("tcp_refused_cnt: %u\n",  snmp->tcp_refused_cnt);
+}
+
 static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_data *stat,
                                                 const struct gazelle_stat_lstack_snmp *snmp)
 {
@@ -850,16 +866,8 @@ static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_d
     printf("udp_no_ports: %u\n",     snmp->udp_no_ports);
     printf("udp_in_errors: %u\n",    snmp->udp_in_errors);
     printf("udp_out_datagrams: %u\n", snmp->udp_out_datagrams);
-    
-    printf("tcp_act_open: %u\n",     snmp->tcp_act_open);
-    printf("tcp_passive_open: %u\n", snmp->tcp_passive_open);
-    printf("tcp_attempt_fail: %u\n", snmp->tcp_attempt_fail);
-    printf("tcp_estab_rst: %u\n",    snmp->tcp_estab_rst);
-    printf("tcp_out_seg: %u\n",      snmp->tcp_out_seg);
-    printf("tcp_retran_seg: %u\n",   snmp->tcp_retran_seg);
-    printf("tcp_in_seg: %u\n",       snmp->tcp_in_seg);
-    printf("tcp_in_err: %u\n",       snmp->tcp_in_err);
-    printf("tcp_out_rst: %u\n",      snmp->tcp_out_rst);
+
+    gazelle_print_lstack_tcp_stat(snmp);
 
     printf("icmp_in_msgs: %u\n", snmp->icmp_in_msgs);
     printf("icmp_in_errors: %u\n", snmp->icmp_in_errors);
