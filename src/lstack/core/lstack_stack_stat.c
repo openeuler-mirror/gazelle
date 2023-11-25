@@ -256,18 +256,24 @@ static int32_t send_control_cmd_data(int32_t fd, struct gazelle_stack_dfx_data *
     return 0;
 }
 
-int32_t handle_stack_cmd(int32_t fd, enum GAZELLE_STAT_MODE stat_mode)
+int handle_dpdk_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode)
 {
     struct gazelle_stack_dfx_data dfx;
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     if (stat_mode == GAZELLE_STAT_LSTACK_SHOW_XSTATS) {
-        dpdk_nic_xstats_get(&dfx, get_port_id());
+        dpdk_nic_xstats_get(&dfx, get_protocol_stack_group()->port_id);
         dfx.tid = 0;
         dfx.eof = 1;
         send_control_cmd_data(fd, &dfx);
-        return 0;
     }
+
+    return 0;
+}
+
+int handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode)
+{
+    struct gazelle_stack_dfx_data dfx;
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
         struct protocol_stack *stack = stack_group->stacks[i];

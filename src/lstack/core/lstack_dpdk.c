@@ -346,13 +346,6 @@ void lstack_log_level_init(void)
     }
 }
 
-// get port id
-inline uint16_t get_port_id(void)
-{
-    uint16_t port_id = get_global_cfg_params()->port_id;
-    return port_id;
-}
-
 static int32_t ethdev_port_id(uint8_t *mac)
 {
     int32_t port_id;
@@ -496,8 +489,6 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
             return port_id;
         }
     }
-
-    get_global_cfg_params()->port_id = port_id;
 
     struct rte_eth_dev_info dev_info;
     int32_t ret = rte_eth_dev_info_get(port_id, &dev_info);
@@ -814,23 +805,83 @@ bool port_in_stack_queue(ip_addr_t src_ip, ip_addr_t dst_ip, uint16_t src_port, 
     return (reta_index % stack_group->nb_queues) == stack->queue_id;
 }
 
+static int dpdk_nic_xstats_value_get(uint64_t *values, unsigned int len, uint16_t *ports, unsigned int count)
+{
+    uint64_t tmp_values[RTE_ETH_XSTATS_MAX_LEN];
+    int p_idx;
+    int v_idx;
+    int ret;
+ 
+    for (p_idx = 0; p_idx < count; p_idx++) {
+        ret = rte_eth_xstats_get_by_id(ports[p_idx], NULL, tmp_values, len);
+        if (ret < 0 || ret > len)  {
+            LSTACK_LOG(ERR, LSTACK, "rte_eth_xstats_get_by_id failed.\n");
+            return -1;
+        }
+
+        for (v_idx = 0; v_idx < len; v_idx++) {
+            values[v_idx] += tmp_values[v_idx];
+        }
+    }
+    return 0;
+}
+
+static int dpdk_nic_xstats_name_get(struct nic_eth_xstats_name *names, uint16_t port_id)
+{
+    int len;
+
+    len = rte_eth_xstats_get_names_by_id(port_id, NULL, 0, NULL);
+    if (len < 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_eth_xstats_get_names_by_id failed.\n");
+        return -1;
+    }
+
+    if (len != rte_eth_xstats_get_names_by_id(port_id, (struct rte_eth_xstat_name *)names, len, NULL)) {
+        LSTACK_LOG(ERR, LSTACK, "rte_eth_xstats_get_names_by_id failed.\n");
+        return -1;
+    }
+
+    return len;
+}
+
 void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
 {
-    int32_t ret;
-    int32_t len = rte_eth_xstats_get_names_by_id(port_id, NULL, 0, NULL);
-    dfx->data.nic_xstats.len = len;
+    struct rte_eth_dev_info dev_info;
+    int len;
+    int ret;
+
+    dfx->data.nic_xstats.len = -1;
     dfx->data.nic_xstats.port_id = port_id;
-    if (len < 0) {
-        return;
-    }
-    if (len != rte_eth_xstats_get_names_by_id(port_id,
-        (struct rte_eth_xstat_name *)dfx->data.nic_xstats.xstats_name, len, NULL)) {
-        dfx->data.nic_xstats.len = -1;
+    ret = rte_eth_dev_info_get(port_id, &dev_info);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_eth_dev_info_get failed.\n");
         return;
     }
 
-    ret = rte_eth_xstats_get_by_id(port_id, NULL, dfx->data.nic_xstats.values, len);
-    if (ret < 0 || ret > len) {
-        dfx->data.nic_xstats.len = -1;
+    /* bond not support get xstats, we get xstats from slave device of bond */
+    if (strcmp(dev_info.driver_name, "net_bonding") == 0) {
+        uint16_t slaves[RTE_MAX_ETHPORTS];
+        int slave_count;
+        slave_count = rte_eth_bond_slaves_get(port_id, slaves, RTE_MAX_ETHPORTS);
+        if (slave_count <= 0) {
+            LSTACK_LOG(ERR, LSTACK, "rte_eth_bond_slaves_get failed.\n");
+            return;
+        }
+        len = dpdk_nic_xstats_name_get(dfx->data.nic_xstats.xstats_name, slaves[0]);
+        if (len <= 0) {
+            return;
+        }
+        if (dpdk_nic_xstats_value_get(dfx->data.nic_xstats.values, len, slaves, slave_count) != 0) {
+            return;
+        }
+    } else {
+        len = dpdk_nic_xstats_name_get(dfx->data.nic_xstats.xstats_name, port_id);
+        if (len <= 0) {
+            return;
+        }
+        if (dpdk_nic_xstats_value_get(dfx->data.nic_xstats.values, len, &port_id, 1) != 0) {
+            return;
+        }
     }
+    dfx->data.nic_xstats.len = len;
 }

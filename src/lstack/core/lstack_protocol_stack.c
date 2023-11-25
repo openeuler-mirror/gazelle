@@ -479,7 +479,7 @@ void stack_polling(uint32_t wakeup_tick)
     if (kni_switch && !stack->queue_id && !(wakeup_tick & 0xfff)) {
         rte_kni_handle_request(get_gazelle_kni());
         if (get_kni_started()) {
-            kni_handle_rx(get_port_id());
+            kni_handle_rx(stack->port_id);
         }
     }
     return;

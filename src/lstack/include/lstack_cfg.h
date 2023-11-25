@@ -94,7 +94,6 @@ struct cfg_params {
 
     uint16_t num_process;
     uint16_t num_listen_port;
-    uint16_t port_id;
     uint16_t is_primary;
     uint16_t num_queue;
     uint16_t tot_queue_num;
