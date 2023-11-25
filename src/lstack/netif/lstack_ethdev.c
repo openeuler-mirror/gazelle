@@ -330,7 +330,7 @@ struct rte_flow *create_flow_director(uint16_t port_id, uint16_t queue_id,
 void config_flow_director(uint16_t queue_id, uint32_t src_ip,
                           uint32_t dst_ip, uint16_t src_port, uint16_t dst_port)
 {
-    uint16_t port_id = get_port_id();
+    uint16_t port_id = get_protocol_stack_group()->port_id;
     char rule_key[RULE_KEY_LEN] = {0};
     sprintf_s(rule_key, sizeof(rule_key), "%u_%u_%u", src_ip, src_port, dst_port);
     struct flow_rule *fl_exist = find_rule(rule_key);
@@ -357,7 +357,7 @@ void config_flow_director(uint16_t queue_id, uint32_t src_ip,
 
 void delete_flow_director(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port)
 {
-    uint16_t port_id = get_port_id();
+    uint16_t port_id = get_protocol_stack_group()->port_id;
     char rule_key[RULE_KEY_LEN] = {0};
     sprintf_s(rule_key, RULE_KEY_LEN, "%u_%u_%u",dst_ip, dst_port, src_port);
     struct flow_rule *fl = find_rule(rule_key);
