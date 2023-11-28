@@ -493,7 +493,6 @@ int32_t epoll_lwip_event_nolock(struct wakeup_poll *wakeup, struct epoll_event *
         }
     }
 
-    wakeup->stat.app_events += event_num;
     return event_num;
 }
 
@@ -611,6 +610,7 @@ int32_t lstack_rtc_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
 
     lwip_num = epoll_lwip_event_nolock(wakeup, &events[kernel_num], tmpmaxevents - kernel_num);
     wakeup->stat.app_events += lwip_num;
+    wakeup->stat.kernel_events += kernel_num;
 
     return lwip_num + kernel_num;
 }
@@ -634,7 +634,6 @@ int32_t lstack_rtw_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
     do {
         __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
         lwip_num = epoll_lwip_event(wakeup, events, maxevents);
-        wakeup->stat.app_events += lwip_num;
 
         if (__atomic_load_n(&wakeup->have_kernel_event, __ATOMIC_ACQUIRE)) {
             kernel_num = posix_api->epoll_wait_fn(epfd, &events[lwip_num], maxevents - lwip_num, 0);
@@ -661,6 +660,9 @@ int32_t lstack_rtw_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
     } while (ret == 0);
 
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+    wakeup->stat.app_events += lwip_num;
+    wakeup->stat.kernel_events += kernel_num;
+
     return lwip_num + kernel_num;
 }
 
@@ -870,6 +872,9 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
     } while (ret == 0);
 
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+    wakeup->stat.app_events += lwip_num;
+    wakeup->stat.kernel_events += kernel_num;
+
     return lwip_num + kernel_num;
 }
 
