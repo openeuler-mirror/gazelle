@@ -75,6 +75,7 @@ struct gazelle_wakeup_stat {
     uint64_t app_write_cnt;
     uint64_t app_read_cnt;
     uint64_t read_null;
+    uint64_t kernel_events;
 };
 
 struct gazelle_stat_pkts {
@@ -120,6 +121,9 @@ struct gazelle_stat_lstack_snmp {
     uint32_t tcp_fin_ack_cnt;
     uint32_t tcp_delay_ack_cnt;
     uint32_t tcp_refused_cnt;
+    uint32_t tcp_out_of_seq;
+    uint32_t tcp_acceptmbox_full;
+    uint32_t tcp_listen_drops;
 
     /* UDP */
     uint32_t udp_in_datagrams;

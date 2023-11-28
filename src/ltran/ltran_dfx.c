@@ -604,7 +604,9 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("write_lwip: %-17"PRIu64" ", lstack_stat->data.pkts.stack_stat.write_lwip_cnt);
     printf("app_write_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.app_write_rpc);
     printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list_cnt);
-    printf("conn_num: %-19hu \n", lstack_stat->data.pkts.conn_num);
+    printf("conn_num: %-19hu ", lstack_stat->data.pkts.conn_num);
+
+    printf("kernel_events: %-14"PRIu64"\n", lstack_stat->data.pkts.wakeup_stat.kernel_events);
     printf("wakeup_events: %-14"PRIu64" ", lstack_stat->data.pkts.stack_stat.wakeup_events);
     printf("app_events: %-17"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_events);
     printf("read_null: %-18"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.read_null);
@@ -839,6 +841,9 @@ static void gazelle_print_lstack_tcp_stat(const struct gazelle_stat_lstack_snmp 
     printf("tcp_fin_ack_cnt: %u\n",  snmp->tcp_fin_ack_cnt);
     printf("tcp_delay_ack_cnt: %u\n", snmp->tcp_delay_ack_cnt);
     printf("tcp_refused_cnt: %u\n",  snmp->tcp_refused_cnt);
+    printf("tcp_out_of_seq: %u\n",  snmp->tcp_out_of_seq);
+    printf("tcp_acceptmbox_full: %u\n",  snmp->tcp_acceptmbox_full);
+    printf("tcp_listen_drops: %u\n",  snmp->tcp_listen_drops);
 }
 
 static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_data *stat,
