@@ -815,12 +815,12 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
         /* copy arp into other stack */
         if (!use_ltran_flag) {
             struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
-	    u16_t type;
-	    type = ethh->ether_type;
-	    if (type == PP_HTONS(ETHTYPE_VLAN)) {
-		struct eth_vlan_hdr *vlan = (struct eth_vlan_hdr *)(((char *)ethh) + SIZEOF_ETH_HDR);
-		type = vlan->tpid;
-	    }
+            u16_t type;
+            type = ethh->ether_type;
+            if (type == PP_HTONS(ETHTYPE_VLAN)) {
+                struct eth_vlan_hdr *vlan = (struct eth_vlan_hdr *)(((char *)ethh) + SIZEOF_ETH_HDR);
+                type = vlan->tpid;
+            }
             if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == type)) {
                 stack_broadcast_arp(stack->pkts[i], stack);
                 /* copy arp into other process */
@@ -860,6 +860,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
         mbuf->data_len = pbuf->len;
         mbuf->pkt_len = pbuf->tot_len;
         mbuf->ol_flags = pbuf->ol_flags;
+        mbuf->vlan_tci = pbuf->vlan_tci;
         mbuf->next = NULL;
         buf_addr = rte_pktmbuf_mtod(mbuf, void *);
 

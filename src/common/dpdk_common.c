@@ -104,6 +104,12 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
         COMMON_INFO("DEV_RX_OFFLOAD_UDP_CKSUM\n");
     }
 
+    // rx vlan
+    if (rx_ol_capa & DEV_RX_OFFLOAD_VLAN_STRIP) {
+        rx_ol |= DEV_RX_OFFLOAD_VLAN_STRIP;
+        COMMON_INFO("DEV_RX_OFFLOAD_VLAN_STRIP\n");
+    }
+
     // tx ip
     if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
         tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
@@ -126,6 +132,12 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
     if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
         tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
         COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
+    }
+
+    // tx vlan
+    if (tx_ol_capa & DEV_TX_OFFLOAD_VLAN_INSERT) {
+        tx_ol |= DEV_TX_OFFLOAD_VLAN_INSERT;
+        COMMON_INFO("DEV_TX_OFFLOAD_VLAN_INSERT\n");
     }
 
     if (!(rx_ol & DEV_RX_OFFLOAD_UDP_CKSUM) ||
