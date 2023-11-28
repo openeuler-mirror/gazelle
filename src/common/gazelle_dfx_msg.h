@@ -117,6 +117,9 @@ struct gazelle_stat_lstack_snmp {
     uint32_t tcp_in_seg;
     uint32_t tcp_in_err;
     uint32_t tcp_out_rst;
+    uint32_t tcp_fin_ack_cnt;
+    uint32_t tcp_delay_ack_cnt;
+    uint32_t tcp_refused_cnt;
 
     /* UDP */
     uint32_t udp_in_datagrams;
