@@ -84,7 +84,7 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
     }
 
     /* skip gro when tcp/ip cksum offloads disable */
-    if (get_protocol_stack_group()->rx_offload == 0 || get_global_cfg_params()->nic.vlan_mode > 0) {
+    if (get_protocol_stack_group()->rx_offload == 0 || get_global_cfg_params()->nic.vlan_mode >= 0) {
         return pkt_num;
     }
 
