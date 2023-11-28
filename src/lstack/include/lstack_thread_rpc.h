@@ -44,7 +44,8 @@ union rpc_msg_arg {
 struct rpc_msg_pool;
 struct rpc_msg {
     pthread_spinlock_t lock; /* msg handler unlock notice sender msg process done */
-    int32_t self_release; /* 0:msg handler release msg  1:msg sender release msg */
+    int8_t sync_flag : 1;
+    int8_t recall_flag : 1;
     int64_t result; /* func return val */
     lockless_queue_node queue_node;
     struct rpc_msg_pool *pool;

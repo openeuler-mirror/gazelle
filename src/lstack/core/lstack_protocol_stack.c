@@ -696,7 +696,15 @@ void stack_socket(struct rpc_msg *msg)
 void stack_close(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
-
+    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
+    struct lwip_sock *sock = get_socket(fd);
+    
+    if (NETCONN_IS_DATAOUT(sock)) {
+        msg->recall_flag = 1;
+        rpc_call(&stack->rpc_queue, msg); /* until stack_send recall finish */
+	return;
+    }
+    
     msg->result = lwip_close(fd);
     if (msg->result != 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
@@ -842,15 +850,12 @@ void stack_send(struct rpc_msg *msg)
     replenish_again = do_lwip_send(stack, sock->conn->socket, sock, len, 0);
     __sync_fetch_and_sub(&sock->call_num, 1);
     if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
-        rpc_msg_free(msg);
         return;
     } else {
         if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 0) {
+	    msg->recall_flag = 1;
             rpc_call(&stack->rpc_queue, msg);
              __sync_fetch_and_add(&sock->call_num, 1);
-        } else {
-            rpc_msg_free(msg);
-            return;
         }
     }
 }

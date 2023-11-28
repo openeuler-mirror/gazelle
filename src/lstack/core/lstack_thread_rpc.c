@@ -71,8 +71,8 @@ static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func 
 
     pthread_spin_init(&msg->lock, PTHREAD_PROCESS_PRIVATE);
     msg->func = func;
-    msg->self_release = 1;
-
+    msg->sync_flag = 1;
+    msg->recall_flag = 0;
     return msg;
 }
 
@@ -94,6 +94,7 @@ static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queu
 void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
 {
     struct rpc_msg *msg = NULL;
+    struct lwip_sock *sock = NULL;
 
     while (max_num--) {
         lockless_queue_node *node = lockless_queue_mpsc_pop(&stack->rpc_queue);
@@ -109,14 +110,15 @@ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
             stack->stats.call_null++;
         }
 
-        /* stack_send free msg in stack_send */
-        if (msg->func != stack_send) {
-            if (msg->self_release) {
+        if (!msg->recall_flag) {
+	    if (msg->sync_flag) {
                 pthread_spin_unlock(&msg->lock);
             } else {
                 rpc_msg_free(msg);
             }
-        }
+        } else {
+	  msg->recall_flag = 0;
+	}
     }
 }
 
@@ -224,7 +226,7 @@ int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf)
         return -1;
     }
 
-    msg->self_release = 0;
+    msg->sync_flag = 0;
     msg->args[MSG_ARG_0].p = mbuf;
     msg->args[MSG_ARG_1].p = stack;
 
@@ -458,8 +460,8 @@ int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
     msg->args[MSG_ARG_1].size = len;
     msg->args[MSG_ARG_2].i = flags;
     msg->args[MSG_ARG_3].p = stack;
-    msg->self_release = 0;
-
+    msg->sync_flag = 0;
+    
     rpc_call(&stack->rpc_queue, msg);
 
     return 0;
