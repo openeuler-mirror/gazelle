@@ -205,13 +205,8 @@ static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_
     return reg_buf;
 }
 
-int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num)
+int32_t pktmbuf_pool_init(struct protocol_stack *stack)
 {
-    if (stack_num == 0) {
-        LSTACK_LOG(ERR, LSTACK, "stack_num=0.\n");
-        return -1;
-    }
-
     stack->rxtx_pktmbuf_pool = get_pktmbuf_mempool("rxtx_mbuf", stack->queue_id);
     if (stack->rxtx_pktmbuf_pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "rxtx_pktmbuf_pool is NULL\n");

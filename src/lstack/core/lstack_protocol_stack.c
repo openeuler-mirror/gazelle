@@ -349,7 +349,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
         return -1;
     }
 
-    if (pktmbuf_pool_init(stack, stack_group->stack_num) != 0) {
+    if (pktmbuf_pool_init(stack) != 0) {
         LSTACK_LOG(ERR, LSTACK, "pktmbuf_pool_init failed\n");
         return -1;
     }
@@ -529,7 +529,7 @@ static void gazelle_listen_thread(void *arg)
 int32_t stack_group_init_mempool(void)
 {
     struct cfg_params *global_cfg_parmas = get_global_cfg_params();
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
     struct rte_mempool *rxtx_mbuf = NULL;
     uint32_t cpu_id = 0;
     unsigned numa_id = 0;
@@ -537,10 +537,8 @@ int32_t stack_group_init_mempool(void)
 
     LSTACK_LOG(INFO, LSTACK,
         "config::num_cpu=%d num_process=%d \n", global_cfg_parmas->num_cpu, global_cfg_parmas->num_process);
-
-    uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
     
-    for (int cpu_idx = 0; cpu_idx < global_cfg_parmas->num_cpu; cpu_idx++) {
+    for (int cpu_idx = 0; cpu_idx < get_global_cfg_params()->num_queue; cpu_idx++) {
         cpu_id = global_cfg_parmas->cpus[cpu_idx];
         numa_id = numa_node_of_cpu(cpu_id);
         
@@ -552,7 +550,7 @@ int32_t stack_group_init_mempool(void)
             }
             
             rxtx_mbuf = create_pktmbuf_mempool(
-                "rxtx_mbuf", total_mbufs / stack_group->stack_num, RXTX_CACHE_SZ, queue_id, numa_id);
+                "rxtx_mbuf", total_mbufs / get_global_cfg_params()->num_queue, RXTX_CACHE_SZ, queue_id, numa_id);
             if (rxtx_mbuf == NULL) {
                 LSTACK_LOG(ERR, LSTACK, "cpuid=%u, numid=%d , rxtx_mbuf idx= %d create_pktmbuf_mempool fail\n",
                     cpu_id, numa_id, queue_id);
@@ -569,11 +567,7 @@ int32_t stack_group_init_mempool(void)
 int32_t stack_group_init(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    if (!get_global_cfg_params()->seperate_send_recv) {
-        stack_group->stack_num = get_global_cfg_params()->num_cpu;
-    } else {
-        stack_group->stack_num = get_global_cfg_params()->num_cpu * 2;
-    }
+    stack_group->stack_num = 0;
 
     init_list_node(&stack_group->poll_list);
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
@@ -627,6 +621,7 @@ int32_t stack_setup_app_thread(void)
         LSTACK_LOG(INFO, LSTACK, "stack setup failed in app thread\n");
         return -1;
     }
+    atomic_fetch_add(&g_stack_group.stack_num, 1);
 
     return 0;
 }
@@ -670,10 +665,11 @@ int32_t stack_setup_thread(void)
     }
 
     /* 2: wait stack thread and kernel_event thread init finish */
-    wait_sem_value(&g_stack_group.sem_stack_setup, g_stack_group.stack_num * 2);
+    wait_sem_value(&g_stack_group.sem_stack_setup, queue_num * 2);
     if (g_stack_group.stack_setup_fail) {
         return -1;
     }
+    g_stack_group.stack_num = queue_num;
 
     return 0;
 }

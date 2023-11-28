@@ -43,7 +43,7 @@ struct rte_ring;
 struct rte_mbuf;
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
 int32_t dpdk_eal_init(void);
-int32_t pktmbuf_pool_init(struct protocol_stack *stack, uint16_t stack_num);
+int32_t pktmbuf_pool_init(struct protocol_stack *stack);
 struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id);
 struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t size,
                                    uint32_t flags, int32_t idx);
