@@ -16,6 +16,8 @@
 #include <sys/types.h>
 #include <stdint.h>
 
+#include <lwip/reg_sock.h>
+
 #define GAZELLE_CLIENT_NUM_MIN           1
 #define GAZELLE_LOG_LEVEL_MAX            10
 #define GAZELLECTL_TIMEOUT               5000 // millisecond
@@ -170,8 +172,8 @@ struct gazelle_stat_lstack_snmp {
 /* same as define in lwip/tcp.h - struct tcp_pcb_dp */
 struct gazelle_stat_lstack_conn_info {
     uint32_t state;
-    uint32_t rip;
-    uint32_t lip;
+    gz_addr_t rip;
+    gz_addr_t lip;
     uint16_t r_port;
     uint16_t l_port;
     uint32_t in_send;

@@ -52,6 +52,10 @@
 #define STACK_THREAD_DEFAULT        4
 #define STACK_NIC_READ_DEFAULT      128
 
+/* same as define in lwip/ip_addr.h */
+#define GZ_ADDR_TYPE_V4             0
+#define GZ_ADDR_TYPE_V6             6
+
 #define MTU_DEFAULT_DATA_LEN        1460
 #define VLAN_HEAD_LEN               4
 #define IPV6_EXTRA_HEAD_LEN         20

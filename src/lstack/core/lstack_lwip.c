@@ -1135,8 +1135,8 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
 {
     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
 
-    conn->lip = ip_2_ip4(&pcb->local_ip)->addr;
-    conn->rip = ip_2_ip4(&pcb->remote_ip)->addr;
+    conn->lip = *((gz_addr_t *)&pcb->local_ip);
+    conn->rip = *((gz_addr_t *)&pcb->remote_ip);
     conn->l_port = pcb->local_port;
     conn->r_port = pcb->remote_port;
     conn->in_send = pcb->snd_queuelen;
@@ -1229,11 +1229,11 @@ uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn,
     for (struct tcp_pcb_listen *pcbl = tcp_listen_pcbs.listen_pcbs; pcbl != NULL && conn_num < max_num;
         pcbl = pcbl->next) {
         conn[conn_num].state = LISTEN_LIST;
-        conn[conn_num].lip = ip_2_ip4(&pcbl->local_ip)->addr;
+        conn[conn_num].lip = *((gz_addr_t *)&pcbl->local_ip);
         conn[conn_num].l_port = pcbl->local_port;
         conn[conn_num].tcp_sub_state = pcbl->state;
         struct netconn *netconn = (struct netconn *)pcbl->callback_arg;
-	conn[conn_num].fd = netconn != NULL ? netconn->socket : -1;
+        conn[conn_num].fd = netconn != NULL ? netconn->socket : -1;
         if (netconn != NULL && netconn->acceptmbox != NULL) {
             conn[conn_num].recv_cnt = rte_ring_count(netconn->acceptmbox->ring);
         }
