@@ -198,6 +198,13 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
         case GAZELLE_STAT_LSTACK_SHOW:
         case GAZELLE_STAT_LSTACK_SHOW_RATE:
             get_stack_stats(dfx, stack);
+	    /* fall through */
+        case GAZELLE_STAT_LSTACK_SHOW_AGGREGATE:
+            ret = memcpy_s(&dfx->data.pkts.aggregate_stats, sizeof(dfx->data.pkts.aggregate_stats),
+                &stack->aggregate_stats, sizeof(stack->aggregate_stats));
+            if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+            }
             break;
         case GAZELLE_STAT_LSTACK_SHOW_SNMP:
             ret = memcpy_s(&dfx->data.snmp, sizeof(dfx->data.snmp), &stack->lwip_stats->mib2,
@@ -214,13 +221,6 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             break;
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
             ret = memcpy_s(&dfx->data.latency, sizeof(dfx->data.latency), &stack->latency, sizeof(stack->latency));
-            if (ret != EOK) {
-                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
-            }
-            break;
-        case GAZELLE_STAT_LSTACK_SHOW_AGGREGATE:
-            ret = memcpy_s(&dfx->data.aggregate_stats, sizeof(dfx->data.aggregate_stats),
-                &stack->aggregate_stats, sizeof(stack->aggregate_stats));
             if (ret != EOK) {
                 LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
             }
@@ -287,6 +287,7 @@ int handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode)
         }
 
         dfx.tid = stack->tid;
+	dfx.stack_id = i;
         if (i == stack_group->stack_num - 1) {
             dfx.eof = 1;
         }
