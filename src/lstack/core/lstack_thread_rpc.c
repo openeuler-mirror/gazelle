@@ -94,7 +94,6 @@ static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queu
 void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
 {
     struct rpc_msg *msg = NULL;
-    struct lwip_sock *sock = NULL;
 
     while (max_num--) {
         lockless_queue_node *node = lockless_queue_mpsc_pop(&stack->rpc_queue);

@@ -96,9 +96,6 @@ static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue
 static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *msg)
 {
     pthread_spin_destroy(&msg->lock);
-
-    msg->self_release = 0;
-
     rte_mempool_put(msg->pool->rpc_pool, (void *)msg);
 }
 
