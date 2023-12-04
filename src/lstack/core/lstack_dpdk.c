@@ -207,16 +207,16 @@ static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_
 
 int32_t pktmbuf_pool_init(struct protocol_stack *stack)
 {
-    stack->rxtx_pktmbuf_pool = get_pktmbuf_mempool("rxtx_mbuf", stack->queue_id);
-    if (stack->rxtx_pktmbuf_pool == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "rxtx_pktmbuf_pool is NULL\n");
+    stack->rxtx_mbuf_pool = get_pktmbuf_mempool("rxtx_mbuf", stack->queue_id);
+    if (stack->rxtx_mbuf_pool == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "rxtx_mbuf_pool is NULL\n");
         return -1;
     }
 
     if (use_ltran()) {
         stack->reg_buf = create_reg_mempool("reg_ring_msg", stack->queue_id);
         if (stack->reg_buf == NULL) {
-            LSTACK_LOG(ERR, LSTACK, "rxtx_pktmbuf_pool is NULL\n");
+            LSTACK_LOG(ERR, LSTACK, "rxtx_mbuf_pool is NULL\n");
             return -1;
         }
     }
@@ -292,6 +292,9 @@ int32_t create_shared_ring(struct protocol_stack *stack)
 
 int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
 {
+    if (rte_mempool_avail_count(pool) < MBUFPOOL_RESERVE_NUM + num) {
+        return -ENOMEM;
+    }
     int32_t ret = rte_pktmbuf_alloc_bulk(pool, mbufs, num);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_alloc_bulk fail allocNum=%d, ret=%d, info:=%s \n",
@@ -607,7 +610,7 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t i
 {
     int32_t ret;
 
-    struct rte_mempool *rxtx_pktmbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx];
+    struct rte_mempool *rxtx_mbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx];
 
     uint16_t socket_id = 0;
     struct cfg_params *cfg = get_global_cfg_params();
@@ -617,7 +620,7 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t i
         socket_id = cfg->process_numa[idx];
     }
     ret = rte_eth_rx_queue_setup(eth_params->port_id, idx, eth_params->nb_rx_desc, socket_id,
-        &eth_params->rx_conf, rxtx_pktmbuf_pool);
+        &eth_params->rx_conf, rxtx_mbuf_pool);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", idx, rte_strerror(-ret));
         return -1;

@@ -29,7 +29,7 @@ static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct 
 {
     int ret;
     struct rpc_msg *msg = NULL;
-    ret = rte_mempool_get(rpc_pool->rpc_pool, (void **)&msg);
+    ret = rte_mempool_get(rpc_pool->mempool, (void **)&msg);
     if (ret < 0) {
         LSTACK_LOG(INFO, LSTACK, "rpc pool empty!\n");
         errno = ENOMEM;
@@ -54,9 +54,9 @@ static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func 
             return NULL;
         }
 
-        g_rpc_pool->rpc_pool = create_mempool("rpc_pool", RPC_MSG_MAX, sizeof(struct rpc_msg),
+        g_rpc_pool->mempool = create_mempool("rpc_pool", RPC_MSG_MAX, sizeof(struct rpc_msg),
             0, rte_gettid());
-        if (g_rpc_pool->rpc_pool == NULL) {
+        if (g_rpc_pool->mempool == NULL) {
             get_protocol_stack_group()->call_alloc_fail++;
             return NULL;
         }
@@ -67,7 +67,7 @@ static struct rpc_msg *rpc_msg_alloc(struct protocol_stack *stack, rpc_msg_func 
         get_protocol_stack_group()->call_alloc_fail++;
         return NULL;
     }
-    msg->pool = g_rpc_pool;
+    msg->rpcpool = g_rpc_pool;
 
     pthread_spin_init(&msg->lock, PTHREAD_PROCESS_PRIVATE);
     msg->func = func;
@@ -194,7 +194,7 @@ int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
-int32_t rpc_call_mempoolsize(struct protocol_stack *stack)
+int32_t rpc_call_mbufpoolsize(struct protocol_stack *stack)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_mempool_size);
     if (msg == NULL) {
@@ -203,6 +203,16 @@ int32_t rpc_call_mempoolsize(struct protocol_stack *stack)
 
     msg->args[MSG_ARG_0].p = stack;
 
+    return rpc_sync_call(&stack->rpc_queue, msg);
+}
+
+int32_t rpc_call_rpcpool_size(struct protocol_stack *stack)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_rpcpool_size);
+    if (msg == NULL) {
+        return -1;
+    }
+    msg->args[MSG_ARG_0].p = g_rpc_pool;
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 

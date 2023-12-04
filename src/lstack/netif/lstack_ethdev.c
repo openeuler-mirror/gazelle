@@ -542,9 +542,9 @@ void parse_arp_and_transefer(char* buf)
     int32_t ret;
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
         while (ret != 0) {
-            ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+            ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
             stack->stats.rx_allocmbuf_fail++;
         }
         copy_mbuf(mbuf_copy, mbuf);
@@ -571,9 +571,9 @@ void parse_tcp_and_transefer(char* buf)
     struct rte_mbuf *mbuf_copy = NULL;
     struct protocol_stack *stack = stack_group->stacks[stk_index];
 
-    int32_t ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+    int32_t ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
     while (ret != 0) {
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
         stack->stats.rx_allocmbuf_fail++;
     }
 
@@ -944,7 +944,7 @@ int32_t ethdev_init(struct protocol_stack *stack)
 
     if (use_ltran()) {
         stack->rx_ring_used = 0;
-        int32_t ret = fill_mbuf_to_ring(stack->rxtx_pktmbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
+        int32_t ret = fill_mbuf_to_ring(stack->rxtx_mbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "fill mbuf to rx_ring failed ret=%d\n", ret);
             return ret;
