@@ -187,6 +187,25 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
     return PROGRAM_OK;
 }
 
+static int32_t server_handler_close(int32_t epfd, struct ServerHandler *server_handler)
+{
+    int32_t fd = server_handler->fd;
+    struct epoll_event ep_ev;
+
+    free(server_handler);
+    if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ep_ev) < 0) {
+        PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", fd, errno);
+        return PROGRAM_FAULT;
+    }
+
+    if (close(fd) < 0) {
+        PRINT_ERROR("server can't close the socket %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+
+    return 0;
+}
+
 // the worker thread, unblock, dissymmetric server processes the events
 int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char* domain)
 {
@@ -199,9 +218,11 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
     for (int32_t i = 0; i < epoll_nfds; ++i) {
         struct epoll_event *curr_epev = worker_unit->epevs + i;
 
-        if (curr_epev->events == EPOLLERR || curr_epev->events == EPOLLHUP || curr_epev->events == EPOLLRDHUP) {
+        if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
             PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
-            return PROGRAM_FAULT;
+            if (server_handler_close(worker_unit->epfd, (struct ServerHandler *)curr_epev->data.ptr) != 0) {
+                return PROGRAM_FAULT;
+            }
         }
 
         if (curr_epev->events == EPOLLIN) {
@@ -209,17 +230,14 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
 
             int32_t server_ans_ret = server_ans(server_handler, worker_unit->pktlen, worker_unit->api, domain);
             if (server_ans_ret == PROGRAM_FAULT) {
-                struct epoll_event ep_ev;
-                if (epoll_ctl(worker_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev) < 0) {
-                    PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", server_handler->fd, errno);
+                if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
                     return PROGRAM_FAULT;
                 }
             } else if (server_ans_ret == PROGRAM_ABORT) {
-                if (close(server_handler->fd) < 0) {
-                    PRINT_ERROR("server can't close the socket %d! ", errno);
+                server_debug_print("server mud worker", "close", worker_unit->ip, worker_unit->port, worker_unit->debug);
+                if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
                     return PROGRAM_FAULT;
                 }
-                server_debug_print("server mud worker", "close", worker_unit->ip, worker_unit->port, worker_unit->debug);
             } else {
                 worker_unit->recv_bytes += worker_unit->pktlen;
                 server_debug_print("server mud worker", "receive", worker_unit->ip, worker_unit->port, worker_unit->debug);
@@ -242,9 +260,12 @@ int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
     for (int32_t i = 0; i < epoll_nfds; ++i) {
         struct epoll_event *curr_epev = server_mud->epevs + i;
     
-        if (curr_epev->events == EPOLLERR || curr_epev->events == EPOLLHUP || curr_epev->events == EPOLLRDHUP) {
+        if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+            server_mud->curr_connect--;
             PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
-            return PROGRAM_FAULT;
+            if (server_handler_close(server_mud->epfd, (struct ServerHandler *)curr_epev->data.ptr) != 0) {
+                return PROGRAM_FAULT;
+            }
         }
 
         if (curr_epev->events == EPOLLIN) {
@@ -486,9 +507,11 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
     for (int32_t i = 0; i < epoll_nfds; ++i) {
         struct epoll_event *curr_epev = server_unit->epevs + i;
 
-        if (curr_epev->events == EPOLLERR || curr_epev->events == EPOLLHUP || curr_epev->events == EPOLLRDHUP) {
-            PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
-            return PROGRAM_FAULT;
+        if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+            server_unit->curr_connect--;
+            if (server_handler_close(server_unit->epfd, (struct ServerHandler *)curr_epev->data.ptr) != 0) {
+                return PROGRAM_FAULT;
+            }
         }
 
         if (curr_epev->events == EPOLLIN) {
@@ -511,18 +534,15 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                 int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen, server_unit->api, server_unit->domain);
                 if (server_ans_ret == PROGRAM_FAULT) {
                     --server_unit->curr_connect;
-                    struct epoll_event ep_ev;
-                    if (epoll_ctl(server_unit->epfd, EPOLL_CTL_DEL, server_handler->fd, &ep_ev) < 0) {
-                        PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", server_handler->fd, errno);
+                    if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                         return PROGRAM_FAULT;
                     }
                 } else if (server_ans_ret == PROGRAM_ABORT) {
                     --server_unit->curr_connect;
-                    if (close(server_handler->fd) < 0) {
-                        PRINT_ERROR("server can't close the socket %d! ", errno);
+                    server_debug_print("server mum unit", "close", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
+                    if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                         return PROGRAM_FAULT;
                     }
-                    server_debug_print("server mum unit", "close", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
                 } else {
                     server_unit->recv_bytes += server_unit->pktlen;
                     server_debug_print("server mum unit", "receive", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
