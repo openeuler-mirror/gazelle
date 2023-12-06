@@ -65,6 +65,11 @@ int rtc_close(int s)
     return lwip_close(s);
 }
 
+int rtc_shutdown(int fd, int how)
+{
+    return lwip_shutdown(fd, how);
+}
+
 int rtc_epoll_create(int flags)
 {
     if (stack_setup_app_thread() < 0) {

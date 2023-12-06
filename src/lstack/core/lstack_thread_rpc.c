@@ -272,6 +272,21 @@ int32_t rpc_call_close(int fd)
     return rpc_sync_call(&stack->rpc_queue, msg);
 }
 
+int32_t rpc_call_shutdown(int fd, int how)
+{
+    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
+
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_shutdown);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    msg->args[MSG_ARG_0].i = fd;
+    msg->args[MSG_ARG_1].i = how;
+
+    return rpc_sync_call(&stack->rpc_queue, msg);
+}
+
 void rpc_call_clean_epoll(struct protocol_stack *stack, struct wakeup_poll *wakeup)
 {
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_clean_epoll);
@@ -475,3 +490,4 @@ int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags)
 
     return 0;
 }
+

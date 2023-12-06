@@ -49,6 +49,7 @@ int rtc_poll(struct pollfd *fds, nfds_t nfds, int timeout);
 int rtc_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout);
 int rtc_socket(int domain, int type, int protocol);
 int rtc_close(int s);
+int rtc_shutdown(int fd, int how);
 int rtc_epoll_create(int flags);
 int rtc_epoll_create1(int flags);
 int rtc_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);

@@ -715,6 +715,27 @@ void stack_close(struct rpc_msg *msg)
     posix_api->close_fn(fd);
 }
 
+void stack_shutdown(struct rpc_msg *msg)
+{
+    int fd = msg->args[MSG_ARG_0].i;
+    int how = msg->args[MSG_ARG_1].i;
+    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
+    struct lwip_sock *sock = get_socket(fd);
+
+    if (sock && NETCONN_IS_DATAOUT(sock)) {
+        msg->recall_flag = 1;
+        rpc_call(&stack->rpc_queue, msg);
+        return;
+    }
+
+    msg->result = lwip_shutdown(fd, how);
+    if (msg->result != 0) {
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), fd, msg->result);
+    }
+
+    posix_api->shutdown_fn(fd, how);
+}
+
 void stack_bind(struct rpc_msg *msg)
 {
     msg->result = lwip_bind(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].socklen);
@@ -1047,6 +1068,29 @@ int32_t stack_broadcast_close(int32_t fd)
     return ret;
 }
 
+int stack_broadcast_shutdown(int fd, int how)
+{
+    int32_t ret = 0;
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        return -1;
+    }
+
+    do {
+        sock = sock->listen_next;
+        if (rpc_call_shutdown(fd, how)) {
+            ret = -1;
+        }
+
+        if (sock == NULL || sock->conn == NULL) {
+            break;
+        }
+        fd = sock->conn->socket;
+    } while (sock);
+
+    return ret;
+}
+
 /* choice one stack listen */
 int32_t stack_single_listen(int32_t fd, int32_t backlog)
 {
@@ -1210,3 +1254,4 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
 {
     return stack_broadcast_accept4(fd, addr, addrlen, 0);
 }
+

@@ -74,6 +74,7 @@ int32_t rpc_call_connnum(struct protocol_stack *stack);
 int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf);
 int32_t rpc_call_socket(int32_t domain, int32_t type, int32_t protocol);
 int32_t rpc_call_close(int32_t fd);
+int32_t rpc_call_shutdown(int fd, int how);
 int32_t rpc_call_bind(int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t rpc_call_listen(int s, int backlog);
 int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
