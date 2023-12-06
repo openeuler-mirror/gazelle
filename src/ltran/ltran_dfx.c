@@ -105,8 +105,11 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LTRAN_LOG_LEVEL_SET, 0,                                       gazelle_print_ltran_wait},
     {GAZELLE_STAT_LTRAN_SHOW_SOCKTABLE, sizeof(struct gazelle_stat_forward_table), gazelle_print_ltran_sock},
     {GAZELLE_STAT_LTRAN_SHOW_CONNTABLE, sizeof(struct gazelle_stat_forward_table), gazelle_print_ltran_conn},
+
+    {GAZELLE_STAT_LTRAN_SHOW_LSTACK,   sizeof(struct gazelle_stat_lstack_total), gazelle_print_lstack_stat_total},
+    {GAZELLE_STAT_LSTACK_SHOW,         sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_stat_total},
+
     {GAZELLE_STAT_LSTACK_LOG_LEVEL_SET, 0,                                      gazelle_print_ltran_wait},
-    {GAZELLE_STAT_LSTACK_SHOW,         sizeof(struct gazelle_stat_lstack_total), gazelle_print_lstack_stat_total},
     {GAZELLE_STAT_LSTACK_SHOW_RATE,    sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_stat_rate},
     {GAZELLE_STAT_LSTACK_SHOW_SNMP,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_snmp},
     {GAZELLE_STAT_LSTACK_SHOW_CONN,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_conn},
@@ -1265,7 +1268,7 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
     long int delay = 1;
 
     if (argc == GAZELLE_LSTACK_PARAM_NUM) {
-        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW;
+        req_msg[cmd_index++].stat_mode = g_use_ltran ? GAZELLE_STAT_LTRAN_SHOW_LSTACK : GAZELLE_STAT_LSTACK_SHOW;
         return cmd_index;
     }
 

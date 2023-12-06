@@ -338,7 +338,7 @@ static int32_t lstack_req_mode_process(int32_t fd, const struct gazelle_stat_msg
         case GAZELLE_STAT_LTRAN_SHOW_LB_RATE:
             handle_resp_lstack_total(req_msg, fd);
             break;
-        case GAZELLE_STAT_LSTACK_SHOW:
+        case GAZELLE_STAT_LTRAN_SHOW_LSTACK:
             handle_resp_lstack_total(req_msg, fd);
             handle_resp_lstack_transfer(req_msg, fd);
             break;
