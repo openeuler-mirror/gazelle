@@ -31,7 +31,6 @@ static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct 
     struct rpc_msg *msg = NULL;
     ret = rte_mempool_get(rpc_pool->rpc_pool, (void **)&msg);
     if (ret < 0) {
-        LSTACK_LOG(INFO, LSTACK, "rpc pool empty!\n");
         errno = ENOMEM;
         return NULL;
     }
