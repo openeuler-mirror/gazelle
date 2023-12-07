@@ -31,6 +31,8 @@
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
 
+#define MBUFPOOL_RESERVE_NUM 5000
+
 struct rte_mempool;
 struct rte_ring;
 struct rte_mbuf;
@@ -45,7 +47,7 @@ struct protocol_stack {
     cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
     int32_t epollfd; /* kernel event thread epoll fd */
 
-    struct rte_mempool *rxtx_pktmbuf_pool;
+    struct rte_mempool *rxtx_mbuf_pool;
     struct rte_ring  *rx_ring;
     struct rte_ring *tx_ring;
     struct rte_ring *reg_ring;
@@ -165,6 +167,7 @@ void stack_fcntl(struct rpc_msg *msg);
 void stack_ioctl(struct rpc_msg *msg);
 void stack_send(struct rpc_msg *msg);
 void stack_mempool_size(struct rpc_msg *msg);
+void stack_rpcpool_size(struct rpc_msg *msg);
 void stack_create_shadow_fd(struct rpc_msg *msg);
 void stack_replenish_sendring(struct rpc_msg *msg);
 void stack_get_conntable(struct rpc_msg *msg);

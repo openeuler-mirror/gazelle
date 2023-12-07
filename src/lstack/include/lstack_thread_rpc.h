@@ -26,7 +26,7 @@
 #define MSG_ARG_4                      (4)
 #define RPM_MSG_ARG_SIZE               (5)
 
-#define RPC_MSG_MAX            2048
+#define RPC_MSG_MAX            4096
 #define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
 
 struct rpc_msg;
@@ -48,14 +48,14 @@ struct rpc_msg {
     int8_t recall_flag : 1;
     int64_t result; /* func return val */
     lockless_queue_node queue_node;
-    struct rpc_msg_pool *pool;
+    struct rpc_msg_pool *rpcpool;
 
     rpc_msg_func func; /* msg handle func hook */
     union rpc_msg_arg args[RPM_MSG_ARG_SIZE]; /* resolve by type */
 };
 
 struct rpc_msg_pool {
-    struct rte_mempool *rpc_pool;
+    struct rte_mempool *mempool;
 };
 
 struct protocol_stack;
@@ -86,7 +86,8 @@ int32_t rpc_call_setsockopt(int fd, int level, int optname, const void *optval, 
 int32_t rpc_call_fcntl(int fd, int cmd, long val);
 int32_t rpc_call_ioctl(int fd, long cmd, void *argp);
 int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock);
-int32_t rpc_call_mempoolsize(struct protocol_stack *stack);
+int32_t rpc_call_mbufpoolsize(struct protocol_stack *stack);
+int32_t rpc_call_rpcpool_size(struct protocol_stack *stack);
 
 static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
 {
@@ -96,7 +97,7 @@ static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue
 static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *msg)
 {
     pthread_spin_destroy(&msg->lock);
-    rte_mempool_put(msg->pool->rpc_pool, (void *)msg);
+    rte_mempool_put(msg->rpcpool->mempool, (void *)msg);
 }
 
 #endif

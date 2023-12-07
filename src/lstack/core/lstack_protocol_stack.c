@@ -881,7 +881,7 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
             continue;
         }
 
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
         if (ret != 0) {
             stack->stats.rx_allocmbuf_fail++;
             return;
@@ -893,7 +893,7 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
             return;
         }
     }
-    ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_pktmbuf_pool, &mbuf_copy, 1);
+    ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1);
     if (ret != 0) {
         cur_stack->stats.rx_allocmbuf_fail++;
         return;
@@ -926,7 +926,13 @@ void stack_mempool_size(struct rpc_msg *msg)
 {
     struct protocol_stack *stack = (struct protocol_stack*)msg->args[MSG_ARG_0].p;
 
-    msg->result = rte_mempool_avail_count(stack->rxtx_pktmbuf_pool);
+    msg->result = rte_mempool_avail_count(stack->rxtx_mbuf_pool);
+}
+
+void stack_rpcpool_size(struct rpc_msg *msg)
+{
+    struct rpc_msg_pool *rpc_mem_pool = (struct rpc_msg_pool*)msg->args[MSG_ARG_0].p;
+    msg->result = rte_mempool_avail_count(rpc_mem_pool->mempool);
 }
 
 void stack_create_shadow_fd(struct rpc_msg *msg)
