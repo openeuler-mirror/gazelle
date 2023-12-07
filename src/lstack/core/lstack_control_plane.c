@@ -361,9 +361,9 @@ static int32_t reg_conn(enum tcp_list_state table_state, enum reg_ring_type reg_
             continue;
         }
         qtuple.protocol = 0;
-        qtuple.src_ip = conn->conn_list[i].lip;
+        qtuple.src_ip = conn->conn_list[i].lip.u_addr.ip4.addr;
         qtuple.src_port = lwip_htons(conn->conn_list[i].l_port);
-        qtuple.dst_ip = conn->conn_list[i].rip;
+        qtuple.dst_ip = conn->conn_list[i].rip.u_addr.ip4.addr;
         qtuple.dst_port = lwip_htons(conn->conn_list[i].r_port);
 
         if ((table_state == LISTEN_LIST) && (!match_host_addr(qtuple.src_ip))) {

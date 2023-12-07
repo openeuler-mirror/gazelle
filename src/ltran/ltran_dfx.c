@@ -236,6 +236,7 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
             strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
         if (ret != EOK) {
             printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            goto END;
         }
     } else {
         ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_FILENAME,
@@ -977,10 +978,11 @@ static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_
 static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
     uint32_t i;
-    struct in_addr rip;
-    struct in_addr lip;
-    char str_ip[GAZELLE_SUBNET_LENGTH_MAX] = {0};
-    char str_rip[GAZELLE_SUBNET_LENGTH_MAX] = {0};
+    char str_ip[INET6_ADDRSTRLEN] = {0};
+    char str_rip[INET6_ADDRSTRLEN] = {0};
+    /* ip:port, 6 is the length reserved for port */
+    char str_laddr[INET6_ADDRSTRLEN + 6] = {0};
+    char str_raddr[INET6_ADDRSTRLEN + 6] = {0};
     struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
     struct gazelle_stat_lstack_conn *conn = &stat->data.conn;
     struct timeval time = {0};
@@ -990,30 +992,37 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     do {
         printf("\n------ stack tid: %6u ------time=%lu\n", stat->tid, time.tv_sec * 1000000 + time.tv_usec);
         printf("No.   Proto lwip_recv recv_ring in_send send_ring cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
-            "        lastack        rcv_nxt        events    epoll_ev  evlist fd     Local Address        "
-            "Foreign Address    State\n");
+            "        lastack        rcv_nxt        events    epoll_ev  evlist fd     Local Address"
+            "                                        Foreign Address                                      State\n");
         uint32_t unread_pkts = 0;
         uint32_t unsend_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
             struct gazelle_stat_lstack_conn_info *conn_info = &conn->conn_list[i];
 
-            rip.s_addr = conn_info->rip;
-            lip.s_addr = conn_info->lip;
+            uint32_t domain = conn_info->lip.type == GZ_ADDR_TYPE_V4 ? AF_INET : AF_INET6;
+            void *lip = (void *)&conn_info->lip;
+            void *rip = (void *)&conn_info->rip;
+
             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
+                inet_ntop(domain, lip, str_ip, sizeof(str_ip));
+                inet_ntop(domain, rip, str_rip, sizeof(str_rip));
+                sprintf_s(str_laddr, sizeof(str_laddr), "%s:%hu", str_ip, conn_info->l_port);
+                sprintf_s(str_raddr, sizeof(str_raddr), "%s:%hu", str_rip, conn_info->r_port);
                 printf("%-6utcp   %-10u%-10u%-8u%-10u%-9d%-9d%-10d%-10d%-15u%-15u%-15u%-10x%-10x%-7d%-7d"
-                    "%s:%hu   %s:%hu  %s\n", i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
+                    "%-52s %-52s %s\n", i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
                     conn_info->send_ring_cnt, conn_info->cwn, conn_info->rcv_wnd, conn_info->snd_wnd,
                     conn_info->snd_buf, conn_info->snd_nxt, conn_info->lastack, conn_info->rcv_nxt, conn_info->events,
                     conn_info->epoll_events, conn_info->eventlist, conn_info->fd,
-                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port,
-                    inet_ntop(AF_INET, &rip, str_rip, sizeof(str_rip)), conn_info->r_port,
-                    tcp_state_to_str(conn_info->tcp_sub_state));
+                    str_laddr, str_raddr, tcp_state_to_str(conn_info->tcp_sub_state));
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
-                printf("%-6utcp    %-147u%-7d%s:%hu   0.0.0.0:*          LISTEN\n", i, conn_info->recv_cnt,
-                    conn_info->fd, inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port);
+                inet_ntop(domain, lip, str_ip, sizeof(str_ip));
+                sprintf_s(str_laddr, sizeof(str_laddr), "%s:%hu", str_ip, conn_info->l_port);
+                sprintf_s(str_raddr, sizeof(str_raddr), "%s:*", domain == AF_INET ? "0.0.0.0" : "::0");
+                printf("%-6utcp    %-147u%-7d%-52s %-52s LISTEN\n", i, conn_info->recv_cnt,
+                    conn_info->fd, str_laddr, str_raddr);
             } else {
                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
-                    inet_ntop(AF_INET, &lip, str_ip, sizeof(str_ip)), conn_info->l_port, conn_info->state);
+                    inet_ntop(domain, lip, str_ip, sizeof(str_ip)), conn_info->l_port, conn_info->state);
             }
             unread_pkts += conn_info->recv_ring_cnt + conn_info->recv_cnt;
             unsend_pkts += conn_info->send_ring_cnt + conn_info->in_send;
