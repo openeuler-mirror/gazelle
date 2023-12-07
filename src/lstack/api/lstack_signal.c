@@ -64,7 +64,10 @@ static void lstack_sig_default_handler(int sig)
         dpdk_kni_release();
     }
     control_fd_close();
-    dump_stack();
+    /* When operations such as pressing Ctrl+C or Kill, the call stack exit is not displayed. */
+    if (sig != SIGINT && sig != SIGTERM && sig != SIGKILL) {
+        dump_stack();
+    }
     lwip_exit();
     (void)kill(getpid(), sig);
 }
