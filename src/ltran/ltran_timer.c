@@ -24,14 +24,6 @@
 #include "ltran_tcp_conn.h"
 #include "ltran_instance.h"
 #include "ltran_timer.h"
-/* undefine lwip_ntohs in lwip/def.h */
-#ifdef ntohs
-#undef ntohs
-#endif
-#ifdef htons
-#undef htons
-#endif
-
 
 static uint64_t g_cycles_per_us = 0;
 
