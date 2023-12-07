@@ -586,7 +586,8 @@ static int32_t handle_stat_request(int32_t sockfd)
     if (msg.stat_mode == GAZELLE_STAT_LSTACK_LOG_LEVEL_SET ||
         msg.stat_mode == GAZELLE_STAT_LSTACK_LOW_POWER_MDF) {
         return handle_proc_cmd(sockfd, &msg);
-    } else if (msg.stat_mode == GAZELLE_STAT_LSTACK_SHOW_XSTATS) {
+    } else if (msg.stat_mode == GAZELLE_STAT_LSTACK_SHOW_XSTATS ||
+        msg.stat_mode == GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES) {
         return handle_dpdk_cmd(sockfd, msg.stat_mode);
     } else {
         ret = handle_stack_cmd(sockfd, msg.stat_mode);

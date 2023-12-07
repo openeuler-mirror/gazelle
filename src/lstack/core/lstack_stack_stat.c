@@ -265,11 +265,15 @@ int handle_dpdk_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode)
 
     if (stat_mode == GAZELLE_STAT_LSTACK_SHOW_XSTATS) {
         dpdk_nic_xstats_get(&dfx, get_protocol_stack_group()->port_id);
-        dfx.tid = 0;
-        dfx.eof = 1;
-        send_control_cmd_data(fd, &dfx);
+    } else if (stat_mode == GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES) {
+        dpdk_nic_features_get(&dfx, get_protocol_stack_group()->port_id);
+    } else {
+        return 0;
     }
 
+    dfx.tid = 0;
+    dfx.eof = 1;
+    send_control_cmd_data(fd, &dfx);
     return 0;
 }
 
