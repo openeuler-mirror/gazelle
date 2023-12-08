@@ -22,7 +22,7 @@
 
 #define GAZELLE_MAX_REG_ARGS     32
 
-#define ENQUEUE_RING_RETRY_TIMEOUT  500 // ms
+#define ENQUEUE_RING_RETRY_TIMEOUT  10 // ms
 
 #define OPT_BASE_VIRTADDR       "--base-virtaddr"
 #define OPT_FILE_PREFIX         "--file-prefix"

@@ -797,7 +797,6 @@ static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t
     if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) < 2) {
         while (rpc_call_send(fd, NULL, len, flags) < 0) {
             usleep(1000); // 1000: wait 1ms to exec again
-            LSTACK_LOG(INFO, LSTACK, "rpc_call_send failed, try again\n");
         }
         __sync_fetch_and_add(&sock->call_num, 1);
     }
