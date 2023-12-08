@@ -297,7 +297,7 @@ int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, ui
     }
     int32_t ret = rte_pktmbuf_alloc_bulk(pool, mbufs, num);
     if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_alloc_bulk fail allocNum=%d, ret=%d, info:=%s \n",
+        LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_alloc_bulk fail allocNum=%d, ret=%d, info:%s \n",
                    num, ret, rte_strerror(-ret));
         return ret;
     }

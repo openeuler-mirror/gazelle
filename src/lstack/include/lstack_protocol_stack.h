@@ -128,6 +128,8 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
 /* when fd is listenfd, listenfd of all protocol stack thread will be closed */
 int32_t stack_broadcast_close(int32_t fd);
 
+int stack_broadcast_shutdown(int fd, int how);
+
 /* listen sync to all protocol stack thread, so that any protocol stack thread can build connect */
 int32_t stack_broadcast_listen(int32_t fd, int backlog);
 int32_t stack_single_listen(int32_t fd, int32_t backlog);
@@ -154,6 +156,7 @@ void stack_clean_epoll(struct rpc_msg *msg);
 void stack_arp(struct rpc_msg *msg);
 void stack_socket(struct rpc_msg *msg);
 void stack_close(struct rpc_msg *msg);
+void stack_shutdown(struct rpc_msg *msg);
 void stack_bind(struct rpc_msg *msg);
 void stack_listen(struct rpc_msg *msg);
 void stack_accept(struct rpc_msg *msg);

@@ -75,6 +75,7 @@ void wrap_api_init(void)
         g_wrap_api->epoll_wait_fn    = rtc_epoll_wait;
         g_wrap_api->poll_fn          = rtc_poll;
         g_wrap_api->close_fn         = rtc_close;
+        g_wrap_api->shutdown_fn      = rtc_shutdown;
         g_wrap_api->epoll_ctl_fn     = rtc_epoll_ctl;
         g_wrap_api->epoll_create1_fn = rtc_epoll_create1;
         g_wrap_api->epoll_create_fn  = rtc_epoll_create;
@@ -103,6 +104,7 @@ void wrap_api_init(void)
         g_wrap_api->epoll_wait_fn    = rtw_epoll_wait;
         g_wrap_api->poll_fn          = rtw_poll;
         g_wrap_api->close_fn         = rtw_close;
+        g_wrap_api->shutdown_fn      = rtw_shutdown;
         g_wrap_api->epoll_ctl_fn     = rtw_epoll_ctl;
         g_wrap_api->epoll_create1_fn = rtw_epoll_create1;
         g_wrap_api->epoll_create_fn  = rtw_epoll_create;
@@ -554,6 +556,20 @@ static inline int32_t do_close(int32_t s)
     return g_wrap_api->close_fn(s);
 }
 
+static int32_t do_shutdown(int fd, int how)
+{
+    struct lwip_sock *sock = NULL;
+    if (select_posix_path() == PATH_KERNEL || select_fd_posix_path(fd, &sock) == PATH_KERNEL) {
+        if (posix_api != NULL && !posix_api->ues_posix && g_wrap_api->shutdown_fn(fd, how) == 0) {
+            return 0;
+        } else {
+            return posix_api->shutdown_fn(fd, how);
+        }
+    }
+
+    return g_wrap_api->shutdown_fn(fd, how);
+}
+
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
     if ((select_posix_path() == PATH_KERNEL) || fds == NULL || nfds == 0) {
@@ -746,6 +762,10 @@ int32_t close(int32_t s)
 {
     return do_close(s);
 }
+int32_t shutdown(int fd, int how)
+{
+    return do_shutdown(fd, how);
+}
 int32_t poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
     return do_poll(fds, nfds, timeout);
@@ -878,6 +898,10 @@ ssize_t __wrap_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags
 int32_t __wrap_close(int32_t s)
 {
     return do_close(s);
+}
+int32_t __wrap_shutdown(int fd, int how)
+{
+    return do_shutdown(fd, how);
 }
 int32_t __wrap_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {

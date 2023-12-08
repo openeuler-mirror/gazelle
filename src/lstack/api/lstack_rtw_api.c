@@ -22,7 +22,9 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
+#include "gazelle_base_func.h"
 #include "lstack_rtw_api.h"
+
 
 int rtw_socket(int domain, int type, int protocol)
 {
@@ -228,6 +230,16 @@ int rtw_close(int s)
     return stack_broadcast_close(s);
 }
 
+int rtw_shutdown(int fd, int how)
+{
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+    if (sock && sock->wakeup && sock->wakeup->epollfd == fd) {
+	GAZELLE_RETURN(ENOTSOCK);
+    }
+
+    return stack_broadcast_shutdown(fd, how);
+}
+
 int rtw_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
     return lstack_rtw_epoll_ctl(epfd, op, fd, event);
@@ -242,3 +254,4 @@ int rtw_epoll_create(int flags)
 {
     return lstack_epoll_create(flags);
 }
+
