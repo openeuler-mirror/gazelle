@@ -24,6 +24,7 @@
 #include <securec.h>
 #include <unistd.h>
 #include <rte_log.h>
+#include <rte_ethdev.h>
 
 #include "ltran_stat.h"
 #include "ltran_base.h"
@@ -91,6 +92,7 @@ static void gazelle_print_ltran_sock(void *buf, const struct gazelle_stat_msg_re
 static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_stat_msg_request *req_msg);
 
 static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LTRAN_SHOW,          sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_total},
@@ -117,6 +119,7 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LSTACK_LOW_POWER_MDF, sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_lpm},
     {GAZELLE_STAT_LSTACK_SHOW_XSTATS, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_xstats},
     {GAZELLE_STAT_LSTACK_SHOW_AGGREGATE, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_aggregate},
+    {GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_nic_features},
 };
 
 static int32_t g_wait_reply = 1;
@@ -156,6 +159,23 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
     }
 
     printf("%s############################\n", nic_stats_border);
+}
+
+static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    struct nic_eth_features *f = &(((struct gazelle_stack_dfx_data *)buf)->data.nic_features);
+    printf("###### NIC offload and other features for port %-2d #########\n", f->port_id);
+
+    printf("tx-ipv4-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_IPV4_CKSUM) ? "on" : "off");
+    printf("tx-tcp_checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
+    printf("tx-tcp-tso: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_TCP_TSO) ? "on" : "off");
+    printf("tx-udp-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_UDP_CKSUM) ? "on" : "off");
+    printf("tx-vlan-insert: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_VLAN_INSERT) ? "on" : "off");
+
+    printf("rx-ipv4-checksum: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_IPV4_CKSUM) ? "on" : "off");
+    printf("rx-tcp-checksum: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
+    printf("rx-udp-checksum: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_UDP_CKSUM) ? "on" : "off");
+    printf("rx-vlan-strip: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_VLAN_STRIP) ? "on" : "off");
 }
 
 static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
@@ -1071,6 +1091,7 @@ static void show_usage(void)
            "  -c, connect     show lstack connect \n"
            "  -l, latency     [time]   show lstack latency \n"
            "  -x, xstats      show lstack xstats \n"
+           "  -k, nic-features     show state of protocol offload and other features \n"
            "  -a, aggregatin  [time]   show lstack send/recv aggregation \n"
            "  set: \n"
            "  loglevel        {error | info | debug}  set lstack loglevel \n"
@@ -1318,6 +1339,8 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
         if (parse_delay_arg(argc, argv, delay) != 0) {
             return 0;
         }
+    } else if (strcmp(param, "-k") == 0 || strcmp(param, "nic-features") == 0) {
+        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES;
     }
 
     return cmd_index;

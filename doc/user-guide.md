@@ -229,6 +229,7 @@ Usage: gazellectl [-h | help]
   -c, connetct    show lstack connect
   -l, latency     show lstack latency
   -x, xstats      show lstack xstats
+  -k, nic-features     show state of protocol offload and other features
   -a, aggregatin  [time]   show lstack send/recv aggregation
   set:
   loglevel        {error | info | debug}  set lstack loglevel

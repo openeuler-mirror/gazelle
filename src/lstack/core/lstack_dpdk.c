@@ -881,3 +881,20 @@ void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
     }
     dfx->data.nic_xstats.len = len;
 }
+
+void dpdk_nic_features_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
+{
+    int ret;
+    struct rte_eth_conf dev_conf;
+
+    ret = rte_eth_dev_conf_get(port_id, &dev_conf);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_eth_dev_conf_get failed:%d.\n", ret);
+        return;
+    }
+
+    dfx->data.nic_features.port_id = port_id;
+    dfx->data.nic_features.tx_offload = dev_conf.txmode.offloads;
+    dfx->data.nic_features.rx_offload = dev_conf.rxmode.offloads;
+    return;
+}

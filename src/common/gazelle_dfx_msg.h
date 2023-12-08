@@ -48,6 +48,7 @@ enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LSTACK_LOW_POWER_MDF,
     GAZELLE_STAT_LSTACK_SHOW_XSTATS,
     GAZELLE_STAT_LSTACK_SHOW_AGGREGATE,
+    GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES,
 
     GAZELLE_STAT_MODE_MAX,
 };
@@ -238,6 +239,12 @@ struct nic_eth_xstats {
     uint16_t port_id;
 };
 
+struct nic_eth_features {
+    uint16_t port_id;
+    uint64_t rx_offload;
+    uint64_t tx_offload;
+};
+
 struct gazelle_stack_dfx_data {
     /* indicates whether the current message is the last */
     uint32_t eof;
@@ -252,6 +259,7 @@ struct gazelle_stack_dfx_data {
         struct gazelle_stat_lstack_conn conn;
         struct gazelle_stat_lstack_snmp snmp;
         struct nic_eth_xstats nic_xstats;
+        struct nic_eth_features nic_features;
     } data;
 };
 

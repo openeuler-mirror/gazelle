@@ -29,9 +29,9 @@ LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
 ARCH := $(shell uname -m)
 
 ifneq ($(CC),clang)
-	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
+	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wno-deprecated-declarations -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
 else
-	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -fPIC
+	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wno-deprecated-declarations -fPIC
 endif
 $(info $(CC):$(SEC_FLAGS))
 
