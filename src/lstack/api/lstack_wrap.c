@@ -595,6 +595,10 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
 
 static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
 {
+    if ((select_posix_path() == PATH_KERNEL) || !(readfds || writefds || exceptfds) || nfds == 0) {
+        return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
+    }
+    
     return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
 }
 

@@ -941,12 +941,7 @@ static nfds_t fds_select2poll(int maxfd, fd_set *readfds, fd_set *writefds, fd_s
 
 int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeval)
 {
-    if (maxfd == 0) {
-        LSTACK_LOG(ERR, LSTACK, "select maxfd is zero\n");
-        return 0;
-    }
-
-    if (maxfd < 0 || maxfd > FD_SETSIZE || (readfds == NULL && writefds == NULL && exceptfds == NULL)) {
+    if (maxfd < 0 || maxfd > FD_SETSIZE) {
         LSTACK_LOG(ERR, LSTACK, "select input param error, fd num=%d\n", maxfd);
         GAZELLE_RETURN(EINVAL);
     }
