@@ -443,6 +443,7 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
             for (int i = 0; i < write_num; i++) {
                 pbufs[i]->addr.u_addr.ip4.addr = saddr->sin_addr.s_addr;
                 pbufs[i]->port = lwip_ntohs((saddr)->sin_port);
+                IP_SET_TYPE(&pbufs[i]->addr, IPADDR_TYPE_V4);
             }
         } else if (addr->sa_family == AF_INET6) {
             struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
@@ -450,6 +451,7 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
                 memcpy_s(pbufs[i]->addr.u_addr.ip6.addr, sizeof(pbufs[i]->addr.u_addr.ip6.addr),
                     saddr->sin6_addr.s6_addr, sizeof(saddr->sin6_addr.s6_addr));
                 pbufs[i]->port = lwip_ntohs((saddr)->sin6_port);
+                IP_SET_TYPE(&pbufs[i]->addr, IPADDR_TYPE_V6);
             }
         } else {
             return 0;
