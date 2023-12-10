@@ -50,8 +50,8 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
 
 void do_lwip_read_recvlist(struct protocol_stack *stack, uint32_t max_num);
 void do_lwip_add_recvlist(int32_t fd);
-bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
-                  size_t len, int32_t flags);
+int do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
+                 size_t len, int32_t flags);
 
 uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn, uint32_t max_num);
 uint32_t do_lwip_get_connnum(void);

@@ -109,14 +109,14 @@ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
         }
 
         if (!msg->recall_flag) {
-	    if (msg->sync_flag) {
+            if (msg->sync_flag) {
                 pthread_spin_unlock(&msg->lock);
             } else {
                 rpc_msg_free(msg);
             }
         } else {
-	  msg->recall_flag = 0;
-	}
+            msg->recall_flag = 0;
+        }
     }
 }
 
