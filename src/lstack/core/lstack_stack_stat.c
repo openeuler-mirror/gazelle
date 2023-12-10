@@ -136,6 +136,7 @@ static void get_wakeup_stat(struct protocol_stack_group *stack_group, struct pro
         struct wakeup_poll *wakeup = container_of(node, struct wakeup_poll, poll_list);
 
         if (wakeup->bind_stack == stack) {
+            stat->kernel_events += wakeup->stat.kernel_events;
             stat->app_events += wakeup->stat.app_events;
             stat->read_null += wakeup->stat.read_null;
             stat->app_write_cnt += wakeup->stat.app_write_cnt;
