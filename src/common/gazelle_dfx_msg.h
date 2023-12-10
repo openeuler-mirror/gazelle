@@ -197,6 +197,8 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t eventlist;
     uint32_t keepalive;
     uint32_t keep_idle;
+    uint32_t keep_intvl;
+    uint32_t keep_cnt;
 };
 
 struct gazelle_stat_lstack_conn {
