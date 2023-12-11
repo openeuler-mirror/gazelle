@@ -61,6 +61,17 @@ void add_sock_event_nolock(struct lwip_sock *sock, uint32_t event)
     if (wakeup == NULL || wakeup->type == WAKEUP_CLOSE || (event & sock->epoll_events) == 0) {
         return;
     }
+
+    if (!get_global_cfg_params()->stack_mode_rtc) {
+        if (event == EPOLLIN && !NETCONN_IS_DATAIN(sock) && !NETCONN_IS_ACCEPTIN(sock)) {
+            return;
+        }
+
+        if (event == EPOLLOUT && !NETCONN_IS_OUTIDLE(sock)) {
+            return;
+        }
+    }
+
     sock->events |= (event == EPOLLERR) ? (EPOLLIN | EPOLLERR) : (event & sock->epoll_events);
     if (list_is_null(&sock->event_list)) {
         list_add_node(&wakeup->event_list, &sock->event_list);
@@ -88,7 +99,16 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
 
 void del_sock_event_nolock(struct lwip_sock *sock, uint32_t event)
 {
-    sock->events &= ~event;
+    if (get_global_cfg_params()->stack_mode_rtc) {
+        sock->events &= ~event;
+    } else {
+        if ((event & EPOLLOUT) && !NETCONN_IS_OUTIDLE(sock)) {
+            sock->events &= ~EPOLLOUT;
+        }
+	if ((event & EPOLLIN) && !NETCONN_IS_DATAIN(sock) && !NETCONN_IS_ACCEPTIN(sock)) {
+            sock->events &= ~EPOLLIN;
+        }
+    }
 
     if (sock->events == 0) {
         list_del_node_null(&sock->event_list);
