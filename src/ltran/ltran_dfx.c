@@ -52,6 +52,7 @@
 #define GAZELLE_MAX_LATENCY_TIME 1800    // max latency time 30mins
 
 #define GAZELLE_DECIMAL          10
+#define GAZELLE_KEEPALIVE_STR_LEN 35
 
 static int32_t g_unix_fd = -1;
 static int32_t g_ltran_rate_show_flag = GAZELLE_OFF;    // not show when first get total statistics
@@ -995,6 +996,20 @@ static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_
     } while (true);
 }
 
+static void gazelle_keepalive_string(char* str, int buff_len, struct gazelle_stat_lstack_conn_info *conn_info)
+{
+    if (conn_info->keepalive == 0) {
+        return;
+    }
+    int ret = sprintf_s(str, buff_len - 1, "(%u,%u,%u)", conn_info->keep_idle, conn_info->keep_intvl,
+        conn_info->keep_cnt);
+    if (ret < 0) {
+        printf("gazelle_keepalive_string sprintf_s fail ret=%d\n", ret);
+        return;
+    }
+    str[strlen(str)] = '\0';
+}
+
 static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
     uint32_t i;
@@ -1007,6 +1022,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     struct gazelle_stat_lstack_conn *conn = &stat->data.conn;
     struct timeval time = {0};
     gettimeofday(&time, NULL);
+    char keepalive_info_str[GAZELLE_KEEPALIVE_STR_LEN] = {0};
 
     printf("Active Internet connections (servers and established)\n");
     do {
@@ -1014,7 +1030,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
         printf("No.   Proto lwip_recv recv_ring in_send send_ring cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
             "        lastack        rcv_nxt        events    epoll_ev  evlist fd     Local Address"
             "                                        Foreign Address                                      State"
-            "     keep-alive keep-idle\n");
+            "     keep-alive keep-alive(idle,intvl,cnt)\n");
         uint32_t unread_pkts = 0;
         uint32_t unsend_pkts = 0;
         for (i = 0; i < conn->conn_num && i < GAZELLE_LSTACK_MAX_CONN; i++) {
@@ -1027,15 +1043,18 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
             if ((conn_info->state == GAZELLE_ACTIVE_LIST) || (conn_info->state == GAZELLE_TIME_WAIT_LIST)) {
                 inet_ntop(domain, lip, str_ip, sizeof(str_ip));
                 inet_ntop(domain, rip, str_rip, sizeof(str_rip));
+                
+                gazelle_keepalive_string(keepalive_info_str, sizeof(keepalive_info_str)/sizeof(char), conn_info);
+                
                 sprintf_s(str_laddr, sizeof(str_laddr), "%s:%hu", str_ip, conn_info->l_port);
                 sprintf_s(str_raddr, sizeof(str_raddr), "%s:%hu", str_rip, conn_info->r_port);
                 printf("%-6utcp   %-10u%-10u%-8u%-10u%-9d%-9d%-10d%-10d%-15u%-15u%-15u%-10x%-10x%-7d%-7d"
-                    "%-52s %-52s %s  %-5d %-9u\n", i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
+                    "%-52s %-52s %s  %-5d %s\n", i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
                     conn_info->send_ring_cnt, conn_info->cwn, conn_info->rcv_wnd, conn_info->snd_wnd,
                     conn_info->snd_buf, conn_info->snd_nxt, conn_info->lastack, conn_info->rcv_nxt, conn_info->events,
                     conn_info->epoll_events, conn_info->eventlist, conn_info->fd,
                     str_laddr, str_raddr, tcp_state_to_str(conn_info->tcp_sub_state),
-                    conn_info->keepalive, conn_info->keep_idle);
+                    conn_info->keepalive, keepalive_info_str);
             } else if (conn_info->state == GAZELLE_LISTEN_LIST) {
                 inet_ntop(domain, lip, str_ip, sizeof(str_ip));
                 sprintf_s(str_laddr, sizeof(str_laddr), "%s:%hu", str_ip, conn_info->l_port);

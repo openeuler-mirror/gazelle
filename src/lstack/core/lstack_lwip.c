@@ -1151,6 +1151,8 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
     conn->rcv_nxt = pcb->rcv_nxt;
     conn->keepalive = (ip_get_option(pcb, SOF_KEEPALIVE) != 0);
     conn->keep_idle = pcb->keep_idle;
+    conn->keep_intvl = pcb->keep_intvl;
+    conn->keep_cnt = pcb->keep_cnt;
 
     if (netconn != NULL && netconn->recvmbox != NULL) {
         conn->recv_cnt = rte_ring_count(netconn->recvmbox->ring);
