@@ -646,14 +646,18 @@ bool do_lwip_replenish_sendring(struct protocol_stack *stack, struct lwip_sock *
     return replenish_again;
 }
 
-bool do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
-                  size_t len, int32_t flags)
+int do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
+                 size_t len, int32_t flags)
 {
+    ssize_t ret;
     /* send all send_ring, so len set lwip send max. */
     if (NETCONN_IS_UDP(sock)) {
-        (void)lwip_send(fd, sock, len, flags);
+        ret = lwip_send(fd, sock, len, flags);
     } else {
-        (void)lwip_send(fd, sock, UINT16_MAX, flags);
+        ret = lwip_send(fd, sock, UINT16_MAX, flags);
+    }
+    if (ret < 0 && (errno == ENOTCONN || errno == ECONNRESET || errno == ECONNABORTED)) {
+        return -1;
     }
 
     return do_lwip_replenish_sendring(stack, sock);

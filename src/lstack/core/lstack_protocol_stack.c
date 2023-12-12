@@ -699,10 +699,10 @@ void stack_close(struct rpc_msg *msg)
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     struct lwip_sock *sock = get_socket(fd);
     
-    if (sock && NETCONN_IS_DATAOUT(sock)) {
+    if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
         rpc_call(&stack->rpc_queue, msg); /* until stack_send recall finish */
-	return;
+        return;
     }
     
     msg->result = lwip_close(fd);
@@ -860,27 +860,32 @@ void stack_send(struct rpc_msg *msg)
     int32_t fd = msg->args[MSG_ARG_0].i;
     size_t len = msg->args[MSG_ARG_1].size;
     struct protocol_stack *stack = (struct protocol_stack *)msg->args[MSG_ARG_3].p;
-    bool replenish_again;
+    int replenish_again;
 
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
-        rpc_msg_free(msg);
+        __sync_fetch_and_sub(&sock->call_num, 1);
         return;
     }
 
     replenish_again = do_lwip_send(stack, sock->conn->socket, sock, len, 0);
-    __sync_fetch_and_sub(&sock->call_num, 1);
-    if (!NETCONN_IS_DATAOUT(sock) && !replenish_again) {
+    if (replenish_again < 0) {
+        __sync_fetch_and_sub(&sock->call_num, 1);
         return;
-    } else {
-        if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 0) {
-	    msg->recall_flag = 1;
+    }
+
+    if (NETCONN_IS_DATAOUT(sock) || replenish_again > 0) {
+        if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 1) {
+            msg->recall_flag = 1;
             rpc_call(&stack->rpc_queue, msg);
-             __sync_fetch_and_add(&sock->call_num, 1);
+            return;
         }
     }
+
+    __sync_fetch_and_sub(&sock->call_num, 1);
+    return;
 }
 
 /* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
