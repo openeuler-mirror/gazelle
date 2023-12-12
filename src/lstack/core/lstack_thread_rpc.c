@@ -90,8 +90,9 @@ static inline __attribute__((always_inline)) int32_t rpc_sync_call(lockless_queu
     return ret;
 }
 
-void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
+int poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
 {
+    int force_quit = 0;
     struct rpc_msg *msg = NULL;
 
     while (max_num--) {
@@ -108,6 +109,10 @@ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
             stack->stats.call_null++;
         }
 
+        if (msg->func == stack_exit_by_rpc) {
+            force_quit = 1;
+        }
+
         if (!msg->recall_flag) {
             if (msg->sync_flag) {
                 pthread_spin_unlock(&msg->lock);
@@ -118,6 +123,8 @@ void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num)
             msg->recall_flag = 0;
         }
     }
+
+    return force_quit;
 }
 
 int32_t rpc_call_conntable(struct protocol_stack *stack, void *conn_table, uint32_t max_conn)
@@ -246,6 +253,7 @@ int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf)
 int32_t rpc_call_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     struct protocol_stack *stack = get_bind_protocol_stack();
+
     struct rpc_msg *msg = rpc_msg_alloc(stack, stack_socket);
     if (msg == NULL) {
         return -1;
@@ -269,6 +277,18 @@ int32_t rpc_call_close(int fd)
     msg->args[MSG_ARG_0].i = fd;
 
     return rpc_sync_call(&stack->rpc_queue, msg);
+}
+
+int32_t rpc_call_stack_exit(struct protocol_stack *stack)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack, stack_exit_by_rpc);
+    if (msg == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "rpc msg alloc failed\n");
+        return -1;
+    }
+
+    rpc_call(&stack->rpc_queue, msg);
+    return 0;
 }
 
 int32_t rpc_call_shutdown(int fd, int how)

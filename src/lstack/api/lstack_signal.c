@@ -18,6 +18,7 @@
 #include <lwip/lwipsock.h>
 #include <lwip/posix_api.h>
 
+#include "gazelle_base_func.h"
 #include "lstack_cfg.h"
 #include "dpdk_common.h"
 #include "lstack_log.h"
@@ -60,15 +61,13 @@ static void lstack_sig_default_handler(int sig)
     if (get_global_cfg_params() && get_global_cfg_params()->is_primary) {
         delete_primary_path();
     }
-    if (!use_ltran()) {
-        dpdk_kni_release();
-    }
     control_fd_close();
     /* When operations such as pressing Ctrl+C or Kill, the call stack exit is not displayed. */
     if (sig != SIGINT && sig != SIGTERM && sig != SIGKILL) {
         dump_stack();
     }
     lwip_exit();
+    gazelle_exit();
     (void)kill(getpid(), sig);
 }
 

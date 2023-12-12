@@ -36,6 +36,7 @@
 
 #include "lstack_rtc_api.h"
 #include "lstack_rtw_api.h"
+#include "lstack_dummy_api.h"
 
 #ifndef SOCK_TYPE_MASK
 #define SOCK_TYPE_MASK 0xf
@@ -110,6 +111,17 @@ void wrap_api_init(void)
         g_wrap_api->epoll_create_fn  = rtw_epoll_create;
         g_wrap_api->select_fn        = rtw_select;
     }
+}
+
+void wrap_api_set_dummy(void)
+{
+    g_wrap_api->socket_fn  = dummy_socket;
+    g_wrap_api->send_fn    = dummy_send;
+    g_wrap_api->write_fn   = dummy_write;
+    g_wrap_api->writev_fn  = dummy_writev;
+    g_wrap_api->send_msg   = dummy_sendmsg;
+    g_wrap_api->send_to    = dummy_sendto;
+    rte_wmb();
 }
 
 static inline int32_t do_epoll_create1(int32_t flags)

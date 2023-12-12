@@ -201,7 +201,7 @@ void do_lwip_init_sock(int32_t fd)
     init_list_node_null(&sock->event_list);
 }
 
-void do_lwip_clean_sock(int32_t fd)
+void do_lwip_clean_sock(int fd)
 {
     struct lwip_sock *sock = get_socket_by_fd(fd);
     if (sock == NULL || sock->stack == NULL) {
@@ -1193,7 +1193,15 @@ void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_soc
     }
 }
 
-int32_t do_lwip_socket(int domain, int type, int protocol)
+int do_lwip_close(int fd)
+{
+    int ret = lwip_close(fd);
+    do_lwip_clean_sock(fd);
+    posix_api->close_fn(fd);
+    return ret;
+}
+
+int do_lwip_socket(int domain, int type, int protocol)
 {
     int32_t fd = lwip_socket(domain, type, 0);
     if (fd < 0) {
@@ -1204,9 +1212,7 @@ int32_t do_lwip_socket(int domain, int type, int protocol)
 
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL || sock->stack == NULL) {
-        lwip_close(fd);
-        do_lwip_clean_sock(fd);
-        posix_api->close_fn(fd);
+        do_lwip_close(fd);
         return -1;
     }
 

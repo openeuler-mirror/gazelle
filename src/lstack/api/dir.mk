@@ -8,7 +8,7 @@
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-SRC = lstack_epoll.c lstack_signal.c lstack_fork.c lstack_wrap.c lstack_rtw_api.c lstack_rtc_api.c
+SRC = lstack_epoll.c lstack_signal.c lstack_fork.c lstack_wrap.c lstack_rtw_api.c lstack_rtc_api.c lstack_dummy_api.c
 
 $(eval $(call register_dir, api, $(SRC)))
 

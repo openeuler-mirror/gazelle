@@ -107,10 +107,24 @@ static int32_t check_process_conflict(void)
     return 0;
 }
 
+void gazelle_exit(void)
+{
+    if (!get_global_cfg_params()->stack_mode_rtc) {
+        wrap_api_set_dummy();
+        /* 1: wait until app thread call send functio complete */
+        sleep(1);
+        stack_group_exit();
+    }
+    if (!use_ltran()) {
+        dpdk_kni_release();
+    }
+}
+
 __attribute__((destructor)) void gazelle_network_exit(void)
 {
     if (posix_api != NULL && !posix_api->ues_posix) {
         lwip_exit();
+        gazelle_exit();
     }
 
     if (!use_ltran()) {
@@ -118,8 +132,6 @@ __attribute__((destructor)) void gazelle_network_exit(void)
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "rte_pdump_uninit failed\n");
         }
-
-        dpdk_kni_release();
     }
 }
 
@@ -289,6 +301,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     if (!get_global_cfg_params()->stack_mode_rtc) {
         if (stack_setup_thread() != 0) {
+            gazelle_exit();
             LSTACK_EXIT(1, "stack_setup_thread failed\n");
         }
     }
@@ -301,6 +314,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
     }
 
     if (set_process_start_flag() != 0) {
+        gazelle_exit();
         LSTACK_EXIT(1, "set_process_start_flag failed\n");
     }
 

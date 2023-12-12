@@ -62,7 +62,7 @@ struct protocol_stack;
 struct rte_mbuf;
 struct wakeup_poll;
 struct lwip_sock;
-void poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
+int poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
 void rpc_call_clean_epoll(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 int32_t rpc_call_msgcnt(struct protocol_stack *stack);
 int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
@@ -89,6 +89,7 @@ int32_t rpc_call_ioctl(int fd, long cmd, void *argp);
 int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock);
 int32_t rpc_call_mbufpoolsize(struct protocol_stack *stack);
 int32_t rpc_call_rpcpool_size(struct protocol_stack *stack);
+int32_t rpc_call_stack_exit(struct protocol_stack *stack);
 
 static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
 {
