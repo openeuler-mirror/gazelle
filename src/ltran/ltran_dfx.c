@@ -53,6 +53,7 @@
 
 #define GAZELLE_DECIMAL          10
 #define GAZELLE_KEEPALIVE_STR_LEN 35
+#define GAZELLE_TIME_STR_LEN 25
 
 static int32_t g_unix_fd = -1;
 static int32_t g_ltran_rate_show_flag = GAZELLE_OFF;    // not show when first get total statistics
@@ -1001,13 +1002,27 @@ static void gazelle_keepalive_string(char* str, int buff_len, struct gazelle_sta
     if (conn_info->keepalive == 0) {
         return;
     }
-    int ret = sprintf_s(str, buff_len - 1, "(%u,%u,%u)", conn_info->keep_idle, conn_info->keep_intvl,
+    int ret = sprintf_s(str, buff_len, "(%u,%u,%u)", conn_info->keep_idle, conn_info->keep_intvl,
         conn_info->keep_cnt);
     if (ret < 0) {
         printf("gazelle_keepalive_string sprintf_s fail ret=%d\n", ret);
         return;
     }
-    str[strlen(str)] = '\0';
+}
+
+static void gazelle_localtime_string(char* str, int buff_len)
+{
+    struct timeval  time = {0};
+    gettimeofday(&time, NULL);
+    struct tm* tm;
+    time_t t = time.tv_sec;
+    tm = localtime(&t);
+    int ret = sprintf_s(str, buff_len, "%d-%d-%d %d:%d:%d",
+        tm->tm_yday + 1900, tm->tm_mon + 1, tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+    if (ret < 0) {
+        printf("gazelle_localtime_string sprintf_s fail ret=%d\n", ret);
+        return;
+    }
 }
 
 static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)
@@ -1020,13 +1035,14 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     char str_raddr[INET6_ADDRSTRLEN + 6] = {0};
     struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
     struct gazelle_stat_lstack_conn *conn = &stat->data.conn;
-    struct timeval time = {0};
-    gettimeofday(&time, NULL);
+
     char keepalive_info_str[GAZELLE_KEEPALIVE_STR_LEN] = {0};
+    char sys_local_time_str[GAZELLE_TIME_STR_LEN] = {0};
+    gazelle_localtime_string(sys_local_time_str, GAZELLE_TIME_STR_LEN);
 
     printf("Active Internet connections (servers and established)\n");
     do {
-        printf("\n------ stack tid: %6u ------time=%lu\n", stat->tid, time.tv_sec * 1000000 + time.tv_usec);
+        printf("\n------ stack tid: %6u ------time=%s\n", stat->tid, sys_local_time_str);
         printf("No.   Proto lwip_recv recv_ring in_send send_ring cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
             "        lastack        rcv_nxt        events    epoll_ev  evlist fd     Local Address"
             "                                        Foreign Address                                      State"
