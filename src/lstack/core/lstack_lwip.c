@@ -564,6 +564,12 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
     uint32_t write_avail = gazelle_ring_readable_count(sock->send_ring);
     struct wakeup_poll *wakeup = sock->wakeup;
 
+    if (!netconn_is_nonblocking(sock->conn)) {
+        while (write_avail < write_num) {
+            write_avail = gazelle_ring_readable_count(sock->send_ring);
+        }
+    }
+
     /* send_ring is full, data attach last pbuf */
     if (write_avail == 0) {
         if (!get_global_cfg_params()->expand_send_ring) {
@@ -1005,8 +1011,19 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
             pbuf = sock->recv_lastdata;
             sock->recv_lastdata = NULL;
         } else {
-            if (gazelle_ring_read(sock->recv_ring, (void **)&pbuf, 1) != 1) {
-                break;
+            if (netconn_is_nonblocking(sock->conn)) {
+                if (gazelle_ring_read(sock->recv_ring, (void **)&pbuf, 1) != 1) {
+                    break;
+                }
+            } else {
+                while (gazelle_ring_read(sock->recv_ring, (void **)&pbuf, 1) != 1 && recvd == 0) {
+                    /* if the connection is disconnected, recv return 0 */
+                    if ((sock->errevent > 0 || (sock->conn->pcb.tcp->flags & TF_FIN)) && !NETCONN_IS_DATAIN(sock)) {
+                        return 0;
+                    }
+
+                    lstack_block_wait(sock->wakeup);
+                }
             }
         }
 

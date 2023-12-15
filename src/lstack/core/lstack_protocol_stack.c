@@ -268,12 +268,8 @@ static void wakeup_kernel_event(struct protocol_stack *stack)
             continue;
         }
 
-         __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
-        if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
-             __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
-            rte_mb();
-            pthread_mutex_unlock(&wakeup->wait);
-        }
+        __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
+        lstack_block_wakeup(wakeup);
     }
 
     return;
@@ -1233,14 +1229,21 @@ int32_t stack_broadcast_bind(int32_t fd, const struct sockaddr *name, socklen_t 
 int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
 {
     int32_t ret = -1;
-
+    struct lwip_sock *min_sock = NULL;
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
         errno = EINVAL;
         return -1;
     }
 
-    struct lwip_sock *min_sock = get_min_accept_sock(fd);
+    if (netconn_is_nonblocking(sock->conn)) {
+        min_sock = get_min_accept_sock(fd);
+    } else {
+        while ((min_sock = get_min_accept_sock(fd)) == NULL) {
+            lstack_block_wait(sock->wakeup);
+	}
+    }
+
     if (min_sock && min_sock->conn) {
         ret = rpc_call_accept(min_sock->conn->socket, addr, addrlen, flags);
     }
