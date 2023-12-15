@@ -31,8 +31,8 @@ struct ClientUnit
     struct epoll_event *epevs;          ///< the epoll events
     uint32_t curr_connect;              ///< current connection number
     uint64_t send_bytes;                ///< total send bytes
-    in_addr_t ip;                       ///< server ip
-    in_addr_t groupip;                  ///< server groupip
+    ip_addr_t ip;                       ///< server ip
+    ip_addr_t groupip;                  ///< server groupip
     uint32_t port;                      ///< server port
     uint32_t sport;                     ///< client sport
     uint32_t connect_num;               ///< total connection number
@@ -67,7 +67,7 @@ struct Client
  * @param debug             if debug or not
  * @return                  the result pointer
  */
-void client_debug_print(const char *ch_str, const char *act_str, in_addr_t ip, uint16_t port, bool debug);
+void client_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug);
 
 /**
  * @brief the client prints informations
@@ -87,7 +87,7 @@ void client_info_print(struct Client *client);
  * @param domain            domain
  * @return                  the result pointer
  */
-int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop);
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop);
 
 /**
  * @brief the single thread, client retry to connect to server, register to epoll

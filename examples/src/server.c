@@ -16,18 +16,19 @@
 static pthread_mutex_t server_debug_mutex;      // the server mutex for debug
 
 // server debug information print
-void server_debug_print(const char *ch_str, const char *act_str, in_addr_t ip, uint16_t port, bool debug)
+void server_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug)
 {
     if (debug == true) {
         pthread_mutex_lock(&server_debug_mutex);
-        struct in_addr sin_addr;
-        sin_addr.s_addr = ip;
+        uint8_t str_len = ip->addr_family == AF_INET ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN;
+        char str_ip[str_len];
+        inet_ntop(ip->addr_family, &ip->u_addr, str_ip, str_len);
         PRINT_SERVER("[%s] [pid: %d] [tid: %ld] [%s <- %s:%d]. ", \
                     ch_str, \
                     getpid(), \
                     pthread_self(), \
                     act_str, \
-                    inet_ntoa(sin_addr), \
+                    str_ip, \
                     ntohs(port));
         pthread_mutex_unlock(&server_debug_mutex);
     }
@@ -136,8 +137,8 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
 int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
 {
     while (true) {
-        struct sockaddr_in accept_addr;
-        uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
+        sockaddr_t accept_addr;
+        uint32_t sockaddr_in_len = server_mud->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
         int32_t accept_fd;
         if (strcmp(server_mud->domain, "udp") == 0) {
             break;
@@ -160,6 +161,17 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
 
         ++(server_mud->curr_connect);
 
+        // sockaddr to ip, port
+        ip_addr_t remote_ip;
+        uint16_t remote_port = ((struct sockaddr_in *)&accept_addr)->sin_port;
+        if (((struct sockaddr *)&accept_addr)->sa_family == AF_INET) {
+            remote_ip.addr_family = AF_INET;
+            remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&accept_addr)->sin_addr;
+        } else if (((struct sockaddr *)&accept_addr)->sa_family == AF_INET6) {
+            remote_ip.addr_family = AF_INET6;
+            remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&accept_addr)->sin6_addr;
+        }
+
         pthread_t *tid = (pthread_t *)malloc(sizeof(pthread_t));
         struct ServerMudWorker *worker = (struct ServerMudWorker *)malloc(sizeof(struct ServerMudWorker));
         worker->worker.fd = accept_fd;
@@ -167,8 +179,8 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
         worker->epevs = (struct epoll_event *)malloc(sizeof(struct epoll_event));
         worker->recv_bytes = 0;
         worker->pktlen = server_mud->pktlen;
-        worker->ip = accept_addr.sin_addr.s_addr;
-        worker->port = accept_addr.sin_port;
+        worker->ip = remote_ip;
+        worker->port = remote_port;
         worker->api = server_mud->api;
         worker->debug = server_mud->debug;
         worker->next = server_mud->workers;
@@ -181,7 +193,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
             return PROGRAM_FAULT;
         }
 
-        server_debug_print("server mud listener", "accept", accept_addr.sin_addr.s_addr, accept_addr.sin_port, server_mud->debug);
+        server_debug_print("server mud listener", "accept", &remote_ip, remote_port, server_mud->debug);
     }
 
     return PROGRAM_OK;
@@ -234,13 +246,13 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
                     return PROGRAM_FAULT;
                 }
             } else if (server_ans_ret == PROGRAM_ABORT) {
-                server_debug_print("server mud worker", "close", worker_unit->ip, worker_unit->port, worker_unit->debug);
+                server_debug_print("server mud worker", "close", &worker_unit->ip, worker_unit->port, worker_unit->debug);
                 if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
                     return PROGRAM_FAULT;
                 }
             } else {
                 worker_unit->recv_bytes += worker_unit->pktlen;
-                server_debug_print("server mud worker", "receive", worker_unit->ip, worker_unit->port, worker_unit->debug);
+                server_debug_print("server mud worker", "receive", &worker_unit->ip, worker_unit->port, worker_unit->debug);
             }
         }
     }
@@ -311,9 +323,9 @@ void *sermud_listener_create_and_run(void *arg)
     uint32_t port = 0;
     for (; port < UNIX_TCP_PORT_MAX; port++) {
         if ((server_mud->port)[port]) {
-            if (create_socket_and_listen(&(server_mud->listener.fd), server_mud->ip, server_mud->groupip, port, server_mud->domain) < 0) {
+            if (create_socket_and_listen(&(server_mud->listener.fd), &server_mud->ip, &server_mud->groupip, port, server_mud->domain) < 0) {
                 exit(PROGRAM_FAULT);
-	    }
+            }
         }
     }
 
@@ -348,8 +360,10 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->epfd = -1;
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
     server_mud->curr_connect = 0;
-    server_mud->ip = inet_addr(params->ip);
-    server_mud->groupip = inet_addr(params->groupip);
+    server_mud->ip.addr_family = params->addr_family;
+    inet_pton(params->addr_family, params->ip, &server_mud->ip.u_addr);
+    server_mud->groupip.addr_family = params->addr_family;
+    inet_pton(params->addr_family, params->groupip, &server_mud->groupip.u_addr);
     server_mud->port = params->port;
     server_mud->pktlen = params->pktlen;
     server_mud->domain = params->domain;
@@ -446,7 +460,7 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
         return PROGRAM_FAULT;
     }
 
-    server_debug_print("server mum unit", "waiting", server_unit->ip, server_unit->port, server_unit->debug);
+    server_debug_print("server mum unit", "waiting", &server_unit->ip, server_unit->port, server_unit->debug);
 
     return PROGRAM_OK;
 }
@@ -455,8 +469,8 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
 int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler)
 {
     while (true) {
-        struct sockaddr_in accept_addr;
-        uint32_t sockaddr_in_len = sizeof(struct sockaddr_in);
+        sockaddr_t accept_addr;
+        socklen_t sockaddr_in_len = server_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
         int32_t accept_fd;
         if (strcmp(server_unit->domain, "udp") == 0) {
             break;
@@ -488,8 +502,19 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
         }
 
         ++server_unit->curr_connect;
+
+        // sockaddr tp ip, port
+        ip_addr_t remote_ip;
+        uint16_t remote_port = ((struct sockaddr_in*)&accept_addr)->sin_port;
+        if (((struct sockaddr *)&accept_addr)->sa_family == AF_INET) {
+            remote_ip.addr_family = AF_INET;
+            remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&accept_addr)->sin_addr;
+        } else if (((struct sockaddr *)&accept_addr)->sa_family == AF_INET6) {
+            remote_ip.addr_family = AF_INET6;
+            remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&accept_addr)->sin6_addr;
+        }
         
-        server_debug_print("server mum unit", "accept", accept_addr.sin_addr.s_addr, accept_addr.sin_port, server_unit->debug);
+        server_debug_print("server mum unit", "accept", &remote_ip, remote_port, server_unit->debug);
     }
 
     return PROGRAM_OK;
@@ -524,11 +549,22 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                 continue;
             } else {
                 struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
-                struct sockaddr_in connect_addr;
-                socklen_t connect_addr_len = sizeof(connect_addr);
+                sockaddr_t connect_addr;
+                socklen_t connect_addr_len = server_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
                 if (strcmp(server_unit->domain, "udp") != 0 && getpeername(server_handler->fd, (struct sockaddr *)&connect_addr, &connect_addr_len) < 0) {
                     PRINT_ERROR("server can't socket peername %d! ", errno);
                     return PROGRAM_FAULT;
+                }
+
+                // sockaddr to ip, port
+                ip_addr_t remote_ip;
+                uint16_t remote_port = ((struct sockaddr_in*)&connect_addr)->sin_port;
+                if (((struct sockaddr *)&connect_addr)->sa_family == AF_INET) {
+                    remote_ip.addr_family = AF_INET;
+                    remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&connect_addr)->sin_addr;
+                } else if (((struct sockaddr *)&connect_addr)->sa_family == AF_INET6) {
+                    remote_ip.addr_family = AF_INET6;
+                    remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&connect_addr)->sin6_addr;
                 }
 
                 int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen, server_unit->api, server_unit->domain);
@@ -539,13 +575,13 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                     }
                 } else if (server_ans_ret == PROGRAM_ABORT) {
                     --server_unit->curr_connect;
-                    server_debug_print("server mum unit", "close", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
+                    server_debug_print("server mum unit", "close", &remote_ip, remote_port, server_unit->debug);
                     if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                         return PROGRAM_FAULT;
                     }
                 } else {
                     server_unit->recv_bytes += server_unit->pktlen;
-                    server_debug_print("server mum unit", "receive", connect_addr.sin_addr.s_addr, connect_addr.sin_port, server_unit->debug);
+                    server_debug_print("server mum unit", "receive", &remote_ip, remote_port, server_unit->debug);
                 }
             }
         }
@@ -559,7 +595,7 @@ void *sersum_create_and_run(void *arg)
 {
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)arg;
 
-    if (create_socket_and_listen(&(server_unit->listener.fd), server_unit->ip, server_unit->groupip, server_unit->port, server_unit->domain) < 0) {
+    if (create_socket_and_listen(&(server_unit->listener.fd), &server_unit->ip, &server_unit->groupip, server_unit->port, server_unit->domain) < 0) {
         exit(PROGRAM_FAULT);
     }
     if (sersum_create_epfd_and_reg(server_unit) < 0) {
@@ -600,10 +636,12 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
         server_unit->curr_connect = 0;
         server_unit->recv_bytes = 0;
-        server_unit->ip = inet_addr(params->ip);
-	server_unit->groupip = inet_addr(params->groupip);
+        server_unit->ip.addr_family = params->addr_family;
+        inet_pton(params->addr_family, params->ip, &server_unit->ip.u_addr);
+        server_unit->groupip.addr_family = params->addr_family;
+        inet_pton(params->addr_family, params->groupip, &server_unit->groupip.u_addr);
 
-	/* loop to set ports to each server_mums */
+        /* loop to set ports to each server_mums */
         while (!((params->port)[port])) {
             port = (port + 1) % UNIX_TCP_PORT_MAX;
         }

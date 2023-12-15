@@ -73,10 +73,30 @@ void program_param_parse_as(struct ProgramParams *params)
     }
 }
 
+bool ip_is_v6(const char *cp)
+{
+    if (cp != NULL) {
+        const char *c;
+        for (c = cp; *c != 0; c++) {
+            if (*c == ':') {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 // set `ip` parameter
 void program_param_parse_ip(struct ProgramParams *params)
 {
-    if (inet_addr(optarg) != INADDR_NONE) {
+    if (ip_is_v6(optarg)) {
+        params->addr_family = AF_INET6;
+    } else {
+        params->addr_family = AF_INET;
+    }
+
+    struct in6_addr ip_tmp;
+    if (inet_pton(params->addr_family, optarg, &ip_tmp) > 0) {
         params->ip = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
@@ -230,6 +250,7 @@ void program_params_init(struct ProgramParams *params)
 {
     params->as = PARAM_DEFAULT_AS;
     params->ip = PARAM_DEFAULT_IP;
+    params->addr_family = PARAM_DEFAULT_ADDR_FAMILY;
     memset_s(params->port, sizeof(bool)*UNIX_TCP_PORT_MAX, 0, sizeof(bool)*UNIX_TCP_PORT_MAX);
     memset_s(params->sport, sizeof(bool)*UNIX_TCP_PORT_MAX, 0, sizeof(bool)*UNIX_TCP_PORT_MAX);
     (params->port)[PARAM_DEFAULT_PORT] = 1;
@@ -308,7 +329,7 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
             case (PARAM_NUM_PORT):
                 program_param_parse_port(params);
                 break;
-	    case (PARAM_NUM_SPORT):
+            case (PARAM_NUM_SPORT):
                 program_param_parse_sport(params);
                 break;
             case (PARAM_NUM_MODEL):
@@ -344,9 +365,9 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
             case (PARAM_NUM_ACCEPT):
                 program_param_parse_accept(params);
                 break;
-	    case (PARAM_NUM_GROUPIP):
-	        program_param_parse_groupip(params);
-		break;
+            case (PARAM_NUM_GROUPIP):
+                program_param_parse_groupip(params);
+                break;
             case (PARAM_NUM_HELP):
                 program_params_help();
                 return PROGRAM_ABORT;
@@ -391,25 +412,25 @@ void program_params_print(struct ProgramParams *params)
     for (uint32_t i = UNIX_TCP_PORT_MIN; i < UNIX_TCP_PORT_MAX; i++) {
         if ((params->port)[i]) {
             printf("%s%u", comma?",":"", i);
-	    comma = 1;
-	}
-	if ((params->sport)[i]) {
+            comma = 1;
+        }
+        if ((params->sport)[i]) {
             sport = i;
-	}
+        }
     }
     printf(" \n");
 
     /* use comma to print sport list */
     if (sport && strcmp(params->as, "client") == 0) {
         printf("--> [client sport]:             ");
-	comma = 0;
-	for (uint32_t i = UNIX_TCP_PORT_MIN; i < sport; i++) {
+        comma = 0;
+        for (uint32_t i = UNIX_TCP_PORT_MIN; i < sport + 1; i++) {
             if ((params->sport)[i]) {
                 printf("%s%u", comma?",":"", i);
                 comma = 1;
             }
-	}
-	printf(" \n");
+        }
+        printf(" \n");
     }
 
     if (strcmp(params->as, "server") == 0) {

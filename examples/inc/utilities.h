@@ -108,6 +108,20 @@
 #define SOCKET_UNIX_DOMAIN_FILE             "unix_domain_file"  ///< socket unix domain file
 
 
+typedef struct ip_addr {
+    union {
+        struct in_addr ip4;
+        struct in6_addr ip6;
+    } u_addr;
+    uint32_t addr_family;
+} ip_addr_t;
+
+typedef union sockaddr_union {
+    struct sockaddr     sa;
+    struct sockaddr_in  in;
+    struct sockaddr_in6 in6;
+} sockaddr_t;
+
 /**
  * @brief create the socket and listen
  * Thi function creates the socket and listen.
@@ -118,7 +132,7 @@
  * @param domain        domain
  * @return              the result
  */
-int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, const char *domain);
+int32_t create_socket_and_listen(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, const char *domain);
 
 /**
  * @brief create the socket and connect
@@ -131,7 +145,7 @@ int32_t create_socket_and_listen(int32_t *socket_fd, in_addr_t ip, in_addr_t gro
  * @param api           api
  * @return              the result
  */
-int32_t create_socket_and_connect(int32_t *socket_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop);
+int32_t create_socket_and_connect(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop);
 
 /**
  * @brief set the socket to unblock
