@@ -45,6 +45,22 @@ static struct protocol_stack_group g_stack_group = {0};
 
 typedef void *(*stack_thread_func)(void *arg);
 
+static void stack_set_state(struct protocol_stack *stack, enum rte_lcore_state_t state)
+{
+    __atomic_store_n(&stack->state, state, __ATOMIC_RELEASE);
+}
+
+static enum rte_lcore_state_t stack_get_state(struct protocol_stack *stack)
+{
+    return __atomic_load_n(&stack->state, __ATOMIC_ACQUIRE);
+}
+
+static void stack_wait_quit(struct protocol_stack *stack)
+{
+    while (__atomic_load_n(&stack->state, __ATOMIC_ACQUIRE) != WAIT) {
+        rte_pause();
+    }
+}
 
 void bind_to_stack_numa(struct protocol_stack *stack)
 {
@@ -436,8 +452,9 @@ END:
     return NULL;
 }
 
-void stack_polling(uint32_t wakeup_tick)
+int stack_polling(uint32_t wakeup_tick)
 {
+    int force_quit;
     struct cfg_params *cfg = get_global_cfg_params();
     uint8_t use_ltran_flag = cfg->use_ltran;
     bool kni_switch = cfg->kni_switch;
@@ -448,7 +465,7 @@ void stack_polling(uint32_t wakeup_tick)
     uint32_t read_connect_number = cfg->read_connect_number;
     struct protocol_stack *stack = get_protocol_stack();
 
-    poll_rpc_msg(stack, rpc_number);
+    force_quit = poll_rpc_msg(stack, rpc_number);
     gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
     sys_timer_run();
     if (cfg->low_power_mod != 0) {
@@ -456,7 +473,7 @@ void stack_polling(uint32_t wakeup_tick)
     }
 
     if (stack_mode_rtc) {
-        return;
+        return force_quit;
     }
 
     do_lwip_read_recvlist(stack, read_connect_number);
@@ -482,7 +499,7 @@ void stack_polling(uint32_t wakeup_tick)
             kni_handle_rx(stack->port_id);
         }
     }
-    return;
+    return force_quit;
 }
 
 static void* gazelle_stack_thread(void *arg)
@@ -512,10 +529,13 @@ static void* gazelle_stack_thread(void *arg)
         return NULL;
     }
 
-    for (;;) {
-        stack_polling(wakeup_tick);
+    stack_set_state(stack, RUNNING);
+
+    while (stack_polling(wakeup_tick) == 0) {
         wakeup_tick++;
     }
+
+    stack_set_state(stack, WAIT);
 
     return NULL;
 }
@@ -576,6 +596,7 @@ int32_t stack_group_init(void)
         LSTACK_LOG(ERR, LSTACK, "sem_init failed errno=%d\n", errno);
         return -1;
     }
+
     stack_group->stack_setup_fail = 0;
 
     if (get_global_cfg_params()->is_primary) {
@@ -705,14 +726,10 @@ void stack_close(struct rpc_msg *msg)
         return;
     }
     
-    msg->result = lwip_close(fd);
+    msg->result = do_lwip_close(fd);
     if (msg->result != 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
-
-    do_lwip_clean_sock(fd);
-
-    posix_api->close_fn(fd);
 }
 
 void stack_shutdown(struct rpc_msg *msg)
@@ -775,9 +792,7 @@ void stack_accept(struct rpc_msg *msg)
 
     struct lwip_sock *sock = get_socket(accept_fd);
     if (sock == NULL || sock->stack == NULL) {
-        lwip_close(accept_fd);
-        do_lwip_clean_sock(accept_fd);
-        posix_api->close_fn(accept_fd);
+        do_lwip_close(accept_fd);
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
     }
@@ -866,7 +881,6 @@ void stack_send(struct rpc_msg *msg)
     if (sock == NULL) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
-        __sync_fetch_and_sub(&sock->call_num, 1);
         return;
     }
 
@@ -1260,3 +1274,52 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
     return stack_broadcast_accept4(fd, addr, addrlen, 0);
 }
 
+static void stack_all_fds_close(void)
+{
+    for (int i = 3; i < GAZELLE_MAX_CLIENTS + GAZELLE_RESERVED_CLIENTS; i++) {
+        struct lwip_sock *sock = get_socket(i);
+        if (sock && sock->stack == get_protocol_stack()) {
+            do_lwip_close(i);
+        }
+    }
+}
+
+static void stack_exit(void)
+{
+    stack_all_fds_close();
+}
+
+void stack_exit_by_rpc(struct rpc_msg *msg)
+{
+    stack_exit();
+}
+
+void stack_group_exit(void)
+{
+    int i;
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    struct protocol_stack *stack = get_protocol_stack();
+
+    for (i = 0; i < stack_group->stack_num; i++) {
+        if ((stack_group->stacks[i] == NULL) ||
+            stack_get_state(stack_group->stacks[i]) != RUNNING) {
+            continue;
+        }
+
+        if (stack != stack_group->stacks[i]) {
+            rpc_call_stack_exit(stack_group->stacks[i]);
+        }
+    }
+
+    if (stack != NULL) {
+        stack_exit();
+    }
+
+    for (i = 0; i < stack_group->stack_num; i++) {
+        if (stack_group->stacks[i] == NULL || stack == stack_group->stacks[i]) {
+            continue;
+        }
+        /* wait stack thread quit */
+        stack_wait_quit(stack_group->stacks[i]);
+    }
+}

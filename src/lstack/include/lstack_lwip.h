@@ -28,9 +28,9 @@ struct rpc_msg;
 struct rte_mbuf;
 struct protocol_stack;
 
-int32_t do_lwip_socket(int domain, int type, int protocol);
+int do_lwip_socket(int domain, int type, int protocol);
+int do_lwip_close(int32_t fd);
 void do_lwip_init_sock(int32_t fd);
-void do_lwip_clean_sock(int32_t fd);
 void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_sock);
 
 struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags);

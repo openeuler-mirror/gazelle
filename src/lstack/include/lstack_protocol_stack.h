@@ -46,6 +46,7 @@ struct protocol_stack {
     uint32_t stack_idx;
     cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
     int32_t epollfd; /* kernel event thread epoll fd */
+    volatile enum rte_lcore_state_t state;
 
     struct rte_mempool *rxtx_mbuf_pool;
     struct rte_ring  *rx_ring;
@@ -114,6 +115,7 @@ struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
 int32_t stack_group_init(void);
+void stack_group_exit(void);
 int32_t stack_setup_thread(void);
 int32_t stack_setup_app_thread(void);
 
@@ -176,6 +178,8 @@ void stack_replenish_sendring(struct rpc_msg *msg);
 void stack_get_conntable(struct rpc_msg *msg);
 void stack_get_connnum(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);
-void stack_polling(uint32_t wakeup_tick);
+void stack_exit_by_rpc(struct rpc_msg *msg);
+
+int stack_polling(uint32_t wakeup_tick);
 void kni_handle_tx(struct rte_mbuf *mbuf);
 #endif

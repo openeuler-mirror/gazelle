@@ -20,6 +20,7 @@
 #include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "lstack_protocol_stack.h"
+#include "lstack_thread_rpc.h"
 #include "lstack_rtc_api.h"
 
 int rtc_poll(struct pollfd *fds, nfds_t nfds, int timeout)

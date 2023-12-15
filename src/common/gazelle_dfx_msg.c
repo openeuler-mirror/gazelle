@@ -29,19 +29,19 @@ int read_specied_len(int fd, char *buf, size_t target_size)
     while (total_read < target_size) {
         int ret = poll(fds, 1, GAZELLECTL_TIMEOUT);
         if (ret < 0) {
-            printf("read_specied_len:: poll ret=%d \n", ret);
+            printf("read_specied_len: poll ret=%d \n", ret);
             return -1;
         } else if (ret == 0) {
-            printf("read_specied_len:: time out \n");
+            printf("read_specied_len: time out \n");
             return -1;
         }
         if (fds[0].revents & POLLIN) {
             int n = read(fd, buf + total_read, target_size - total_read);
             if (n < 0) {
-                printf("read_specied_len:: read ret=%d \n", ret);
+                printf("read_specied_len: read ret=%d \n", ret);
                 return -1;
             } else if (n == 0) {
-                printf("read_specied_len:: Connection closed \n");
+                printf("read_specied_len: Connection closed \n");
                 return -1;
             }
             total_read += n;
