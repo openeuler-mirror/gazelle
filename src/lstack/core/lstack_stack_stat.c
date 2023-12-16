@@ -201,6 +201,7 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
     switch (stat_mode) {
         case GAZELLE_STAT_LSTACK_SHOW:
         case GAZELLE_STAT_LSTACK_SHOW_RATE:
+        case GAZELLE_STAT_LTRAN_SHOW_LSTACK:
             get_stack_stats(dfx, stack);
 	    /* fall through */
         case GAZELLE_STAT_LSTACK_SHOW_AGGREGATE:
