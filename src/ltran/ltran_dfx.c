@@ -1018,7 +1018,7 @@ static void gazelle_localtime_string(char* str, int buff_len)
     time_t t = time.tv_sec;
     tm = localtime(&t);
     int ret = sprintf_s(str, buff_len, "%d-%d-%d %d:%d:%d",
-        tm->tm_yday + 1900, tm->tm_mon + 1, tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+        tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
     if (ret < 0) {
         printf("gazelle_localtime_string sprintf_s fail ret=%d\n", ret);
         return;
