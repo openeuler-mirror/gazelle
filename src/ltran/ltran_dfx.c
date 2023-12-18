@@ -99,7 +99,7 @@ static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_st
 static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LTRAN_SHOW,          sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_total},
     {GAZELLE_STAT_LTRAN_SHOW_RATE,     sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_rate},
-    {GAZELLE_STAT_LTRAN_SHOW_LB_RATE,     sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_lb_rate},
+    {GAZELLE_STAT_LTRAN_SHOW_LB_RATE,     sizeof(struct gazelle_stat_lstack_total),  gazelle_print_ltran_stat_lb_rate},
     {GAZELLE_STAT_LTRAN_SHOW_INSTANCE, sizeof(struct gazelle_stat_ltran_client), gazelle_print_ltran_stat_client},
     {GAZELLE_STAT_LTRAN_SHOW_BURST,    sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_burst},
     {GAZELLE_STAT_LTRAN_SHOW_LATENCY,  sizeof(struct in_addr),                  gazelle_print_ltran_stat_latency},
