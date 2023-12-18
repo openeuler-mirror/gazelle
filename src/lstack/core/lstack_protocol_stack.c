@@ -739,7 +739,7 @@ void stack_shutdown(struct rpc_msg *msg)
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     struct lwip_sock *sock = get_socket(fd);
 
-    if (sock && NETCONN_IS_DATAOUT(sock)) {
+    if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
         rpc_call(&stack->rpc_queue, msg);
         return;
