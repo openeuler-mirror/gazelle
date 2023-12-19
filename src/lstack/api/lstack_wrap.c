@@ -211,6 +211,12 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         return posix_api->bind_fn(s, name, namelen);
     }
 
+    /* select user path when udp enable and ip addr is multicast */
+    if (IN_MULTICAST(ntohl(((struct sockaddr_in *)name)->sin_addr.s_addr))) {
+        SET_CONN_TYPE_LIBOS(sock->conn);
+        return g_wrap_api->bind_fn(s, name, namelen);
+    }
+
     if (match_host_addr(((struct sockaddr_in *)name)->sin_addr.s_addr)) {
         /* maybe kni addr */
         if (posix_api->bind_fn(s, name, namelen) != 0) {
