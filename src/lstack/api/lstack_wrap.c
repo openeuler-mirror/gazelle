@@ -288,11 +288,6 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         return posix_api->connect_fn(s, name, namelen);
     }
 
-    if (!netconn_is_nonblocking(sock->conn)) {
-        LSTACK_LOG(ERR, LSTACK, "connect does not support blocking fd currently\n");
-        GAZELLE_RETURN(EINVAL);
-    }
-
     int32_t ret = 0;
     int32_t remote_port;
     bool is_local = is_dst_ip_localhost(name);
@@ -359,7 +354,11 @@ static bool unsupport_optname(int32_t optname)
         optname == SO_PROTOCOL  ||
         optname == TCP_QUICKACK ||
         optname == SO_SNDTIMEO  ||
-        optname == SO_RCVTIMEO) {
+        optname == SO_RCVTIMEO  ||
+        optname == SO_SNDBUF    ||
+        optname == TCP_INFO     ||
+        optname == TCP_MAXSEG   ||
+        optname == TCP_CONGESTION) {
         return true;
     }
     return false;
@@ -627,7 +626,7 @@ static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set
         return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
     }
     
-    return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
+    return g_wrap_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
 }
 
 #define WRAP_VA_PARAM(_fd, _cmd, _lwip_fcntl, _fcntl_fn) \

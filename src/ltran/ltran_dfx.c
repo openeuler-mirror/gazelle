@@ -169,7 +169,7 @@ static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_st
     printf("###### NIC offload and other features for port %-2d #########\n", f->port_id);
 
     printf("tx-ipv4-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_IPV4_CKSUM) ? "on" : "off");
-    printf("tx-tcp_checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
+    printf("tx-tcp-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
     printf("tx-tcp-tso: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_TCP_TSO) ? "on" : "off");
     printf("tx-udp-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_UDP_CKSUM) ? "on" : "off");
     printf("tx-vlan-insert: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_VLAN_INSERT) ? "on" : "off");
