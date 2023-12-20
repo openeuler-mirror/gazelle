@@ -1185,11 +1185,13 @@ static int32_t parse_bond_slave_mac(void)
         if (k >= GAZELLE_MAX_BOND_NUM) {
             LSTACK_PRE_LOG(LSTACK_ERR, "cfg: too many slave mac address. The maximum number of mac address is %d.\n",
                 GAZELLE_MAX_BOND_NUM);
+            free(bond_slave_mac_tmp);
             return -EINVAL;
         }
         ret = str_to_eth_addr(mac_addr, g_config_params.bond_slave_mac_addr[k].addr_bytes);
         if (ret != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", mac_addr, ret);
+            free(bond_slave_mac_tmp);
             return ret;
         }
         mac_addr = strtok_s(NULL, delim, &tmp);

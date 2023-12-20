@@ -553,11 +553,13 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
         int slave_id = rte_eth_bond_primary_get(port_id);
         if (slave_id < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk get bond primary port failed port = %d\n", slave_id);
+	    free(eth_params);
             return slave_id;
         }
         ret = rte_eth_dev_info_get(slave_id, &slave_dev_info);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk get bond dev info failed ret = %d\n", ret);
+	    free(eth_params);
             return ret;
         }
         dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
