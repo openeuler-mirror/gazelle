@@ -145,6 +145,15 @@ static struct config_vector_t g_config_tbl[] = {
     { NULL,           NULL }
 };
 
+static char* strdup_assert_return(const char* str)
+{
+    char* result = strdup(str);
+    if (result == NULL) {
+      LSTACK_EXIT(1, "strdup_assert_return failed, func strdup return NULL!\n");
+    }
+    return result;
+}
+
 struct cfg_params *get_global_cfg_params(void)
 {
     return &g_config_params;
@@ -336,15 +345,15 @@ static int32_t parse_stack_cpu_number(void)
         if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
             int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
             if (idx < 0) {
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(OPT_BIND_CORELIST);
                 g_config_params.dpdk_argc++;
 
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(args);
                 g_config_params.dpdk_argc++;
             }
         }
 
-        char *tmp_arg = strdup(args);
+        char *tmp_arg = strdup_assert_return(args);
         int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg);
         if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
@@ -369,15 +378,15 @@ static int32_t parse_stack_cpu_number(void)
         if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
             int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
             if (idx < 0) {
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(OPT_BIND_CORELIST);
                 g_config_params.dpdk_argc++;
 
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(args);
                 g_config_params.dpdk_argc++;
             }
         }
 
-        char *tmp_arg_send = strdup(args);
+        char *tmp_arg_send = strdup_assert_return(args);
         int32_t send_cpu_cnt = separate_str_to_array(tmp_arg_send, g_config_params.send_cpus,
             CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg_send);
@@ -396,15 +405,15 @@ static int32_t parse_stack_cpu_number(void)
         if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
             int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
             if (idx < 0) {
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(OPT_BIND_CORELIST);
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(OPT_BIND_CORELIST);
                 g_config_params.dpdk_argc++;
 
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup(args);
+                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(args);
                 g_config_params.dpdk_argc++;
             }
         }
 
-        char *tmp_arg_recv = strdup(args);
+        char *tmp_arg_recv = strdup_assert_return(args);
         int32_t recv_cpu_cnt = separate_str_to_array(tmp_arg_recv, g_config_params.recv_cpus,
             CFG_MAX_CPUS, CFG_MAX_CPUS);
         free(tmp_arg_recv);
@@ -450,7 +459,7 @@ static int32_t parse_app_exclude_cpus(void)
         return -EINVAL;
     }
 
-    tmp_arg = strdup(args);
+    tmp_arg = strdup_assert_return(args);
     cnt = separate_str_to_array(tmp_arg, g_config_params.app_exclude_cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
     free(tmp_arg);
     if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
@@ -1176,7 +1185,7 @@ static int32_t parse_bond_slave_mac(void)
     }
 
     int32_t k = 0;
-    char *bond_slave_mac_tmp = strdup(bond_slave_mac);
+    char *bond_slave_mac_tmp = strdup_assert_return(bond_slave_mac);
     char *tmp = NULL;
     const char *delim = ";";
     
