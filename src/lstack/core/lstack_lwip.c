@@ -564,10 +564,11 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
     uint32_t write_avail = gazelle_ring_readable_count(sock->send_ring);
     struct wakeup_poll *wakeup = sock->wakeup;
 
-    if (!netconn_is_nonblocking(sock->conn)) {
-        while (write_avail < write_num) {
-            write_avail = gazelle_ring_readable_count(sock->send_ring);
+    while (!netconn_is_nonblocking(sock->conn) && (write_avail < write_num)) {
+        if (sock->errevent > 0) {
+            GAZELLE_RETURN(ENOTCONN);
         }
+        write_avail = gazelle_ring_readable_count(sock->send_ring);
     }
 
     /* send_ring is full, data attach last pbuf */

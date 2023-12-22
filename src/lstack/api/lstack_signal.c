@@ -57,7 +57,7 @@ static inline bool match_hijack_signal(int sig)
 
 static void lstack_sig_default_handler(int sig)
 {
-    LSTACK_LOG(ERR, LSTACK, "lstack dumped，caught signal：%d\n", sig);
+    LSTACK_LOG(ERR, LSTACK, "lstack dumped, caught signal: %d\n", sig);
     if (get_global_cfg_params() && get_global_cfg_params()->is_primary) {
         delete_primary_path();
     }
@@ -94,5 +94,13 @@ int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigacti
         new_action.sa_handler = lstack_sig_default_handler;
         return posix_api->sigaction_fn(sig_num, &new_action, old_action);
     }
+
+    /* SA_INTERRUPT is deprecated, use SA_RESETHAND instead. */
+    if ((match_hijack_signal(sig_num) != 0) && (action && action->sa_flags == SA_INTERRUPT)) {
+        new_action = *action;
+        new_action.sa_flags |= SA_RESETHAND;
+        return posix_api->sigaction_fn(sig_num, &new_action, old_action);
+    }
+
     return posix_api->sigaction_fn(sig_num, action, old_action);
 }
