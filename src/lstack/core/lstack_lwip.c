@@ -1175,15 +1175,14 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
     conn->keep_intvl = pcb->keep_intvl;
     conn->keep_cnt = pcb->keep_cnt;
 
-    if (netconn != NULL && netconn->recvmbox != NULL) {
-        conn->recv_cnt = rte_ring_count(netconn->recvmbox->ring);
+    if (netconn != NULL) {
         conn->fd = netconn->socket;
-
+        conn->recv_cnt = (netconn->recvmbox == NULL) ? 0 : rte_ring_count(netconn->recvmbox->ring);
         struct lwip_sock *sock = get_socket(netconn->socket);
-        if (netconn->socket > 0 && sock != NULL && sock->recv_ring != NULL && sock->send_ring != NULL) {
-            conn->recv_ring_cnt = gazelle_ring_readable_count(sock->recv_ring);
+        if (sock != NULL) {
+            conn->recv_ring_cnt = (sock->recv_ring == NULL) ? 0 : gazelle_ring_readable_count(sock->recv_ring);
             conn->recv_ring_cnt += (sock->recv_lastdata) ? 1 : 0;
-            conn->send_ring_cnt = gazelle_ring_readover_count(sock->send_ring);
+            conn->send_ring_cnt = (sock->send_ring == NULL) ? 0 : gazelle_ring_readover_count(sock->send_ring);
             conn->events = sock->events;
             conn->epoll_events = sock->epoll_events;
             conn->eventlist = !list_is_null(&sock->event_list);
