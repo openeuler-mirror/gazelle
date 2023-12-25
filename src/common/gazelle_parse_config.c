@@ -78,11 +78,11 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size, i
                 min = idx;
             }
             for (idx = min; idx <= max; idx++) {
+                if (count > array_size) {
+		            return -1;
+		        }
                 array[count] = idx;
                 count++;
-		if (count > array_size) {
-		    return -1;
-		}
             }
             min = array_size;
         } else {
