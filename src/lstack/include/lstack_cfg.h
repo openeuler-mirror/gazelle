@@ -118,6 +118,7 @@ struct cfg_params {
     bool udp_enable;
     struct cfg_nic_params nic;
     bool stack_mode_rtc;
+    bool nonblock_mode;
 };
 
 struct cfg_params *get_global_cfg_params(void);
