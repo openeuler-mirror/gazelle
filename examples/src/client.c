@@ -18,18 +18,19 @@ static pthread_mutex_t client_debug_mutex;      // the client mutex for printf
 
 
 // the single thread, client prints informations
-void client_debug_print(const char *ch_str, const char *act_str, in_addr_t ip, uint16_t port, bool debug)
+void client_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug)
 {
     if (debug == true) {
         pthread_mutex_lock(&client_debug_mutex);
-        struct in_addr sin_addr;
-        sin_addr.s_addr = ip;
+        uint8_t str_len = ip->addr_family == AF_INET ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN;
+        char str_ip[str_len];
+        inet_ntop(ip->addr_family, &ip->u_addr, str_ip, str_len);
         PRINT_CLIENT("[%s] [pid: %d] [tid: %ld] [%s <- %s:%d]. ", \
                     ch_str, \
                     getpid(), \
                     pthread_self(), \
                     act_str, \
-                    inet_ntoa(sin_addr), \
+                    str_ip, \
                     ntohs(port));
         pthread_mutex_unlock(&client_debug_mutex);
     }
@@ -85,7 +86,7 @@ void client_info_print(struct Client *client)
 }
 
 // the single thread, client try to connect to server, register to epoll
-int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, in_addr_t ip, in_addr_t groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop)
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop)
 {
     int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, groupip, port, sport, domain, api, loop);
     if (create_socket_and_connect_ret == PROGRAM_INPROGRESS) {
@@ -97,7 +98,8 @@ int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t 
 // the single thread, client retry to connect to server, register to epoll
 int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler)
 {
-    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
+    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, &client_unit->ip,
+          &client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
     if (clithd_try_cnntask_ret < 0) {
         if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
             return PROGRAM_OK;
@@ -114,15 +116,27 @@ int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct Clien
 
     ++(client_unit->curr_connect);
 
-    struct sockaddr_in server_addr;
-    socklen_t server_addr_len = sizeof(server_addr);
+    sockaddr_t server_addr;
+    socklen_t server_addr_len = client_unit->ip.addr_family ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
     if (getpeername(client_handler->fd, (struct sockaddr *)&server_addr, &server_addr_len) < 0) {
         PRINT_ERROR("client can't socket peername %d! ", errno);
         return PROGRAM_FAULT;
     }
-    client_debug_print("client unit", "connect", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
 
-    int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip, client_unit->port);
+    // sockaddr to ip, port
+    ip_addr_t remote_ip;
+    uint16_t remote_port = ((struct sockaddr_in*)&server_addr)->sin_port;
+    if (((struct sockaddr *)&server_addr)->sa_family == AF_INET) {
+        remote_ip.addr_family = AF_INET;
+        remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&server_addr)->sin_addr;
+    } else if (((struct sockaddr *)&server_addr)->sa_family == AF_INET6) {
+        remote_ip.addr_family = AF_INET6;
+        remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&server_addr)->sin6_addr;
+    }
+
+    client_debug_print("client unit", "connect", &remote_ip, remote_port, client_unit->debug);
+
+    int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip:&client_unit->ip, client_unit->port);
     if (client_ask_ret == PROGRAM_FAULT) {
         --client_unit->curr_connect;
         struct epoll_event ep_ev;
@@ -136,10 +150,10 @@ int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct Clien
             PRINT_ERROR("client can't close the socket %d! ", errno);
             return PROGRAM_FAULT;
         }
-        client_debug_print("client unit", "close", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
+        client_debug_print("client unit", "close", &remote_ip, remote_port, client_unit->debug);
     } else {
         client_unit->send_bytes += client_unit->pktlen;
-        client_debug_print("client unit", "send", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
+        client_debug_print("client unit", "send", &remote_ip, remote_port, client_unit->debug);
     }
 
     return PROGRAM_OK;
@@ -162,7 +176,7 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
     }
 
     for (uint32_t i = 0; i < connect_num; ++i) {
-        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, client_unit->ip, client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
+        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, &client_unit->ip, &client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
         if (clithd_try_cnntask_ret < 0) {
             if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
                 continue;
@@ -179,9 +193,9 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
 
             ++(client_unit->curr_connect);
 
-            client_debug_print("client unit", "connect", client_unit->ip, client_unit->port, client_unit->debug);
+            client_debug_print("client unit", "connect", &client_unit->ip, client_unit->port, client_unit->debug);
 
-            int32_t client_ask_ret = client_ask(client_unit->handlers + i, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip, client_unit->port);
+            int32_t client_ask_ret = client_ask(client_unit->handlers + i, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip:&client_unit->ip, client_unit->port);
             if (client_ask_ret == PROGRAM_FAULT) {
                 --client_unit->curr_connect;
                 struct epoll_event ep_ev;
@@ -195,10 +209,10 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
                     PRINT_ERROR("client can't close the socket! ");
                     return PROGRAM_FAULT;
                 }
-                client_debug_print("client unit", "close", client_unit->ip, client_unit->port, client_unit->debug);
+                client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
             } else {
                 client_unit->send_bytes += client_unit->pktlen;
-                client_debug_print("client unit", "send", client_unit->ip, client_unit->port, client_unit->debug);
+                client_debug_print("client unit", "send", &client_unit->ip, client_unit->port, client_unit->debug);
             }
         }
     }
@@ -241,15 +255,27 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
             } else {
                 ++(client_unit->curr_connect);
 
-                struct sockaddr_in server_addr;
-                socklen_t server_addr_len = sizeof(server_addr);
+                sockaddr_t server_addr;
+                socklen_t server_addr_len = client_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
                 if (getpeername(client_handler->fd, (struct sockaddr *)&server_addr, &server_addr_len) < 0) {
                     PRINT_ERROR("client can't socket peername %d! ", errno);
                     return PROGRAM_FAULT;
                 }
-                client_debug_print("client unit", "connect", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
+
+                // sockaddr to ip, port
+                ip_addr_t remote_ip;
+                uint16_t remote_port = ((struct sockaddr_in*)&server_addr)->sin_port;
+                if (((struct sockaddr *)&server_addr)->sa_family == AF_INET) {
+                    remote_ip.addr_family = AF_INET;
+                    remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&server_addr)->sin_addr;
+                } else if (((struct sockaddr *)&server_addr)->sa_family == AF_INET6) {
+                    remote_ip.addr_family = AF_INET6;
+                    remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&server_addr)->sin6_addr;
+                }
+
+                client_debug_print("client unit", "connect", &remote_ip, remote_port, client_unit->debug);
                 
-                int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip, client_unit->port);
+                int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip:&client_unit->ip, client_unit->port);
                 if (client_ask_ret == PROGRAM_FAULT) {
                     --client_unit->curr_connect;
                     struct epoll_event ep_ev;
@@ -263,14 +289,15 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
                         PRINT_ERROR("client can't close the socket! ");
                         return PROGRAM_FAULT;
                     }
-                    client_debug_print("client unit", "close", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
+                    client_debug_print("client unit", "close", &remote_ip, remote_port, client_unit->debug);
                 } else {
                     client_unit->send_bytes += client_unit->pktlen;
-                    client_debug_print("client unit", "send", server_addr.sin_addr.s_addr, server_addr.sin_port, client_unit->debug);
+                    client_debug_print("client unit", "send", &remote_ip, remote_port, client_unit->debug);
                 }
             }
         } else if (curr_epev->events == EPOLLIN) {
-            int32_t client_chkans_ret = client_chkans((struct ClientHandler *)curr_epev->data.ptr, client_unit->pktlen, client_unit->verify, client_unit->api, client_unit->domain, client_unit->groupip ? client_unit->groupip:client_unit->ip);
+            ip_addr_t *chkans_ip = client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip : &client_unit->ip;
+            int32_t client_chkans_ret = client_chkans((struct ClientHandler *)curr_epev->data.ptr, client_unit->pktlen, client_unit->verify, client_unit->api, client_unit->domain, chkans_ip);
             if (client_chkans_ret == PROGRAM_FAULT) {
                 --client_unit->curr_connect;
                 struct epoll_event ep_ev;
@@ -284,10 +311,10 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
                     PRINT_ERROR("client can't close the socket %d! ", errno);
                     return PROGRAM_FAULT;
                 }
-                client_debug_print("client unit", "close", client_unit->ip, client_unit->port, client_unit->debug);
+                client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
             } else {
                 client_unit->send_bytes += client_unit->pktlen;
-                client_debug_print("client unit", "receive", client_unit->ip, client_unit->port, client_unit->debug);
+                client_debug_print("client unit", "receive", &client_unit->ip, client_unit->port, client_unit->debug);
             }
         }
     }
@@ -348,17 +375,19 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->epevs = (struct epoll_event *)malloc(CLIENT_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
         client_unit->curr_connect = 0;
         client_unit->send_bytes = 0;
-        client_unit->ip = inet_addr(params->ip);
-        client_unit->groupip = inet_addr(params->groupip);
+        client_unit->ip.addr_family = params->addr_family;
+        inet_pton(params->addr_family, params->ip, &client_unit->ip.u_addr);
+        client_unit->groupip.addr_family = params->addr_family;
+        inet_pton(params->addr_family, params->groupip, &client_unit->groupip.u_addr);
 
-	/* loop to set ports to each client_units */
+        /* loop to set ports to each client_units */
         while (!((params->port)[port])) {
             port = (port + 1) % UNIX_TCP_PORT_MAX;
         }
         client_unit->port = htons(port++);
 
         sp = sport;
-	sport++;
+        sport++;
         while (!((params->sport)[sport]) && (sport != sp)) {
             sport = (sport + 1) % UNIX_TCP_PORT_MAX;
         }
@@ -366,11 +395,11 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->sport = htons(sport);
         client_unit->connect_num = params->connect_num;
         client_unit->pktlen = params->pktlen;
-	if (strcmp(params->as, "loop") == 0) {
-	    client_unit->loop = 1;
-	} else {
-	    client_unit->loop = 0;
-	}
+        if (strcmp(params->as, "loop") == 0) {
+            client_unit->loop = 1;
+        } else {
+            client_unit->loop = 0;
+        }
         client_unit->verify = params->verify;
         client_unit->domain = params->domain;
         client_unit->api = params->api;

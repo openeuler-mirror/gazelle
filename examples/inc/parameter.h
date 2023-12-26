@@ -20,6 +20,7 @@
 
 #define PARAM_DEFAULT_AS            ("server")              ///< default type
 #define PARAM_DEFAULT_IP            ("127.0.0.1")           ///< default IP
+#define PARAM_DEFAULT_ADDR_FAMILY   (AF_INET)               ///< default address family
 #define PARAM_DEFAULT_PORT          (5050)                  ///< default port
 #define PARAM_DEFAULT_SPORT         (0)                     ///< default sport
 #define PARAM_DEFAULT_MODEL         ("mum")                 ///< default model type
@@ -43,7 +44,7 @@ enum {
     PARAM_NUM_IP = 'i',
 #define PARAM_NAME_PORT             ("port")                ///< name of parameter port
     PARAM_NUM_PORT = 'p',
-#define PARAM_NAME_SPORT            ("sport")                ///< name of parameter sport
+#define PARAM_NAME_SPORT            ("sport")               ///< name of parameter sport
     PARAM_NUM_SPORT = 's',
 #define PARAM_NAME_MODEL            ("model")               ///< name of parameter model type
     PARAM_NUM_MODEL = 'm',
@@ -101,7 +102,7 @@ struct ProgramParams {
     char*               model;              ///< model type
     uint32_t            thread_num;         ///< the number of threads
     uint32_t            connect_num;        ///< the connection number
-    char*               domain;             ///< the communication dimain
+    char*               domain;             ///< the communication domain
     char*               api;                ///< the type of api
     uint32_t            pktlen;             ///< the packet length
     bool                verify;             ///< if we verify the message or not
@@ -110,6 +111,7 @@ struct ProgramParams {
     char*               accept;             ///< accept connections method
     bool                ringpmd;            ///< if we use ring PMD or not
     char*               groupip;            ///< group IP address>
+    uint32_t            addr_family;        ///< IP address family
 };
 
 /**
@@ -142,5 +144,6 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
  */
 void program_params_print(struct ProgramParams *params);
 
+bool ip_is_v6(const char *ip);
 
 #endif // __EXAMPLES_PARAMETER_H__

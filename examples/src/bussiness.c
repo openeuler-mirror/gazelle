@@ -11,8 +11,9 @@
 */
 
 
-#include "bussiness.h"
+#include "parameter.h"
 #include "client.h"
+#include "bussiness.h"
 
 
 static const char bussiness_messages_low[] = "abcdefghijklmnopqrstuvwxyz";  // the lower charactors of business message
@@ -145,15 +146,15 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
     int32_t cread = 0;
     int32_t sread = length;
     int32_t nread = 0;
-    struct sockaddr_in client_addr;
-    socklen_t len = sizeof(client_addr);
+    sockaddr_t client_addr;
+    socklen_t len = sizeof(sockaddr_t);
 
     if (strcmp(domain, "udp") == 0 && strncmp(api, "recvfrom", strlen("recvfrom")) != 0) {
         if (getpeername(server_handler->fd, (struct sockaddr *)&client_addr, &len) < 0) {
             if (recvfrom(server_handler->fd, buffer_in, length, MSG_PEEK, (struct sockaddr *)&client_addr, &len) < 0) {
                 return PROGRAM_FAULT;
             }
-            if (connect(server_handler->fd, (struct sockaddr *)&client_addr, sizeof(struct sockaddr_in)) < 0) {
+            if (connect(server_handler->fd, (struct sockaddr *)&client_addr, len) < 0) {
                 return PROGRAM_FAULT;
             }
         }
@@ -215,17 +216,27 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
 }
 
 // client asks
-int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api, const char* domain, in_addr_t ip, uint16_t port)
+int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api, const char* domain, ip_addr_t *ip, uint16_t port)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
     char *buffer_out = (char *)malloc(length * sizeof(char));
-    struct sockaddr_in server_addr;
-    socklen_t len = sizeof(server_addr);
-    memset_s(&server_addr, sizeof(server_addr), 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = ip;
-    server_addr.sin_port = port;
+    sockaddr_t server_addr;
+    socklen_t len = 0;
+
+    if (ip->addr_family == AF_INET6) {
+        memset_s(&server_addr, sizeof(struct sockaddr_in6), 0, sizeof(struct sockaddr_in6));
+        ((struct sockaddr_in6 *)&server_addr)->sin6_family = AF_INET6;
+        ((struct sockaddr_in6 *)&server_addr)->sin6_addr = ip->u_addr.ip6;
+        ((struct sockaddr_in6 *)&server_addr)->sin6_port = port;
+        len = sizeof(struct sockaddr_in6);
+    } else if (ip->addr_family == AF_INET) {
+        memset_s(&server_addr, sizeof(struct sockaddr_in), 0, sizeof(struct sockaddr_in));
+        ((struct sockaddr_in *)&server_addr)->sin_family = AF_INET;
+        ((struct sockaddr_in *)&server_addr)->sin_addr = ip->u_addr.ip4;
+        ((struct sockaddr_in *)&server_addr)->sin_port = port;
+        len = sizeof(struct sockaddr_in);
+    }
 
     client_bussiness(buffer_out, buffer_in, length, false, &(client_handler->msg_idx));
 
@@ -257,7 +268,7 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const 
 }
 
 // client checks
-int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api, const char* domain, in_addr_t ip)
+int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api, const char* domain, ip_addr_t* ip)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
@@ -266,8 +277,8 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
     int32_t cread = 0;
     int32_t sread = length;
     int32_t nread = 0;
-    struct sockaddr_in server_addr;
-    socklen_t len = sizeof(server_addr);
+    sockaddr_t server_addr;
+    socklen_t len = ip->addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
 
     while (cread < sread) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
@@ -295,8 +306,8 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
     int32_t cwrite = 0;
     int32_t swrite = length;
     int32_t nwrite = 0;
-    if (ip >= inet_addr("224.0.0.0") && ip <= inet_addr("239.255.255.255")) {
-        server_addr.sin_addr.s_addr = ip;
+    if (ip->addr_family == AF_INET && ip->u_addr.ip4.s_addr >= inet_addr("224.0.0.0") && ip->u_addr.ip4.s_addr <= inet_addr("239.255.255.255")) {
+        ((struct sockaddr_in*)&server_addr)->sin_addr = ip->u_addr.ip4;
     }
 
     while (cwrite < swrite) {

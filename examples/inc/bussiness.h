@@ -104,9 +104,10 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
  * @param pktlen            the length of package
  * @param api               the api
  * @param domain            the domain
+ * @param ip                the ip address of peer
  * @return                  the result
  */
-int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api, const char* domain, in_addr_t ip, uint16_t port);
+int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api, const char* domain, ip_addr_t* ip, uint16_t port);
 
 /**
  * @brief client checks the information and answers
@@ -119,7 +120,7 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const 
  * @param ip                the ip address of peer, maybe group ip
  * @return                  the result
  */
-int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api, const char* domain, in_addr_t ip);
+int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api, const char* domain, ip_addr_t* ip);
 
 
 #endif // __EXAMPLES_BUSSINESS_H__

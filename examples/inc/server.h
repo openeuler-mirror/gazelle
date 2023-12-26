@@ -31,8 +31,8 @@ struct ServerMumUnit
     struct epoll_event *epevs;              ///< the epoll events
     uint32_t curr_connect;                  ///< current connection number
     uint64_t recv_bytes;                    ///< total receive bytes
-    in_addr_t ip;                           ///< server ip
-    in_addr_t groupip;                      ///< server group ip
+    ip_addr_t ip;                           ///< server ip
+    ip_addr_t groupip;                      ///< server group ip
     uint16_t port;                          ///< server port
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
@@ -64,7 +64,7 @@ struct ServerMudWorker
     struct epoll_event *epevs;              ///< the epoll events
     uint64_t recv_bytes;                    ///< total receive bytes
     uint32_t pktlen;                        ///< the length of peckage
-    in_addr_t ip;                           ///< client ip
+    ip_addr_t ip;                           ///< client ip
     uint16_t port;                          ///< client port
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
@@ -83,8 +83,8 @@ struct ServerMud
     int32_t epfd;                           ///< the listen epoll file descriptor
     struct epoll_event *epevs;              ///< the epoll events
     uint32_t curr_connect;                  ///< current connection number
-    in_addr_t ip;                           ///< server ip
-    in_addr_t groupip;                      ///< server group ip
+    ip_addr_t ip;                           ///< server ip
+    ip_addr_t groupip;                      ///< server group ip
     bool* port;                             ///< server port point to parameter's port
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
@@ -105,7 +105,7 @@ struct ServerMud
  * @param debug             if debug or not
  * @return                  the result pointer
  */
-void server_debug_print(const char *ch_str, const char *act_str, in_addr_t ip, uint16_t port, bool debug);
+void server_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug);
 
 /**
  * @brief the multi thread, unblock, dissymmetric server prints informations
