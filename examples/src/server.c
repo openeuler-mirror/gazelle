@@ -371,6 +371,7 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->debug = params->debug;
     server_mud->epollcreate = params->epollcreate;
     server_mud->accept = params->accept;
+    server_mud->tcp_keepalive_idle = params->tcp_keepalive_idle;
 
     if (pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud) < 0) {
         PRINT_ERROR("server can't create poisx thread %d! ", errno);
@@ -472,6 +473,7 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
         sockaddr_t accept_addr;
         socklen_t sockaddr_in_len = server_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
         int32_t accept_fd;
+        int32_t ret = 0;
         if (strcmp(server_unit->domain, "udp") == 0) {
             break;
         }
@@ -484,6 +486,11 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
         
         if (accept_fd < 0) {
             break;
+        }
+        ret = set_tcp_keep_alive_info(accept_fd, server_unit->tcp_keepalive_idle);
+        if (ret < 0) {
+            PRINT_ERROR("set_tcp_keep_alive_info ret=%d \n", ret);
+            return PROGRAM_FAULT;
         }
 
         if (set_socket_unblock(accept_fd) < 0) {
@@ -652,6 +659,7 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->debug = params->debug;
         server_unit->epollcreate = params->epollcreate;
         server_unit->accept = params->accept;
+        server_unit->tcp_keepalive_idle = params->tcp_keepalive_idle;
         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
         if (server_unit->next) {
             memset_s(server_unit->next, sizeof(struct ServerMumUnit), 0, sizeof(struct ServerMumUnit));

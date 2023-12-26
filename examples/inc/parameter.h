@@ -35,6 +35,9 @@
 #define PARAM_DEFAULT_EPOLLCREATE   ("ec")                  ///< default method of epoll_create
 #define PARAM_DEFAULT_ACCEPT        ("ac")                  ///< default method of accept method
 #define PARAM_DEFAULT_GROUPIP       ("0.0.0.0")             ///< default group IP>
+#define PARAM_DEFAULT_KEEPALIVEIDLE (0)                     ///< default TCP_KEEPALIVE_IDLE_TIME>
+
+#define TCP_KEEPALIVE_IDLE_MAX (3600)                       // time: second
 
 
 enum {
@@ -72,6 +75,8 @@ enum {
     PARAM_NUM_ACCEPT = 'C',
 #define PARAM_NAME_GROUPIP          ("groupip")             ///< name of parameter group ip
     PARAM_NUM_GROUPIP = 'g',
+#define PARAM_NAME_KEEPALIVE        ("keep_alive")          ///< name of parameter keep_alive
+    PARAM_NUM_KEEPALIVE = 'k',
 };
 
 #define NO_ARGUMENT             0                           ///< options takes no arguments
@@ -112,6 +117,7 @@ struct ProgramParams {
     bool                ringpmd;            ///< if we use ring PMD or not
     char*               groupip;            ///< group IP address>
     uint32_t            addr_family;        ///< IP address family
+    int32_t             tcp_keepalive_idle; ///< tcp keepalive idle time
 };
 
 /**

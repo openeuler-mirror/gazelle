@@ -36,6 +36,7 @@
 #include <sys/un.h>
 
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 
 #include "securec.h"
@@ -154,6 +155,7 @@ int32_t create_socket_and_connect(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *
  * @return              the result
  */
 int32_t set_socket_unblock(int32_t socket_fd);
+int32_t set_tcp_keep_alive_info(int32_t sockfd, int32_t tcp_keepalive_idle);
 
 
 #endif // __EXAMPLES_UTILITIES_H__
