@@ -33,7 +33,7 @@
 
 int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size, int32_t max_value)
 {
-    uint32_t count = 0;
+    int32_t count = 0;
     char *end = NULL;
     int32_t min, max;
     int32_t idx;
@@ -78,6 +78,9 @@ int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size, i
                 min = idx;
             }
             for (idx = min; idx <= max; idx++) {
+                if (count >= array_size) {
+                    return -1;
+                }
                 array[count] = idx;
                 count++;
             }

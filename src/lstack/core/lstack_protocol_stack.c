@@ -651,44 +651,57 @@ int32_t stack_setup_thread(void)
     struct thread_params *t_params[queue_num];
     int process_index = get_global_cfg_params()->process_idx;
 
+    for (uint32_t i = 0; i < queue_num; ++i) {
+        t_params[i] = malloc(sizeof(struct thread_params));
+        if (t_params[i] == NULL) {
+            goto OUT;
+        }
+    }
     for (uint32_t i = 0; i < queue_num; i++) {
         if (get_global_cfg_params()->seperate_send_recv) {
             if (i % 2 == 0) {
                 ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_RECV_THREAD_NAME, process_index, i / 2);
                 if (ret < 0) {
-                    return -1;
+                    goto OUT;
                 }
             } else {
                 ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_SEND_THREAD_NAME, process_index, i / 2);
                 if (ret < 0) {
-                    return -1;
+                    goto OUT;
                 }
             }
         } else {
             ret = sprintf_s(name, sizeof(name), "%s", LSTACK_THREAD_NAME);
             if (ret < 0) {
-                return -1;
+                goto OUT;
             }
         }
 
-        t_params[i] = malloc(sizeof(struct thread_params));
         t_params[i]->idx = i;
         t_params[i]->queue_id = process_index * queue_num + i;
 
         ret = create_thread((void *)t_params[i], name, gazelle_stack_thread);
         if (ret != 0) {
-            return ret;
+            goto OUT;
         }
     }
 
     /* 2: wait stack thread and kernel_event thread init finish */
     wait_sem_value(&g_stack_group.sem_stack_setup, queue_num * 2);
     if (g_stack_group.stack_setup_fail) {
-        return -1;
+        goto OUT;
     }
     g_stack_group.stack_num = queue_num;
 
     return 0;
+
+ OUT:
+    for (int32_t i = 0; i < queue_num; ++i) {
+        if (t_params[i] != NULL) {
+            free(t_params[i]);
+        }
+    }
+    return -1;
 }
 
 void stack_arp(struct rpc_msg *msg)
