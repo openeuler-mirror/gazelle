@@ -648,7 +648,7 @@ int32_t stack_setup_thread(void)
     int32_t ret;
     char name[PATH_MAX];
     int queue_num = get_global_cfg_params()->num_queue;
-    struct thread_params *t_params[queue_num];
+    struct thread_params *t_params[queue_num] = {0};
     int process_index = get_global_cfg_params()->process_idx;
 
     for (uint32_t i = 0; i < queue_num; ++i) {
