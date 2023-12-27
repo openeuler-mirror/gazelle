@@ -72,13 +72,13 @@ static void reset_sock_data(struct lwip_sock *sock)
     /* check null pointer in ring_free func */
     if (sock->recv_ring) {
         free_ring_pbuf(sock->recv_ring);
-        rte_ring_free(sock->recv_ring);
+        gazelle_ring_free_fast(sock->recv_ring);
         sock->recv_ring = NULL;
     }
 
     if (sock->send_ring) {
         free_ring_pbuf(sock->send_ring);
-        rte_ring_free(sock->send_ring);
+        gazelle_ring_free_fast(sock->send_ring);
         sock->send_ring = NULL;
     }
 
@@ -169,7 +169,6 @@ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct lwip_so
 
 void do_lwip_init_sock(int32_t fd)
 {
-    static _Atomic uint32_t name_tick = 0;
     struct protocol_stack *stack = get_protocol_stack();
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
@@ -178,18 +177,17 @@ void do_lwip_init_sock(int32_t fd)
 
     reset_sock_data(sock);
 
-    sock->recv_ring = create_ring("sock_recv", SOCK_RECV_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ,
-        atomic_fetch_add(&name_tick, 1));
+    sock->recv_ring = gazelle_ring_create_fast("sock_recv", SOCK_RECV_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ);
     if (sock->recv_ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "sock_recv create failed. errno: %d.\n", rte_errno);
         return;
     }
 
-    sock->send_ring = create_ring("sock_send",
+    sock->send_ring = gazelle_ring_create_fast("sock_send",
         get_global_cfg_params()->send_ring_size,
-        RING_F_SP_ENQ | RING_F_SC_DEQ,
-        atomic_fetch_add(&name_tick, 1));
+        RING_F_SP_ENQ | RING_F_SC_DEQ);
     if (sock->send_ring == NULL) {
+        gazelle_ring_free_fast(sock->recv_ring);
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
         return;
     }
