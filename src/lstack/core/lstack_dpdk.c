@@ -245,43 +245,22 @@ struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t si
     return mempool;
 }
 
-struct rte_ring *create_ring(const char *name, uint32_t count, uint32_t flags, int32_t queue_id)
-{
-    char ring_name[RTE_RING_NAMESIZE] = {0};
-    struct rte_ring *ring;
-
-    int32_t ret = snprintf_s(ring_name, sizeof(ring_name), RTE_RING_NAMESIZE - 1,
-        "%s_%d_%d", name, get_global_cfg_params()->process_idx,  queue_id);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d\n", ret);
-        return NULL;
-    }
-
-    ring = rte_ring_create(ring_name, count, rte_socket_id(), flags);
-    if (ring == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "%s create failed. errno: %d.\n", name, rte_errno);
-    }
-
-    return ring;
-}
-
 int32_t create_shared_ring(struct protocol_stack *stack)
 {
     lockless_queue_init(&stack->rpc_queue);
 
     if (use_ltran()) {
-        stack->rx_ring = create_ring("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
+        stack->rx_ring = gazelle_ring_create_fast("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
         if (stack->rx_ring == NULL) {
             return -1;
         }
 
-        stack->tx_ring = create_ring("RING_TX", VDEV_TX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ, stack->queue_id);
+        stack->tx_ring = gazelle_ring_create_fast("RING_TX", VDEV_TX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
         if (stack->tx_ring == NULL) {
             return -1;
         }
 
-        stack->reg_ring = create_ring("SHARED_REG_RING", VDEV_REG_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ,
-            stack->queue_id);
+        stack->reg_ring = gazelle_ring_create_fast("SHARED_REG_RING", VDEV_REG_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
         if (stack->reg_ring == NULL) {
             return -1;
         }
