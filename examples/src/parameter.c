@@ -33,6 +33,7 @@ const char prog_short_opts[] = \
     "E:"         // epollcreate
     "C:"         // accept
     "g:"        // group address
+    "k:"        // tcp keep_alive
     ;
 
 // program long options
@@ -55,6 +56,7 @@ const struct ProgramOption prog_long_opts[] = \
     {PARAM_NAME_EPOLLCREATE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_EPOLLCREATE},
     {PARAM_NAME_ACCEPT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_ACCEPT},
     {PARAM_NAME_GROUPIP, REQUIRED_ARGUMETN, NULL, PARAM_NUM_GROUPIP},
+    {PARAM_NAME_KEEPALIVE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_KEEPALIVE},
 };
 
 
@@ -233,6 +235,18 @@ void program_param_parse_accept(struct ProgramParams *params)
     }
 }
 
+// set `tcp_keepalive_idle` parameter
+void program_param_parse_keepalive(struct ProgramParams *params)
+{
+    int32_t keep_alive_idle = strtol(optarg, NULL, 0);
+    if (keep_alive_idle > 0 && keep_alive_idle <= TCP_KEEPALIVE_IDLE_MAX) {
+        params->tcp_keepalive_idle = keep_alive_idle;
+    } else {
+        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+}
+
 // set `group ip` parameter
 void program_param_parse_groupip(struct ProgramParams *params)
 {
@@ -266,6 +280,7 @@ void program_params_init(struct ProgramParams *params)
     params->epollcreate = PARAM_DEFAULT_EPOLLCREATE;
     params->accept = PARAM_DEFAULT_ACCEPT;
     params->groupip = PARAM_DEFAULT_GROUPIP;
+    params->tcp_keepalive_idle = PARAM_DEFAULT_KEEPALIVEIDLE;
 }
 
 // print program helps
@@ -367,6 +382,9 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
                 break;
             case (PARAM_NUM_GROUPIP):
                 program_param_parse_groupip(params);
+                break;
+            case (PARAM_NUM_KEEPALIVE):
+                program_param_parse_keepalive(params);
                 break;
             case (PARAM_NUM_HELP):
                 program_params_help();

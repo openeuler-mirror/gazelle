@@ -11,7 +11,31 @@
 */
 
 
-#include "utilities.h"
+#include "parameter.h"
+
+int32_t set_tcp_keep_alive_info(int32_t sockfd, int32_t tcp_keepalive_idle)
+{
+    int32_t ret = 0;
+    int32_t keep_alive = 1;
+    int32_t keep_idle = 1;
+
+    if (tcp_keepalive_idle == PARAM_DEFAULT_KEEPALIVEIDLE) {
+        return 0;
+    }
+
+    keep_idle = tcp_keepalive_idle;
+    ret = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keep_alive, sizeof(keep_alive));
+    if (ret != 0) {
+        PRINT_ERROR("setsockopt keep_alive err ret=%d \n", ret);
+        return ret;
+    }
+
+    ret = setsockopt(sockfd, SOL_TCP, TCP_KEEPIDLE, (void *)&keep_idle, sizeof(keep_idle));
+    if (ret != 0) {
+        return ret;
+    }
+    return ret;
+}
 
 
 // create the socket and listen
