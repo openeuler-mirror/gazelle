@@ -1287,7 +1287,10 @@ int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *ad
 
 int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen)
 {
-    return stack_broadcast_accept4(fd, addr, addrlen, 0);
+    if (get_global_cfg_params()->nonblock_mode)
+        return stack_broadcast_accept4(fd, addr, addrlen, O_NONBLOCK);
+    else
+        return stack_broadcast_accept4(fd, addr, addrlen, 0);
 }
 
 static void stack_all_fds_close(void)

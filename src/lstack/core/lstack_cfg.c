@@ -80,6 +80,7 @@ static int32_t parse_nic_rxqueue_size(void);
 static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
+static int32_t parse_defaule_nonblock_mode(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -142,6 +143,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "nic_txqueue_size", parse_nic_txqueue_size},
     { "stack_thread_mode", parse_stack_thread_mode },
     { "nic_vlan_mode", parse_nic_vlan_mode },
+    { "nonblock_mode", parse_defaule_nonblock_mode },
     { NULL,           NULL }
 };
 
@@ -1280,3 +1282,13 @@ static int32_t parse_nic_vlan_mode(void)
     return ret;
 }
 
+static int32_t parse_defaule_nonblock_mode(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.nonblock_mode, "nonblock_mode", 1, 0, 1, ret);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid nonblock mode value %d. only support 0 or 1\n", \
+                            g_config_params.nonblock_mode);
+    }
+    return ret;
+}
