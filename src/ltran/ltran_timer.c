@@ -103,8 +103,8 @@ void gazelle_detect_conn_logout(struct gazelle_tcp_conn_htable *conn_htable)
                 conn_htable->array[i].chain_size--;
                 LTRAN_DEBUG("delete the tcp conn htable: tid %u quintuple[%u %u %u %u %u]\n",
                     conn->tid, conn->quintuple.protocol,
-                    conn->quintuple.src_ip, (uint32_t)ntohs(conn->quintuple.src_port),
-                    conn->quintuple.dst_ip, (uint32_t)ntohs(conn->quintuple.dst_port));
+                    conn->quintuple.src_ip.u_addr.ip4.addr, (uint32_t)ntohs(conn->quintuple.src_port),
+                    conn->quintuple.dst_ip.u_addr.ip4.addr, (uint32_t)ntohs(conn->quintuple.dst_port));
                 rte_free(conn);
             }
         }

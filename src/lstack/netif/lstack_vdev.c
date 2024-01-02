@@ -185,10 +185,12 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
                 delete_user_process_port(qtuple->src_port, PORT_CONNECT);
                 uint16_t queue_id = get_protocol_stack()->queue_id;
                 if (queue_id != 0) {
-                    transfer_delete_rule_info_to_process0(qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+                    transfer_delete_rule_info_to_process0(qtuple->dst_ip.u_addr.ip4.addr,
+                        qtuple->src_port, qtuple->dst_port);
                 }
             } else {
-                transfer_delete_rule_info_to_process0(qtuple->dst_ip, qtuple->src_port, qtuple->dst_port);
+                transfer_delete_rule_info_to_process0(qtuple->dst_ip.u_addr.ip4.addr,
+                    qtuple->src_port, qtuple->dst_port);
             }
         }
 
@@ -197,12 +199,12 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
             if (get_global_cfg_params()->is_primary) {
                 add_user_process_port(qtuple->src_port, get_global_cfg_params()->process_idx, PORT_CONNECT);
                 if (queue_id != 0) {
-                    transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip, qtuple->dst_ip,
-                        qtuple->src_port, qtuple->dst_port);
+                    transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip.u_addr.ip4.addr,
+                        qtuple->dst_ip.u_addr.ip4.addr, qtuple->src_port, qtuple->dst_port);
                 }
             } else {
-                transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip, qtuple->dst_ip,
-                    qtuple->src_port, qtuple->dst_port);
+                transfer_create_rule_info_to_process0(queue_id, qtuple->src_ip.u_addr.ip4.addr,
+                    qtuple->dst_ip.u_addr.ip4.addr, qtuple->src_port, qtuple->dst_port);
             }
         }
 
@@ -228,7 +230,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
     struct protocol_stack *stack = get_protocol_stack();
 
     if (type == REG_RING_TCP_LISTEN || type == REG_RING_TCP_LISTEN_CLOSE) {
-        if (!match_host_addr(qtuple->src_ip)) {
+        if (!match_host_addr(qtuple->src_ip.u_addr.ip4.addr)) {
             LSTACK_LOG(INFO, LSTACK, "lstack ip not match in conf.\n");
             return 0;
         }

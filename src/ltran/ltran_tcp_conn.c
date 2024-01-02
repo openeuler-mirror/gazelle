@@ -78,8 +78,8 @@ struct gazelle_tcp_conn_hbucket *gazelle_conn_hbucket_get(struct gazelle_tcp_con
     const struct gazelle_quintuple *quintuple)
 {
     uint32_t index;
-    index = tuple_hash_fn(quintuple->src_ip, quintuple->src_port, quintuple->dst_ip, quintuple->dst_port) %
-                           GAZELLE_MAX_CONN_HTABLE_SIZE;
+    index = tuple_hash_fn(quintuple->src_ip.u_addr.ip4.addr, quintuple->src_port, quintuple->dst_ip.u_addr.ip4.addr,
+                            quintuple->dst_port) % GAZELLE_MAX_CONN_HTABLE_SIZE;
     return &conn_htable->array[index];
 }
 

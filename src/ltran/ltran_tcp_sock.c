@@ -104,8 +104,8 @@ static void recover_sock_info_from_conn(struct gazelle_tcp_sock *tcp_sock)
         head = &conn_htable->array[i].chain;
 
         hlist_for_each_entry(conn, node, head, conn_node) {
-            if ((conn->quintuple.dst_ip != tcp_sock->ip) || (conn->quintuple.dst_port != tcp_sock->port) ||
-                (conn->tid != tcp_sock->tid)) {
+            if ((conn->quintuple.dst_ip.u_addr.ip4.addr != tcp_sock->ip) ||
+                (conn->quintuple.dst_port != tcp_sock->port) || (conn->tid != tcp_sock->tid)) {
                 continue;
             }
             count++;

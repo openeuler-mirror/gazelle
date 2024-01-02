@@ -246,8 +246,8 @@ static __rte_always_inline int32_t tcp_handle(struct rte_mbuf *m, const struct r
     struct gazelle_tcp_sock *tcp_sock = NULL;
     struct gazelle_quintuple quintuple;
 
-    quintuple.dst_ip = ipv4_hdr->dst_addr;
-    quintuple.src_ip = ipv4_hdr->src_addr;
+    quintuple.dst_ip.u_addr.ip4.addr = ipv4_hdr->dst_addr;
+    quintuple.src_ip.u_addr.ip4.addr = ipv4_hdr->src_addr;
     quintuple.dst_port = tcp_hdr->dst_port;
     quintuple.src_port = tcp_hdr->src_port;
     quintuple.protocol = 0;
@@ -260,7 +260,7 @@ static __rte_always_inline int32_t tcp_handle(struct rte_mbuf *m, const struct r
     }
 
     tcp_sock = gazelle_sock_get_by_min_conn(gazelle_get_tcp_sock_htable(),
-                                                     quintuple.dst_ip, quintuple.dst_port);
+                                                    quintuple.dst_ip.u_addr.ip4.addr, quintuple.dst_port);
     if (unlikely(tcp_sock == NULL)) {
         return GAZELLE_ERR;
     }
@@ -494,7 +494,7 @@ static void tcp_hash_table_modify(struct gazelle_stack *stack, const struct reg_
         case REG_RING_TCP_LISTEN:
             /* add sock htable */
             tcp_sock = gazelle_sock_add_by_ipporttid(gazelle_get_tcp_sock_htable(),
-                transfer_qtuple.dst_ip, transfer_qtuple.dst_port, msg->tid);
+                transfer_qtuple.dst_ip.u_addr.ip4.addr, transfer_qtuple.dst_port, msg->tid);
             if (tcp_sock == NULL) {
                 LTRAN_ERR("add tcp sock htable failed\n");
                 break;
@@ -506,7 +506,7 @@ static void tcp_hash_table_modify(struct gazelle_stack *stack, const struct reg_
         case REG_RING_TCP_LISTEN_CLOSE:
             /* del sock htable */
             gazelle_sock_del_by_ipporttid(gazelle_get_tcp_sock_htable(),
-                transfer_qtuple.dst_ip, transfer_qtuple.dst_port, msg->tid);
+                transfer_qtuple.dst_ip.u_addr.ip4.addr, transfer_qtuple.dst_port, msg->tid);
             break;
         case REG_RING_TCP_CONNECT:
             /* add conn htable */

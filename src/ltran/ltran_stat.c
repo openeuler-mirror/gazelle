@@ -267,8 +267,8 @@ void handle_resp_ltran_conn(int32_t fd)
             if (index < GAZELLE_LSTACK_MAX_CONN) {
                 forward_table.conn_list[index].protocol = conn->quintuple.protocol;
                 forward_table.conn_list[index].tid = conn->tid;
-                forward_table.conn_list[index].dst_ip = conn->quintuple.dst_ip;
-                forward_table.conn_list[index].src_ip = conn->quintuple.src_ip;
+                forward_table.conn_list[index].dst_ip = conn->quintuple.dst_ip.u_addr.ip4.addr;
+                forward_table.conn_list[index].src_ip = conn->quintuple.src_ip.u_addr.ip4.addr;
                 forward_table.conn_list[index].dst_port = ntohs(conn->quintuple.dst_port);
                 forward_table.conn_list[index].src_port = ntohs(conn->quintuple.src_port);
             }

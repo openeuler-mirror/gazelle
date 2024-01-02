@@ -446,8 +446,7 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
         } else if (addr->sa_family == AF_INET6) {
             struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
             for (int i = 0; i < write_num; i++) {
-                memcpy_s(pbufs[i]->addr.u_addr.ip6.addr, sizeof(pbufs[i]->addr.u_addr.ip6.addr),
-                    saddr->sin6_addr.s6_addr, sizeof(saddr->sin6_addr.s6_addr));
+                memcpy_s(pbufs[i]->addr.u_addr.ip6.addr, IPV6_ADDR_LEN, saddr->sin6_addr.s6_addr, IPV6_ADDR_LEN);
                 pbufs[i]->port = lwip_ntohs((saddr)->sin6_port);
                 IP_SET_TYPE(&pbufs[i]->addr, IPADDR_TYPE_V6);
             }
