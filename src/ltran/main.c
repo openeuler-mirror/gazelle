@@ -55,7 +55,7 @@ static void print_stack(void)
 
 static void sig_default_handler(int32_t sig)
 {
-    LTRAN_ERR("ltran dumped，caught signal：%d.\n", sig);
+    LTRAN_ERR("ltran dumped, caught signal: %d.\n", sig);
     print_stack();
     dpdk_kni_release();
     int ret = 0;

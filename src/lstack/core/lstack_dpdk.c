@@ -155,6 +155,11 @@ struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
         LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d \n", ret);
         return NULL;
     }
+    /* limit mbuf max num based on the dpdk capability */
+    if (nb_mbuf > MBUF_MAX_NUM) {
+        LSTACK_LOG(ERR, LSTACK, "out of the dpdk mbuf quantity range\n");
+        return NULL;
+    }
 
     /* time stamp before pbuf_custom as priv_data */
     uint16_t private_size = RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
