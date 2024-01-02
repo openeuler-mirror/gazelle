@@ -310,7 +310,7 @@ cp -fr /home/tpccdata/* /data/mysql/data/
 #关闭mysql进程
 pkill -9 mysqld
 ```
-Gazelle部署详见[Gazelle使用指南](Gazelle使用指南.md)
+Gazelle部署详见[Gazelle用户指南](user-guide.md)
 
 测试结果如下:
 

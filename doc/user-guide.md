@@ -204,7 +204,7 @@ LD_PRELOAD=/usr/lib64/liblstack.so  GAZELLE_BIND_PROCNAME=redis-server redis-ser
 Gazelle wrap应用程序POSIX接口，应用程序无需修改代码。
 
 ### 9. 调测命令
-- 不使用ltran模式时不支持gazellectl ltran xxx命令，以及lstack -r命令
+- 不使用ltran模式时不支持gazellectl ltran xxx命令
 - -u参数指定gazelle进程间通信的unix socket前缀，和需要通信的ltran.conf或lstack.conf的unix_prefix配置一致。
 - 对于udp连接，目前gazellectl lstack xxx 命令目前仅支持无LSTACK_OPTIONS参数的。
 ```
@@ -239,7 +239,7 @@ Usage: gazellectl [-h | help]
 
 **抓包工具**  
 gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle的数据包。作为替代，gazelle使用dpdk-tools软件包中提供的gazelle-pdump作为数据包捕获工具，它使用dpdk的多进程模式和lstack/ltran进程共享内存。在ltran模式下，gazelle-pdump只能抓取和网卡直接通信的ltran的数据包，通过tcpdump的数据包过滤，可以过滤特定lstack的数据包。
-[详细使用方法](https://gitee.com/openeuler/gazelle/blob/master/doc/pdump/pdump.md)
+[详细使用方法](https://gitee.com/openeuler/gazelle/blob/master/doc/pdump.md)
 
 ### 10. 使用注意
 #### 1. dpdk配置文件的位置
@@ -271,7 +271,7 @@ gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle�
 - 提供的命令行、配置文件默认root权限。非root用户使用，需先提权以及修改文件所有者。
 - 将用户态网卡绑回到内核驱动，必须先退出Gazelle。
 - 大页内存不支持在挂载点里创建子目录重新挂载。
-- ltran需要最低大页内存为1GB。
+- ltran需要最低大页内存为1064MB。
 - 每个应用实例协议栈线程最低大页内存为800MB 。
 - 仅支持64位系统。
 - 构建x86版本的Gazelle使用了-march=native选项，基于构建环境的CPU（Intel® Xeon® Gold 5118 CPU @ 2.30GHz指令集进行优化。要求运行环境CPU支持 SSE4.2、AVX、AVX2、AVX-512 指令集。

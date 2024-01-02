@@ -30,7 +30,6 @@
 - int32_t poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 - int32_t ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo_p, const sigset_t *sigmask)
 - int32_t sigaction(int32_t signum, const struct sigaction *act, struct sigaction *oldact)
-- pid_t fork(void)
 
 # Gazelle支持应用列表
 - mysql 8.0.20
