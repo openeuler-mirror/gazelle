@@ -13,6 +13,7 @@
 
 #include "parameter.h"
 
+static int32_t g_inject_delay[INJECT_DELAY_MAX] = {0};
 
 // program short options
 const char prog_short_opts[] = \
@@ -34,6 +35,7 @@ const char prog_short_opts[] = \
     "C:"         // accept
     "g:"        // group address
     "k:"        // tcp keep_alive
+    "I:"        // fault inject
     ;
 
 // program long options
@@ -57,6 +59,7 @@ const struct ProgramOption prog_long_opts[] = \
     {PARAM_NAME_ACCEPT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_ACCEPT},
     {PARAM_NAME_GROUPIP, REQUIRED_ARGUMETN, NULL, PARAM_NUM_GROUPIP},
     {PARAM_NAME_KEEPALIVE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_KEEPALIVE},
+    {PARAM_NAME_INJECT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_INJECT},
 };
 
 
@@ -280,6 +283,85 @@ void program_param_parse_groupip(struct ProgramParams *params)
     }
 }
 
+void fault_inject_delay(delay_type type)
+{
+    if (g_inject_delay[type]) {
+        printf("FAULT INJECT: Delay begin, sleep %d seconds.\n", g_inject_delay[type]);
+        sleep(g_inject_delay[type]);
+        g_inject_delay[type] = 0;
+        printf("FAULT INJECT: Delay finished.\n");
+    }
+}
+
+
+// apply fault inject type of delay
+static void delay_param_parse(struct ProgramParams *params)
+{
+    int32_t time = 0;
+    if (params->inject[INJECT_TIME_IDX] != NULL) {
+        time = atoi(params->inject[INJECT_TIME_IDX]);
+    }
+    if (time <= 0) {
+        PRINT_ERROR("FAULT INJECT: delay time input error! receive: \"%s\"\n", params->inject[INJECT_TIME_IDX]);
+        exit(PROGRAM_ABORT);
+    }
+    
+    char *location = params->inject[INJECT_LOCATION_IDX];
+    if (location == NULL) {
+        PRINT_ERROR("FAULT INJECT: Lack param for delay fault inject, The location is not appointed.\n");
+        exit(PROGRAM_ABORT);
+    }
+    
+    if (strcmp("before_accept", location) == 0) {
+        g_inject_delay[INJECT_DELAY_ACCEPT] = time;
+        return;
+    }
+
+    PRINT_ERROR("FAULT INJECT: Unidentified fault inject location -- %s \n", location);
+    exit(PROGRAM_ABORT);
+}
+
+// check legitimacy of fault injection and apply it.
+static void apply_fault_inject(struct ProgramParams *params)
+{
+    char *inject_type = params->inject[INJECT_TYPE_IDX];
+    if (strcmp("delay", inject_type) == 0) {
+        delay_param_parse(params);
+        return;
+    }
+
+    PRINT_ERROR("FAULT INJCET: Unidentified fault inject -- %s \n", inject_type);
+    exit(PROGRAM_ABORT);
+}
+
+// set `fault injection` parameter
+static void program_param_parse_inject(struct ProgramParams *params)
+{
+    int32_t inject_idx = 0;
+    char *inject_input = strdup(optarg);
+    if (inject_input == NULL) {
+        PRINT_ERROR("FAULT INJCET: Insufficient memory, strdup failed.\n");
+        exit(PROGRAM_ABORT);
+    }
+    
+    char *context = NULL;
+    char *elem = strtok_s(inject_input, " ", &context);
+    if (elem == NULL) {
+        PRINT_ERROR("FAULT INJECT: Input error. -- %s \n", inject_input);
+        exit(PROGRAM_ABORT);
+    }
+    while (elem != NULL) {
+        if (inject_idx == FAULT_INJECT_PARA_COUNT) {
+            PRINT_ERROR("FAULT INJECT: Exceed the max count (3) of fault inject params. -- %s\n", optarg);
+            exit(PROGRAM_ABORT);
+        }
+        params->inject[inject_idx++] = elem;
+        elem = strtok_s(NULL, " ", &context);
+    }
+
+    apply_fault_inject(params);
+}
+
 // initialize the parameters
 void program_params_init(struct ProgramParams *params)
 {
@@ -341,6 +423,8 @@ void program_params_help(void)
     printf("-C, --accept [ac | ac4]: accept method. \n");
     printf("-k, --keep_alive [keep_alive_idle:keep_alive_interval]: set tcp-alive info in range of %d-%d. \n",
            PARAM_DEFAULT_KEEPALIVEIDLE, TCP_KEEPALIVE_IDLE_MAX);
+    printf("-I, --inject [\"fault_inject_param0 fault_inject_param1 fault_inject_param2\"]: fault inject\n");
+    printf("    for example: \"delay 20 before_accept\"\n");
     printf("\n");
 }
 
@@ -409,6 +493,9 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
                 break;
             case (PARAM_NUM_KEEPALIVE):
                 program_param_parse_keepalive(params);
+                break;
+            case (PARAM_NUM_INJECT):
+                program_param_parse_inject(params);
                 break;
             case (PARAM_NUM_HELP):
                 program_params_help();
@@ -502,5 +589,16 @@ void program_params_print(struct ProgramParams *params)
     printf("--> [debug]:                    %s \n", (params->debug == true) ? "on" : "off");
     printf("--> [epoll create]:             %s \n", params->epollcreate);
     printf("--> [accept]:                   %s \n", params->accept);
+    printf("--> [inject]:                   ");
+    if (params->inject[INJECT_TYPE_IDX] == NULL) {
+        printf("none \n");
+    } else {
+        for (int32_t i = 0; i < FAULT_INJECT_PARA_COUNT; ++i) {
+            if (params->inject[i] != NULL) {
+                printf("%s ", params->inject[i]);
+            }
+        }
+	printf("\n");
+    }
     printf("\n");
 }
