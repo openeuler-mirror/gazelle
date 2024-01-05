@@ -664,8 +664,15 @@ struct param_parser g_param_parse_tbl[] = {
 int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *ltran_config)
 {
     config_t config;
-    config_init(&config);
     int32_t ret;
+    char real_path[PATH_MAX];
+
+    if (realpath(conf_file_path, real_path) == NULL) {
+        syslog(LOG_ERR, "Err: Config file path %s error, please check conf file path.\n", conf_file_path);
+        return -1;
+    }
+
+    config_init(&config);
 
     ret = memset_s(ltran_config, sizeof(struct ltran_config), 0, sizeof(struct ltran_config));
     if (ret != 0) {
@@ -673,10 +680,10 @@ int32_t parse_config_file_args(const char *conf_file_path, struct ltran_config *
         syslog(LOG_ERR, "memset_s failed\n");
         return ret;
     }
-    ret = config_read_file(&config, conf_file_path);
+    ret = config_read_file(&config, real_path);
     if (ret == 0) {
+        syslog(LOG_ERR, "Err: Read config file \"%s\" error: %s\n", real_path, config_error_text(&config));
         config_destroy(&config);
-        syslog(LOG_ERR, "Err: Config file path %s error, please check conf file path.\n", conf_file_path);
         return -GAZELLE_EPATH;
     }
 
