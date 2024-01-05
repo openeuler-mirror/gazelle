@@ -230,7 +230,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
     struct protocol_stack *stack = get_protocol_stack();
 
     if (type == REG_RING_TCP_LISTEN || type == REG_RING_TCP_LISTEN_CLOSE) {
-        if (!match_host_addr(qtuple->src_ip.u_addr.ip4.addr)) {
+        if (!match_host_addr((ip_addr_t *)&qtuple->src_ip)) {
             LSTACK_LOG(INFO, LSTACK, "lstack ip not match in conf.\n");
             return 0;
         }
