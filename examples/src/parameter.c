@@ -238,11 +238,32 @@ void program_param_parse_accept(struct ProgramParams *params)
 // set `tcp_keepalive_idle` parameter
 void program_param_parse_keepalive(struct ProgramParams *params)
 {
+    char *token = NULL;
+    char *next_token = NULL;
+    token = strtok_s(optarg, ":", &next_token);
+    if (token == NULL) {
+        PRINT_ERROR("parse keep_alive idle null, illigal argument(%s) \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+
     int32_t keep_alive_idle = strtol(optarg, NULL, 0);
     if (keep_alive_idle > 0 && keep_alive_idle <= TCP_KEEPALIVE_IDLE_MAX) {
         params->tcp_keepalive_idle = keep_alive_idle;
     } else {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        PRINT_ERROR("keep_alive_idle=%d,illigal argument -- %s \n", keep_alive_idle, optarg);
+        exit(PROGRAM_ABORT);
+    }
+
+    token = strtok_s(NULL, ":", &next_token);
+    if (token == NULL) {
+        PRINT_ERROR("parse keep_alive interval null, illigal argument(%s) \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+    int32_t keep_alive_interval = strtol(token, NULL, 0);
+    if (keep_alive_interval > 0 && keep_alive_interval <= TCP_KEEPALIVE_IDLE_MAX) {
+        params->tcp_keepalive_interval = keep_alive_interval;
+    } else {
+        PRINT_ERROR("keep_alive_interval=%d,illigal argument -- %s \n", keep_alive_interval, optarg);
         exit(PROGRAM_ABORT);
     }
 }
@@ -281,6 +302,7 @@ void program_params_init(struct ProgramParams *params)
     params->accept = PARAM_DEFAULT_ACCEPT;
     params->groupip = PARAM_DEFAULT_GROUPIP;
     params->tcp_keepalive_idle = PARAM_DEFAULT_KEEPALIVEIDLE;
+    params->tcp_keepalive_interval = PARAM_DEFAULT_KEEPALIVEIDLE;
 }
 
 // print program helps
@@ -317,6 +339,8 @@ void program_params_help(void)
     printf("-h, --help: see helps. \n");
     printf("-E, --epollcreate [ec | ec1]: epoll_create method. \n");
     printf("-C, --accept [ac | ac4]: accept method. \n");
+    printf("-k, --keep_alive [keep_alive_idle:keep_alive_interval]: set tcp-alive info in range of %d-%d. \n",
+           PARAM_DEFAULT_KEEPALIVEIDLE, TCP_KEEPALIVE_IDLE_MAX);
     printf("\n");
 }
 

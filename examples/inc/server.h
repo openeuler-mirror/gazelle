@@ -41,6 +41,7 @@ struct ServerMumUnit
     char* epollcreate;                      ///< epoll_create method
     char* accept;                           ///< accept connections method
     int32_t tcp_keepalive_idle;             ///< tcp keepalive idle time
+    int32_t tcp_keepalive_interval;         ///< tcp keepalive interval time
     struct ServerMumUnit *next;             ///< next pointer
 };
 
@@ -94,6 +95,7 @@ struct ServerMud
     char* accept;                           ///< accept connections method
     char* epollcreate;                      ///< epoll_create method
     int32_t tcp_keepalive_idle;             ///< tcp keepalive idle time
+    int32_t tcp_keepalive_interval;         ///< tcp keepalive interval time
 };
 
 

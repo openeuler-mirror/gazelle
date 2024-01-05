@@ -1002,8 +1002,8 @@ static void gazelle_keepalive_string(char* str, int buff_len, struct gazelle_sta
     if (conn_info->keepalive == 0) {
         return;
     }
-    int ret = sprintf_s(str, buff_len, "(%u,%u,%u)", conn_info->keep_idle, conn_info->keep_intvl,
-        conn_info->keep_cnt);
+    int ret = sprintf_s(str, buff_len, "(%u,%u,%u)", (conn_info->keep_idle) / 1000,
+        (conn_info->keep_intvl) / 1000, conn_info->keep_cnt);
     if (ret < 0) {
         printf("gazelle_keepalive_string sprintf_s fail ret=%d\n", ret);
         return;

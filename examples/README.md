@@ -132,7 +132,7 @@
 * `-C, --accept`：accept的方式。
   * `ac`：使用accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)通过套接口接受连接。
   * `ac4`：使用accept4(int sockfd, struct sockaddr *addr,socklen_t *addrlen, int flags)通过套接口接受连接,flags=SOCK_CLOEXEC。
-* `-k, --keep_alive`：配置TCP keep_alive idle 时间(second)。
+* `-k, --keep_alive`：配置TCP keep_alive idle ,  keep_alive interval时间(second)。
 
 ## 使用
 

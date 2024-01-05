@@ -118,6 +118,7 @@ struct ProgramParams {
     char*               groupip;            ///< group IP address>
     uint32_t            addr_family;        ///< IP address family
     int32_t             tcp_keepalive_idle; ///< tcp keepalive idle time
+    int32_t             tcp_keepalive_interval;  ///< tcp keepalive interval time
 };
 
 /**

@@ -372,6 +372,7 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->epollcreate = params->epollcreate;
     server_mud->accept = params->accept;
     server_mud->tcp_keepalive_idle = params->tcp_keepalive_idle;
+    server_mud->tcp_keepalive_interval = params->tcp_keepalive_interval;
 
     if (pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud) < 0) {
         PRINT_ERROR("server can't create poisx thread %d! ", errno);
@@ -487,7 +488,7 @@ int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerH
         if (accept_fd < 0) {
             break;
         }
-        ret = set_tcp_keep_alive_info(accept_fd, server_unit->tcp_keepalive_idle);
+        ret = set_tcp_keep_alive_info(accept_fd, server_unit->tcp_keepalive_idle, server_unit->tcp_keepalive_interval);
         if (ret < 0) {
             PRINT_ERROR("set_tcp_keep_alive_info ret=%d \n", ret);
             return PROGRAM_FAULT;
@@ -660,6 +661,7 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->epollcreate = params->epollcreate;
         server_unit->accept = params->accept;
         server_unit->tcp_keepalive_idle = params->tcp_keepalive_idle;
+        server_unit->tcp_keepalive_interval = params->tcp_keepalive_interval;
         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
         if (server_unit->next) {
             memset_s(server_unit->next, sizeof(struct ServerMumUnit), 0, sizeof(struct ServerMumUnit));

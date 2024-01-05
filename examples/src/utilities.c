@@ -13,13 +13,15 @@
 
 #include "parameter.h"
 
-int32_t set_tcp_keep_alive_info(int32_t sockfd, int32_t tcp_keepalive_idle)
+int32_t set_tcp_keep_alive_info(int32_t sockfd, int32_t tcp_keepalive_idle, int32_t tcp_keepalive_interval)
 {
     int32_t ret = 0;
     int32_t keep_alive = 1;
     int32_t keep_idle = 1;
+    int32_t keep_interval = 1;
 
-    if (tcp_keepalive_idle == PARAM_DEFAULT_KEEPALIVEIDLE) {
+    if ((tcp_keepalive_idle == PARAM_DEFAULT_KEEPALIVEIDLE) ||
+        (tcp_keepalive_interval == PARAM_DEFAULT_KEEPALIVEIDLE)) {
         return 0;
     }
 
@@ -32,6 +34,14 @@ int32_t set_tcp_keep_alive_info(int32_t sockfd, int32_t tcp_keepalive_idle)
 
     ret = setsockopt(sockfd, SOL_TCP, TCP_KEEPIDLE, (void *)&keep_idle, sizeof(keep_idle));
     if (ret != 0) {
+        PRINT_ERROR("setsockopt keep_idle err ret=%d \n", ret);
+        return ret;
+    }
+
+    keep_interval = tcp_keepalive_interval;
+    ret = setsockopt(sockfd, SOL_TCP, TCP_KEEPINTVL, (void *)&keep_interval, sizeof(keep_interval));
+    if (ret != 0) {
+        PRINT_ERROR("setsockopt keep_interval err ret=%d \n", ret);
         return ret;
     }
     return ret;
