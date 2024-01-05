@@ -179,14 +179,14 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
 
     ret = snprintf_s(conf.name, RTE_KNI_NAMESIZE, RTE_KNI_NAMESIZE - 1, "%s", GAZELLE_KNI_NAME);
     if (ret < 0) {
-        COMMON_ERR("snprintf_s failed. ret=%d\n", ret);
+        COMMON_ERR("Snprintf_s failed. ret=%d\n", ret);
         return -1;
     }
     conf.mbuf_size = GAZELLE_MAX_PKT_SZ;
     conf.group_id = port;
 
     if (rte_eth_dev_info_get(port, &dev_info) != 0) {
-        COMMON_ERR("Fail rte_eth_dev_info_get\n");
+        COMMON_ERR("Failed rte_eth_dev_info_get\n");
         return -1;
     }
 
@@ -204,7 +204,7 @@ int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
     ops.port_id = port;
     g_pkni = rte_kni_alloc(pool, &conf, &ops);
     if (g_pkni == NULL) {
-        COMMON_ERR("Fail to create kni for port: %hu \n", port);
+        COMMON_ERR("Failed to create kni for port: %hu \n", port);
         return -1;
     }
     return 0;
