@@ -271,9 +271,14 @@ int32_t create_shared_ring(struct protocol_stack *stack)
 
 int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num)
 {
-    if (rte_mempool_avail_count(pool) < MBUFPOOL_RESERVE_NUM + num) {
+    /*
+     * don't use rte_mempool_avail_count, it traverse cpu local cache,
+     * when RTE_MAX_LCORE is too large, it's time-consuming
+     */
+    if (rte_ring_count(pool->pool_data) < MBUFPOOL_RESERVE_NUM + num) {
         return -ENOMEM;
     }
+
     int32_t ret = rte_pktmbuf_alloc_bulk(pool, mbufs, num);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_alloc_bulk fail allocNum=%d, ret=%d, info:%s \n",
