@@ -65,13 +65,13 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
                 g_bond_dev_started = true;
             }
         } else {
-            COMMON_INFO("trying to start a started dev. \n");
+            COMMON_INFO("Trying to start a started dev. \n");
         }
     } else {  /* Configure network interface down */
         if (g_kni_started) {
             g_kni_started = false;
         } else {
-            COMMON_INFO("trying to stop a stopped dev. \n");
+            COMMON_INFO("Trying to stop a stopped dev. \n");
         }
     }
 
@@ -154,7 +154,7 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
     conf->rxmode.offloads = rx_ol;
     conf->txmode.offloads = tx_ol;
 
-    COMMON_INFO("set checksum offloads\n");
+    COMMON_INFO("Set checksum offloads\n");
 }
 
 int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
