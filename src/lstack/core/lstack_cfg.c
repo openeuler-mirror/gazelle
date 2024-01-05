@@ -253,11 +253,17 @@ static int32_t parse_host_addr6(void)
     return 0;
 }
 
-int32_t match_host_addr(uint32_t addr)
+int32_t match_host_addr(ip_addr_t *addr)
 {
     /* network byte order */
-    if (addr == g_config_params.host_addr.addr || addr == INADDR_ANY) {
-        return 1;
+    if (IP_IS_V4_VAL(*addr)) {
+        if (ip4_addr_cmp(&addr->u_addr.ip4, &g_config_params.host_addr) || ip4_addr_isany_val(addr->u_addr.ip4)) {
+            return 1;
+        }
+    } else if (IP_IS_V6_VAL(*addr)) {
+        if (ip6_addr_cmp(&addr->u_addr.ip6, &g_config_params.host_addr6) || ip6_addr_isany_val(addr->u_addr.ip6)) {
+            return 1;
+        }
     }
     return 0;
 }

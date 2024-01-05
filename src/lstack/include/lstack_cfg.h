@@ -133,7 +133,7 @@ int gazelle_param_init(int *argc, char **argv);
 int gazelle_copy_param(const char *param, bool is_double,
     int *argc, char argv[][PATH_MAX]);
 
-int match_host_addr(uint32_t ipv4);
+int match_host_addr(ip_addr_t *addr);
 int32_t init_stack_numa_cpuset(struct protocol_stack *stack);
 
 #endif /* GAZELLE_NET_CFG_H */

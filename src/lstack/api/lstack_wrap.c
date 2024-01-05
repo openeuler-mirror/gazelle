@@ -217,7 +217,17 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         return g_wrap_api->bind_fn(s, name, namelen);
     }
 
-    if (match_host_addr(((struct sockaddr_in *)name)->sin_addr.s_addr)) {
+    ip_addr_t sock_addr = IPADDR_ANY_TYPE_INIT;
+    if (name->sa_family == AF_INET) {
+        sock_addr.type = IPADDR_TYPE_V4;
+        sock_addr.u_addr.ip4.addr = ((struct sockaddr_in *)name)->sin_addr.s_addr;
+    } else if (name->sa_family == AF_INET6) {
+        sock_addr.type = IPADDR_TYPE_V6;
+        memcpy_s(sock_addr.u_addr.ip6.addr, IPV6_ADDR_LEN,
+            ((struct sockaddr_in6 *)name)->sin6_addr.s6_addr, IPV6_ADDR_LEN);
+    }
+
+    if (match_host_addr(&sock_addr)) {
         /* maybe kni addr */
         if (posix_api->bind_fn(s, name, namelen) != 0) {
             SET_CONN_TYPE_LIBOS(sock->conn);
