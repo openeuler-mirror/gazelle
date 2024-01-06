@@ -97,7 +97,7 @@
 #define MESSAGE_PKTLEN_MIN                  (2)                 ///< minimum length of message (1 byte)
 #define MESSAGE_PKTLEN_MAX                  (1024 * 1024 * 10)  ///< maximum length of message (10 Mb)
 
-#define SERVER_SOCKET_LISTEN_BACKLOG        (128)               ///< the queue of socket
+#define SERVER_SOCKET_LISTEN_BACKLOG        (4096)               ///< the queue of socket
 #define SERVER_EPOLL_SIZE_MAX               (10000)             ///< the max wait event of epoll
 #define SERVER_EPOLL_WAIT_TIMEOUT           (-1)                ///< the timeout value of epoll
 

@@ -77,6 +77,8 @@ enum {
     PARAM_NUM_GROUPIP = 'g',
 #define PARAM_NAME_KEEPALIVE        ("keep_alive")          ///< name of parameter keep_alive
     PARAM_NUM_KEEPALIVE = 'k',
+#define PARAM_NAME_INJECT           ("inject")              ///< name of parameter fault inject
+    PARAM_NUM_INJECT = 'I',
 };
 
 #define NO_ARGUMENT             0                           ///< options takes no arguments
@@ -119,7 +121,23 @@ struct ProgramParams {
     uint32_t            addr_family;        ///< IP address family
     int32_t             tcp_keepalive_idle; ///< tcp keepalive idle time
     int32_t             tcp_keepalive_interval;  ///< tcp keepalive interval time
+#define INJECT_TYPE_IDX                     (0)                 ///< the index of inject type
+#define INJECT_TIME_IDX                     (1)                 ///< the index of delay time
+#define INJECT_LOCATION_IDX                 (2)                 ///< the index of delay location
+#define FAULT_INJECT_PARA_COUNT             (3)                 ///< the count of fault injection parameters
+    char*               inject[FAULT_INJECT_PARA_COUNT];  /// < fault inject
 };
+
+typedef enum {
+    INJECT_DELAY_ACCEPT = 0,
+    INJECT_DELAY_MAX,
+}delay_type;
+
+/**
+ * @brief function execute delay inject
+ * This function delay execute following program.
+ */
+void fault_inject_delay(delay_type type);
 
 /**
  * @brief initialize the parameters

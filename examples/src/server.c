@@ -136,6 +136,7 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
 // the listener thread, unblock, dissymmetric server accepts the connections
 int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
 {
+    fault_inject_delay(INJECT_DELAY_ACCEPT);
     while (true) {
         sockaddr_t accept_addr;
         uint32_t sockaddr_in_len = server_mud->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
@@ -470,6 +471,7 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
 // the single thread, unblock, mutliplexing IO server accepts the connections
 int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler)
 {
+    fault_inject_delay(INJECT_DELAY_ACCEPT);
     while (true) {
         sockaddr_t accept_addr;
         socklen_t sockaddr_in_len = server_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
