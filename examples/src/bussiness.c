@@ -160,6 +160,8 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
         }
     }
 
+    fault_inject_delay(INJECT_DELAY_READ);
+    
     while (cread < sread) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nread = recvfrom(server_handler->fd, buffer_in, length, 0, (struct sockaddr *)&client_addr, &len);
@@ -190,6 +192,9 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
     int32_t cwrite = 0;
     int32_t swrite = length;
     int32_t nwrite = 0;
+    
+    fault_inject_delay(INJECT_DELAY_WRITE);
+    
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nwrite = sendto(server_handler->fd, buffer_out, length, 0, (struct sockaddr *)&client_addr, len);
@@ -243,6 +248,9 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const 
     int32_t cwrite = 0;
     int32_t swrite = length;
     int32_t nwrite = 0;
+
+    fault_inject_delay(INJECT_DELAY_WRITE);
+    
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nwrite = sendto(client_handler->fd, buffer_out, length, 0, (struct sockaddr *)&server_addr, len);
@@ -280,6 +288,8 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
     sockaddr_t server_addr;
     socklen_t len = ip->addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
 
+    fault_inject_delay(INJECT_DELAY_READ);
+    
     while (cread < sread) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nread = recvfrom(client_handler->fd, buffer_in, length, 0, (struct sockaddr *)&server_addr, &len);
@@ -310,6 +320,8 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
         ((struct sockaddr_in*)&server_addr)->sin_addr = ip->u_addr.ip4;
     }
 
+    fault_inject_delay(INJECT_DELAY_WRITE);
+    
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nwrite = sendto(client_handler->fd, buffer_out, length, 0, (struct sockaddr *)&server_addr, len);

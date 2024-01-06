@@ -130,6 +130,8 @@ struct ProgramParams {
 
 typedef enum {
     INJECT_DELAY_ACCEPT = 0,
+    INJECT_DELAY_READ,
+    INJECT_DELAY_WRITE,
     INJECT_DELAY_MAX,
 }delay_type;
 
