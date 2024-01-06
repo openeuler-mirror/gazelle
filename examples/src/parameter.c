@@ -316,6 +316,19 @@ static void delay_param_parse(struct ProgramParams *params)
         g_inject_delay[INJECT_DELAY_ACCEPT] = time;
         return;
     }
+    if (strcmp("before_read", location) == 0) {
+        g_inject_delay[INJECT_DELAY_READ] = time;
+        return;
+    }
+    if (strcmp("before_write", location) == 0) {
+        g_inject_delay[INJECT_DELAY_WRITE] = time;
+        return;
+    }
+    if (strcmp("before_read_and_write", location) == 0) {
+        g_inject_delay[INJECT_DELAY_READ] = time;
+        g_inject_delay[INJECT_DELAY_WRITE] = time;
+        return;
+    }
 
     PRINT_ERROR("FAULT INJECT: Unidentified fault inject location -- %s \n", location);
     exit(PROGRAM_ABORT);
@@ -425,6 +438,9 @@ void program_params_help(void)
            PARAM_DEFAULT_KEEPALIVEIDLE, TCP_KEEPALIVE_IDLE_MAX);
     printf("-I, --inject [\"fault_inject_param0 fault_inject_param1 fault_inject_param2\"]: fault inject\n");
     printf("    for example: \"delay 20 before_accept\"\n");
+    printf("                 \"delay 20 before_read\"\n");
+    printf("                 \"delay 20 before_write\"\n");
+    printf("                 \"delay 20 before_read_and_write\"\n");
     printf("\n");
 }
 
