@@ -1128,9 +1128,15 @@ int32_t stack_single_listen(int32_t fd, int32_t backlog)
 /* listen sync to all protocol stack thread, so that any protocol stack thread can build connect */
 int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 {
+    typedef union sockaddr_union {
+        struct sockaddr     sa;
+        struct sockaddr_in  in;
+        struct sockaddr_in6 in6;
+    } sockaddr_t;
+
     struct protocol_stack *cur_stack = get_protocol_stack_by_fd(fd);
     struct protocol_stack *stack = NULL;
-    struct sockaddr addr;
+    sockaddr_t addr;
     socklen_t addr_len = sizeof(addr);
     int32_t ret, clone_fd;
 
@@ -1140,7 +1146,7 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
         GAZELLE_RETURN(EINVAL);
     }
 
-    ret = rpc_call_getsockname(fd, &addr, &addr_len);
+    ret = rpc_call_getsockname(fd, (struct sockaddr *)&addr, &addr_len);
     if (ret != 0) {
         return ret;
     }
@@ -1154,7 +1160,7 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
             continue;
         }
         if (stack != cur_stack) {
-            clone_fd = rpc_call_shadow_fd(stack, fd, &addr, sizeof(addr));
+            clone_fd = rpc_call_shadow_fd(stack, fd, (struct sockaddr *)&addr, addr_len);
             if (clone_fd < 0) {
                 stack_broadcast_close(fd);
                 return clone_fd;
