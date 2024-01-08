@@ -143,6 +143,7 @@ struct gazelle_stat_lstack_snmp {
     uint32_t tcp_out_of_seq;
     uint32_t tcp_acceptmbox_full;
     uint32_t tcp_listen_drops;
+    uint32_t tcp_in_empty_acks;
 
     /* UDP */
     uint32_t udp_in_datagrams;
