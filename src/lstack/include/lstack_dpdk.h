@@ -17,22 +17,20 @@
 #include "gazelle_opt.h"
 #include "gazelle_dfx_msg.h"
 
-#define RXTX_CACHE_SZ       (VDEV_RX_QUEUE_SZ)
-#define KNI_NB_MBUF         (DEFAULT_RING_SIZE << 4)
+#define RXTX_CACHE_SZ        (VDEV_RX_QUEUE_SZ)
 
-#define RESERVE_NIC_RECV    (1024)
+#define KNI_NB_MBUF          (DEFAULT_RING_SIZE << 4)
 
-#define MBUF_HEADER_LEN     64
-
-#define MAX_PACKET_SZ       2048
+#define MAX_PACKET_SZ        2048
 
 #define RING_SIZE(x)         ((x) - 1)
 
-#define MBUF_SZ (MAX_PACKET_SZ + RTE_PKTMBUF_HEADROOM)
+#define MBUF_SZ              (MAX_PACKET_SZ + RTE_PKTMBUF_HEADROOM)
 
-#define MAX_CORE_NUM            256
-#define CALL_MSG_RING_SIZE      (unsigned long long)32
-#define CALL_CACHE_SZ           0
+/* DPDK limit ring head-tail distance in rte_ring_init.
+ * Max value is RTE_RING_SZ_MASK / HTD_MAX_DEF, RTE_RING_SZ_MASK is 0x7fffffff, HTD_MAX_DEF is 8.
+ */
+#define MBUF_MAX_NUM         0xfffffff
 
 int thread_affinity_default(void);
 int thread_affinity_init(int cpu_id);
