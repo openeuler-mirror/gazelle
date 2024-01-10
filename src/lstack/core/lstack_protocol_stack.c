@@ -792,9 +792,11 @@ void stack_accept(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
     msg->result = -1;
+    struct protocol_stack *stack = get_protocol_stack();
 
     int32_t accept_fd = lwip_accept4(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p, msg->args[MSG_ARG_3].i);
     if (accept_fd < 0) {
+        stack->stats.accept_fail++;
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
     }
