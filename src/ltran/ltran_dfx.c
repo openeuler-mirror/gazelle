@@ -855,21 +855,22 @@ static void gazelle_print_lstack_stat_rate(void *buf, const struct gazelle_stat_
 
 static void gazelle_print_lstack_tcp_stat(const struct gazelle_stat_lstack_snmp *snmp)
 {
-    printf("tcp_act_open: %u\n",     snmp->tcp_act_open);
-    printf("tcp_passive_open: %u\n", snmp->tcp_passive_open);
-    printf("tcp_attempt_fail: %u\n", snmp->tcp_attempt_fail);
-    printf("tcp_estab_rst: %u\n",    snmp->tcp_estab_rst);
-    printf("tcp_out_seg: %u\n",      snmp->tcp_out_seg);
-    printf("tcp_retran_seg: %u\n",   snmp->tcp_retran_seg);
-    printf("tcp_in_seg: %u\n",       snmp->tcp_in_seg);
-    printf("tcp_in_err: %u\n",       snmp->tcp_in_err);
-    printf("tcp_out_rst: %u\n",      snmp->tcp_out_rst);
-    printf("tcp_fin_ack_cnt: %u\n",  snmp->tcp_fin_ack_cnt);
-    printf("tcp_delay_ack_cnt: %u\n", snmp->tcp_delay_ack_cnt);
-    printf("tcp_refused_cnt: %u\n",  snmp->tcp_refused_cnt);
-    printf("tcp_out_of_seq: %u\n",  snmp->tcp_out_of_seq);
+    printf("tcp_act_open: %u\n",         snmp->tcp_act_open);
+    printf("tcp_passive_open: %u\n",     snmp->tcp_passive_open);
+    printf("tcp_attempt_fail: %u\n",     snmp->tcp_attempt_fail);
+    printf("tcp_estab_rst: %u\n",        snmp->tcp_estab_rst);
+    printf("tcp_out_seg: %u\n",          snmp->tcp_out_seg);
+    printf("tcp_retran_seg: %u\n",       snmp->tcp_retran_seg);
+    printf("tcp_in_seg: %u\n",           snmp->tcp_in_seg);
+    printf("tcp_in_err: %u\n",           snmp->tcp_in_err);
+    printf("tcp_out_rst: %u\n",          snmp->tcp_out_rst);
+    printf("tcp_fin_ack_cnt: %u\n",      snmp->tcp_fin_ack_cnt);
+    printf("tcp_delay_ack_cnt: %u\n",    snmp->tcp_delay_ack_cnt);
+    printf("tcp_refused_cnt: %u\n",      snmp->tcp_refused_cnt);
+    printf("tcp_out_of_seq: %u\n",       snmp->tcp_out_of_seq);
     printf("tcp_acceptmbox_full: %u\n",  snmp->tcp_acceptmbox_full);
-    printf("tcp_listen_drops: %u\n",  snmp->tcp_listen_drops);
+    printf("tcp_listen_drops: %u\n",     snmp->tcp_listen_drops);
+    printf("tcp_in_empty_acks: %u\n",    snmp->tcp_in_empty_acks);
 }
 
 static void gazelle_print_ltran_stat_lb_rate(void *buf, const struct gazelle_stat_msg_request *req_msg)
