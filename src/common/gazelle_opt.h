@@ -85,8 +85,13 @@
 
 #define GAZELLE_MAX_STACK_ARRAY_SIZE    GAZELLE_CLIENT_NUM
 
-#define GAZELLE_REG_SOCK_PATHNAME       "/var/run/gazelle/gazelle_client.sock"
-#define GAZELLE_REG_SOCK_FILENAME       "gazelle_client.sock"
+#define LTRAN_REG_SOCK_PATHNAME       "/var/run/gazelle/ltran_client.sock"
+#define LTRAN_REG_SOCK_FILENAME       "ltran_client.sock"
+#define LTRAN_DFX_SOCK_PATHNAME       "/var/run/gazelle/ltran_cmd.sock"
+#define LTRAN_DFX_SOCK_FILENAME       "ltran_cmd.sock"
+#define LSTACK_DFX_SOCK_PATHNAME       "/var/run/gazelle/lstack_cmd.sock"
+#define LSTACK_DFX_SOCK_FILENAME       "lstack_cmd.sock"
+
 #define GAZELLE_SOCK_FILENAME_MAXLEN    128
 
 #define GAZELLE_RUN_DIR                  "/var/run/gazelle/"

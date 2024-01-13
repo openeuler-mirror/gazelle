@@ -254,15 +254,15 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
 
     addr.sun_family = AF_UNIX;
     if (use_ltran) {
-        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_DFX_SOCK_FILENAME,
-            strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
+        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), LTRAN_DFX_SOCK_FILENAME,
+            strlen(LTRAN_DFX_SOCK_FILENAME) + 1);
         if (ret != EOK) {
             printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
             goto END;
         }
     } else {
-        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_REG_SOCK_FILENAME,
-            strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), LSTACK_DFX_SOCK_FILENAME,
+            strlen(LSTACK_DFX_SOCK_FILENAME) + 1);
         if (ret != EOK) {
             printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
             goto END;

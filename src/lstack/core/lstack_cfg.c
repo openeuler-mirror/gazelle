@@ -1043,8 +1043,14 @@ static int32_t parse_unix_prefix(void)
         }
     }
 
-    ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-            GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+    if (g_config_params.use_ltran) {
+        ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+                LTRAN_REG_SOCK_FILENAME, strlen(LTRAN_REG_SOCK_FILENAME) + 1);
+    } else {
+        ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
+                LSTACK_DFX_SOCK_FILENAME, strlen(LSTACK_DFX_SOCK_FILENAME) + 1);
+    }
+
     if (ret != EOK) {
         return ret;
     }

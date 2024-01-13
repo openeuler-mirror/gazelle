@@ -238,13 +238,13 @@ static void gazelle_ctl_destroy(void)
     close(g_epoll_fd);
     g_epoll_fd = -1;
 
-    ret = unlink(GAZELLE_DFX_SOCK_PATHNAME);
+    ret = unlink(LTRAN_DFX_SOCK_PATHNAME);
     if (ret != 0) {
-        LTRAN_WARN("unlink %s ERROR. errno: %d. ret=%d\n", GAZELLE_DFX_SOCK_PATHNAME, errno, ret);
+        LTRAN_WARN("unlink %s ERROR. errno: %d. ret=%d\n", LTRAN_DFX_SOCK_PATHNAME, errno, ret);
     }
-    ret = unlink(GAZELLE_REG_SOCK_PATHNAME);
+    ret = unlink(LTRAN_REG_SOCK_PATHNAME);
     if (ret != 0) {
-        LTRAN_WARN("unlink %s ERROR. errno: %d. ret=%d\n", GAZELLE_REG_SOCK_PATHNAME, errno, ret);
+        LTRAN_WARN("unlink %s ERROR. errno: %d. ret=%d\n", LTRAN_REG_SOCK_PATHNAME, errno, ret);
     }
 }
 
