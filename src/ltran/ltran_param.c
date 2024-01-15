@@ -598,14 +598,14 @@ static int32_t parse_unix_prefix(const config_t *config, const char *key, struct
     }
 
     ret = strncat_s(ltran_config->unix_socket_filename, sizeof(ltran_config->unix_socket_filename),
-        GAZELLE_REG_SOCK_FILENAME, strlen(GAZELLE_REG_SOCK_FILENAME) + 1);
+        LTRAN_REG_SOCK_FILENAME, strlen(LTRAN_REG_SOCK_FILENAME) + 1);
     if (ret != EOK) {
         gazelle_set_errno(GAZELLE_EINETATON);
         return GAZELLE_ERR;
     }
 
     ret = strncat_s(ltran_config->dfx_socket_filename, sizeof(ltran_config->dfx_socket_filename),
-        GAZELLE_DFX_SOCK_FILENAME, strlen(GAZELLE_DFX_SOCK_FILENAME) + 1);
+        LTRAN_DFX_SOCK_FILENAME, strlen(LTRAN_DFX_SOCK_FILENAME) + 1);
     if (ret != EOK) {
         gazelle_set_errno(GAZELLE_EINETATON);
         return GAZELLE_ERR;
