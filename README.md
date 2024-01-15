@@ -35,6 +35,8 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 |实践系列-Gazelle加速redis |1. 详细测试步骤<br>2. 性能效果| 待定 |
 |实践系列-Gazelle加速openGauss |1. 详细测试步骤<br>2. 性能效果| 待定 |
 
+## 特性变更
+- [多进程模式即将下线](doc/releasenote.md)
 
 ## 支持列表
 - [posix接口列表及应用支持列表](doc/support.md)
