@@ -13,8 +13,6 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
-#include <rte_kni.h>
-
 #include <lwip/sockets.h>
 #include <lwip/tcpip.h>
 #include <lwip/tcp.h>
@@ -37,6 +35,10 @@
 #include "posix/lstack_epoll.h"
 #include "lstack_stack_stat.h"
 #include "lstack_protocol_stack.h"
+
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
+#include <rte_kni.h>
+#endif
 
 #define KERNEL_EVENT_10us               10
 
@@ -453,7 +455,9 @@ int stack_polling(uint32_t wakeup_tick)
     int force_quit;
     struct cfg_params *cfg = get_global_cfg_params();
     uint8_t use_ltran_flag = cfg->use_ltran;
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     bool kni_switch = cfg->kni_switch;
+#endif
     bool use_sockmap = cfg->use_sockmap;
     bool stack_mode_rtc = cfg->stack_mode_rtc;
     uint32_t rpc_number = cfg->rpc_number;
@@ -486,6 +490,7 @@ int stack_polling(uint32_t wakeup_tick)
         }
     }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     /* run to completion mode currently does not support kni */
     /* KNI requests are generally low-rate I/Os,
     * so processing KNI requests only in the thread with queue_id No.0 is sufficient. */
@@ -495,6 +500,7 @@ int stack_polling(uint32_t wakeup_tick)
             kni_handle_rx(stack->port_id);
         }
     }
+#endif
     return force_quit;
 }
 
@@ -950,7 +956,9 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
         return;
     }
     copy_mbuf(mbuf_copy, mbuf);
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     kni_handle_tx(mbuf_copy);
+#endif
     return;
 }
 

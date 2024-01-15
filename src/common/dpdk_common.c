@@ -10,18 +10,21 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include <rte_kni.h>
+#include <securec.h>
 #include <rte_bus_pci.h>
 #include <rte_ethdev.h>
 #include <rte_bus_pci.h>
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
-#include <securec.h>
+#include <rte_version.h>
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
+#include <rte_kni.h>
+#endif
+
+#include <lwip/dpdk_version.h>
 
 #include "dpdk_common.h"
 
-#define GAZELLE_KNI_IFACES_NUM               1
-#define GAZELLE_KNI_READ_SIZE                32
 #define GAZELLE_MAX_PKT_SZ                   2048
 
 #ifdef LTRAN_COMPILE
@@ -34,6 +37,9 @@
 #define  COMMON_INFO(fmt, ...)   LSTACK_LOG(INFO, LSTACK, fmt, ##__VA_ARGS__)
 #endif
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
+#define GAZELLE_KNI_IFACES_NUM               1
+#define GAZELLE_KNI_READ_SIZE                32
 struct rte_kni *g_pkni = NULL;
 static volatile bool g_kni_started = false;
 
@@ -77,84 +83,6 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
 
     COMMON_INFO("Configure network interface of %hu %s \n", port_id, if_up ? "up" : "down");
     return ret;
-}
-
-void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
-{
-    uint64_t rx_ol = 0;
-    uint64_t tx_ol = 0;
-    uint64_t rx_ol_capa = dev_info->rx_offload_capa;
-    uint64_t tx_ol_capa = dev_info->tx_offload_capa;
-
-    // rx ip
-    if (rx_ol_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) {
-        rx_ol |= DEV_RX_OFFLOAD_IPV4_CKSUM;
-        COMMON_INFO("DEV_RX_OFFLOAD_IPV4_CKSUM\n");
-    }
-
-    // rx tcp
-    if (rx_ol_capa & DEV_RX_OFFLOAD_TCP_CKSUM) {
-        rx_ol |= DEV_RX_OFFLOAD_TCP_CKSUM;
-        COMMON_INFO("DEV_RX_OFFLOAD_TCP_CKSUM\n");
-    }
-
-    // rx udp
-    if (rx_ol_capa & DEV_RX_OFFLOAD_UDP_CKSUM) {
-        rx_ol |= DEV_RX_OFFLOAD_UDP_CKSUM;
-        COMMON_INFO("DEV_RX_OFFLOAD_UDP_CKSUM\n");
-    }
-
-    // rx vlan
-    if (rx_ol_capa & DEV_RX_OFFLOAD_VLAN_STRIP) {
-        rx_ol |= DEV_RX_OFFLOAD_VLAN_STRIP;
-        COMMON_INFO("DEV_RX_OFFLOAD_VLAN_STRIP\n");
-    }
-
-    // tx ip
-    if (tx_ol_capa & DEV_TX_OFFLOAD_IPV4_CKSUM) {
-        tx_ol |= DEV_TX_OFFLOAD_IPV4_CKSUM;
-        COMMON_INFO("DEV_TX_OFFLOAD_IPV4_CKSUM\n");
-    }
-
-    // tx tcp
-    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
-        tx_ol |= DEV_TX_OFFLOAD_TCP_CKSUM;
-        COMMON_INFO("DEV_TX_OFFLOAD_TCP_CKSUM\n");
-    }
-
-    // tx udp
-    if (tx_ol_capa & DEV_TX_OFFLOAD_UDP_CKSUM) {
-        tx_ol |= DEV_TX_OFFLOAD_UDP_CKSUM;
-        COMMON_INFO("DEV_TX_OFFLOAD_UDP_CKSUM\n");
-    }
-
-    // tx tso
-    if (tx_ol_capa & DEV_TX_OFFLOAD_TCP_TSO) {
-        tx_ol |= (DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_MULTI_SEGS);
-        COMMON_INFO("DEV_TX_OFFLOAD_TCP_TSO\n");
-    }
-
-    // tx vlan
-    if (tx_ol_capa & DEV_TX_OFFLOAD_VLAN_INSERT) {
-        tx_ol |= DEV_TX_OFFLOAD_VLAN_INSERT;
-        COMMON_INFO("DEV_TX_OFFLOAD_VLAN_INSERT\n");
-    }
-
-    if (!(rx_ol & DEV_RX_OFFLOAD_UDP_CKSUM) ||
-        !(rx_ol & DEV_RX_OFFLOAD_TCP_CKSUM) ||
-        !(rx_ol & DEV_RX_OFFLOAD_IPV4_CKSUM)) {
-        rx_ol = 0;
-    }
-    if (!(tx_ol & DEV_TX_OFFLOAD_UDP_CKSUM) ||
-        !(tx_ol & DEV_TX_OFFLOAD_TCP_CKSUM) ||
-        !(tx_ol & DEV_TX_OFFLOAD_IPV4_CKSUM)) {
-        tx_ol = 0;
-    }
-
-    conf->rxmode.offloads = rx_ol;
-    conf->txmode.offloads = tx_ol;
-
-    COMMON_INFO("Set checksum offloads\n");
 }
 
 int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
@@ -261,4 +189,83 @@ void kni_process_rx(uint16_t port)
             pkts_burst[i] = NULL;
         }
     }
+}
+#endif
+
+void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
+{
+    uint64_t rx_ol = 0;
+    uint64_t tx_ol = 0;
+    uint64_t rx_ol_capa = dev_info->rx_offload_capa;
+    uint64_t tx_ol_capa = dev_info->tx_offload_capa;
+
+    // rx ip
+    if (rx_ol_capa & RTE_ETH_RX_OFFLOAD_IPV4_CKSUM) {
+        rx_ol |= RTE_ETH_RX_OFFLOAD_IPV4_CKSUM;
+        COMMON_INFO("RTE_ETH_RX_OFFLOAD_IPV4_CKSUM\n");
+    }
+
+    // rx tcp
+    if (rx_ol_capa & RTE_ETH_RX_OFFLOAD_TCP_CKSUM) {
+        rx_ol |= RTE_ETH_RX_OFFLOAD_TCP_CKSUM;
+        COMMON_INFO("RTE_ETH_RX_OFFLOAD_TCP_CKSUM\n");
+    }
+
+    // rx udp
+    if (rx_ol_capa & RTE_ETH_RX_OFFLOAD_UDP_CKSUM) {
+        rx_ol |= RTE_ETH_RX_OFFLOAD_UDP_CKSUM;
+        COMMON_INFO("RTE_ETH_RX_OFFLOAD_UDP_CKSUM\n");
+    }
+
+    // rx vlan
+    if (rx_ol_capa & RTE_ETH_RX_OFFLOAD_VLAN_STRIP) {
+        rx_ol |= RTE_ETH_RX_OFFLOAD_VLAN_STRIP;
+        COMMON_INFO("RTE_ETH_RX_OFFLOAD_VLAN_STRIP\n");
+    }
+
+    // tx ip
+    if (tx_ol_capa & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM) {
+        tx_ol |= RTE_ETH_TX_OFFLOAD_IPV4_CKSUM;
+        COMMON_INFO("RTE_ETH_TX_OFFLOAD_IPV4_CKSUM\n");
+    }
+
+    // tx tcp
+    if (tx_ol_capa & RTE_ETH_TX_OFFLOAD_TCP_CKSUM) {
+        tx_ol |= RTE_ETH_TX_OFFLOAD_TCP_CKSUM;
+        COMMON_INFO("RTE_ETH_TX_OFFLOAD_TCP_CKSUM\n");
+    }
+
+    // tx udp
+    if (tx_ol_capa & RTE_ETH_TX_OFFLOAD_UDP_CKSUM) {
+        tx_ol |= RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
+        COMMON_INFO("RTE_ETH_TX_OFFLOAD_UDP_CKSUM\n");
+    }
+
+    // tx tso
+    if (tx_ol_capa & RTE_ETH_TX_OFFLOAD_TCP_TSO) {
+        tx_ol |= (RTE_ETH_TX_OFFLOAD_TCP_TSO | RTE_ETH_TX_OFFLOAD_MULTI_SEGS);
+        COMMON_INFO("RTE_ETH_TX_OFFLOAD_TCP_TSO\n");
+    }
+
+    // tx vlan
+    if (tx_ol_capa & RTE_ETH_TX_OFFLOAD_VLAN_INSERT) {
+        tx_ol |= RTE_ETH_TX_OFFLOAD_VLAN_INSERT;
+        COMMON_INFO("RTE_ETH_TX_OFFLOAD_VLAN_INSERT\n");
+    }
+
+    if (!(rx_ol & RTE_ETH_RX_OFFLOAD_UDP_CKSUM) ||
+        !(rx_ol & RTE_ETH_RX_OFFLOAD_TCP_CKSUM) ||
+        !(rx_ol & RTE_ETH_RX_OFFLOAD_IPV4_CKSUM)) {
+        rx_ol = 0;
+    }
+    if (!(tx_ol & RTE_ETH_TX_OFFLOAD_UDP_CKSUM) ||
+        !(tx_ol & RTE_ETH_TX_OFFLOAD_TCP_CKSUM) ||
+        !(tx_ol & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM)) {
+        tx_ol = 0;
+    }
+
+    conf->rxmode.offloads = rx_ol;
+    conf->txmode.offloads = tx_ol;
+
+    COMMON_INFO("Set checksum offloads\n");
 }

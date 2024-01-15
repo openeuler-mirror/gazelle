@@ -27,22 +27,38 @@ if($ENV{GAZELLE_COVERAGE_ENABLE})
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ftest-coverage -fprofile-arcs")
 endif($ENV{GAZELLE_COVERAGE_ENABLE})
 
-if($ENV{DPDK_VERSION_1911})
+execute_process(
+    COMMAND rpm -qa dpdk
+    OUTPUT_VARIABLE DPDK_VERSION_FULL
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(REGEX MATCH "[0-9]+\\.[0-9]+" DPDK_VERSION ${DPDK_VERSION_FULL})
+
+if (DPDK_VERSION STREQUAL "21.11")
+    set(DPDK_DIR /usr/local/include/)
+else()
     set(DPDK_DIR /usr/include/dpdk)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDPDK_VERSION_1911=1")
+endif()
+
+if (DPDK_VERSION STREQUAL "19.11")
     set(DPDK_LINK_FLAGS "-Wl,-lrte_pmd_bond -Wl,-lrte_pmd_hinic -Wl,-lrte_pmd_ixgbe \
     -Wl,-lrte_pmd_pcap -Wl,-lrte_pmd_virtio")
     if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64")
         set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lrte_pmd_i40e")
     endif()
 else()
-    set(DPDK_DIR /usr/local/include/)
     set(DPDK_LINK_FLAGS "-Wl,-lrte_net_bond -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe \
     -Wl,-lpcap -Wl,-lrte_net_pcap -Wl,-lrte_net_virtio -Wl,-lrte_pcapng -Wl,-lrte_telemetry")
     if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64")
         set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lrte_net_i40e")
     endif()
-endif($ENV{DPDK_VERSION_1911})
+endif()
+
+if (DPDK_VERSION  GREATER_EQUAL 23.11)
+    set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -lrte_log -larchive -Wl,-lrte_eal")
+else()
+    set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -lrte_kni -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic")
+endif()
 
 add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_stat.c ltran_errno.c
 				ltran_monitor.c ltran_instance.c ltran_stack.c ltran_tcp_conn.c ltran_tcp_sock.c
@@ -55,16 +71,19 @@ target_compile_options(ltran PRIVATE -fno-strict-aliasing -D__ARM_FEATURE_CRC32=
                -DRTE_MACHINE_CPUFLAG_SHA1 -DRTE_MACHINE_CPUFLAG_SHA2 -include rte_config.h
                -D_GNU_SOURCE -W -Wall -Wstrict-prototypes -Wmissing-declarations -Wmissing-prototypes -Wold-style-definition
                -Wpointer-arith -Wcast-qual -Wnested-externs -Wformat-nonliteral -Wformat-security -Wundef
-               -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2)
-if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "sw_64")
+               -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2 -Wno-error=deprecated-declarations)
+
+# gcc coredump in openEuler-20.03-LTS-XX aarch64 when add -march=native 
+if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "sw_64|aarch64" )
     target_compile_options(ltran PRIVATE -march=native -Wcast-align)
 endif()
 
 target_link_libraries(ltran PRIVATE config boundscheck rte_pdump -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines)
+
 set_target_properties(ltran PROPERTIES LINK_FLAGS "-L$ENV{DPDK_LIB_PATH} -Wl,--no-whole-archive \
     -Wl,-lrte_meter -Wl,--whole-archive -Wl,-lrte_gro -Wl,-lrte_hash -Wl,-lrte_kvargs -Wl,-lrte_mbuf -Wl,-lrte_ethdev \
     -Wl,-lrte_net -Wl,-lrte_timer -Wl,-lrte_mempool -Wl,-lrte_mempool_ring -Wl,-lrte_ring -Wl,-lrte_pci \
-    -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic -Wl,-lrte_cmdline -Wl,-lrte_kni -Wl,-lrte_bus_pci \
+    -Wl,-lrte_cmdline -Wl,-lrte_bus_pci\
     -Wl,-lrte_bus_vdev ${DPDK_LINK_FLAGS} \
     -Wl,--no-whole-archive -Wl,-lm -Wl,-lrt -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic -Wl,-export-dynamic \
     -Wl,--as-needed -Wl,-export-dynamic -Wl,-Map=ltran.map -Wl,--cref")

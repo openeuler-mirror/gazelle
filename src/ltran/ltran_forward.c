@@ -13,7 +13,12 @@
 #include <rte_arp.h>
 #include <rte_eal.h>
 #include <rte_common.h>
+#include <rte_version.h>
+
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 #include <rte_kni.h>
+#endif
+
 #include <rte_malloc.h>
 #include <rte_ethdev.h>
 #include <rte_mempool.h>
@@ -195,6 +200,7 @@ static __rte_always_inline uint32_t pkt_bufs_enque_rx_ring(struct gazelle_stack 
 
 static __rte_always_inline void flush_rx_ring(struct gazelle_stack *stack)
 {
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     if (unlikely(stack == get_kni_stack())) {
         // if fail, free mbuf inside
         kni_process_tx(stack->pkt_buf, stack->pkt_cnt);
@@ -202,6 +208,7 @@ static __rte_always_inline void flush_rx_ring(struct gazelle_stack *stack)
         stack->pkt_cnt = 0;
         return;
     }
+#endif
 
     /* first flush backup mbuf pointer avoid packet disorder */
     if (unlikely(stack->backup_pkt_cnt > 0)) {
@@ -414,9 +421,12 @@ static __rte_always_inline void upstream_forward_one(struct rte_mbuf *m)
     }
 
 forward_to_kni:
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
         enqueue_rx_packet(get_kni_stack(), m);
     }
+#endif
+    return;
 }
 
 static __rte_always_inline void msg_to_quintuple(struct gazelle_quintuple *transfer_qtuple,
@@ -653,10 +663,12 @@ void upstream_forward(const uint16_t *port)
             upstream_forward_loop(port_id, queue_id);
         }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
         if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
             flush_rx_ring(get_kni_stack());
             rte_kni_handle_request(get_gazelle_kni());
         }
+#endif
 
         now_time = get_current_time();
         if (now_time - aging_conn_last_time > GAZELLE_CONN_INTERVAL) {
@@ -755,11 +767,13 @@ int32_t downstream_forward(uint16_t *port)
     uint32_t queue_num = get_ltran_config()->bond.tx_queue_num;
 
     while (get_ltran_stop_flag() != GAZELLE_TRUE) {
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
         /* kni rx means read from kni and send to nic */
         if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON &&
             get_kni_started()) {
             kni_process_rx(g_port_index);
         }
+#endif
 
         for (uint32_t queue_id = 0; queue_id < queue_num; queue_id++) {
             downstream_forward_loop(port_id, queue_id);

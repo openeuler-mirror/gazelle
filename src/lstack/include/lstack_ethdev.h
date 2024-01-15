@@ -13,6 +13,9 @@
 #ifndef __GAZELLE_ETHDEV_H__
 #define __GAZELLE_ETHDEV_H__
 
+#include <rte_eal.h>
+#include <rte_version.h>
+
 #define INVAILD_PROCESS_IDX 255
 
 enum port_type {
@@ -46,7 +49,12 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack);
 
 int recv_pkts_from_other_process(int process_index, void* arg);
 int32_t check_params_from_primary(void);
+
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 void kni_handle_rx(uint16_t port_id);
+void kni_handle_tx(struct rte_mbuf *mbuf);
+#endif
+
 void delete_user_process_port(uint16_t dst_port, enum port_type type);
 void add_user_process_port(uint16_t dst_port, uint8_t process_idx, enum port_type type);
 void delete_flow_director(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port);

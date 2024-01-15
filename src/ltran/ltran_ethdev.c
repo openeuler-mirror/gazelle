@@ -21,9 +21,14 @@
 #include <rte_eth_bond.h>
 #include <rte_ethdev.h>
 #include <rte_errno.h>
+#include <rte_version.h>
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 #include <rte_kni.h>
+#endif
 #include <syslog.h>
 #include <securec.h>
+
+#include <lwip/dpdk_version.h>
 
 #include "dpdk_common.h"
 #include "ltran_param.h"
@@ -85,7 +90,11 @@ static int32_t ltran_mbuf_pool_init(void);
 static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempool *pktmbuf_rxpool);
 static int32_t ltran_single_bond_port_init(uint16_t port_num, struct rte_mempool *pktmbuf_rxpool);
 static int32_t ltran_slave_port_init(void);
+
+
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 static int32_t ltran_kni_init(void);
+#endif
 static int32_t ltran_bond_port_init(void);
 
 static int32_t ltran_eal_init(void)
@@ -248,10 +257,10 @@ static int32_t ltran_single_slave_port_init(uint16_t port_num, struct rte_mempoo
     }
 
     struct rte_eth_conf port_conf = {0};
-    port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
-    port_conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
+    port_conf.txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
+    port_conf.link_speeds = RTE_ETH_LINK_SPEED_AUTONEG;
     eth_params_checksum(&port_conf, &dev_info);
-    port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
+    port_conf.rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
 
     struct ltran_config *ltran_config = get_ltran_config();
     ltran_config->dpdk.rx_offload = port_conf.rxmode.offloads;
@@ -311,7 +320,11 @@ static int32_t ltran_slave_port_init(void)
 static int32_t ltran_eth_bond_slave(const struct port_info *port_info, uint16_t port_num, uint16_t bond_port_id)
 {
     for (uint32_t i = 0; i < port_info[port_num].num_ports; i++) {
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
         int32_t ret = rte_eth_bond_slave_add(bond_port_id, port_info[port_num].id[i]);
+#else
+        int32_t ret = rte_eth_bond_member_add(bond_port_id, port_info[port_num].id[i]);
+#endif
         if (ret < 0) {
             return ret;
         }
@@ -370,9 +383,9 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
     }
 
     struct rte_eth_conf port_conf = {0};
-    port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
-    port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
-    port_conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
+    port_conf.rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
+    port_conf.txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
+    port_conf.link_speeds = RTE_ETH_LINK_SPEED_AUTONEG;
     eth_params_checksum(&port_conf, &dev_info);
 
     ret = rte_eth_dev_configure(bond_port_id, rx_queue_num, tx_queue_num, &port_conf);
@@ -469,6 +482,7 @@ static int32_t ltran_bond_port_init(void)
     return GAZELLE_OK;
 }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 static int32_t ltran_kni_init(void)
 {
     // if not use kni. skip kni init and return
@@ -481,6 +495,7 @@ static int32_t ltran_kni_init(void)
 
     return dpdk_kni_init(bond_port[0], txpool[0]);
 }
+#endif
 
 typedef int32_t (*ethdev_init_func)(void);
 
@@ -492,7 +507,9 @@ static ethdev_init_func g_ltran_ethdev_init_tbl[] = {
     ltran_mbuf_pool_init,
     ltran_slave_port_init,
     ltran_bond_port_init,
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     ltran_kni_init,
+#endif
 };
 
 int32_t ltran_ethdev_init(void)

@@ -27,7 +27,10 @@
 #include <rte_malloc.h>
 #include <rte_bus.h>
 #include <rte_errno.h>
+#include <rte_version.h>
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 #include <rte_kni.h>
+#endif
 #include <rte_pdump.h>
 #include <rte_thash.h>
 #include <lwip/posix_api.h>
@@ -35,6 +38,7 @@
 #include <lwip/pbuf.h>
 #include <lwip/reg_sock.h>
 #include <lwip/priv/tcp_priv.h>
+
 #include <rte_eth_bond_8023ad.h>
 #include <rte_eth_bond.h>
 #include <rte_ethdev.h>
@@ -59,8 +63,10 @@ struct eth_params {
     struct rte_eth_rxconf rx_conf;
     struct rte_eth_txconf tx_conf;
 };
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 struct rte_kni;
 static struct rte_bus *g_pci_bus = NULL;
+#endif
 
 #define RSS_HASH_KEY_LEN    40
 static uint8_t g_default_rss_key[] = {
@@ -368,9 +374,9 @@ static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
     eth_params->nb_queues = nb_queues;
     eth_params->nb_rx_desc = get_global_cfg_params()->nic.rxqueue_size;
     eth_params->nb_tx_desc = get_global_cfg_params()->nic.txqueue_size;
-    eth_params->conf.link_speeds = ETH_LINK_SPEED_AUTONEG;
-    eth_params->conf.txmode.mq_mode = ETH_MQ_TX_NONE;
-    eth_params->conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
+    eth_params->conf.link_speeds = RTE_ETH_LINK_SPEED_AUTONEG;
+    eth_params->conf.txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
+    eth_params->conf.rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
 
     return eth_params;
 }
@@ -388,7 +394,7 @@ uint64_t get_eth_params_tx_ol(void)
 static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
 {
     int rss_enable = 0;
-    uint64_t def_rss_hf = ETH_RSS_TCP | ETH_RSS_UDP | ETH_RSS_IP;
+    uint64_t def_rss_hf = RTE_ETH_RSS_TCP | RTE_ETH_RSS_UDP | RTE_ETH_RSS_IP;
     struct rte_eth_rss_conf rss_conf = {
         g_default_rss_key,
         RSS_HASH_KEY_LEN,
@@ -404,7 +410,7 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
     if (rss_conf.rss_hf) {
         rss_enable = 1;
         conf->rx_adv_conf.rss_conf = rss_conf;
-        conf->rxmode.mq_mode = ETH_MQ_RX_RSS;
+        conf->rxmode.mq_mode = RTE_ETH_MQ_RX_RSS;
 
         LSTACK_LOG(INFO, LSTACK, "set rss_hf: %lx\n", rss_conf.rss_hf);
     }
@@ -427,8 +433,8 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
         return;
     }
 
-    reta_conf_size = dev_info.reta_size / RTE_RETA_GROUP_SIZE;
-    if (dev_info.reta_size % RTE_RETA_GROUP_SIZE) {
+    reta_conf_size = dev_info.reta_size / RTE_ETH_RETA_GROUP_SIZE;
+    if (dev_info.reta_size % RTE_ETH_RETA_GROUP_SIZE) {
         reta_conf_size += 1;
     }
 
@@ -438,8 +444,8 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
     }
     for (i = 0; i < dev_info.reta_size; i++) {
         struct rte_eth_rss_reta_entry64 *one_reta_conf =
-            &reta_conf[i / RTE_RETA_GROUP_SIZE];
-        one_reta_conf->reta[i % RTE_RETA_GROUP_SIZE] = i % nb_queues;
+            &reta_conf[i / RTE_ETH_RETA_GROUP_SIZE];
+        one_reta_conf->reta[i % RTE_ETH_RETA_GROUP_SIZE] = i % nb_queues;
     }
 
     for (i = 0; i < reta_conf_size; i++) {
@@ -518,7 +524,11 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
                 return -1;
             }
 
+#if RTE_VERSION >= RTE_VERSION_NUM(23, 11, 0, 0)
+            ret = rte_eth_bond_member_add(port_id, slave_port_id[i]);
+#else
             ret = rte_eth_bond_slave_add(port_id, slave_port_id[i]);
+#endif
             if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk add slave port failed ret = %d\n", ret);
                 return -1;
@@ -671,6 +681,7 @@ int32_t dpdk_init_lstack_kni(void)
     return 0;
 }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 void dpdk_skip_nic_init(void)
 {
     /* when lstack init nic again, ltran can't read pkts from nic. unregister pci_bus to avoid init nic in lstack */
@@ -686,6 +697,7 @@ void dpdk_restore_pci(void)
         rte_bus_register(g_pci_bus);
     }
 }
+#endif
 
 int32_t init_dpdk_ethdev(void)
 {
@@ -849,7 +861,11 @@ void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
     if (strcmp(dev_info.driver_name, "net_bonding") == 0) {
         uint16_t slaves[RTE_MAX_ETHPORTS];
         int slave_count;
+#if RTE_VERSION >= RTE_VERSION_NUM(23, 11, 0, 0)
+        slave_count = rte_eth_bond_members_get(port_id, slaves, RTE_MAX_ETHPORTS);
+#else
         slave_count = rte_eth_bond_slaves_get(port_id, slaves, RTE_MAX_ETHPORTS);
+#endif
         if (slave_count <= 0) {
             LSTACK_LOG(ERR, LSTACK, "rte_eth_bond_slaves_get failed.\n");
             return;

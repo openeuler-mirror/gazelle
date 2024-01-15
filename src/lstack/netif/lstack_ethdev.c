@@ -13,7 +13,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <rte_eal.h>
+#include <rte_version.h>
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 #include <rte_kni.h>
+#endif
 #include <rte_ethdev.h>
 #include <rte_malloc.h>
 #include <rte_ether.h>
@@ -755,6 +759,7 @@ int distribute_pakages(struct rte_mbuf *mbuf)
     return TRANSFER_KERNEL;
 }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 void kni_handle_rx(uint16_t port_id)
 {
     struct rte_mbuf *pkts_burst[PACKET_READ_SIZE];
@@ -793,6 +798,7 @@ void kni_handle_tx(struct rte_mbuf *mbuf)
         rte_pktmbuf_free(mbuf);
     }
 }
+#endif
 
 /* optimized eth_dev_poll() in lstack */
 int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_flag, uint32_t nic_read_number)
@@ -835,7 +841,9 @@ int32_t gazelle_eth_dev_poll(struct protocol_stack *stack, uint8_t use_ltran_fla
         if (likely(transfer_type == TRANSFER_CURRENT_THREAD)) {
             eth_dev_recv(stack->pkts[i], stack);
         } else if (transfer_type == TRANSFER_KERNEL) {
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
             kni_handle_tx(stack->pkts[i]);
+#endif
         } else {
             /* transfer to other thread */
         }

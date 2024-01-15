@@ -7,17 +7,17 @@
 # IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
-
 LSTACK_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ROOT_DIR := $(dir $(abspath $(LSTACK_DIR)))
 
 LWIP_INCLUDE_FILE ?= /usr/include/lwip
 LIB_PATH ?= /usr/lib64
 
-ifeq ($(DPDK_VERSION_1911), 1)
-	DPDK_INCLUDE_FILE ?= /usr/include/dpdk
+DPDK_VERSION := $(shell rpm -q --queryformat '%{VERSION}' dpdk)
+ifeq ($(DPDK_VERSION),21.11)
+    DPDK_INCLUDE_FILE := /usr/local/include
 else
-	DPDK_INCLUDE_FILE ?= /usr/local/include/
+    DPDK_INCLUDE_FILE := /usr/include/dpdk
 endif
 
 AR = ar
@@ -77,34 +77,36 @@ LIBRTE_LIB = $(LIB_PATH)/librte_pci.so \
              $(LIB_PATH)/librte_gro.so \
              $(LIB_PATH)/librte_ring.so \
              $(LIB_PATH)/librte_mbuf.so \
-             $(LIB_PATH)/librte_kni.so \
              $(LIB_PATH)/librte_kvargs.so \
              $(LIB_PATH)/librte_bus_vdev.so \
              $(LIB_PATH)/librte_net.so \
              $(LIB_PATH)/librte_ethdev.so \
-             $(LIB_PATH)/librte_pdump.so \
+             $(LIB_PATH)/librte_pdump.so
 
-ifeq ($(DPDK_VERSION_1911), 1)
-	CFLAGS += -DDPDK_VERSION_1911=1
+ifeq ($(shell expr $(DPDK_VERSION) \< 23.11), 1)
+	LIBRTE_LIB += $(LIB_PATH)/librte_kni.so
+endif
+
+ifeq ($(DPDK_VERSION), 19.11)
 	LIBRTE_LIB += $(LIB_PATH)/librte_pmd_pcap.so \
-	              $(LIB_PATH)/librte_pmd_bond.so \
-	              $(LIB_PATH)/librte_pmd_hinic.so \
-	              $(LIB_PATH)/librte_pmd_ixgbe.so \
-	              $(LIB_PATH)/librte_pmd_virtio.so
-	ifneq ($(ARCH), loongarch64)
-		LIBRTE_LIB += $(LIB_PATH)/librte_pmd_i40e.so
-	endif
+                  $(LIB_PATH)/librte_pmd_bond.so \
+                  $(LIB_PATH)/librte_pmd_hinic.so \
+                  $(LIB_PATH)/librte_pmd_ixgbe.so \
+                  $(LIB_PATH)/librte_pmd_virtio.so
+    ifneq ($(ARCH), loongarch64)
+	LIBRTE_LIB += $(LIB_PATH)/librte_pmd_i40e.so
+    endif
 else
 	LIBRTE_LIB += $(LIB_PATH)/librte_net_pcap.so \
-	              $(LIB_PATH)/librte_net_bond.so \
-	              $(LIB_PATH)/librte_net_hinic.so \
-	              $(LIB_PATH)/librte_net_ixgbe.so \
-	              $(LIB_PATH)/librte_net_virtio.so \
-	              $(LIB_PATH)/librte_telemetry.so \
-	              $(LIB_PATH)/librte_pcapng.so
-	ifneq ($(ARCH), loongarch64)
-		LIBRTE_LIB += $(LIB_PATH)/librte_net_i40e.so
-	endif
+                      $(LIB_PATH)/librte_net_bond.so \
+                      $(LIB_PATH)/librte_net_hinic.so \
+                      $(LIB_PATH)/librte_net_ixgbe.so \
+                      $(LIB_PATH)/librte_net_virtio.so \
+                      $(LIB_PATH)/librte_telemetry.so \
+                      $(LIB_PATH)/librte_pcapng.so
+    ifneq ($(ARCH), loongarch64)
+	LIBRTE_LIB += $(LIB_PATH)/librte_net_i40e.so
+    endif
 endif
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)

@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#include <malloc.h>
 #include <sys/time.h>
 #include <pthread.h>
 

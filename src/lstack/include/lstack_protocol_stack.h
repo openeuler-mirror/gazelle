@@ -181,5 +181,4 @@ void stack_recvlist_count(struct rpc_msg *msg);
 void stack_exit_by_rpc(struct rpc_msg *msg);
 
 int stack_polling(uint32_t wakeup_tick);
-void kni_handle_tx(struct rte_mbuf *mbuf);
 #endif
