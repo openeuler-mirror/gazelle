@@ -250,6 +250,12 @@ static int32_t parse_host_addr6(void)
     if (ip6addr_aton(value, &g_config_params.host_addr6) == 0) {
         return -EINVAL;
     }
+
+    if (ip6_addr_ismulticast(&g_config_params.host_addr6)) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: host_addr6 cannot be a multicast address.");
+        return -EINVAL;
+    }
+
     return 0;
 }
 
