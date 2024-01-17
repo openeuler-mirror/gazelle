@@ -123,6 +123,7 @@ struct ProgramParams {
     int32_t             tcp_keepalive_interval;  ///< tcp keepalive interval time
 #define INJECT_TYPE_IDX                     (0)                 ///< the index of inject type
 #define INJECT_TIME_IDX                     (1)                 ///< the index of delay time
+#define INJECT_SKIP_IDX                     (1)                 ///< the index of skip location
 #define INJECT_LOCATION_IDX                 (2)                 ///< the index of delay location
 #define FAULT_INJECT_PARA_COUNT             (3)                 ///< the count of fault injection parameters
     char*               inject[FAULT_INJECT_PARA_COUNT];  /// < fault inject
@@ -134,6 +135,23 @@ typedef enum {
     INJECT_DELAY_WRITE,
     INJECT_DELAY_MAX,
 }delay_type;
+
+typedef enum {
+    INJECT_SKIP_READ = 0,
+    INJECT_SKIP_WRITE,
+    INJECT_SKIP_MAX,
+} skip_type;
+
+#define FAULT_INJECT_SKIP_BEGIN(skip_type)    \
+    if (get_g_inject_skip((skip_type))) {}    \
+    else {
+#define FAULT_INJECT_SKIP_END  }
+
+/**
+ * @brief return g_inject_skip value
+ * This function return g_inject_skip value to deside if excute skip
+ */
+int32_t get_g_inject_skip(skip_type type);
 
 /**
  * @brief function execute delay inject

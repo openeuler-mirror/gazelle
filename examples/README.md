@@ -7,6 +7,7 @@
 * 支持多线程网络非对称模型，一个 listen 线程，若干个读写线程。listen 线程和读写线程使用 `poll` / `epoll` 监听事件。
 * 支持 `recvmsg` 、`sendmsg` 、`recv` 、`send` 、`recvfrom`、`sendto`、`getpeername` 、`getsockopt` 、`epoll_ctl` 等 posix 接口。
 * 网络通讯报文采用问答方式，丢包或者内容错误则报错并停止通讯。报文内容有变化，长度可配。
+* 支持网络故障注入，延迟进行（delay）、跳过（skip）read、write、accept等逻辑。
 
 ## 网络模型
 
@@ -133,6 +134,17 @@
   * `ac`：使用accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)通过套接口接受连接。
   * `ac4`：使用accept4(int sockfd, struct sockaddr *addr,socklen_t *addrlen, int flags)通过套接口接受连接,flags=SOCK_CLOEXEC。
 * `-k, --keep_alive`：配置TCP keep_alive idle ,  keep_alive interval时间(second)。
+* `-I, --inject`: 配置故障注入类型。
+  * `delay`:
+    * `"delay 20 before_accept"`: 延迟20秒进行accept，时间可自定义，需大于0。可用于构造tcp_acceptmbox_full的情景
+    * `"delay 20 before_read"`: 延迟20秒进行read，时间可自定义，需大于0。
+    * `"delay 20 before_write"`: 延迟20秒进行write，时间可自定义，需大于0。
+    * `"delay 20 before_read_and_write"`: 延迟20秒进行read和write，时间可自定义，需大于0。
+  * `skip`:
+    * `"skip write"`: 跳过写过程，并关闭链接。
+    * `"skip read"`: 跳过读过程，并关闭链接。
+    * `"skip read_and_write"`: 跳过读写写过程，并关闭链接。
+    
 
 ## 使用
 

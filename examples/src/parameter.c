@@ -14,6 +14,7 @@
 #include "parameter.h"
 
 static int32_t g_inject_delay[INJECT_DELAY_MAX] = {0};
+static int32_t g_inject_skip[INJECT_SKIP_MAX];
 
 // program short options
 const char prog_short_opts[] = \
@@ -334,6 +335,39 @@ static void delay_param_parse(struct ProgramParams *params)
     exit(PROGRAM_ABORT);
 }
 
+// apply fault inject type of skip
+static void skip_param_parse(struct ProgramParams *params)
+{
+    char* location = params->inject[INJECT_SKIP_IDX];
+    if (location == NULL) {
+        PRINT_ERROR("FAULT INJECT: Lack param for skip fault inject, location is not appointed.\n");
+        exit(PROGRAM_ABORT);
+    }
+
+    if (strcmp("read", location) == 0) {
+        g_inject_skip[INJECT_SKIP_READ] = 1;
+        return;
+    }
+    if (strcmp("write", location) == 0) {
+        g_inject_skip[INJECT_SKIP_WRITE] = 1;
+        return;
+    }
+    if (strcmp("read_and_write", location) == 0) {
+        g_inject_skip[INJECT_SKIP_READ] = 1;
+        g_inject_skip[INJECT_SKIP_WRITE] = 1;
+        return;
+    }
+
+    PRINT_ERROR("FAULT INJECT: Unidentified fault inject location -- %s \n", location);
+    exit(PROGRAM_ABORT);
+}
+
+// judge if need skip fault inject
+int32_t get_g_inject_skip(skip_type type)
+{
+    return g_inject_skip[type];
+}
+
 // check legitimacy of fault injection and apply it.
 static void apply_fault_inject(struct ProgramParams *params)
 {
@@ -342,7 +376,11 @@ static void apply_fault_inject(struct ProgramParams *params)
         delay_param_parse(params);
         return;
     }
-
+    if (strcmp("skip", inject_type) == 0) {
+        skip_param_parse(params);
+        return;
+    }
+    
     PRINT_ERROR("FAULT INJCET: Unidentified fault inject -- %s \n", inject_type);
     exit(PROGRAM_ABORT);
 }
@@ -441,6 +479,9 @@ void program_params_help(void)
     printf("                 \"delay 20 before_read\"\n");
     printf("                 \"delay 20 before_write\"\n");
     printf("                 \"delay 20 before_read_and_write\"\n");
+    printf("                 \"skip read\"\n");
+    printf("                 \"skip write\"\n");
+    printf("                 \"skip read_and_write\"\n");
     printf("\n");
 }
 

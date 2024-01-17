@@ -161,6 +161,7 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
     }
 
     fault_inject_delay(INJECT_DELAY_READ);
+    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_READ)
     
     while (cread < sread) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
@@ -181,6 +182,8 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
         }
     }
 
+    FAULT_INJECT_SKIP_END
+    
     if (strcmp(api, "recvfrom") == 0) {
         free(buffer_in);
         free(buffer_out);
@@ -194,7 +197,7 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
     int32_t nwrite = 0;
     
     fault_inject_delay(INJECT_DELAY_WRITE);
-    
+    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_WRITE)
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nwrite = sendto(server_handler->fd, buffer_out, length, 0, (struct sockaddr *)&client_addr, len);
@@ -213,6 +216,8 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
             continue;
         }
     }
+
+    FAULT_INJECT_SKIP_END
 
     free(buffer_in);
     free(buffer_out);
@@ -250,6 +255,7 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const 
     int32_t nwrite = 0;
 
     fault_inject_delay(INJECT_DELAY_WRITE);
+    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_WRITE)
     
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
@@ -268,6 +274,8 @@ int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const 
             continue;
         }
     }
+
+    FAULT_INJECT_SKIP_END
 
     free(buffer_in);
     free(buffer_out);
@@ -289,6 +297,7 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
     socklen_t len = ip->addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
 
     fault_inject_delay(INJECT_DELAY_READ);
+    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_READ)
     
     while (cread < sread) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
@@ -308,6 +317,8 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
         }
     }
 
+    FAULT_INJECT_SKIP_END
+    
     if (client_bussiness(buffer_out, buffer_in, length, verify, &(client_handler->msg_idx)) < 0) {
         PRINT_ERROR("message verify fault! ");
         getchar();
@@ -321,7 +332,8 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
     }
 
     fault_inject_delay(INJECT_DELAY_WRITE);
-    
+    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_WRITE)
+
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nwrite = sendto(client_handler->fd, buffer_out, length, 0, (struct sockaddr *)&server_addr, len);
@@ -340,6 +352,8 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
         }
     }
 
+    FAULT_INJECT_SKIP_END
+    
     free(buffer_in);
     free(buffer_out);
 
