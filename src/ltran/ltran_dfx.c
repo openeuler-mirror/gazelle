@@ -26,6 +26,8 @@
 #include <rte_log.h>
 #include <rte_ethdev.h>
 
+#include <lwip/dpdk_version.h>
+
 #include "ltran_stat.h"
 #include "ltran_base.h"
 #include "gazelle_dfx_msg.h"
@@ -168,16 +170,16 @@ static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_st
     struct nic_eth_features *f = &(((struct gazelle_stack_dfx_data *)buf)->data.nic_features);
     printf("###### NIC offload and other features for port %-2d #########\n", f->port_id);
 
-    printf("tx-ipv4-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_IPV4_CKSUM) ? "on" : "off");
-    printf("tx-tcp-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
-    printf("tx-tcp-tso: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_TCP_TSO) ? "on" : "off");
-    printf("tx-udp-checksum: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_UDP_CKSUM) ? "on" : "off");
-    printf("tx-vlan-insert: %s\n", (f->tx_offload & DEV_TX_OFFLOAD_VLAN_INSERT) ? "on" : "off");
+    printf("tx-ipv4-checksum: %s\n", (f->tx_offload & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM) ? "on" : "off");
+    printf("tx-tcp-checksum: %s\n", (f->tx_offload & RTE_ETH_TX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
+    printf("tx-tcp-tso: %s\n", (f->tx_offload & RTE_ETH_TX_OFFLOAD_TCP_TSO) ? "on" : "off");
+    printf("tx-udp-checksum: %s\n", (f->tx_offload & RTE_ETH_TX_OFFLOAD_UDP_CKSUM) ? "on" : "off");
+    printf("tx-vlan-insert: %s\n", (f->tx_offload & RTE_ETH_TX_OFFLOAD_VLAN_INSERT) ? "on" : "off");
 
-    printf("rx-ipv4-checksum: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_IPV4_CKSUM) ? "on" : "off");
-    printf("rx-tcp-checksum: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
-    printf("rx-udp-checksum: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_UDP_CKSUM) ? "on" : "off");
-    printf("rx-vlan-strip: %s\n", (f->rx_offload & DEV_RX_OFFLOAD_VLAN_STRIP) ? "on" : "off");
+    printf("rx-ipv4-checksum: %s\n", (f->rx_offload & RTE_ETH_RX_OFFLOAD_IPV4_CKSUM) ? "on" : "off");
+    printf("rx-tcp-checksum: %s\n", (f->rx_offload & RTE_ETH_RX_OFFLOAD_TCP_CKSUM) ? "on" : "off");
+    printf("rx-udp-checksum: %s\n", (f->rx_offload & RTE_ETH_RX_OFFLOAD_UDP_CKSUM) ? "on" : "off");
+    printf("rx-vlan-strip: %s\n", (f->rx_offload & RTE_ETH_RX_OFFLOAD_VLAN_STRIP) ? "on" : "off");
 }
 
 static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_request *req_msg)

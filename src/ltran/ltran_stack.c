@@ -10,6 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#include <malloc.h>
 #include <rte_mbuf.h>
 
 #include "ltran_instance.h"

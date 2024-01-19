@@ -116,7 +116,9 @@ void gazelle_exit(void)
         stack_group_exit();
     }
     if (!use_ltran()) {
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
         dpdk_kni_release();
+#endif
     }
 }
 

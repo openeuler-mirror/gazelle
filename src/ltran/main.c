@@ -17,6 +17,8 @@
 #include <syslog.h>
 #include <sys/types.h>
 #include <rte_malloc.h>
+#include <rte_eal.h>
+#include <rte_version.h>
 
 #include "dpdk_common.h"
 #include "ltran_log.h"
@@ -57,7 +59,9 @@ static void sig_default_handler(int32_t sig)
 {
     LTRAN_ERR("ltran dumped, caught signal: %d.\n", sig);
     print_stack();
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     dpdk_kni_release();
+#endif
     int ret = 0;
     ret = unlink(get_ltran_config()->unix_socket_filename);
     if (ret) {
@@ -143,7 +147,9 @@ static void ltran_core_destroy(void)
     gazelle_stack_htable_destroy();
     gazelle_tcp_conn_htable_destroy();
     gazelle_tcp_sock_htable_destroy();
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     dpdk_kni_release();
+#endif
 }
 
 static void wait_thread_finish(pthread_t ctrl_thread, uint32_t next_core)
