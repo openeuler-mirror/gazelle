@@ -542,14 +542,14 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
     }
 
     struct protocol_stack *stack = sock->stack;
-    if (!stack|| len == 0) {
+    if (!stack || len == 0) {
         return 0;
     }
 
     ssize_t send_len = 0;
 
     /* merge data into last pbuf */
-    if (sock->remain_len) {
+    if (!NETCONN_IS_UDP(sock) && sock->remain_len) {
         send_len = merge_data_lastpbuf(sock, (char *)buf, len);
         if (send_len >= len) {
             send_len = len;
@@ -1045,6 +1045,11 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
                 calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ);
             }
             gazelle_ring_read_over(sock->recv_ring);
+
+            /* in udp, if pbuf remaining len less than copy_len, discard these packets */
+            if (recvd > 0 && NETCONN_IS_UDP(sock)) {
+                break;
+            }
         }
     }
 
