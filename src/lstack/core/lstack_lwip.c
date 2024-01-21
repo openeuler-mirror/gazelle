@@ -114,14 +114,7 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
     void *data = rte_pktmbuf_mtod(mbuf, void *);
     struct pbuf *pbuf = pbuf_alloced_custom(layer, length, type, pbuf_custom, data, MAX_PACKET_SZ);
     if (pbuf) {
-        pbuf->ol_flags = 0;
-        pbuf->l2_len = 0;
-        pbuf->l3_len = 0;
-        pbuf->l4_len = 0;
-        pbuf->header_off = 0;
-        pbuf->rexmit = 0;
         pbuf->allow_in = 1;
-        pbuf->head = 0;
         pbuf->last = pbuf;
         pbuf->addr = *IP_ANY_TYPE;
         pbuf->port = 0;
@@ -290,7 +283,6 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
         if (pbuf->tot_len > remain_size) {
             pthread_spin_unlock(&pbuf->pbuf_lock);
             *apiflags &= ~TCP_WRITE_FLAG_MORE;
-            pbuf->head = 1;
             return NULL;
         }
         if (pbuf->allow_in == 1) {
@@ -300,7 +292,6 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
     } else {
         if (pbuf->tot_len > remain_size) {
             *apiflags &= ~TCP_WRITE_FLAG_MORE;
-            pbuf->head = 1;
             return NULL;
         }
     }
@@ -1354,7 +1345,6 @@ err_t netif_loop_output(struct netif *netif, struct pbuf *p)
         LSTACK_LOG(ERR, LSTACK, "netif_loop_output: pbuf_alloc failed\n");
         return ERR_MEM;
     }
-    head->ol_flags = p->ol_flags;
     memcpy_s(head->payload, head->len, p->payload, p->len);
 
     if ((flags & TCP_SYN) && !(flags & TCP_ACK)) {
