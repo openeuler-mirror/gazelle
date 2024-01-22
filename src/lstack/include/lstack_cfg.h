@@ -110,7 +110,6 @@ struct cfg_params {
     struct secondary_attach_arg sec_attach_arg;
     char unix_socket_filename[NAME_MAX];
     uint16_t send_ring_size;
-    bool expand_send_ring;
     bool tuple_filter;
     int8_t bond_mode;
     struct rte_ether_addr bond_slave_mac_addr[GAZELLE_MAX_BOND_NUM];

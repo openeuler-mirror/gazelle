@@ -56,17 +56,6 @@ static void free_ring_pbuf(struct rte_ring *ring)
     } while (gazelle_ring_readover_count(ring));
 }
 
-static void free_list_pbuf(struct pbuf *pbuf)
-{
-    while (pbuf) {
-        struct pbuf *del_pbuf = pbuf;
-        pbuf = pbuf->next;
-
-        del_pbuf->next = NULL;
-        pbuf_free(del_pbuf);
-    }
-}
-
 static void reset_sock_data(struct lwip_sock *sock)
 {
     /* check null pointer in ring_free func */
@@ -80,11 +69,6 @@ static void reset_sock_data(struct lwip_sock *sock)
         free_ring_pbuf(sock->send_ring);
         gazelle_ring_free_fast(sock->send_ring);
         sock->send_ring = NULL;
-    }
-
-    if (sock->send_lastdata) {
-        free_list_pbuf(sock->send_lastdata);
-        sock->send_lastdata = NULL;
     }
 
     if (sock->send_pre_del) {
@@ -160,9 +144,7 @@ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct lwip_so
         pbuf_free(pbuf[i]);
     }
 
-    if (!get_global_cfg_params()->expand_send_ring) {
-        sem_post(&sock->snd_ring_sem);
-    }
+    sem_post(&sock->snd_ring_sem);
 
     return false;
 }
@@ -260,22 +242,6 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
         }
         pthread_spin_unlock(&pbuf->pbuf_lock);
 
-        if (pbuf->next) {
-            sock->send_lastdata = pbuf->next;
-            pbuf->next = NULL;
-        }
-        return pbuf;
-    }
-
-    if (sock->send_lastdata) {
-        pbuf = sock->send_lastdata;
-        if (pbuf->tot_len > remain_size) {
-            *apiflags &= ~TCP_WRITE_FLAG_MORE;
-            return NULL;
-        }
-        sock->send_pre_del = pbuf;
-        sock->send_lastdata = pbuf->next;
-        pbuf->next = NULL;
         return pbuf;
     }
 
@@ -305,8 +271,6 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
         }
     }
 
-    sock->send_lastdata = pbuf->next;
-    pbuf->next = NULL;
     return pbuf;
 }
 
@@ -320,109 +284,22 @@ static ssize_t do_app_write(struct pbuf *pbufs[], void *buf, size_t len, uint32_
 {
     ssize_t send_len = 0;
     uint32_t i = 0;
-    uint32_t expand_send_ring = get_global_cfg_params()->expand_send_ring;
 
     for (i = 0; i < write_num - 1; i++) {
         rte_prefetch0(pbufs[i + 1]);
         rte_prefetch0(pbufs[i + 1]->payload);
         rte_prefetch0((char *)buf + send_len + MBUF_MAX_DATA_LEN);
-        if (expand_send_ring) {
-            pbuf_take(pbufs[i], (char *)buf + send_len, MBUF_MAX_DATA_LEN);
-        } else {
-            rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, MBUF_MAX_DATA_LEN);
-        }
+        rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, MBUF_MAX_DATA_LEN);
         pbufs[i]->tot_len = pbufs[i]->len = MBUF_MAX_DATA_LEN;
         send_len += MBUF_MAX_DATA_LEN;
     }
 
     /* reduce the branch in loop */
     uint16_t copy_len = len - send_len;
-    if (expand_send_ring) {
-        pbuf_take(pbufs[i], (char *)buf + send_len, copy_len);
-    } else {
-        rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, copy_len);
-    }
+    rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, copy_len);
     pbufs[i]->tot_len = pbufs[i]->len = copy_len;
     send_len += copy_len;
 
-    return send_len;
-}
-
-static inline ssize_t app_direct_write(struct protocol_stack *stack, struct lwip_sock *sock, void *buf,
-    size_t len, uint32_t write_num)
-{
-    if (write_num == 0) {
-        return 0;
-    }
-    struct pbuf **pbufs = (struct pbuf **)malloc(write_num * sizeof(struct pbuf *));
-    if (pbufs == NULL) {
-        return 0;
-    }
-
-    /* first pbuf get from send_ring. and malloc pbufs attach to first pbuf */
-    if (dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, (struct rte_mbuf **)&pbufs[1], write_num - 1) != 0) {
-        stack->stats.tx_allocmbuf_fail++;
-        free(pbufs);
-        return 0;
-    }
-
-    (void)gazelle_ring_read(sock->send_ring, (void **)&pbufs[0], 1);
-
-    uint32_t i = 1;
-    for (; i < write_num - 1; i++) {
-        rte_prefetch0(mbuf_to_pbuf((void *)pbufs[i + 1]));
-        pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
-        pbufs[i - 1]->next = pbufs[i];
-    }
-    pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
-    pbufs[i - 1]->next = pbufs[i];
-
-    ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
-
-    gazelle_ring_read_over(sock->send_ring);
-
-    pbufs[0]->last = pbufs[write_num - 1];
-    sock->remain_len = 0;
-    free(pbufs);
-    return send_len;
-}
-
-static inline ssize_t app_direct_attach(struct protocol_stack *stack, struct pbuf *attach_pbuf, void *buf,
-    size_t len, uint32_t write_num)
-{
-    if (write_num == 0) {
-        return 0;
-    }
-    struct pbuf **pbufs = (struct pbuf **)malloc(write_num * sizeof(struct pbuf *));
-    if (pbufs == NULL) {
-        return 0;
-    }
-
-    /* first pbuf get from send_ring. and malloc pbufs attach to first pbuf */
-    if (dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, (struct rte_mbuf **)pbufs, write_num) != 0) {
-        stack->stats.tx_allocmbuf_fail++;
-        free(pbufs);
-        return 0;
-    }
-
-    pbufs[0] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[0], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
-    uint32_t i = 1;
-    for (; i < write_num - 1; i++) {
-        rte_prefetch0(mbuf_to_pbuf((void *)pbufs[i + 1]));
-        pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
-        pbufs[i - 1]->next = pbufs[i];
-    }
-    if (write_num > 1) {
-        pbufs[i] = init_mbuf_to_pbuf((struct rte_mbuf *)pbufs[i], PBUF_TRANSPORT, MBUF_MAX_DATA_LEN, PBUF_RAM);
-        pbufs[i - 1]->next = pbufs[i];
-    }
-
-    ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
-
-    attach_pbuf->last->next = pbufs[0];
-    attach_pbuf->last = pbufs[write_num - 1];
-
-    free(pbufs);
     return send_len;
 }
 
@@ -496,12 +373,6 @@ static inline size_t merge_data_lastpbuf(struct lwip_sock *sock, void *buf, size
         return 0;
     }
 
-    if (last_pbuf->next || last_pbuf->len >= MBUF_MAX_DATA_LEN) {
-        sock->remain_len = 0;
-        gazelle_ring_lastover(last_pbuf);
-        return 0;
-    }
-
     size_t send_len = MBUF_MAX_DATA_LEN - last_pbuf->len;
     if (send_len >= len) {
         sock->remain_len = send_len - len;
@@ -512,11 +383,7 @@ static inline size_t merge_data_lastpbuf(struct lwip_sock *sock, void *buf, size
 
     uint16_t offset = last_pbuf->len;
     last_pbuf->tot_len = last_pbuf->len = offset + send_len;
-    if (get_global_cfg_params()->expand_send_ring) {
-        pbuf_take_at(last_pbuf, buf, send_len, offset);
-    } else {
-        rte_memcpy((char *)last_pbuf->payload + offset, buf, send_len);
-    }
+    rte_memcpy((char *)last_pbuf->payload + offset, buf, send_len);
 
     gazelle_ring_lastover(last_pbuf);
 
@@ -570,55 +437,19 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
 
     /* send_ring is full, data attach last pbuf */
     if (write_avail == 0) {
-        if (!get_global_cfg_params()->expand_send_ring) {
-            sem_timedwait_nsecs(&sock->snd_ring_sem);
-            if (likely(sock->send_ring != NULL)) {
-                write_avail = gazelle_ring_readable_count(sock->send_ring);
-            }
-            goto END;
+        sem_timedwait_nsecs(&sock->snd_ring_sem);
+        if (likely(sock->send_ring != NULL)) {
+            write_avail = gazelle_ring_readable_count(sock->send_ring);
         }
-        if (unlikely(sock->send_ring == NULL)) {
-            goto END;
-        }
-        struct pbuf *last_pbuf = gazelle_ring_readlast(sock->send_ring);
-        if (last_pbuf) {
-            send_len += app_direct_attach(stack, last_pbuf, (char *)buf + send_len, len - send_len, write_num);
-            gazelle_ring_lastover(last_pbuf);
-            if (wakeup) {
-                wakeup->stat.app_write_cnt += write_num;
-            }
-            if (addr->sa_family == AF_INET) {
-                struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-                last_pbuf->addr.u_addr.ip4.addr = saddr->sin_addr.s_addr;
-                last_pbuf->port = lwip_ntohs((saddr)->sin_port);
-            } else if (addr->sa_family == AF_INET6) {
-                struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
-                memcpy_s(last_pbuf->addr.u_addr.ip6.addr, sizeof(last_pbuf->addr.u_addr.ip6.addr),
-                    saddr->sin6_addr.s6_addr, sizeof(saddr->sin6_addr.s6_addr));
-                last_pbuf->port = lwip_ntohs((saddr)->sin6_port);
-            }
-        } else {
-            (void)rpc_call_replenish(stack, sock);
-            if (wakeup) {
-                wakeup->stat.app_write_rpc++;
-            }
-        }
-        sock->remain_len = 0;
         goto END;
     }
 
     /* send_ring have idle */
-    if (get_global_cfg_params()->expand_send_ring) {
-        send_len += (write_num <= write_avail) ?
-            app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num, addr, addrlen) :
-            app_direct_write(stack, sock, (char *)buf + send_len, len - send_len, write_num);
-    } else {
-        if (write_num > write_avail) {
-            write_num = write_avail;
-            len = write_num * MBUF_MAX_DATA_LEN;
-        }
-        send_len += app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num, addr, addrlen);
+    if (write_num > write_avail) {
+        write_num = write_avail;
+        len = write_num * MBUF_MAX_DATA_LEN;
     }
+    send_len += app_buff_write(sock, (char *)buf + send_len, len - send_len, write_num, addr, addrlen);
 
     if (wakeup) {
         wakeup->stat.app_write_cnt += write_num;
