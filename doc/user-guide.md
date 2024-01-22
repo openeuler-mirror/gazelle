@@ -125,6 +125,7 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |mbuf_count_per_conn|170|每个tcp连接需要的mbuf个数，该参数乘以tcp_conn_count是初始化时申请的mbuf地址池大小，配置过小会启动失败|
 |nic_rxqueue_size|4096|网卡接收队列深度，范围512-8192，缺省值是4096|
 |nic_txqueue_size|2048|网卡发送队列深度，范围512-8192，缺省值是2048|
+|nic_vlan_mode|-1|vlan模式开关，变量值为vlanid，取值范围-1~4094，-1关闭，缺省值是-1|
 
 lstack.conf示例：
 ``` conf
