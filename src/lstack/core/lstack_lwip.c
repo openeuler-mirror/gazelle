@@ -1016,7 +1016,7 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
             } else {
                 while (gazelle_ring_read(sock->recv_ring, (void **)&pbuf, 1) != 1 && recvd == 0) {
                     /* if the connection is disconnected, recv return 0 */
-                    if ((sock->errevent > 0 || (sock->conn->pcb.tcp->flags & TF_FIN)) && !NETCONN_IS_DATAIN(sock)) {
+                    if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
                         return 0;
                     }
 
