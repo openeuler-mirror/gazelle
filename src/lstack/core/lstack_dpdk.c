@@ -462,6 +462,20 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
     free(reta_conf);
 }
 
+int32_t dpdk_bond_primary_set(int port_id, int slave_port_id)
+{
+    int32_t primary_port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
+    if (slave_port_id == primary_port_id) {
+        int32_t ret = rte_eth_bond_primary_set(port_id, primary_port_id);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk set bond primary port failed ret = %d\n", ret);
+            return -1;
+        }
+        return ret;
+    }
+    return 0;
+}
+
 int32_t dpdk_ethdev_init(int port_id, bool bond_port)
 {
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
@@ -532,6 +546,10 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
             if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk add slave port failed ret = %d\n", ret);
                 return -1;
+            }
+            
+            if (get_global_cfg_params()->bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
+                dpdk_bond_primary_set(port_id, slave_port_id[i]);
             }
 
             ret = rte_eth_dev_start(slave_port_id[i]);
@@ -734,6 +752,12 @@ int32_t init_dpdk_ethdev(void)
             if (ret < 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk enable mode set failed ret = %d\n", ret);
             }
+        }
+
+        ret = rte_eth_bond_link_monitoring_set(bond_port_id, get_global_cfg_params()->bond_miimon);
+        if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk set bond link monitoring failed ret = %d\n", ret);
+            return -1;
         }
 
         ret = rte_eth_promiscuous_enable(bond_port_id);
