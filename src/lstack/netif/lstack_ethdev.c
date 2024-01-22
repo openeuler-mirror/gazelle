@@ -103,9 +103,6 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
         }
         next->tot_len = pkt_len;
         pkt_len -= len;
-#if CHECKSUM_CHECK_IP_HW || CHECKSUM_CHECK_TCP_HW
-        next->ol_flags = m->ol_flags;
-#endif
 
         if (head == NULL) {
             head = next;
@@ -859,7 +856,6 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
     struct protocol_stack *stack = get_protocol_stack();
     struct rte_mbuf *pre_mbuf = NULL;
     struct rte_mbuf *first_mbuf = NULL;
-    struct pbuf *first_pbuf = pbuf;
     void *buf_addr;
 
     while (likely(pbuf != NULL)) {
@@ -867,8 +863,6 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 
         mbuf->data_len = pbuf->len;
         mbuf->pkt_len = pbuf->tot_len;
-        mbuf->ol_flags = pbuf->ol_flags;
-        mbuf->vlan_tci = pbuf->vlan_tci;
         mbuf->next = NULL;
         buf_addr = rte_pktmbuf_mtod(mbuf, void *);
 
@@ -882,7 +876,6 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 
         if (first_mbuf == NULL) {
             first_mbuf = mbuf;
-            first_pbuf = pbuf;
             first_mbuf->nb_segs = 1;
         } else {
             first_mbuf->nb_segs++;
@@ -893,13 +886,9 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
             mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
             mbuf->tso_segsz = MBUF_MAX_DATA_LEN;
         }
-        mbuf->l2_len = first_pbuf->l2_len;
-        mbuf->l3_len = first_pbuf->l3_len;
-        mbuf->l4_len = first_pbuf->l4_len;
 
         pre_mbuf = mbuf;
         rte_mbuf_refcnt_update(mbuf, 1);
-        pbuf->rexmit = 1;
         pbuf = pbuf->next;
     }
 
