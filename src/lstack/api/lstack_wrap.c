@@ -372,6 +372,7 @@ static bool unsupport_optname(int32_t optname)
         optname == SO_SNDTIMEO  ||
         optname == SO_RCVTIMEO  ||
         optname == SO_SNDBUF    ||
+        optname == SO_RCVBUF    ||
         optname == TCP_INFO     ||
         optname == TCP_MAXSEG   ||
         optname == TCP_CONGESTION) {
