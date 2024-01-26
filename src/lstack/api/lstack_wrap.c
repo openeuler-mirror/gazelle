@@ -375,6 +375,7 @@ static bool unsupport_optname(int32_t optname)
         optname == SO_RCVBUF    ||
         optname == TCP_INFO     ||
         optname == TCP_MAXSEG   ||
+        optname == SO_DONTROUTE ||
         optname == TCP_CONGESTION) {
         return true;
     }

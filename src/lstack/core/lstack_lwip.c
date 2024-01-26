@@ -402,7 +402,7 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
     }
 
     struct protocol_stack *stack = sock->stack;
-    if (!stack || len == 0) {
+    if (!stack) {
         return 0;
     }
 
@@ -420,6 +420,11 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
     uint32_t write_num = (len - send_len + MBUF_MAX_DATA_LEN - 1) / MBUF_MAX_DATA_LEN;
     uint32_t write_avail = gazelle_ring_readable_count(sock->send_ring);
     struct wakeup_poll *wakeup = sock->wakeup;
+
+    /* if udp send 0 packet, set write_num to at least 1 */
+    if (NETCONN_IS_UDP(sock) && write_num == 0) {
+        write_num = 1;
+    }
 
     while (!netconn_is_nonblocking(sock->conn) && (write_avail < write_num)) {
         if (sock->errevent > 0) {
@@ -454,7 +459,7 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
     }
 
 END:
-    if (send_len == 0) {
+    if (send_len == 0 && !NETCONN_IS_UDP(sock)) {
         errno = EAGAIN;
         return -1;
     }
@@ -735,11 +740,10 @@ ssize_t do_lwip_send_to_stack(int32_t fd, const void *buf, size_t len, int32_t f
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (len == 0) {
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+    if (len == 0 && !NETCONN_IS_UDP(sock)) {
         return 0;
     }
-
-    struct lwip_sock *sock = get_socket_by_fd(fd);
 
     thread_bind_stack(sock);
 
@@ -747,7 +751,7 @@ ssize_t do_lwip_send_to_stack(int32_t fd, const void *buf, size_t len, int32_t f
         return gazelle_same_node_ring_send(sock, buf, len, flags);
     }
     ssize_t send = do_lwip_fill_sendring(sock, buf, len, addr, addrlen);
-    if (send <= 0) {
+    if (send < 0 || (send == 0 && !NETCONN_IS_UDP(sock))) {
         return send;
     }
 
@@ -850,6 +854,11 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
                     lstack_block_wait(sock->wakeup);
                 }
             }
+        }
+
+        /* if udp recv a packet whose len is 0, return 0 */
+        if (NETCONN_IS_UDP(sock) && pbuf->tot_len == 0) {
+            return 0;
         }
 
         /* fin */

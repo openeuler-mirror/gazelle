@@ -160,10 +160,10 @@ static ssize_t rtw_udp_recvfrom(int sockfd, void *buf, size_t len, int flags,
 
     while (1) {
         ret = do_lwip_read_from_stack(sockfd, buf, len, flags, addr, addrlen);
-        if (ret > 0) {
+        if (ret >= 0) {
             return ret;
         }
-        if (ret <= 0 && errno != EAGAIN) {
+        if (ret < 0 && errno != EAGAIN) {
             return -1;
         }
         sock = sock->listen_next;
@@ -205,7 +205,6 @@ ssize_t rtw_sendto(int sockfd, const void *buf, size_t len, int flags,
     return do_lwip_send_to_stack(sockfd, buf, len, flags, addr, addrlen);
 }
 
-
 int rtw_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
 {
     return lstack_rtw_epoll_wait(epfd, events, maxevents, timeout);
@@ -234,7 +233,7 @@ int rtw_shutdown(int fd, int how)
 {
     struct lwip_sock *sock = get_socket_by_fd(fd);
     if (sock && sock->wakeup && sock->wakeup->epollfd == fd) {
-	GAZELLE_RETURN(ENOTSOCK);
+        GAZELLE_RETURN(ENOTSOCK);
     }
 
     return stack_broadcast_shutdown(fd, how);
