@@ -66,7 +66,54 @@ const struct ProgramOption prog_long_opts[] = \
 
 // get long options
 int getopt_long(int argc, char * const argv[], const char *optstring, const struct ProgramOption *long_opts, int *long_idx);
+// index [0,7)
+uint8_t getbit_num(uint8_t mode, uint8_t index)
+{
+    return (mode & ((uint8_t)1 << index)) != 0;
+}
 
+uint8_t setbitnum_on(uint8_t mode, uint8_t index)
+{
+    mode |=  ((uint8_t)1 << index);
+    return mode;
+}
+
+uint8_t setbitnum_off(uint8_t mode, uint8_t index)
+{
+    mode &=  ~((uint8_t)1 << index);
+    return mode;
+}
+
+uint8_t program_set_protocol_mode(uint8_t protocol_mode, char* ipv4, char* ipv6, uint8_t index_v4, uint8_t index_v6)
+{
+    uint8_t protocol_mode_temp = protocol_mode;
+    if (strcmp(ipv4, PARAM_DEFAULT_IP) != 0) {
+        protocol_mode_temp = setbitnum_on(protocol_mode_temp, index_v4);
+    }
+    if (strcmp(ipv6, PARAM_DEFAULT_IP_V6) != 0) {
+        protocol_mode_temp = setbitnum_on(protocol_mode_temp, index_v6);
+    }
+    return protocol_mode_temp;
+}
+
+uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* ipv6)
+{
+    uint8_t protocol_mode = 0;
+    char *cur_ptr = NULL;
+    char *next_Ptr = NULL;
+    cur_ptr = strtok_s(domain, ",", &next_Ptr);
+    while (cur_ptr) {
+        if (strcmp(cur_ptr, "tcp") == 0) {
+            protocol_mode = program_set_protocol_mode(protocol_mode, ipv4, ipv6, V4_TCP, V6_TCP);
+        } else if (strcmp(cur_ptr, "udp") == 0) {
+            protocol_mode = program_set_protocol_mode(protocol_mode, ipv4, ipv6, V4_UDP, V6_UDP);
+        } else if (strcmp(cur_ptr, "unix") == 0) {
+            protocol_mode = setbitnum_on(protocol_mode, UNIX);
+        }
+        cur_ptr = strtok_s(NULL, ",", &next_Ptr);
+    }
+    return protocol_mode;
+}
 
 // set `as` parameter
 void program_param_parse_as(struct ProgramParams *params)
@@ -92,21 +139,43 @@ bool ip_is_v6(const char *cp)
     return 0;
 }
 
-// set `ip` parameter
+void program_param_parse_ipv4_addr(char* v4ip_addr, struct ProgramParams *params)
+{
+    struct in6_addr ip_tmp;
+    params->addr_family = AF_INET;
+    if (inet_pton(params->addr_family, v4ip_addr, &ip_tmp) > 0) {
+        params->ip = v4ip_addr;
+    } else {
+        PRINT_ERROR("illegal ipv4 addr -- %s \n", v4ip_addr);
+        exit(PROGRAM_ABORT);
+    }
+}
+
+void program_param_parse_ipv6_addr(char* v6ip_add, struct ProgramParams *params)
+{
+    struct in6_addr ip_tmp;
+    params->addr_family = AF_INET6;
+    if (inet_pton(AF_INET6, v6ip_add, &ip_tmp) > 0) {
+        params->ipv6 = v6ip_add;
+    } else {
+        PRINT_ERROR("illegal ipv6 addr -- %s \n", v6ip_add);
+        exit(PROGRAM_ABORT);
+    }
+}
+// set `ip` parameter,支持同时配置 ipv4 和 ipv6 地址，格式为 ipv4,ipv6
 void program_param_parse_ip(struct ProgramParams *params)
 {
-    if (ip_is_v6(optarg)) {
-        params->addr_family = AF_INET6;
-    } else {
-        params->addr_family = AF_INET;
-    }
+    char *cur_ptr = NULL;
+    char *next_ptr = NULL;
 
-    struct in6_addr ip_tmp;
-    if (inet_pton(params->addr_family, optarg, &ip_tmp) > 0) {
-        params->ip = optarg;
-    } else {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
-        exit(PROGRAM_ABORT);
+    cur_ptr = strtok_s(optarg, ",", &next_ptr);
+    while (cur_ptr) {
+        if (ip_is_v6(cur_ptr)) {
+            program_param_parse_ipv6_addr(cur_ptr, params);
+        } else {
+            program_param_parse_ipv4_addr(cur_ptr, params);
+        }
+        cur_ptr = strtok_s(NULL, ",", &next_ptr);
     }
 }
 
@@ -418,6 +487,7 @@ void program_params_init(struct ProgramParams *params)
 {
     params->as = PARAM_DEFAULT_AS;
     params->ip = PARAM_DEFAULT_IP;
+    params->ipv6 = PARAM_DEFAULT_IP_V6;
     params->addr_family = PARAM_DEFAULT_ADDR_FAMILY;
     memset_s(params->port, sizeof(bool)*UNIX_TCP_PORT_MAX, 0, sizeof(bool)*UNIX_TCP_PORT_MAX);
     memset_s(params->sport, sizeof(bool)*UNIX_TCP_PORT_MAX, 0, sizeof(bool)*UNIX_TCP_PORT_MAX);
@@ -563,10 +633,6 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
                 program_params_help();
                 return PROGRAM_ABORT;
         }
-    }
-
-    if (strcmp(params->domain, "tcp") != 0) {
-        params->connect_num = 1;
     }
 
     return PROGRAM_OK;

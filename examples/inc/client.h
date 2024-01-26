@@ -43,6 +43,7 @@ struct ClientUnit
     char* api;                          ///< the type of api
     bool debug;                         ///< if we print the debug information
     char* epollcreate;                  ///< epoll_create method
+    uint8_t protocol_type_mode;         ///< tcp/udp ipv4/ipv6 protocol mode
     struct ClientUnit *next;            ///< next pointer
 };
 

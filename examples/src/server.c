@@ -367,7 +367,9 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     inet_pton(params->addr_family, params->groupip, &server_mud->groupip.u_addr);
     server_mud->port = params->port;
     server_mud->pktlen = params->pktlen;
-    server_mud->domain = params->domain;
+
+    server_mud->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6);
+
     server_mud->api = params->api;
     server_mud->debug = params->debug;
     server_mud->epollcreate = params->epollcreate;
@@ -657,7 +659,10 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         }
         server_unit->port = htons(port++);
         server_unit->pktlen = params->pktlen;
-        server_unit->domain = params->domain;
+
+        server_unit->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip,
+                                                                                 params->ipv6);
+
         server_unit->api = params->api;
         server_unit->debug = params->debug;
         server_unit->epollcreate = params->epollcreate;
