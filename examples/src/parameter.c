@@ -139,11 +139,29 @@ bool ip_is_v6(const char *cp)
     return 0;
 }
 
-void program_param_parse_ipv4_addr(char* v4ip_addr, struct ProgramParams *params)
+
+static bool program_ipv4_check(char *ipv4)
+{
+    in_addr_t ip = ntohl(inet_addr(ipv4));
+    if (ip == INADDR_NONE) {
+        PRINT_ERROR("illigal argument -- %s \n", ipv4);
+        return false;
+    }
+    if ((ip >= ntohl(inet_addr("1.0.0.1"))   && ip <= ntohl(inet_addr("126.255.255.254"))) ||
+        (ip >= ntohl(inet_addr("127.0.0.1")) && ip <= ntohl(inet_addr("127.255.255.254"))) ||
+        (ip >= ntohl(inet_addr("128.0.0.1")) && ip <= ntohl(inet_addr("191.255.255.254"))) ||
+        (ip >= ntohl(inet_addr("192.0.0.1")) && ip <= ntohl(inet_addr("223.255.255.254")))) {
+        return true;
+    }
+    PRINT_ERROR("illigal argument -- %s \n", ipv4);
+    return false;
+}
+
+static void program_param_parse_ipv4_addr(char* v4ip_addr, struct ProgramParams *params)
 {
     struct in6_addr ip_tmp;
     params->addr_family = AF_INET;
-    if (inet_pton(params->addr_family, v4ip_addr, &ip_tmp) > 0) {
+    if (inet_pton(params->addr_family, v4ip_addr, &ip_tmp) > 0 && program_ipv4_check(v4ip_addr) == true) {
         params->ip = v4ip_addr;
     } else {
         PRINT_ERROR("illegal ipv4 addr -- %s \n", v4ip_addr);
@@ -151,7 +169,7 @@ void program_param_parse_ipv4_addr(char* v4ip_addr, struct ProgramParams *params
     }
 }
 
-void program_param_parse_ipv6_addr(char* v6ip_add, struct ProgramParams *params)
+static void program_param_parse_ipv6_addr(char* v6ip_add, struct ProgramParams *params)
 {
     struct in6_addr ip_tmp;
     params->addr_family = AF_INET6;
@@ -344,8 +362,8 @@ void program_param_parse_keepalive(struct ProgramParams *params)
 // set `group ip` parameter
 void program_param_parse_groupip(struct ProgramParams *params)
 {
-    in_addr_t ip = inet_addr(optarg);
-    if (ip != INADDR_NONE && ip >= inet_addr("224.0.0.0") && ip <= inet_addr("239.255.255.255")) {
+    in_addr_t ip = ntohl(inet_addr(optarg));
+    if (ip != INADDR_NONE && ip >= ntohl(inet_addr("224.0.0.0")) && ip <= ntohl(inet_addr("239.255.255.255"))) {
         params->groupip = optarg;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
