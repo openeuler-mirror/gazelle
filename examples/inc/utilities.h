@@ -48,7 +48,7 @@
                                             { \
                                                 printf("\n[error]: "); \
                                                 printf(format, ##__VA_ARGS__); \
-                                                printf("\n"); \
+                                                printf("\n\n"); \
                                             } while (0)
 #define PRINT_WARNNING(format, ...)         do \
                                             { \
