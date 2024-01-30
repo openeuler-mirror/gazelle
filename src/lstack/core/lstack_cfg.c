@@ -185,6 +185,10 @@ static int32_t parse_gateway_addr(void)
     char *value;
     bool ok;
 
+    if (ip4_addr_isany_val(g_config_params.host_addr)) {
+        return 0;
+    }
+
     ok = config_lookup_string(&g_config, "gateway_addr", (const char **)&value);
     if (!ok) {
         return -EINVAL;
@@ -201,6 +205,10 @@ static int32_t parse_mask_addr(void)
     char *value = NULL;
     uint32_t mask;
     bool ok;
+
+    if (ip4_addr_isany_val(g_config_params.host_addr)) {
+        return 0;
+    }
 
     ok = config_lookup_string(&g_config, "mask_addr", (const char **)&value);
     if (!ok) {
@@ -225,7 +233,7 @@ static int32_t parse_host_addr(void)
 
     ok = config_lookup_string(&g_config, "host_addr", (const char **)&value);
     if (!ok) {
-        return -EINVAL;
+        return 0;
     }
 
     g_config_params.host_addr.addr = inet_addr(value);
@@ -242,7 +250,12 @@ static int32_t parse_host_addr6(void)
 
     ok = config_lookup_string(&g_config, "host_addr6", (const char **)&value);
     if (!ok) {
-        return 0;
+        if (ip4_addr_isany_val(g_config_params.host_addr)) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg: host_addr and host_addr6 must have a valid one.");
+            return -EINVAL;
+        } else {
+            return 0;
+        }
     }
 
     if (ip6addr_aton(value, &g_config_params.host_addr6) == 0) {
