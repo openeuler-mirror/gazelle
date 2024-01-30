@@ -20,6 +20,7 @@
 
 #define PARAM_DEFAULT_AS            ("server")              ///< default type
 #define PARAM_DEFAULT_IP            ("127.0.0.1")           ///< default IP
+#define PARAM_DEFAULT_IP_V6         ("0.0.0.0.0.0.0.0")           ///< default IP
 #define PARAM_DEFAULT_ADDR_FAMILY   (AF_INET)               ///< default address family
 #define PARAM_DEFAULT_PORT          (5050)                  ///< default port
 #define PARAM_DEFAULT_SPORT         (0)                     ///< default sport
@@ -85,6 +86,11 @@ enum {
 #define REQUIRED_ARGUMETN       1                           ///< options requires arguments
 #define OPTIONAL_ARGUMETN       2                           ///< options arguments are optional
 
+uint8_t getbit_num(uint8_t mode, uint8_t index);
+uint8_t setbitnum_on(uint8_t mode, uint8_t index);
+uint8_t setbitnum_off(uint8_t mode, uint8_t index);
+
+uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* ipv6);
 
 /**
  * @brief program option description
@@ -104,6 +110,7 @@ struct ProgramOption {
 struct ProgramParams {
     char*               as;                 ///< as server or client
     char*               ip;                 ///< IP address
+    char*               ipv6;
     bool                port[UNIX_TCP_PORT_MAX];       ///< index:port list; value:port is set or not
     bool                sport[UNIX_TCP_PORT_MAX];       ///< index:sport list; value:sport is set or not
     char*               model;              ///< model type
@@ -141,6 +148,15 @@ typedef enum {
     INJECT_SKIP_WRITE,
     INJECT_SKIP_MAX,
 } skip_type;
+
+typedef enum {
+    V4_TCP,
+    V6_TCP,
+    V4_UDP,
+    V6_UDP,
+    UNIX,
+    PROTOCOL_MODE_MAX
+} PROTOCOL_MODE_ENUM_TYPE;
 
 #define FAULT_INJECT_SKIP_BEGIN(skip_type)    \
     if (get_g_inject_skip((skip_type))) {}    \

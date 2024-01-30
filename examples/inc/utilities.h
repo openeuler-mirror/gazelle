@@ -110,7 +110,7 @@
 
 
 typedef struct ip_addr {
-    union {
+    struct {
         struct in_addr ip4;
         struct in6_addr ip6;
     } u_addr;

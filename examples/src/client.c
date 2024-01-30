@@ -400,6 +400,8 @@ int32_t client_create_and_run(struct ProgramParams *params)
         } else {
             client_unit->loop = 0;
         }
+        client_unit->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip,
+                                                                                 params->ipv6);
         client_unit->verify = params->verify;
         client_unit->domain = params->domain;
         client_unit->api = params->api;
