@@ -660,7 +660,7 @@ int32_t stack_setup_thread(void)
     for (uint32_t i = 0; i < queue_num; ++i) {
         t_params[i] = malloc(sizeof(struct thread_params));
         if (t_params[i] == NULL) {
-            goto OUT;
+            goto OUT1;
         }
     }
     for (uint32_t i = 0; i < queue_num; i++) {
@@ -668,18 +668,18 @@ int32_t stack_setup_thread(void)
             if (i % 2 == 0) {
                 ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_RECV_THREAD_NAME, process_index, i / 2);
                 if (ret < 0) {
-                    goto OUT;
+                    goto OUT1;
                 }
             } else {
                 ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_SEND_THREAD_NAME, process_index, i / 2);
                 if (ret < 0) {
-                    goto OUT;
+                    goto OUT1;
                 }
             }
         } else {
             ret = sprintf_s(name, sizeof(name), "%s", LSTACK_THREAD_NAME);
             if (ret < 0) {
-                goto OUT;
+                goto OUT1;
             }
         }
 
@@ -688,25 +688,27 @@ int32_t stack_setup_thread(void)
 
         ret = create_thread((void *)t_params[i], name, gazelle_stack_thread);
         if (ret != 0) {
-            goto OUT;
+            goto OUT1;
         }
     }
 
     /* 2: wait stack thread and kernel_event thread init finish */
     wait_sem_value(&g_stack_group.sem_stack_setup, queue_num * 2);
     if (g_stack_group.stack_setup_fail) {
-        goto OUT;
+        /* t_params free by stack thread */
+        goto OUT2;
     }
     g_stack_group.stack_num = queue_num;
 
     return 0;
 
- OUT:
+OUT1:
     for (int32_t i = 0; i < queue_num; ++i) {
         if (t_params[i] != NULL) {
             free(t_params[i]);
         }
     }
+OUT2:
     return -1;
 }
 
