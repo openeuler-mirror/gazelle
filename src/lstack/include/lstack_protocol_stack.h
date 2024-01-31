@@ -31,7 +31,7 @@
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)
 
-#define MBUFPOOL_RESERVE_NUM 5000
+#define MBUFPOOL_RESERVE_NUM (get_global_cfg_params()->nic.rxqueue_size + 1024)
 
 struct rte_mempool;
 struct rte_ring;
