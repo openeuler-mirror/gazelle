@@ -38,6 +38,8 @@
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
 
+static const uint8_t fin_packet = 0;
+
 static void free_ring_pbuf(struct rte_ring *ring)
 {
     void *pbufs[SOCK_RECV_RING_SIZE];
@@ -509,13 +511,15 @@ static inline struct pbuf *pbuf_last(struct pbuf *pbuf)
 ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, u8_t apiflags)
 {
     if (sock->conn->recvmbox == NULL) {
-        return 0;
+        sock->conn->pending_err = ERR_CONN;
+        GAZELLE_RETURN(ENOTCONN);
     }
 
     free_recv_ring_readover(sock->recv_ring);
 
     uint32_t free_count = gazelle_ring_free_count(sock->recv_ring);
     if (free_count == 0) {
+        sock->conn->pending_err = ERR_WOULDBLOCK;
         GAZELLE_RETURN(EAGAIN);
     }
 
@@ -534,12 +538,19 @@ ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, u8_t apifl
             err = netconn_recv_tcp_pbuf_flags(sock->conn, &pbufs[i], apiflags);
         }
         if (err != ERR_OK) {
-            if (recv_len > 0) {
-                /* already received data, return that (this trusts in getting the same error from
-                   netconn layer again next time netconn_recv is called) */
+            /* fin has been read from recvmbox, put it to recv_ring */
+            if (!NETCONN_IS_UDP(sock) &&
+                (netconn_is_flag_set(sock->conn, NETCONN_FIN_RX_PENDING) || err == ERR_CLSD)) {
+                /* fin has been read, lwip don't need to process fin packet */
+                netconn_clear_flags(sock->conn, NETCONN_FIN_RX_PENDING);
+                pbufs[i] = NULL;
+                read_count++;
                 break;
             }
-            return (err == ERR_CLSD) ? 0 : -1;
+
+            /* store err to pending_err again, clear it after app read */
+            sock->conn->pending_err = err;
+            GAZELLE_RETURN(err_to_errno(err));
         }
 
         recv_len += pbufs[i]->tot_len;
@@ -551,25 +562,17 @@ ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, u8_t apifl
     }
 
     uint32_t enqueue_num = gazelle_ring_sp_enqueue(sock->recv_ring, (void **)pbufs, read_count);
-    for (uint32_t i = enqueue_num; i < read_count; i++) {
-        if (NETCONN_IS_UDP(sock)) {
-            pbuf_free(pbufs[i]);
-        } else {
-            /* update receive window */
-            tcp_recved(sock->conn->pcb.tcp, pbufs[i]->tot_len);
-            pbuf_free(pbufs[i]);
-        }
-        sock->stack->stats.read_lwip_drop++;
+    if (enqueue_num != read_count) {
+        LSTACK_LOG(ERR, LSTACK, "Code shouldn't get here!\n");
     }
 
     for (uint32_t i = 0; get_protocol_stack_group()->latency_start && i < read_count; i++) {
-        calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_LWIP);
+        if (pbufs[i] != NULL) {
+            calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_LWIP);
+        }
     }
 
     sock->stack->stats.read_lwip_cnt += read_count;
-    if (recv_len == 0) {
-        GAZELLE_RETURN(EAGAIN);
-    }
     return recv_len;
 }
 
@@ -817,7 +820,8 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
     bool latency_enable = get_protocol_stack_group()->latency_start;
 
     if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
-        return 0;
+        errno = err_to_errno(netconn_err(sock->conn));
+        return -1;
     }
 
     thread_bind_stack(sock);
@@ -839,12 +843,30 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
                 while (gazelle_ring_read(sock->recv_ring, (void **)&pbuf, 1) != 1 && recvd == 0) {
                     /* if the connection is disconnected, recv return 0 */
                     if (sock->errevent > 0 && !NETCONN_IS_DATAIN(sock)) {
-                        return 0;
+                        errno = err_to_errno(netconn_err(sock->conn));
+                        return -1;
                     }
 
                     lstack_block_wait(sock->wakeup);
                 }
             }
+        }
+
+        /* fin */
+        if (unlikely(pbuf == NULL)) {
+            if (recvd > 0) {
+                /* read data first, then read fin */
+                sock->recv_lastdata = (void *)&fin_packet;
+                gazelle_ring_read_over(sock->recv_ring);
+                break;
+            }
+            gazelle_ring_read_over(sock->recv_ring);
+            return 0;
+        }
+
+        /* pending fin */
+        if (unlikely(pbuf == (void *)&fin_packet)) {
+            return 0;
         }
 
         copy_len = (recv_left > pbuf->tot_len) ? pbuf->tot_len : recv_left;
@@ -946,10 +968,11 @@ void do_lwip_read_recvlist(struct protocol_stack *stack, uint32_t max_num)
         } else {
             len = lwip_recv(sock->conn->socket, NULL, 0, 0);
         }
-        if (len == 0) {
+        if (len < 0 && errno != EAGAIN) {
             sock->errevent = 1;
             add_sock_event(sock, EPOLLERR);
-        } else if (len > 0) {
+        /* = 0: fin */
+        } else if (len >= 0) {
             add_sock_event(sock, EPOLLIN);
         }
     }
