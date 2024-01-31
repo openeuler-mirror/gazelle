@@ -112,6 +112,7 @@ struct cfg_params {
     uint16_t send_ring_size;
     bool tuple_filter;
     int8_t bond_mode;
+    int32_t bond_miimon;
     struct rte_ether_addr bond_slave_mac_addr[GAZELLE_MAX_BOND_NUM];
     bool use_sockmap;
     bool udp_enable;

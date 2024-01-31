@@ -40,6 +40,8 @@
 #define NUMA_CPULIST_PATH "/sys/devices/system/node/node%u/cpulist"
 #define DEV_MAC_LEN 17
 #define CPUS_MAX_NUM 256
+#define BOND_MIIMON_MIN 1
+#define BOND_MIIMON_MAX INT_MAX
 
 static struct cfg_params g_config_params;
 
@@ -72,6 +74,7 @@ static int32_t parse_process_index(void);
 static int32_t parse_seperate_sendrecv_args(void);
 static int32_t parse_tuple_filter(void);
 static int32_t parse_bond_mode(void);
+static int32_t parse_bond_miimon(void);
 static int32_t parse_bond_slave_mac(void);
 static int32_t parse_use_sockmap(void);
 static int32_t parse_udp_enable(void);
@@ -134,6 +137,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "process_idx", parse_process_index },
     { "tuple_filter", parse_tuple_filter },
     { "bond_mode", parse_bond_mode },
+    { "bond_miimon", parse_bond_miimon},
     { "bond_slave_mac", parse_bond_slave_mac },
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
@@ -1181,12 +1185,28 @@ static int32_t parse_bond_mode(void)
     if (g_config_params.bond_mode == -1) {
         return 0;
     }
-    if (g_config_params.bond_mode != BONDING_MODE_8023AD && g_config_params.bond_mode != BONDING_MODE_ALB) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid bond mode = %d. only supports bond mode = 4,6.\n",
-            g_config_params.bond_mode);
-        return -EINVAL;
+
+    switch (g_config_params.bond_mode) {
+        case BONDING_MODE_ACTIVE_BACKUP:
+        case BONDING_MODE_8023AD:
+        case BONDING_MODE_ALB:
+            break;
+        default:
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid bond mode = %d. only supports bond mode = 1,4,6.\n",
+                g_config_params.bond_mode);
+            return -EINVAL; // Invalid bond mode
     }
     return 0;
+}
+
+static int32_t parse_bond_miimon(void)
+{
+    int32_t ret;
+    if (g_config_params.bond_mode == -1) {
+        return 0;
+    }
+    PARSE_ARG(g_config_params.bond_miimon, "bond_miimon", 10, BOND_MIIMON_MIN, BOND_MIIMON_MAX, ret);
+    return ret;
 }
 
 static int32_t parse_bond_slave_mac(void)
