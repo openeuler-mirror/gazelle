@@ -285,7 +285,7 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
                     }
                 } else if (client_ask_ret == PROGRAM_ABORT) {
                     --client_unit->curr_connect;
-                    if (close(curr_epev->data.fd) < 0) {
+                    if (close(client_handler->fd) < 0) {
                         PRINT_ERROR("client can't close the socket! ");
                         return PROGRAM_FAULT;
                     }
@@ -301,13 +301,13 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
             if (client_chkans_ret == PROGRAM_FAULT) {
                 --client_unit->curr_connect;
                 struct epoll_event ep_ev;
-                if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, curr_epev->data.fd, &ep_ev) < 0) {
+                if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, ((struct ClientHandler *)curr_epev->data.ptr)->fd, &ep_ev) < 0) {
                     PRINT_ERROR("client can't delete socket '%d' to control epoll %d! ", curr_epev->data.fd, errno);
                     return PROGRAM_FAULT;
                 }
             } else if (client_chkans_ret == PROGRAM_ABORT) {
                 --client_unit->curr_connect;
-                if (close(curr_epev->data.fd) < 0) {
+                if (close(((struct ClientHandler *)curr_epev->data.ptr)->fd) < 0) {
                     PRINT_ERROR("client can't close the socket %d! ", errno);
                     return PROGRAM_FAULT;
                 }
