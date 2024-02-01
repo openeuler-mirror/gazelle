@@ -57,6 +57,10 @@ struct Client
     bool debug;                         ///< if we print the debug information
 };
 
+struct Client_domain_ip {
+    char *domain;
+    uint8_t ip_family;
+};
 
 /**
  * @brief the single thread, client prints informations

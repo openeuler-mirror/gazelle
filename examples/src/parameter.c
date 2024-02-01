@@ -254,12 +254,23 @@ void program_param_parse_threadnum(struct ProgramParams *params)
 // set `domain` parameter
 void program_param_parse_domain(struct ProgramParams *params)
 {
-    if (strcmp(optarg, "unix") == 0 || strcmp(optarg, "tcp") == 0 || strcmp(optarg, "udp") == 0) {
-        params->domain = optarg;
-    } else {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
+    char temp[100] = {0};
+    int32_t ret = strcpy_s(temp, sizeof(temp) / sizeof(char), optarg);
+    if (ret != 0) {
+        PRINT_ERROR("strcpy_s fail ret=%d \n", ret);
         exit(PROGRAM_ABORT);
     }
+    char *cur_ptr = temp;
+    char *next_ptr = NULL;
+    cur_ptr = strtok_s(cur_ptr, ",", &next_ptr);
+    while (cur_ptr) {
+        if (strcmp(cur_ptr, "tcp") != 0 && strcmp(cur_ptr, "udp") != 0 && strcmp(cur_ptr, "unix") != 0) {
+            PRINT_ERROR("illigal argument -- %s \n", cur_ptr);
+            exit(PROGRAM_ABORT);
+        }
+        cur_ptr = strtok_s(NULL, ",", &next_ptr);
+    }
+    params->domain = optarg;
 }
 
 // set `api` parameter
