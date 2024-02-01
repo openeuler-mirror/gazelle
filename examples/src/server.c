@@ -276,16 +276,14 @@ int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
         if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
             server_mud->curr_connect--;
             PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
-            if (server_handler_close(server_mud->epfd, (struct ServerHandler *)curr_epev->data.ptr) != 0) {
-                return PROGRAM_FAULT;
-            }
+            server_handler_close(server_mud->epfd, (struct ServerHandler *)curr_epev->data.ptr);
+            return PROGRAM_OK;
         }
 
         if (curr_epev->events == EPOLLIN) {
             int32_t sermud_listener_accept_connects_ret = sermud_listener_accept_connects(server_mud);
             if (sermud_listener_accept_connects_ret < 0) {
                 PRINT_ERROR("server try accept error %d! ", sermud_listener_accept_connects_ret);
-                return PROGRAM_FAULT;
             }
         }
     }
@@ -302,11 +300,11 @@ void *sermud_worker_create_and_run(void *arg)
     char* domain = ((struct ServerMud *)arg)->domain;
 
     if (sermud_worker_create_epfd_and_reg(worker_unit) < 0) {
-       exit(PROGRAM_FAULT);
+        return (void *)PROGRAM_OK;
     }
     while (true) {
         if (sermud_worker_proc_epevs(worker_unit, domain) < 0) {
-            exit(PROGRAM_FAULT);
+            return (void *)PROGRAM_OK;
         }
     }
 
@@ -547,7 +545,7 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
         if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
             server_unit->curr_connect--;
             if (server_handler_close(server_unit->epfd, (struct ServerHandler *)curr_epev->data.ptr) != 0) {
-                return PROGRAM_FAULT;
+                return PROGRAM_OK;
             }
         }
 
@@ -556,7 +554,7 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                 int32_t sersum_accept_connects_ret = sersum_accept_connects(server_unit, &(server_unit->listener));
                 if (sersum_accept_connects_ret < 0) {
                     PRINT_ERROR("server try accept error %d! ", sersum_accept_connects_ret);
-                    return PROGRAM_FAULT;
+                    return PROGRAM_OK;
                 }
                 continue;
             } else {
@@ -565,7 +563,8 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                 socklen_t connect_addr_len = server_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
                 if (strcmp(server_unit->domain, "udp") != 0 && getpeername(server_handler->fd, (struct sockaddr *)&connect_addr, &connect_addr_len) < 0) {
                     PRINT_ERROR("server can't socket peername %d! ", errno);
-                    return PROGRAM_FAULT;
+                    PRINT_ERROR("maybe peer be killed, send rst packet\n! ");
+                    return PROGRAM_OK;
                 }
 
                 // sockaddr to ip, port
@@ -582,15 +581,11 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                 int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen, server_unit->api, server_unit->domain);
                 if (server_ans_ret == PROGRAM_FAULT) {
                     --server_unit->curr_connect;
-                    if (server_handler_close(server_unit->epfd, server_handler) != 0) {
-                        return PROGRAM_FAULT;
-                    }
+                    server_handler_close(server_unit->epfd, server_handler);
                 } else if (server_ans_ret == PROGRAM_ABORT) {
                     --server_unit->curr_connect;
                     server_debug_print("server mum unit", "close", &remote_ip, remote_port, server_unit->debug);
-                    if (server_handler_close(server_unit->epfd, server_handler) != 0) {
-                        return PROGRAM_FAULT;
-                    }
+                    server_handler_close(server_unit->epfd, server_handler);
                 } else {
                     server_unit->recv_bytes += server_unit->pktlen;
                     server_debug_print("server mum unit", "receive", &remote_ip, remote_port, server_unit->debug);
