@@ -16,6 +16,11 @@
 
 static pthread_mutex_t client_debug_mutex;      // the client mutex for printf
 
+static struct Client_domain_ip g_cfgmode_map[PROTOCOL_MODE_MAX] = {
+    [V4_TCP] = {"tcp", AF_INET},
+    [V6_TCP] = {"tcp", AF_INET6},
+    [V4_UDP] = {"udp", AF_INET},
+    [V4_UDP] = {"udp", AF_INET6}};
 
 // the single thread, client prints informations
 void client_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug)
@@ -326,6 +331,11 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
 void *client_s_create_and_run(void *arg)
 {
     struct ClientUnit *client_unit = (struct ClientUnit *)arg;
+    // not supported udp_v6 currently
+    if (strcmp(client_unit->domain, "udp") == 0 && client_unit->ip.addr_family == AF_INET6) {
+        PRINT_ERROR("client: not supported udp_v6 currently");
+        return (void *)PROGRAM_OK;
+    }
 
     if (client_thread_create_epfd_and_reg(client_unit) < 0) {
        exit(PROGRAM_FAULT);
@@ -343,6 +353,30 @@ void *client_s_create_and_run(void *arg)
     return (void *)PROGRAM_OK;
 }
 
+// prase the specific supported TCP IP types by cfg_mode.
+static void client_get_protocol_type_by_cfgmode(uint8_t mode, int32_t *support_type_array, int32_t buff_len,
+                                                int32_t *actual_len)
+{
+    int32_t index = 0;
+    for (uint8_t i = V4_TCP; i < PROTOCOL_MODE_MAX; i++) {
+        if (getbit_num(mode, i) == 1) {
+            if (index >= buff_len) {
+                PRINT_ERROR("index is over, index =%d", index);
+                return;
+            }
+            support_type_array[index] = i;
+            index++;
+        }
+    }
+    *actual_len = index;
+}
+
+static void client_get_domain_ipversion(uint8_t protocol_type, struct ClientUnit *client_unit)
+{
+    client_unit->domain = g_cfgmode_map[protocol_type].domain;
+    client_unit->ip.addr_family = g_cfgmode_map[protocol_type].ip_family;
+}
+
 // create client and run
 int32_t client_create_and_run(struct ProgramParams *params)
 {
@@ -352,6 +386,8 @@ int32_t client_create_and_run(struct ProgramParams *params)
     struct Client *client = (struct Client *)malloc(sizeof(struct Client));
     struct ClientUnit *client_unit = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
     memset_s(client_unit, sizeof(struct ClientUnit), 0, sizeof(struct ClientUnit));
+    int32_t protocol_support_array[PROTOCOL_MODE_MAX] = {0};
+    int32_t number_of_support_type = 1;
 
     if (pthread_mutex_init(&client_debug_mutex, NULL) < 0) {
         PRINT_ERROR("client can't init posix mutex %d! ", errno);
@@ -360,6 +396,9 @@ int32_t client_create_and_run(struct ProgramParams *params)
 
     client->uints = client_unit;
     client->debug = params->debug;
+    client_unit->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6);
+    client_get_protocol_type_by_cfgmode(client_unit->protocol_type_mode, protocol_support_array, PROTOCOL_MODE_MAX,
+        &number_of_support_type);
 
     uint32_t port = UNIX_TCP_PORT_MIN;
     uint32_t sport = 0;
@@ -376,7 +415,8 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->curr_connect = 0;
         client_unit->send_bytes = 0;
         client_unit->ip.addr_family = params->addr_family;
-        inet_pton(params->addr_family, params->ip, &client_unit->ip.u_addr);
+        inet_pton(AF_INET, params->ip, &client_unit->ip.u_addr.ip4);
+        inet_pton(AF_INET6, params->ip, &client_unit->ip.u_addr.ip6);
         client_unit->groupip.addr_family = params->addr_family;
         inet_pton(params->addr_family, params->groupip, &client_unit->groupip.u_addr);
 
@@ -400,8 +440,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         } else {
             client_unit->loop = 0;
         }
-        client_unit->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip,
-                                                                                 params->ipv6);
+
         client_unit->verify = params->verify;
         client_unit->domain = params->domain;
         client_unit->api = params->api;
@@ -409,6 +448,11 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->debug = params->debug;
         client_unit->next = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
         memset_s(client_unit->next, sizeof(struct ClientUnit), 0, sizeof(struct ClientUnit));
+
+        if (number_of_support_type > 0) {
+            int32_t index = i % number_of_support_type;
+            client_get_domain_ipversion(protocol_support_array[index], client_unit);
+        }
 
         if (pthread_create((tids + i), NULL, client_s_create_and_run, client_unit) < 0) {
             PRINT_ERROR("client can't create thread of poisx %d! ", errno);
