@@ -121,8 +121,8 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |read_connect_number|4|设置为正整数，表示每次协议栈循环中收包处理的连接个数|
 |rpc_number|4|设置为正整数，表示每次协议栈循环中rpc消息处理的个数|
 |nic_read_num|128|设置为正整数，表示每次协议栈循环中从网卡读取的数据包的个数|
-|tcp_conn_count|1500|tcp的最大连接数，该参数乘以mbuf_count_per_conn是初始化时申请的mbuf池大小，配置过小会启动失败|
-|mbuf_count_per_conn|170|每个tcp连接需要的mbuf个数，该参数乘以tcp_conn_count是初始化时申请的mbuf地址池大小，配置过小会启动失败|
+|tcp_conn_count|1500|tcp的最大连接数，该参数乘以mbuf_count_per_conn是初始化时申请的mbuf池大小，配置过小会启动失败，tcp_conn_count * mbuf_count_per_conn * 2048字节不能大于大页大小 |
+|mbuf_count_per_conn|170|每个tcp连接需要的mbuf个数，该参数乘以tcp_conn_count是初始化时申请的mbuf地址池大小，配置过小会启动失败，tcp_conn_count * mbuf_count_per_conn * 2048字节不能大于大页大小|
 |nic_rxqueue_size|4096|网卡接收队列深度，范围512-8192，缺省值是4096|
 |nic_txqueue_size|2048|网卡发送队列深度，范围512-8192，缺省值是2048|
 |nic_vlan_mode|-1|vlan模式开关，变量值为vlanid，取值范围-1~4094，-1关闭，缺省值是-1|
