@@ -50,9 +50,6 @@
 #define GAZELLE_CMD_MAX          5
 #define CMD_WAIT_TIME            1   // sec
 
-#define GAZELLE_RESULT_LEN       8291
-#define GAZELLE_MAX_LATENCY_TIME 1800    // max latency time 30mins
-
 #define GAZELLE_DECIMAL          10
 #define GAZELLE_KEEPALIVE_STR_LEN 35
 #define GAZELLE_TIME_STR_LEN 25
@@ -702,8 +699,8 @@ static void parse_thread_latency_result(const struct stack_latency *latency, cha
 {
     if (latency->latency_pkts > 0) {
         *pos += sprintf_s(result + *pos, max_len, "%-8"PRIu64"    ", latency->latency_pkts);
-        *pos += sprintf_s(result + *pos, max_len, "%-6"PRIu64"      ", latency->latency_min);
-        *pos += sprintf_s(result + *pos, max_len, "%-6"PRIu64"      ", latency->latency_max);
+        *pos += sprintf_s(result + *pos, max_len, "%-8"PRIu64"    ", latency->latency_min);
+        *pos += sprintf_s(result + *pos, max_len, "%-8"PRIu64"    ", latency->latency_max);
         *pos += sprintf_s(result + *pos, max_len, "%-6.2f \n",
             (double)latency->latency_total / latency->latency_pkts);
     } else {
@@ -719,52 +716,53 @@ static void parse_thread_latency_result(const struct stack_latency *latency, cha
 static void parse_latency_total_result(char *result, size_t max_len, int32_t *pos,
     const struct stack_latency *record)
 {
+    if (max_len < GAZELLE_RESULT_LINE_LEN) {
+        printf("total latency result show failed, out of memory bounds\n");
+        return;
+    }
+
     if (record->latency_pkts > 0) {
-        *pos += sprintf_s(result + *pos, max_len, "                          total:      ");
+        *pos += sprintf_s(result + *pos, max_len, "                     total:           ");
         *pos += sprintf_s(result + *pos, max_len, "%-8"PRIu64"    ", record->latency_pkts);
-        *pos += sprintf_s(result + *pos, max_len, "%-6"PRIu64"      ", record->latency_min);
-        *pos += sprintf_s(result + *pos, max_len, "%-6"PRIu64"      ", record->latency_max);
-        *pos += sprintf_s(result + *pos, max_len, "%-6.2f \n\n\n",
+        *pos += sprintf_s(result + *pos, max_len, "%-8"PRIu64"    ", record->latency_min);
+        *pos += sprintf_s(result + *pos, max_len, "%-8"PRIu64"    ", record->latency_max);
+        *pos += sprintf_s(result + *pos, max_len, "%-6.2f \n\n",
             (double)record->latency_total / record->latency_pkts);
     } else {
-        *pos += sprintf_s(result + *pos, max_len, "                          total:      0\n\n\n");
+        *pos += sprintf_s(result + *pos, max_len, "                     total:           0\n\n");
     }
 }
 
-static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_stat_msg_request *req_msg)
+static void gazelle_show_latency_result(const struct gazelle_stat_msg_request *req_msg,
+                                        struct gazelle_stack_dfx_data *stat, struct stack_latency *latency,
+                                        struct gazelle_latency_result *res)
 {
+    char str_ip[GAZELLE_SUBNET_LENGTH_MAX] = { 0 };
+
+    if (GAZELLE_RESULT_LEN - res->latency_stat_index < GAZELLE_RESULT_LINE_LEN) {
+        printf("too many threads show latency result, out of memory bounds\n");
+        return;
+    }
+
+    res->latency_stat_index += sprintf_s(res->latency_stat_result + res->latency_stat_index,
+        (size_t)(GAZELLE_RESULT_LEN - res->latency_stat_index), "ip: %-15s  tid: %-8u    ",
+        inet_ntop(AF_INET, &req_msg->ip, str_ip, sizeof(str_ip)), stat->tid);
+
+    parse_thread_latency_result(latency, res->latency_stat_result,
+        (size_t)(GAZELLE_RESULT_LEN - res->latency_stat_index), &res->latency_stat_index, &res->latency_stat_record);
+}
+
+static void gazelle_show_latency_result_total(void *buf, const struct gazelle_stat_msg_request *req_msg,
+                                              struct gazelle_latency_result *res)
+{
+    int ret = GAZELLE_OK;
     struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
     struct gazelle_stack_latency *latency = &stat->data.latency;
-    int32_t ret = GAZELLE_OK;
-    int32_t lwip_index = 0;
-    int32_t read_index = 0;
-    struct stack_latency lwip_record = {0};
-    struct stack_latency read_record = {0};
-    char str_ip[GAZELLE_SUBNET_LENGTH_MAX] = {0};
-
-    read_record.latency_min = ~((uint64_t)0);
-    lwip_record.latency_min = ~((uint64_t)0);
-
-    char *lwip_result = calloc(GAZELLE_RESULT_LEN, sizeof(char));
-    if (lwip_result == NULL) {
-        return;
-    }
-    char *read_result = calloc(GAZELLE_RESULT_LEN, sizeof(char));
-    if (read_result == NULL) {
-        free(lwip_result);
-        return;
-    }
 
     do {
-        lwip_index += sprintf_s(lwip_result + lwip_index, (size_t)(GAZELLE_RESULT_LEN - lwip_index),
-            "ip: %-15s  tid: %-8u    ", inet_ntop(AF_INET, &req_msg->ip, str_ip, sizeof(str_ip)), stat->tid);
-        parse_thread_latency_result(&latency->lwip_latency, lwip_result, (size_t)(GAZELLE_RESULT_LEN - lwip_index),
-            &lwip_index, &lwip_record);
-
-        read_index += sprintf_s(read_result + read_index, (size_t)(GAZELLE_RESULT_LEN - read_index),
-            "ip: %-15s  tid: %-8u    ", inet_ntop(AF_INET, &req_msg->ip, str_ip, sizeof(str_ip)), stat->tid);
-        parse_thread_latency_result(&latency->read_latency, read_result, (size_t)(GAZELLE_RESULT_LEN - read_index),
-            &read_index, &read_record);
+        for (int i = 0; i < GAZELLE_LATENCY_MAX; i++) {
+            gazelle_show_latency_result(req_msg, stat, &latency->latency[i], &res[i]);
+        }
 
         if ((stat->eof != 0) || (ret != GAZELLE_OK)) {
             break;
@@ -772,21 +770,33 @@ static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_st
         ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
     } while (true);
 
-    parse_latency_total_result(lwip_result, (size_t)(GAZELLE_RESULT_LEN - lwip_index), &lwip_index, &lwip_record);
-    parse_latency_total_result(read_result, (size_t)(GAZELLE_RESULT_LEN - read_index), &read_index, &read_record);
+    for (int i = 0; i < GAZELLE_LATENCY_MAX; i++) {
+        parse_latency_total_result(res[i].latency_stat_result, (size_t)(GAZELLE_RESULT_LEN - res[i].latency_stat_index),
+            &res[i].latency_stat_index, &res[i].latency_stat_record);
+    }
+}
 
-    printf("Statistics of lstack latency: t0--->t3 \
-        (t0:read form nic  t1:into lstask queue  t2:into app queue t3:app read)\n");
-    printf("                                      pkts        min(us)     max(us)     average(us)\n%s",
-        read_result);
+static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    struct gazelle_latency_result *res = calloc(GAZELLE_LATENCY_MAX, sizeof(struct gazelle_latency_result));
+    if (res == NULL) {
+        return;
+    }
 
-    printf("Statistics of lstack latency: t0--->t2 \
-        (t0:read form nic  t1:into lstask queue  t2:into app queue t3:app read)\n");
-    printf("                                      pkts        min(us)     max(us)     average(us)\n%s",
-        lwip_result);
+    for (int i = 0; i < GAZELLE_LATENCY_MAX; i++) {
+        res[i].latency_stat_record.latency_min = ~((uint64_t)0);
+    }
 
-    free(read_result);
-    free(lwip_result);
+    gazelle_show_latency_result_total(buf, req_msg, res);
+
+    printf("Statistics of lstack latency          pkts        min(us)     max(us)     average(us)\n");
+    printf("range: t0--->t3\n%s", res[GAZELLE_LATENCY_READ_LSTACK].latency_stat_result);
+    printf("range: t0--->t2\n%s", res[GAZELLE_LATENCY_READ_LWIP].latency_stat_result);
+    printf("range: t3--->t0\n%s", res[GAZELLE_LATENCY_WRITE_LSTACK].latency_stat_result);
+    printf("range: t2--->t0\n%s", res[GAZELLE_LATENCY_WRITE_LWIP].latency_stat_result);
+    printf("t0:read form/send to nic  t1:into/out of lstask queue  t2:into/out of app queue t3:app read/send\n");
+
+    free(res);
 }
 
 static void gazelle_print_lstack_stat_lpm(void *buf, const struct gazelle_stat_msg_request *req_msg)

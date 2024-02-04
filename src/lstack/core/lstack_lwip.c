@@ -244,6 +244,11 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
     if (pbuf == NULL) {
         return NULL;
     }
+
+    if (get_protocol_stack_group()->latency_start) {
+        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LWIP);
+    }
+
     sock->send_pre_del = pbuf;
 
     if (!gazelle_ring_readover_count(sock->send_ring)) {
@@ -302,6 +307,11 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
     struct pbuf *pbufs[SOCK_SEND_RING_SIZE_MAX];
 
     (void)gazelle_ring_read(sock->send_ring, (void **)pbufs, write_num);
+
+    if (get_protocol_stack_group()->latency_start) {
+        uint64_t time_stamp = get_current_time();
+        time_stamp_into_pbuf(write_num, pbufs, time_stamp);
+    }
 
     ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
 
@@ -573,7 +583,7 @@ ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, u8_t apifl
 
     for (uint32_t i = 0; get_protocol_stack_group()->latency_start && i < read_count; i++) {
         if (pbufs[i] != NULL) {
-            calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_LWIP);
+            calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_READ_LWIP);
         }
     }
 
@@ -895,7 +905,7 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
                 sock->wakeup->stat.app_read_cnt += 1;
             }
             if (latency_enable) {
-                calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ);
+                calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ_LSTACK);
             }
             gazelle_ring_read_over(sock->recv_ring);
 

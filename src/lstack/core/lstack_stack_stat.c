@@ -53,8 +53,9 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
 {
     uint64_t latency;
     const struct latency_timestamp *lt;
+    struct stack_latency *latency_stat;
 
-    if (pbuf == NULL) {
+    if (pbuf == NULL || type >= GAZELLE_LATENCY_MAX) {
         return;
     }
 
@@ -62,10 +63,9 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
     if (lt->stamp != ~(lt->check) || lt->stamp < stack_latency->start_time) {
         return;
     }
-    latency = get_current_time() - lt->stamp;
 
-    struct stack_latency *latency_stat = (type == GAZELLE_LATENCY_LWIP) ?
-        &stack_latency->lwip_latency : &stack_latency->read_latency;
+    latency = get_current_time() - lt->stamp;
+    latency_stat = &stack_latency->latency[type];
 
     latency_stat->latency_total += latency;
     latency_stat->latency_max = (latency_stat->latency_max > latency) ? latency_stat->latency_max : latency;
@@ -118,8 +118,11 @@ static void set_latency_start_flag(bool start)
             LSTACK_LOG(ERR, LSTACK, "memset_s faile\n");
         }
         stack->latency.start_time = get_current_time();
-        stack->latency.lwip_latency.latency_min = ~((uint64_t)0);
-        stack->latency.read_latency.latency_min = ~((uint64_t)0);
+
+        for (uint32_t j = 0; j < GAZELLE_LATENCY_MAX; j++) {
+            stack->latency.latency[j].latency_min = ~((uint64_t)0);
+        }
+ 
         memset_s(&stack->aggregate_stats, sizeof(struct gazelle_stack_aggregate_stats),
             0, sizeof(stack->aggregate_stats));
     }
