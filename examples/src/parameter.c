@@ -84,7 +84,8 @@ uint8_t setbitnum_off(uint8_t mode, uint8_t index)
     return mode;
 }
 
-uint8_t program_set_protocol_mode(uint8_t protocol_mode, char* ipv4, char* ipv6, uint8_t index_v4, uint8_t index_v6)
+static uint8_t program_set_protocol_mode(uint8_t protocol_mode, char *ipv4, char *ipv6, uint8_t index_v4,
+                                         uint8_t index_v6)
 {
     uint8_t protocol_mode_temp = protocol_mode;
     if (strcmp(ipv4, PARAM_DEFAULT_IP) != 0) {

@@ -47,104 +47,135 @@ int32_t set_tcp_keep_alive_info(int32_t sockfd, int32_t tcp_keepalive_idle, int3
     return ret;
 }
 
+static int32_t process_unix_fd(int32_t *socket_fd, int32_t *listen_fd_array)
+{
+    struct sockaddr_un socket_addr;
+    int32_t fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        PRINT_ERROR("can't create socket %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+    *socket_fd = fd;
+
+    unlink(SOCKET_UNIX_DOMAIN_FILE);
+    socket_addr.sun_family = AF_UNIX;
+    strcpy_s(socket_addr.sun_path, sizeof(socket_addr.sun_path), SOCKET_UNIX_DOMAIN_FILE);
+    if (bind(*socket_fd, (struct sockaddr *)&socket_addr, sizeof(struct sockaddr_un)) < 0) {
+        PRINT_ERROR("can't bind the address to socket %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+
+    if (listen(*socket_fd, SERVER_SOCKET_LISTEN_BACKLOG) < 0) {
+        PRINT_ERROR("server socket can't lisiten %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+    return PROGRAM_OK;
+}
+
+static int32_t process_udp_groupip(int32_t fd, ip_addr_t *ip, ip_addr_t *groupip, sockaddr_t *socker_add_info)
+{
+    struct ip_mreq mreq;
+    if (groupip->u_addr.ip4.s_addr) {
+        mreq.imr_multiaddr = groupip->u_addr.ip4;
+        mreq.imr_interface = ip->u_addr.ip4;
+        if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(struct ip_mreq)) == -1) {
+            PRINT_ERROR("can't set the address to group %d! ", errno);
+            return PROGRAM_FAULT;
+        }
+        ((struct sockaddr_in *)socker_add_info)->sin_addr = groupip->u_addr.ip4;
+        return PROGRAM_OK;
+    }
+    return PROGRAM_OK;
+}
+
+static int32_t server_create_sock(uint8_t protocol_mode, int32_t* fd_arry)
+{
+    bool ret = true;
+    for (int32_t i = 0; i < PROTOCOL_MODE_MAX; i++) {
+        if (getbit_num(protocol_mode, i) == 0)
+            continue;
+        if (i == V4_TCP) {
+            fd_arry[i] = socket(AF_INET, SOCK_STREAM, 0);
+        } else if (i == V6_TCP) {
+            fd_arry[i] = socket(AF_INET6, SOCK_STREAM, 0);
+        } else if (i == V4_UDP) {
+            fd_arry[i] = socket(AF_INET, SOCK_DGRAM, 0);
+        }
+        if (fd_arry[i] < 0) {
+            PRINT_ERROR("can't create socket type=%d errno=%d! ", i, errno);
+            ret = false;
+            break;
+        }
+    }
+
+    if (ret == false) {
+        for (int32_t i = 0; i< PROTOCOL_MODE_MAX; i++) {
+            if (fd_arry[i] > 0) {
+                close(fd_arry[i]);
+            }
+        }
+        return PROGRAM_FAULT;
+    }
+    return PROGRAM_OK;
+}
 
 // create the socket and listen
-int32_t create_socket_and_listen(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, const char *domain)
+int32_t create_socket_and_listen(int32_t *listen_fd_array, ip_addr_t *ip, ip_addr_t *groupip,
+                                 uint16_t port, uint8_t protocol_mode)
 {
-    if (strcmp(domain, "tcp") == 0) {
-        *socket_fd = socket(ip->addr_family, SOCK_STREAM, 0);
-        if (*socket_fd < 0) {
-            PRINT_ERROR("can't create socket %d! ", errno);
-            return PROGRAM_FAULT;
-        }
-    } else if (strcmp(domain, "unix") == 0) {
-        *socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (*socket_fd < 0) {
-            PRINT_ERROR("can't create socket %d! ", errno);
-            return PROGRAM_FAULT;
-        }
-    } else if (strcmp(domain, "udp") == 0) {
-        *socket_fd = socket(ip->addr_family, SOCK_DGRAM, 0);
-        if (*socket_fd < 0) {
-            PRINT_ERROR("can't create socket %d! ", errno);
-            return PROGRAM_FAULT;
-        }
-    }
-
     int32_t port_multi = 1;
-    if (setsockopt(*socket_fd, SOL_SOCKET, SO_REUSEPORT, (void *)&port_multi, sizeof(int32_t)) < 0) {
-        PRINT_ERROR("can't set the option of socket %d! ", errno);
+    uint32_t len = 0;
+    sockaddr_t socker_add_info;
+
+    if (getbit_num(protocol_mode, UNIX) == 1) {
+        if (process_unix_fd(&listen_fd_array[UNIX], listen_fd_array) != PROGRAM_OK) {
+            return PROGRAM_FAULT;
+        }
+        return PROGRAM_OK;
+    }
+
+    if (server_create_sock(protocol_mode, listen_fd_array) != PROGRAM_OK) {
         return PROGRAM_FAULT;
     }
 
-    if (set_socket_unblock(*socket_fd) < 0) {
-        PRINT_ERROR("can't set the socket to unblock! ");
-        return PROGRAM_FAULT;
-    }
-
-    if (strcmp(domain, "tcp") == 0) {
-        sockaddr_t socket_addr;
-        uint32_t len = 0;
-        if (ip->addr_family == AF_INET) {
-            memset_s(&socket_addr, sizeof(struct sockaddr_in), 0, sizeof(struct sockaddr_in));
-            ((struct sockaddr_in *)&socket_addr)->sin_addr = ip->u_addr.ip4;
-            len = sizeof(struct sockaddr_in);
-        } else if (ip->addr_family == AF_INET6) {
-            memset_s(&socket_addr, sizeof(struct sockaddr_in6), 0, sizeof(struct sockaddr_in6));
-            ((struct sockaddr_in6 *)&socket_addr)->sin6_addr = ip->u_addr.ip6;
-            len = sizeof(struct sockaddr_in6);
-        }
-        ((struct sockaddr *)&socket_addr)->sa_family = ip->addr_family;
-        ((struct sockaddr_in *)&socket_addr)->sin_port = port;
-
-        if (bind(*socket_fd, (struct sockaddr *)&socket_addr, len) < 0) {
-            PRINT_ERROR("can't bind the address to socket %d! ", errno);
+    for (int32_t i = 0;i< PROTOCOL_MODE_MAX; i++) {
+        if (listen_fd_array[i] <= 0)
+            continue;
+        if (setsockopt(listen_fd_array[i], SOL_SOCKET, SO_REUSEPORT, (void *)&port_multi, sizeof(int32_t)) < 0) {
+            PRINT_ERROR("can't set the option of socket %d! ", errno);
             return PROGRAM_FAULT;
         }
-
-        if (listen(*socket_fd, SERVER_SOCKET_LISTEN_BACKLOG) < 0) {
-            PRINT_ERROR("server socket can't lisiten %d! ", errno);
+        if (set_socket_unblock(listen_fd_array[i]) < 0) {
+            PRINT_ERROR("can't set the socket to unblock! ");
             return PROGRAM_FAULT;
         }
-    } else if (strcmp(domain, "unix") == 0) {
-        struct sockaddr_un socket_addr;
-        unlink(SOCKET_UNIX_DOMAIN_FILE);
-        socket_addr.sun_family = AF_UNIX;
-        strcpy_s(socket_addr.sun_path, sizeof(socket_addr.sun_path), SOCKET_UNIX_DOMAIN_FILE);
-        if (bind(*socket_fd, (struct sockaddr *)&socket_addr, sizeof(struct sockaddr_un)) < 0) {
-            PRINT_ERROR("can't bind the address to socket %d! ", errno);
-            return PROGRAM_FAULT;
-        }
+        len = ((i == V4_TCP || i== V4_UDP) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
+        memset_s(&socker_add_info, len, 0, len);
 
-        if (listen(*socket_fd, SERVER_SOCKET_LISTEN_BACKLOG) < 0) {
-            PRINT_ERROR("server socket can't lisiten %d! ", errno);
-            return PROGRAM_FAULT;
-        }
-    } else if (strcmp(domain, "udp") == 0) {
-        struct sockaddr_in socket_addr;
-        memset_s(&socket_addr, sizeof(socket_addr), 0, sizeof(socket_addr));
-        socket_addr.sin_family = AF_INET;
-        socket_addr.sin_port = port;
-
-        if (groupip->u_addr.ip4.s_addr) {
-            struct ip_mreq mreq;
-            mreq.imr_multiaddr = groupip->u_addr.ip4;
-            mreq.imr_interface = ip->u_addr.ip4;
-            if (setsockopt(*socket_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(struct ip_mreq)) == -1) {
-                PRINT_ERROR("can't set the address to group %d! ", errno);
-                return PROGRAM_FAULT;;
+        if (i == V4_TCP || i == V4_UDP) {
+            ((struct sockaddr_in *)&socker_add_info)->sin_addr = ip->u_addr.ip4;
+            if (i == V4_UDP && process_udp_groupip(listen_fd_array[i], ip, groupip, &socker_add_info) != PROGRAM_OK) {
+                return PROGRAM_FAULT;
             }
-            socket_addr.sin_addr = groupip->u_addr.ip4;
-        } else {
-            socket_addr.sin_addr = ip->u_addr.ip4;
+        } else if (i == V6_TCP) {
+            ((struct sockaddr_in6 *)&socker_add_info)->sin6_addr = ip->u_addr.ip6;
         }
 
-        if (bind(*socket_fd, (struct sockaddr *)&socket_addr, sizeof(struct sockaddr_in)) < 0) {
-            PRINT_ERROR("can't bind the address to socket %d! ", errno);
+        ((struct sockaddr *)&socker_add_info)->sa_family = ((i == V4_TCP || i== V4_UDP) ? AF_INET : AF_INET6);
+        ((struct sockaddr_in *)&socker_add_info)->sin_port = port;
+
+        if (bind(listen_fd_array[i], (struct sockaddr *)&socker_add_info, len) < 0) {
+            PRINT_ERROR("can't bind the address %d!, i=%d, listen_fd_array[i]=%d ", errno, i, listen_fd_array[i]);
             return PROGRAM_FAULT;
         }
+
+        if (i == V4_TCP || i == V6_TCP) {
+            if (listen(listen_fd_array[i], SERVER_SOCKET_LISTEN_BACKLOG) < 0) {
+                PRINT_ERROR("server socket can't lisiten %d! ", errno);
+                return PROGRAM_FAULT;
+            }
+        }
     }
-    
     return PROGRAM_OK;
 }
 
