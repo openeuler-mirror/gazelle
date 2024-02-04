@@ -241,7 +241,7 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
         if (curr_epev->events == EPOLLIN) {
             struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
-            int32_t server_ans_ret = server_ans(server_handler, worker_unit->pktlen, worker_unit->api, domain);
+            int32_t server_ans_ret = server_ans(server_handler->fd, worker_unit->pktlen, worker_unit->api, domain);
             if (server_ans_ret == PROGRAM_FAULT) {
                 if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
                     return PROGRAM_FAULT;
@@ -578,7 +578,8 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
                     remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&connect_addr)->sin6_addr;
                 }
 
-                int32_t server_ans_ret = server_ans(server_handler, server_unit->pktlen, server_unit->api, server_unit->domain);
+                int32_t server_ans_ret = server_ans(server_handler->fd, server_unit->pktlen, server_unit->api,
+                                                    server_unit->domain);
                 if (server_ans_ret == PROGRAM_FAULT) {
                     --server_unit->curr_connect;
                     server_handler_close(server_unit->epfd, server_handler);

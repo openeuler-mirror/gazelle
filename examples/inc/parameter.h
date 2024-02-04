@@ -92,6 +92,12 @@ uint8_t setbitnum_off(uint8_t mode, uint8_t index);
 
 uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* ipv6);
 
+struct ServerBaseCfgInfo {
+    const char *domain;
+    const char *api;
+    uint32_t pktlen;
+};
+
 /**
  * @brief program option description
  * The program option description.

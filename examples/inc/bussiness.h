@@ -90,12 +90,12 @@ int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, 
 /**
  * @brief server checks the information and answers
  * This function checks the information and answers.
- * @param server_handler    server handler
+ * @param fd                socket_fd
  * @param pktlen            the length of package
  * @param api               the api
  * @return                  the result
  */
-int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api, const char* domain);
+int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* domain);
 
 /**
  * @brief client asks server
