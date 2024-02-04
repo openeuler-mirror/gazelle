@@ -611,9 +611,10 @@ static int32_t thread_register(void)
     /* register all connected conn before listen conn, avoid creating new conn */
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
-        conn->conn_num = rpc_call_conntable(stack_group->stacks[i], conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
+        conn->conn_num = rpc_call_conntable(&stack_group->stacks[i]->rpc_queue,
+                                            conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
 
-        ret = rpc_call_thread_regphase1(stack_group->stacks[i], conn);
+        ret = rpc_call_thread_regphase1(&stack_group->stacks[i]->rpc_queue, conn);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "thread_register_phase1  failed ret=%d!\n", ret);
             free(conn);
@@ -622,9 +623,10 @@ static int32_t thread_register(void)
     }
 
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
-        conn->conn_num = rpc_call_conntable(stack_group->stacks[i], conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
+        conn->conn_num = rpc_call_conntable(&stack_group->stacks[i]->rpc_queue,
+                                            conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
 
-        ret = rpc_call_thread_regphase2(stack_group->stacks[i], conn);
+        ret = rpc_call_thread_regphase2(&stack_group->stacks[i]->rpc_queue, conn);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "thread_register_phase2  failed ret=%d!\n", ret);
             free(conn);

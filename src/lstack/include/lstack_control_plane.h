@@ -23,14 +23,11 @@ enum vdev_request {
     VDEV_NONE,
 };
 
-struct rpc_msg;
 int client_reg_thrd_ring(void);
 int32_t control_init_client(bool is_reconnect);
 void control_client_thread(void *arg);
 void control_server_thread(void *arg);
 bool get_register_state(void);
-void thread_register_phase1(struct rpc_msg *msg);
-void thread_register_phase2(struct rpc_msg *msg);
 void control_fd_close(void);
 void delete_primary_path(void);
 

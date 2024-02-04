@@ -529,7 +529,7 @@ void transfer_tcp_to_thread(struct rte_mbuf *mbuf, uint16_t stk_idx)
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[stk_idx];
     int ret  = -1;
     while(ret != 0) {
-        ret = rpc_call_arp(stack, mbuf);
+        ret = rpc_call_arp(&stack->rpc_queue, mbuf);
         printf("transfer_tcp_to_thread, ret : %d \n", ret);
     }
 }
@@ -550,10 +550,10 @@ void parse_arp_and_transefer(char* buf)
         }
         copy_mbuf(mbuf_copy, mbuf);
 
-        ret = rpc_call_arp(stack, mbuf_copy);
+        ret = rpc_call_arp(&stack->rpc_queue, mbuf_copy);
 
         while (ret != 0) {
-            rpc_call_arp(stack, mbuf_copy);;
+            rpc_call_arp(&stack->rpc_queue, mbuf_copy);
         }
     }
 }

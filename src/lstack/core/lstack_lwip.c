@@ -636,7 +636,7 @@ static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t
 {
     // 2: call_num >= 2, don't need add new rpc send
     if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) < 2) {
-        while (rpc_call_send(fd, NULL, len, flags) < 0) {
+        while (rpc_call_send(&sock->stack->rpc_queue, fd, NULL, len, flags) < 0) {
             usleep(1000); // 1000: wait 1ms to exec again
         }
         __sync_fetch_and_add(&sock->call_num, 1);

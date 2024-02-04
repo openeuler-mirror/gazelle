@@ -28,6 +28,12 @@
 
 #define RPC_MSG_MAX            4096
 #define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
+typedef struct lockless_queue rpc_queue;
+
+struct rpc_stats {
+    uint16_t call_null;
+    uint64_t call_alloc_fail;
+};
 
 struct rpc_msg;
 typedef void (*rpc_msg_func)(struct rpc_msg *msg);
@@ -41,7 +47,9 @@ union rpc_msg_arg {
     socklen_t socklen;
     size_t size;
 };
-struct rpc_msg_pool;
+struct rpc_msg_pool {
+    struct rte_mempool *mempool;
+};
 struct rpc_msg {
     pthread_spinlock_t lock; /* msg handler unlock notice sender msg process done */
     int8_t sync_flag : 1;
@@ -54,44 +62,41 @@ struct rpc_msg {
     union rpc_msg_arg args[RPM_MSG_ARG_SIZE]; /* resolve by type */
 };
 
-struct rpc_msg_pool {
-    struct rte_mempool *mempool;
-};
+static inline void rpc_queue_init(rpc_queue *queue)
+{
+    lockless_queue_init(queue);
+}
 
-struct protocol_stack;
-struct rte_mbuf;
-struct wakeup_poll;
-struct lwip_sock;
-int poll_rpc_msg(struct protocol_stack *stack, uint32_t max_num);
-void rpc_call_clean_epoll(struct protocol_stack *stack, struct wakeup_poll *wakeup);
-int32_t rpc_call_msgcnt(struct protocol_stack *stack);
-int32_t rpc_call_shadow_fd(struct protocol_stack *stack, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
-int32_t rpc_call_recvlistcnt(struct protocol_stack *stack);
-int32_t rpc_call_thread_regphase1(struct protocol_stack *stack, void *conn);
-int32_t rpc_call_thread_regphase2(struct protocol_stack *stack, void *conn);
-int32_t rpc_call_conntable(struct protocol_stack *stack, void *conn_table, uint32_t max_conn);
-int32_t rpc_call_connnum(struct protocol_stack *stack);
-int32_t rpc_call_arp(struct protocol_stack *stack, struct rte_mbuf *mbuf);
-int32_t rpc_call_socket(int32_t domain, int32_t type, int32_t protocol);
-int32_t rpc_call_close(int32_t fd);
-int32_t rpc_call_shutdown(int fd, int how);
-int32_t rpc_call_bind(int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
-int32_t rpc_call_listen(int s, int backlog);
-int32_t rpc_call_accept(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
-int32_t rpc_call_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
-int32_t rpc_call_send(int fd, const void *buf, size_t len, int flags);
-int32_t rpc_call_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
-int32_t rpc_call_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
-int32_t rpc_call_getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen);
-int32_t rpc_call_setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
-int32_t rpc_call_fcntl(int fd, int cmd, long val);
-int32_t rpc_call_ioctl(int fd, long cmd, void *argp);
-int32_t rpc_call_replenish(struct protocol_stack *stack, struct lwip_sock *sock);
-int32_t rpc_call_mbufpoolsize(struct protocol_stack *stack);
-int32_t rpc_call_rpcpool_size(struct protocol_stack *stack);
-int32_t rpc_call_stack_exit(struct protocol_stack *stack);
+struct rpc_stats *rpc_stats_get(void);
+int32_t rpc_msgcnt(rpc_queue *queue);
+int rpc_poll_msg(rpc_queue *queue, uint32_t max_num);
+void rpc_call_clean_epoll(rpc_queue *queue, void *wakeup);
+int32_t rpc_call_shadow_fd(rpc_queue *queue, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
+int32_t rpc_call_recvlistcnt(rpc_queue *queue);
+int32_t rpc_call_thread_regphase1(rpc_queue *queue, void *conn);
+int32_t rpc_call_thread_regphase2(rpc_queue *queue, void *conn);
+int32_t rpc_call_conntable(rpc_queue *queue, void *conn_table, uint32_t max_conn);
+int32_t rpc_call_connnum(rpc_queue *queue);
+int32_t rpc_call_arp(rpc_queue *queue, void *mbuf);
+int32_t rpc_call_socket(rpc_queue *queue, int32_t domain, int32_t type, int32_t protocol);
+int32_t rpc_call_close(rpc_queue *queue, int32_t fd);
+int32_t rpc_call_shutdown(rpc_queue *queue, int fd, int how);
+int32_t rpc_call_bind(rpc_queue *queue, int32_t fd, const struct sockaddr *addr, socklen_t addrlen);
+int32_t rpc_call_listen(rpc_queue *queue, int s, int backlog);
+int32_t rpc_call_accept(rpc_queue *queue, int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
+int32_t rpc_call_connect(rpc_queue *queue, int fd, const struct sockaddr *addr, socklen_t addrlen);
+int32_t rpc_call_send(rpc_queue *queue, int fd, const void *buf, size_t len, int flags);
+int32_t rpc_call_getpeername(rpc_queue *queue, int fd, struct sockaddr *addr, socklen_t *addrlen);
+int32_t rpc_call_getsockname(rpc_queue *queue, int fd, struct sockaddr *addr, socklen_t *addrlen);
+int32_t rpc_call_getsockopt(rpc_queue *queue, int fd, int level, int optname, void *optval, socklen_t *optlen);
+int32_t rpc_call_setsockopt(rpc_queue *queue, int fd, int level, int optname, const void *optval, socklen_t optlen);
+int32_t rpc_call_fcntl(rpc_queue *queue, int fd, int cmd, long val);
+int32_t rpc_call_ioctl(rpc_queue *queue, int fd, long cmd, void *argp);
+int32_t rpc_call_replenish(rpc_queue *queue, void *sock);
+int32_t rpc_call_mbufpoolsize(rpc_queue *queue);
+int32_t rpc_call_stack_exit(rpc_queue *queue);
 
-static inline __attribute__((always_inline)) void rpc_call(lockless_queue *queue, struct rpc_msg *msg)
+static inline __attribute__((always_inline)) void rpc_call(rpc_queue *queue, struct rpc_msg *msg)
 {
     lockless_queue_mpsc_push(queue, &msg->queue_node);
 }

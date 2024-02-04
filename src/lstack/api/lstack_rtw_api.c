@@ -28,7 +28,11 @@
 
 int rtw_socket(int domain, int type, int protocol)
 {
-    return rpc_call_socket(domain, type, protocol);
+    struct protocol_stack *stack = get_bind_protocol_stack();
+    if (stack == NULL) {
+        GAZELLE_RETURN(EINVAL);
+    }
+    return rpc_call_socket(&stack->rpc_queue, domain, type, protocol);
 }
 
 int rtw_accept(int s, struct sockaddr *addr, socklen_t *addrlen)
@@ -64,27 +68,47 @@ int rtw_listen(int s, int backlog)
 
 int rtw_connect(int s, const struct sockaddr *name, socklen_t namelen)
 {
-    return rpc_call_connect(s, name, namelen);
+    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
+    if (stack == NULL) {
+        GAZELLE_RETURN(EBADF);
+    }
+    return rpc_call_connect(&stack->rpc_queue, s, name, namelen);
 }
 
 int rtw_setsockopt(int s, int level, int optname, const void *optval, socklen_t optlen)
 {
-    return rpc_call_setsockopt(s, level, optname, optval, optlen);
+    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
+    if (stack == NULL) {
+        GAZELLE_RETURN(EBADF);
+    }
+    return rpc_call_setsockopt(&stack->rpc_queue, s, level, optname, optval, optlen);
 }
 
 int rtw_getsockopt(int s, int level, int optname, void *optval, socklen_t *optlen)
 {
-    return rpc_call_getsockopt(s, level, optname, optval, optlen);
+    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
+    if (stack == NULL) {
+        GAZELLE_RETURN(EBADF);
+    }
+    return rpc_call_getsockopt(&stack->rpc_queue, s, level, optname, optval, optlen);
 }
 
 int rtw_getpeername(int s, struct sockaddr *name, socklen_t *namelen)
 {
-    return rpc_call_getpeername(s, name, namelen);
+    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
+    if (stack == NULL) {
+        GAZELLE_RETURN(EBADF);
+    }
+    return rpc_call_getpeername(&stack->rpc_queue, s, name, namelen);
 }
 
 int rtw_getsockname(int s, struct sockaddr *name, socklen_t *namelen)
 {
-    return rpc_call_getsockname(s, name, namelen);
+    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
+    if (stack == NULL) {
+        GAZELLE_RETURN(EBADF);
+    }
+    return rpc_call_getsockname(&stack->rpc_queue, s, name, namelen);
 }
 
 ssize_t rtw_read(int s, void *mem, size_t len)

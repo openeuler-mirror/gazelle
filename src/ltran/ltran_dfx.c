@@ -646,8 +646,7 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
     printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.stack_stat.call_null);
     printf("send_pkts_fail: %-13"PRIu64" ", lstack_stat->data.pkts.stack_stat.send_pkts_fail);
-    printf("mbuf_pool_freecnt: %-10"PRIu32" ", lstack_stat->data.pkts.mbufpool_avail_cnt);
-    printf("rpc_pool_freecnt: %-12"PRIu32" \n", lstack_stat->data.pkts.rpcpool_avail_cnt);
+    printf("mbuf_pool_freecnt: %-10"PRIu32" \n", lstack_stat->data.pkts.mbufpool_avail_cnt);
     printf("accpet_fail: %-16"PRIu64" ", lstack_stat->data.pkts.stack_stat.accept_fail);
     printf("sock_rx_drop: %-15"PRIu64" ", lstack_stat->data.pkts.stack_stat.sock_rx_drop);
     printf("sock_tx_merge: %-16"PRIu64" \n", lstack_stat->data.pkts.stack_stat.sock_tx_merge);
