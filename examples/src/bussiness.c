@@ -136,44 +136,41 @@ int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, 
     return PROGRAM_OK;
 }
 
-// server answers
-int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const char* api, const char* domain)
+static void server_ans_free_buff(char *buff_in, char *buff_out)
 {
-    const uint32_t length = pktlen;
-    char *buffer_in = (char *)malloc(length * sizeof(char));
-    char *buffer_out = (char *)malloc(length * sizeof(char));
+    if (buff_in) {
+        free(buff_in);
+    }
+    if (buff_out) {
+        free(buff_out);
+    }
+}
+
+// server_ans_read
+static int32_t server_ans_read(int32_t socket_fd, struct ServerBaseCfgInfo *server_base_info, char *buffer_in,
+                               struct sockaddr *client_addr)
+{
+    const uint32_t length = server_base_info->pktlen;
+    const char *api = server_base_info->api;
+    const char *domain = server_base_info->domain;
 
     int32_t cread = 0;
     int32_t sread = length;
     int32_t nread = 0;
-    sockaddr_t client_addr;
+
     socklen_t len = sizeof(sockaddr_t);
 
-    if (strcmp(domain, "udp") == 0 && strncmp(api, "recvfrom", strlen("recvfrom")) != 0) {
-        if (getpeername(server_handler->fd, (struct sockaddr *)&client_addr, &len) < 0) {
-            if (recvfrom(server_handler->fd, buffer_in, length, MSG_PEEK, (struct sockaddr *)&client_addr, &len) < 0) {
-                return PROGRAM_FAULT;
-            }
-            if (connect(server_handler->fd, (struct sockaddr *)&client_addr, len) < 0) {
-                return PROGRAM_FAULT;
-            }
-        }
-    }
-
-    fault_inject_delay(INJECT_DELAY_READ);
-    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_READ)
-    
     while (cread < sread) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
-            nread = recvfrom(server_handler->fd, buffer_in, length, 0, (struct sockaddr *)&client_addr, &len);
+            nread = recvfrom(socket_fd, buffer_in, length, 0, client_addr, &len);
         } else {
-            nread = read_api(server_handler->fd, buffer_in, length, api);
+            nread = read_api(socket_fd, buffer_in, length, api);
         }
-
         if (nread == 0) {
             return PROGRAM_ABORT;
         } else if (nread < 0) {
             if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
+                PRINT_ERROR("nread =%d, errno=%d", nread, errno);
                 return PROGRAM_FAULT;
             }
         } else {
@@ -181,46 +178,99 @@ int32_t server_ans(struct ServerHandler *server_handler, uint32_t pktlen, const 
             continue;
         }
     }
+    return PROGRAM_OK;
+}
 
-    FAULT_INJECT_SKIP_END
-    
-    if (strcmp(api, "recvfrom") == 0) {
-        free(buffer_in);
-        free(buffer_out);
-        return PROGRAM_OK;
-    }
-
-    server_bussiness(buffer_out, buffer_in, length);
+static int32_t server_ans_write(int32_t socket_fd, struct ServerBaseCfgInfo *server_base_info, char *buffer_out,
+                                struct sockaddr *client_addr)
+{
+    const uint32_t length = server_base_info->pktlen;
+    const char *api = server_base_info->api;
+    const char *domain = server_base_info->domain;
 
     int32_t cwrite = 0;
     int32_t swrite = length;
     int32_t nwrite = 0;
-    
-    fault_inject_delay(INJECT_DELAY_WRITE);
-    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_WRITE)
+    socklen_t len = sizeof(sockaddr_t);
+
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
-            nwrite = sendto(server_handler->fd, buffer_out, length, 0, (struct sockaddr *)&client_addr, len);
+            nwrite = sendto(socket_fd, buffer_out, length, 0, client_addr, len);
         } else {
-            nwrite = write_api(server_handler->fd, buffer_out, length, api);
+            nwrite = write_api(socket_fd, buffer_out, length, api);
         }
 
         if (nwrite == 0) {
             return PROGRAM_ABORT;
         } else if (nwrite < 0) {
-             if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
+            if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
+                PRINT_ERROR("nwrite =%d, errno=%d", nwrite, errno);
                 return PROGRAM_FAULT;
-             }
+            }
         } else {
             cwrite += nwrite;
             continue;
         }
     }
+    return PROGRAM_OK;
+}
+
+// server answers
+int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* domain)
+{
+    const uint32_t length = pktlen;
+    char *buffer_in = (char *)malloc(length * sizeof(char));
+    char *buffer_out = (char *)malloc(length * sizeof(char));
+
+    struct ServerBaseCfgInfo server_base_info;
+    server_base_info.domain = domain;
+    server_base_info.api = api;
+    server_base_info.pktlen = pktlen;
+
+    sockaddr_t client_addr;
+    socklen_t len = sizeof(sockaddr_t);
+
+    if (strcmp(domain, "udp") == 0 && strncmp(api, "recvfrom", strlen("recvfrom")) != 0) {
+        if (getpeername(fd, (struct sockaddr *)&client_addr, &len) < 0) {
+            if (recvfrom(fd, buffer_in, length, MSG_PEEK, (struct sockaddr *)&client_addr, &len) < 0) {
+                server_ans_free_buff(buffer_in, buffer_out);
+                return PROGRAM_FAULT;
+            }
+            if (connect(fd, (struct sockaddr *)&client_addr, len) < 0) {
+                server_ans_free_buff(buffer_in, buffer_out);
+                return PROGRAM_FAULT;
+            }
+        }
+    }
+
+    fault_inject_delay(INJECT_DELAY_READ);
+    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_READ)
+
+    if (server_ans_read(fd, &server_base_info, buffer_in, (struct sockaddr *)&client_addr) != PROGRAM_OK) {
+        server_ans_free_buff(buffer_in, buffer_out);
+        return PROGRAM_FAULT;
+    }
+
+    FAULT_INJECT_SKIP_END
+    
+    if (strcmp(api, "recvfrom") == 0) {
+        server_ans_free_buff(buffer_in, buffer_out);
+        return PROGRAM_OK;
+    }
+
+    server_bussiness(buffer_out, buffer_in, length);
+    
+    fault_inject_delay(INJECT_DELAY_WRITE);
+    FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_WRITE)
+
+    if (server_ans_write(fd, &server_base_info, buffer_out, (struct sockaddr *)&client_addr) != PROGRAM_OK) {
+        server_ans_free_buff(buffer_in, buffer_out);
+        return PROGRAM_FAULT;
+    }
 
     FAULT_INJECT_SKIP_END
 
-    free(buffer_in);
-    free(buffer_out);
+    server_ans_free_buff(buffer_in, buffer_out);
 
     return PROGRAM_OK;
 }
