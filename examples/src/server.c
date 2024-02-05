@@ -322,7 +322,9 @@ void *sermud_listener_create_and_run(void *arg)
     uint32_t port = 0;
     for (; port < UNIX_TCP_PORT_MAX; port++) {
         if ((server_mud->port)[port]) {
-            if (create_socket_and_listen(&(server_mud->listener.fd), &server_mud->ip, &server_mud->groupip, port, server_mud->domain) < 0) {
+            if (create_socket_and_listen(server_mud->listener.listen_fd_array, &server_mud->ip, &server_mud->groupip,
+                                         htons(port), server_mud->protocol_type_mode) < 0) {
+                PRINT_ERROR("create_socket_and_listen err");
                 exit(PROGRAM_FAULT);
             }
         }
@@ -355,6 +357,9 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     }
 
     server_mud->listener.fd = -1;
+    for (int32_t i = 0; i < PROTOCOL_MODE_MAX; i++) {
+        server_mud->listener.listen_fd_array[i] = -1;
+    }
     server_mud->workers = NULL;
     server_mud->epfd = -1;
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
@@ -602,7 +607,9 @@ void *sersum_create_and_run(void *arg)
 {
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)arg;
 
-    if (create_socket_and_listen(&(server_unit->listener.fd), &server_unit->ip, &server_unit->groupip, server_unit->port, server_unit->domain) < 0) {
+    if (create_socket_and_listen(server_unit->listener.listen_fd_array, &server_unit->ip, &server_unit->groupip,
+                                 server_unit->port, server_unit->protocol_type_mode) < 0) {
+        PRINT_ERROR("create_socket_and_listen err! \n");
         exit(PROGRAM_FAULT);
     }
     if (sersum_create_epfd_and_reg(server_unit) < 0) {
@@ -639,6 +646,9 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
 
     for (uint32_t i = 0; i < thread_num; ++i) {
         server_unit->listener.fd = -1;
+        for (int32_t i = 0; i < PROTOCOL_MODE_MAX; i++) {
+            server_unit->listener.listen_fd_array[i] = -1;
+        }
         server_unit->epfd = -1;
         server_unit->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
         server_unit->curr_connect = 0;

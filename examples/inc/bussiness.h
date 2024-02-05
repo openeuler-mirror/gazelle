@@ -28,7 +28,9 @@
  */
 struct ServerHandler
 {
+    int32_t listen_fd_array[PROTOCOL_MODE_MAX];
     int32_t fd;                 ///< socket file descriptor
+    int32_t is_v6;
 };
 
 /**

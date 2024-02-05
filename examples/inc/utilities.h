@@ -133,7 +133,8 @@ typedef union sockaddr_union {
  * @param domain        domain
  * @return              the result
  */
-int32_t create_socket_and_listen(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, const char *domain);
+int32_t create_socket_and_listen(int32_t *listen_fd_array, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port,
+                                 uint8_t protocol_mode);
 
 /**
  * @brief create the socket and connect
