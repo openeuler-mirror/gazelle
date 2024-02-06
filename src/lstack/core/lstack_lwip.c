@@ -541,6 +541,7 @@ static ssize_t do_lwip_fill_sendring(struct lwip_sock *sock, const void *buf, si
 
     /* merge data into last pbuf */
     if (!NETCONN_IS_UDP(sock) && sock->remain_len) {
+        sock->stack->stats.sock_tx_merge++;
         send_len = merge_data_lastpbuf(sock, (char *)buf, len);
         if (send_len >= len) {
             send_len = len;
@@ -1039,6 +1040,7 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
 
             /* in udp, if pbuf remaining len less than copy_len, discard these packets */
             if (recvd > 0 && NETCONN_IS_UDP(sock)) {
+                sock->stack->stats.sock_rx_drop++;
                 break;
             }
         }
