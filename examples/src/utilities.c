@@ -100,6 +100,8 @@ static int32_t server_create_sock(uint8_t protocol_mode, int32_t* fd_arry)
             fd_arry[i] = socket(AF_INET6, SOCK_STREAM, 0);
         } else if (i == V4_UDP) {
             fd_arry[i] = socket(AF_INET, SOCK_DGRAM, 0);
+        } else {
+            continue;
         }
         if (fd_arry[i] < 0) {
             PRINT_ERROR("can't create socket type=%d errno=%d! ", i, errno);

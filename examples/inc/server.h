@@ -206,7 +206,7 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit);
  * @param server_handler    the server handler
  * @return                  the result pointer
  */
-int32_t sersum_accept_connects(struct ServerMumUnit *server_unit, struct ServerHandler *server_handler);
+int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUnit *server_unit);
 
 /**
  * @brief the single thread, unblock, mutliplexing IO server processes the events
