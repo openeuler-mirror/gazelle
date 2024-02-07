@@ -973,9 +973,9 @@ void do_lwip_read_recvlist(struct protocol_stack *stack, uint32_t max_num)
 
         ssize_t len = 0;
         if (NETCONN_IS_UDP(sock)) {
-            len = lwip_recv(sock->conn->socket, NULL, SSIZE_MAX, 0);
+            len = lwip_recv(sock->conn->callback_arg.socket, NULL, SSIZE_MAX, 0);
         } else {
-            len = lwip_recv(sock->conn->socket, NULL, 0, 0);
+            len = lwip_recv(sock->conn->callback_arg.socket, NULL, 0, 0);
         }
         if (len < 0 && errno != EAGAIN) {
             sock->errevent = 1;
@@ -993,7 +993,7 @@ void do_lwip_connected_callback(struct netconn *conn)
         return;
     }
 
-    int32_t fd = conn->socket;
+    int32_t fd = conn->callback_arg.socket;
     struct lwip_sock *sock = get_socket_by_fd(fd);
     if (sock == NULL || sock->conn == NULL) {
         return;
@@ -1033,9 +1033,9 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
     conn->keep_cnt = pcb->keep_cnt;
 
     if (netconn != NULL) {
-        conn->fd = netconn->socket;
+        conn->fd = netconn->callback_arg.socket;
         conn->recv_cnt = (netconn->recvmbox == NULL) ? 0 : rte_ring_count(netconn->recvmbox->ring);
-        struct lwip_sock *sock = get_socket(netconn->socket);
+        struct lwip_sock *sock = get_socket(netconn->callback_arg.socket);
         if (sock != NULL) {
             conn->recv_ring_cnt = (sock->recv_ring == NULL) ? 0 : gazelle_ring_readable_count(sock->recv_ring);
             conn->recv_ring_cnt += (sock->recv_lastdata) ? 1 : 0;
@@ -1121,7 +1121,7 @@ uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn,
         conn[conn_num].l_port = pcbl->local_port;
         conn[conn_num].tcp_sub_state = pcbl->state;
         struct netconn *netconn = (struct netconn *)pcbl->callback_arg;
-        conn[conn_num].fd = netconn != NULL ? netconn->socket : -1;
+        conn[conn_num].fd = netconn != NULL ? netconn->callback_arg.socket : -1;
         if (netconn != NULL && netconn->acceptmbox != NULL) {
             conn[conn_num].recv_cnt = rte_ring_count(netconn->acceptmbox->ring);
         }
@@ -1319,7 +1319,7 @@ err_t same_node_ring_create(struct rte_ring **ring, int size, int port, char *na
 static void init_same_node_ring(struct tcp_pcb *pcb)
 {
     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
-    struct lwip_sock *sock = get_socket(netconn->socket);
+    struct lwip_sock *sock = get_socket(netconn->callback_arg.socket);
 
     pcb->client_rx_ring = NULL;
     pcb->client_tx_ring = NULL;
@@ -1334,7 +1334,7 @@ static void init_same_node_ring(struct tcp_pcb *pcb)
 err_t create_same_node_ring(struct tcp_pcb *pcb)
 {
     struct netconn *netconn = (struct netconn *)pcb->callback_arg;
-    struct lwip_sock *sock = get_socket(netconn->socket);
+    struct lwip_sock *sock = get_socket(netconn->callback_arg.socket);
 
     if (same_node_ring_create(&pcb->client_rx_ring, CLIENT_RING_SIZE, pcb->local_port, "client", "rx") != 0) {
         goto END;

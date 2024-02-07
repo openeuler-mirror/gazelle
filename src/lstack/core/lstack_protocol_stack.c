@@ -903,7 +903,7 @@ void stack_send(struct rpc_msg *msg)
         return;
     }
 
-    replenish_again = do_lwip_send(stack, sock->conn->socket, sock, len, 0);
+    replenish_again = do_lwip_send(stack, sock->conn->callback_arg.socket, sock, len, 0);
     if (replenish_again < 0) {
         __sync_fetch_and_sub(&sock->call_num, 1);
         return;
@@ -1102,7 +1102,7 @@ int32_t stack_broadcast_close(int32_t fd)
         if (sock == NULL || sock->conn == NULL) {
             break;
         }
-        fd = sock->conn->socket;
+        fd = sock->conn->callback_arg.socket;
     } while (sock);
 
     return ret;
@@ -1125,7 +1125,7 @@ int stack_broadcast_shutdown(int fd, int how)
         if (sock == NULL || sock->conn == NULL) {
             break;
         }
-        fd = sock->conn->socket;
+        fd = sock->conn->callback_arg.socket;
     } while (sock);
 
     return ret;
@@ -1290,7 +1290,7 @@ int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *ad
     }
 
     if (min_sock && min_sock->conn) {
-        ret = rpc_call_accept(min_sock->conn->socket, addr, addrlen, flags);
+        ret = rpc_call_accept(min_sock->conn->callback_arg.socket, addr, addrlen, flags);
     }
 
     if (min_sock && min_sock->wakeup && min_sock->wakeup->type == WAKEUP_EPOLL) {
