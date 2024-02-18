@@ -123,34 +123,55 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
     }
 
     struct epoll_event ep_ev;
-    ep_ev.data.ptr = (void *)&(server_mud->listener);
     ep_ev.events = EPOLLIN | EPOLLET;
-    if (epoll_ctl(server_mud->epfd, EPOLL_CTL_ADD, server_mud->listener.fd, &ep_ev) < 0) {
-        PRINT_ERROR("server can't control epoll %d! ", errno);
-        return PROGRAM_FAULT;
+    for (int i = 0; i < PROTOCOL_MODE_MAX; i++) {
+        if (server_mud->listener.listen_fd_array[i] != -1) {
+            ep_ev.data.ptr = (void *)&(server_mud->listener.listen_fd_array[i]);
+            ep_ev.data.fd = server_mud->listener.listen_fd_array[i];
+            if (epoll_ctl(server_mud->epfd, EPOLL_CTL_ADD, server_mud->listener.listen_fd_array[i], &ep_ev) < 0) {
+                PRINT_ERROR("epoll_ctl failed %d! listen_fd=%d ", errno, server_mud->listener.listen_fd_array[i]);
+                return PROGRAM_FAULT;
+            }
+        }
     }
 
     return PROGRAM_OK;
 }
 
+static void sermud_accept_get_remote_ip(sockaddr_t *accept_addr, ip_addr_t *remote_ip, bool is_tcp_v6_flag)
+{
+    remote_ip->addr_family = is_tcp_v6_flag ? AF_INET6 : AF_INET;
+    if (is_tcp_v6_flag == false) {
+        remote_ip->u_addr.ip4 = ((struct sockaddr_in *)&accept_addr)->sin_addr;
+    } else {
+        remote_ip->u_addr.ip6 = ((struct sockaddr_in6 *)&accept_addr)->sin6_addr;
+    }
+}
+
 // the listener thread, unblock, dissymmetric server accepts the connections
-int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
+int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct ServerMud *server_mud)
 {
     fault_inject_delay(INJECT_DELAY_ACCEPT);
     while (true) {
         sockaddr_t accept_addr;
-        uint32_t sockaddr_in_len = server_mud->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-        int32_t accept_fd;
-        if (strcmp(server_mud->domain, "udp") == 0) {
-            break;
+        bool is_tcp_v6_flag = false;
+
+        if (curr_epev->data.fd == server_mud->listener.listen_fd_array[V6_TCP]) {
+            is_tcp_v6_flag = true;
         }
+        uint32_t sockaddr_in_len = is_tcp_v6_flag ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
+
+        int32_t accept_fd;
+
+        int32_t listen_fd_index = is_tcp_v6_flag ? V6_TCP : V4_TCP;
+        int32_t listen_fd = server_mud->listener.listen_fd_array[listen_fd_index];
 
         if (strcmp(server_mud->accept, "ac4") == 0) {
-            accept_fd = accept4(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
+            accept_fd = accept4(listen_fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len, SOCK_CLOEXEC);
         } else {
-            accept_fd = accept(server_mud->listener.fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
+            accept_fd = accept(listen_fd, (struct sockaddr *)&accept_addr, &sockaddr_in_len);
         }
-        
+
         if (accept_fd < 0) {
             break;
         }
@@ -165,13 +186,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
         // sockaddr to ip, port
         ip_addr_t remote_ip;
         uint16_t remote_port = ((struct sockaddr_in *)&accept_addr)->sin_port;
-        if (((struct sockaddr *)&accept_addr)->sa_family == AF_INET) {
-            remote_ip.addr_family = AF_INET;
-            remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&accept_addr)->sin_addr;
-        } else if (((struct sockaddr *)&accept_addr)->sa_family == AF_INET6) {
-            remote_ip.addr_family = AF_INET6;
-            remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&accept_addr)->sin6_addr;
-        }
+        sermud_accept_get_remote_ip(&accept_addr, &remote_ip, is_tcp_v6_flag);
 
         pthread_t *tid = (pthread_t *)malloc(sizeof(pthread_t));
         struct ServerMudWorker *worker = (struct ServerMudWorker *)malloc(sizeof(struct ServerMudWorker));
@@ -186,6 +201,7 @@ int32_t sermud_listener_accept_connects(struct ServerMud *server_mud)
         worker->debug = server_mud->debug;
         worker->next = server_mud->workers;
         worker->epollcreate = server_mud->epollcreate;
+        worker->worker.is_v6 = is_tcp_v6_flag ? 1 : 0;
 
         server_mud->workers = worker;
 
@@ -241,7 +257,7 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
         if (curr_epev->events == EPOLLIN) {
             struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
-            int32_t server_ans_ret = server_ans(server_handler->fd, worker_unit->pktlen, worker_unit->api, domain);
+            int32_t server_ans_ret = server_ans(server_handler->fd, worker_unit->pktlen, worker_unit->api, "tcp");
             if (server_ans_ret == PROGRAM_FAULT) {
                 if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
                     return PROGRAM_FAULT;
@@ -255,6 +271,29 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
                 worker_unit->recv_bytes += worker_unit->pktlen;
                 server_debug_print("server mud worker", "receive", &worker_unit->ip, worker_unit->port, worker_unit->debug);
             }
+        }
+    }
+
+    return PROGRAM_OK;
+}
+
+static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struct ServerMud *server_mud)
+{
+    if (curr_epev->data.fd == server_mud->listener.listen_fd_array[V4_UDP]) {
+        struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
+
+        int32_t server_ans_ret = server_ans(curr_epev->data.fd, server_mud->pktlen, "recvfromsendto", "udp");
+        if (server_ans_ret != PROGRAM_OK) {
+            if (server_handler_close(server_mud->epfd, server_handler) != 0) {
+                PRINT_ERROR("server_handler_close server_ans_ret %d! \n", server_ans_ret);
+                return PROGRAM_FAULT;
+            }
+        }
+    } else {
+        int32_t sermud_listener_accept_connects_ret = sermud_listener_accept_connects(curr_epev, server_mud);
+        if (sermud_listener_accept_connects_ret < 0) {
+            PRINT_ERROR("server try accept error %d! ", sermud_listener_accept_connects_ret);
+            return PROGRAM_FAULT;
         }
     }
 
@@ -281,9 +320,8 @@ int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
         }
 
         if (curr_epev->events == EPOLLIN) {
-            int32_t sermud_listener_accept_connects_ret = sermud_listener_accept_connects(server_mud);
-            if (sermud_listener_accept_connects_ret < 0) {
-                PRINT_ERROR("server try accept error %d! ", sermud_listener_accept_connects_ret);
+            if (sermud_process_epollin_event(curr_epev, server_mud) < 0) {
+                return PROGRAM_FAULT;
             }
         }
     }
@@ -338,8 +376,13 @@ void *sermud_listener_create_and_run(void *arg)
             exit(PROGRAM_FAULT);
         }
     }
-    if (close(server_mud->listener.fd) < 0 || close(server_mud->epfd) < 0) {
-        exit(PROGRAM_FAULT);
+
+    for (int i = 0; i < PROTOCOL_MODE_MAX; i++) {
+        if (server_mud->listener.listen_fd_array[i] == -1)
+            continue;
+        if (close(server_mud->listener.listen_fd_array[i]) < 0) {
+            exit(PROGRAM_FAULT);
+        }
     }
 
     return (void *)PROGRAM_OK;
@@ -365,9 +408,12 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
     server_mud->curr_connect = 0;
     server_mud->ip.addr_family = params->addr_family;
-    inet_pton(params->addr_family, params->ip, &server_mud->ip.u_addr);
+
+    inet_pton(AF_INET, params->ip, &server_mud->ip.u_addr.ip4);
+    inet_pton(AF_INET6, params->ipv6, &server_mud->ip.u_addr.ip6);
+
     server_mud->groupip.addr_family = params->addr_family;
-    inet_pton(params->addr_family, params->groupip, &server_mud->groupip.u_addr);
+    inet_pton(AF_INET, params->groupip, &server_mud->groupip.u_addr);
     server_mud->port = params->port;
     server_mud->pktlen = params->pktlen;
 

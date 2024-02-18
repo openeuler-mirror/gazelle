@@ -142,7 +142,7 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud);
  * @param server_mud        the server unit
  * @return                  the result pointer
  */
-int32_t sermud_listener_accept_connects(struct ServerMud *server_mud);
+int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct ServerMud *server_mud);
 
 /**
  * @brief the worker thread, unblock, dissymmetric server processes the events
