@@ -10,14 +10,11 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef _GAZELLE_VDEV_H_
-#define _GAZELLE_VDEV_H_
+#ifndef __GAZELLE_INJECT_H__
+#define __GAZELLE_INJECT_H__
 
-struct lstack_dev_ops;
-struct gazelle_quintuple;
-enum reg_ring_type;
-void vdev_dev_ops_init(struct lstack_dev_ops *dev_ops);
-int vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple);
-uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts);
+#include <stdbool.h>
 
-#endif /* _GAZELLE_VDEV_H_ */
+int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_stat_msg_request *msg);
+
+#endif /* __GAZELLE_INJECT_H__ */

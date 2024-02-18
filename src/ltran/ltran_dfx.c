@@ -60,6 +60,46 @@ static struct gazelle_stat_ltran_total g_last_ltran_total;
 static struct gazelle_stat_lstack_total g_last_lstack_total[GAZELLE_MAX_STACK_ARRAY_SIZE];
 static struct gazelle_stack_dfx_data g_last_lstack_data[GAZELLE_MAX_STACK_ARRAY_SIZE];
 
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+#define INJECT_NAME_SIZE 32
+#define INJECT_RULE_SIZE 32
+
+typedef int32_t  (*inject_parse_digit_fun)(char*, char*, struct gazelle_stat_msg_request *req_msg);
+static int32_t parse_inject_packet_delay_digit(char *time, char *range, struct gazelle_stat_msg_request *req_msg);
+static int32_t parse_inject_packet_loss_digit(char *rate, char *count, struct gazelle_stat_msg_request *req_msg);
+static int32_t parse_inject_packet_duplicate_digit(char *rate, char *count, struct gazelle_stat_msg_request *req_msg);
+static int32_t parse_inject_packet_reorder_digit(char *rate, char *count, struct gazelle_stat_msg_request *req_msg);
+
+struct gazelle_fault_inject_type_list {
+    char inject_type_item[INJECT_NAME_SIZE];
+    enum GAZELLE_FAULT_INJECT_TYPE inject_type_parsed;
+    inject_parse_digit_fun parse_digit_func;
+};
+
+static struct gazelle_fault_inject_type_list inject_type_list[] = {
+    {"delay",     GAZELLE_FAULT_INJECT_PACKET_DELAY,      parse_inject_packet_delay_digit},
+    {"loss",      GAZELLE_FAULT_INJECT_PACKET_LOSS,       parse_inject_packet_loss_digit},
+    {"duplicate", GAZELLE_FAULT_INJECT_PACKAET_DUPLICATE, parse_inject_packet_duplicate_digit},
+    {"reorder",  GAZELLE_FAULT_INJECT_PACKET_REORDER,   parse_inject_packet_reorder_digit},
+};
+
+struct gazelle_fault_inject_rule_list {
+    char inject_rule_item[INJECT_RULE_SIZE];
+    enum GAZELLE_FAULT_INJECT_RULE inject_rule_parsed;
+    enum GAZELLE_FAULT_INJECT_TYPE rule_parse_assit;
+};
+
+static struct gazelle_fault_inject_rule_list g_gazelle_fault_inject_rule_list[] = {
+    {"random",     INJECT_DELAY_RANDOM,         GAZELLE_FAULT_INJECT_PACKET_DELAY},
+    {"random",     INJECT_LOSS_RANDOM,          GAZELLE_FAULT_INJECT_PACKET_LOSS},
+    {"random",      INJECT_DUPLICATE_RANDOM,     GAZELLE_FAULT_INJECT_PACKAET_DUPLICATE},
+    {"random",      INJECT_REORDER_RANDOM,      GAZELLE_FAULT_INJECT_PACKET_REORDER},
+};
+
+static void gazelle_print_fault_inject_set_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
+
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+
 static bool g_use_ltran = false;
 
 static char* g_unix_prefix;
@@ -95,6 +135,11 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
 static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_stat_msg_request *req_msg);
 
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+static void gazelle_print_fault_inject_set_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_fault_inject_unset_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+
 static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LTRAN_SHOW,          sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_total},
     {GAZELLE_STAT_LTRAN_SHOW_RATE,     sizeof(struct gazelle_stat_ltran_total),  gazelle_print_ltran_stat_rate},
@@ -121,6 +166,11 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LSTACK_SHOW_XSTATS, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_xstats},
     {GAZELLE_STAT_LSTACK_SHOW_AGGREGATE, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_aggregate},
     {GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_nic_features},
+
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+    {GAZELLE_STAT_FAULT_INJECT_SET, sizeof(struct gazelle_stack_dfx_data), gazelle_print_fault_inject_set_status},
+    {GAZELLE_STAT_FAULT_INJECT_UNSET, sizeof(struct gazelle_stack_dfx_data), gazelle_print_fault_inject_unset_status},
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
 };
 
 static int32_t g_wait_reply = 1;
@@ -1121,7 +1171,10 @@ static void show_usage(void)
 {
     printf("Usage: gazellectl [-h | help] \n"
            "  or:  gazellectl ltran  {quit | show | set} [LTRAN_OPTIONS] [-u UNIX_PREFIX]\n"
-           "  or:  gazellectl lstack {show | set} ip [LSTACK_OPTIONS] [-u UNIX_PREFIX]\n \n"
+           "  or:  gazellectl lstack {show | set} ip [LSTACK_OPTIONS] [-u UNIX_PREFIX]\n\n"
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+           "  or:  gazellectl inject [inject_type] [digit_param_1] [digit_param_2] [inject_rule]\n\n"
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
            "  quit            ltran process exit \n \n"
            "  where  LTRAN_OPTIONS := \n"
            "  show: \n"
@@ -1146,7 +1199,13 @@ static void show_usage(void)
            "  set: \n"
            "  loglevel        {error | info | debug}  set lstack loglevel \n"
            "  lowpower        {0 | 1}  set lowpower enable \n"
-           "  [time]          measure latency time default 1S, maximum 30mins \n");
+           "  [time]          measure latency time default 1S, maximum 30mins \n\n"
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+           "                                     *inject params*\n"
+           " |inject_type    |     digit_param_1      |      digit_param_2     |     inject_rule   |\n"
+           " |  delay        |   delay_time(unit: ms) |  delay_range(unit: ms) |       random      |\n"
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+           );
 }
 
 static int32_t parse_dfx_ltran_set_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
@@ -1436,6 +1495,211 @@ static int32_t parse_dfx_lstack_args(int32_t argc, char *argv[], struct gazelle_
     return num_cmd;
 }
 
+
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+
+#define GAZELLE_SET_FAULT_INJECT_PARAM_COUNT    6
+#define GAZELLE_UNSET_FAULT_INJECT_PARAM_COUNT  4
+#define INJECT_TYPE_INDEX                       2
+#define INJECT_DIGITAL_FIRST_INDEX              3
+#define INJECT_DIGITAL_SECOND_INDEX             4
+#define INJECT_RULE_INDEX                       5
+
+
+static void gazelle_print_fault_inject_type_info(struct gazelle_fault_inject_data *inject)
+{
+    if (!inject->fault_inject_on) {
+        return;
+    }
+    
+    if (inject->inject_type == GAZELLE_FAULT_INJECT_PACKET_DELAY) {
+        printf("\t| inject_type: delay   | delay_time: %-7d | delay_range: %-3d             | "
+               "inject_rule: random |\n", inject->inject_data.delay.delay_time,
+               inject->inject_data.delay.delay_range);
+    }
+    
+#define INJECT_PERCENT                          100
+    
+    if (inject->inject_type == GAZELLE_FAULT_INJECT_PACKET_LOSS) {
+        printf("\t| inject_type: loss    | loss_rate: %-3.1f%%    | loss_single_count: %-3d       | "
+               "inject_rule: random |\n", inject->inject_data.loss.loss_rate * INJECT_PERCENT,
+               inject->inject_data.loss.loss_sigle_count);
+    }
+    printf("\n");
+}
+
+static void gazelle_print_fault_inject_set_status(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t ret;
+    struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
+    struct gazelle_fault_inject_data *inject = &stat->data.inject;
+
+    printf("\n\n\t\t\t\t\t **** FAULT INJECT INFO **** \n\n");
+    do {
+        gazelle_print_fault_inject_type_info(inject);
+        if (stat->eof != 0) {
+            break;
+        }
+        ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
+        if (ret != GAZELLE_OK) {
+            return;
+        }
+    } while (true);
+}
+
+static void gazelle_print_fault_inject_unset_status(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    return;
+}
+
+static int32_t parse_inject_packet_delay_digit(char* time, char* range, struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t parse_success = 0;
+    int32_t delay_time = atoi(time);
+    if (delay_time <= 0) {
+        printf("FAULT INJECT error: delay time error -- %d, need positive integer.\n", delay_time);
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.delay.delay_time = (uint32_t) delay_time;
+
+    int32_t delay_range = atoi(range);
+    if (delay_range < 0) {
+        printf("FAULT INJECT error: delay range error -- %d, need positive integer.\n", delay_range);
+        return parse_success;
+    }
+    if (delay_time - delay_range <= 0) {
+        printf("FAULT INJECT error: delay range should lower than delay time.\n");
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.delay.delay_range = delay_range;
+
+    return ++parse_success;
+}
+
+#define INJECT_RATE_LOWER                    0.001
+
+static int32_t parse_inject_packet_loss_digit(char *rate, char *count, struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t parse_success = 0;
+    double loss_rate = atof(rate);
+    if (loss_rate < INJECT_RATE_LOWER || loss_rate >= 1) {
+        printf("FAULT INJECT error: loss rate error, range in [0.001, 1), now is %f\n", loss_rate);
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.loss.loss_rate = loss_rate;
+
+    int32_t loss_counts = atoi(count);
+    if (loss_counts <= 0) {
+        printf("FAULT INJECT error: single loss counts wrong --%d, need positive integer.", loss_counts);
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.loss.loss_sigle_count = loss_counts;
+
+    return ++parse_success;
+}
+
+static int32_t parse_inject_packet_duplicate_digit(char *rate, char *count, struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t parse_success = 0;
+    double duplicate_rate = atof(rate);
+    if (duplicate_rate < INJECT_RATE_LOWER || duplicate_rate >= 1) {
+        printf("FAULT INJECT error: duplicate rate error, range in [0.001, 1), now is %f\n", duplicate_rate);
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.duplicate.duplicate_rate = duplicate_rate;
+
+    int32_t duplicate_counts = atoi(count);
+    if (duplicate_counts <= 0) {
+        printf("FAULT INJECT error: single duplicate counts wrong --%d, need positive integer.", duplicate_counts);
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.duplicate.duplicate_sigle_count = duplicate_counts;
+
+    return ++parse_success;
+}
+
+static int32_t parse_inject_packet_reorder_digit(char *rate, char *count, struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t parse_success = 0;
+    double reorder_rate = atof(rate);
+    if (reorder_rate < INJECT_RATE_LOWER || reorder_rate >= 1) {
+        printf("FAULT INJECT error: reorder rate error, range in [0.001, 1), now is %f\n", reorder_rate);
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.reorder.reorder_rate = reorder_rate;
+
+    int32_t reorder_counts = atoi(count);
+    if (reorder_counts <= 0) {
+        printf("FAULT INJECT error: single duplicate counts wrong --%d, need positive integer.", reorder_counts);
+        return parse_success;
+    }
+    req_msg->data.inject.inject_data.reorder.reorder_sigle_count = reorder_counts;
+
+    return ++parse_success;
+}
+
+static int32_t parse_fault_inject_digital_data(char *argv[], struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t parse_success = 0;
+    int32_t func_count = sizeof(inject_type_list) / sizeof(inject_type_list[0]);
+    for (int32_t i = 0; i < func_count; ++i) {
+        if (inject_type_list[i].inject_type_parsed == req_msg->data.inject.inject_type) {
+            parse_success = inject_type_list[i].parse_digit_func(argv[INJECT_DIGITAL_FIRST_INDEX],
+                                                                 argv[INJECT_DIGITAL_SECOND_INDEX], req_msg);
+            break;
+        }
+    }
+
+    return parse_success;
+}
+
+static int32_t parse_dfx_fault_inject_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t num_cmd = 0; /* while parse error, num_cmd will return as 0, or num_cmd should be returned as 1. */
+
+    req_msg->data.inject.fault_inject_on = 1; /* set fault inject on */
+
+    if (argc == GAZELLE_SET_FAULT_INJECT_PARAM_COUNT) {
+        req_msg->stat_mode = GAZELLE_STAT_FAULT_INJECT_SET;
+    } else if (argc == GAZELLE_UNSET_FAULT_INJECT_PARAM_COUNT) {
+        req_msg->stat_mode = GAZELLE_STAT_FAULT_INJECT_UNSET;
+    } else {
+        printf("FAULT_INJECT error: Count of params wrong , correct count is 6 or 4, now is %d\n", argc);
+        return num_cmd;
+    }
+
+    int32_t inject_type_count = sizeof(inject_type_list) / sizeof(inject_type_list[0]);
+    for (int32_t i = 0; i < inject_type_count; ++i) {
+        if (strcmp(inject_type_list[i].inject_type_item, argv[INJECT_TYPE_INDEX]) == 0) {
+            req_msg->data.inject.inject_type = inject_type_list[i].inject_type_parsed;
+            break;
+        }
+    }
+    if (req_msg->data.inject.inject_type == GAZELLE_FAULT_INJECT_TYPE_ERR) {
+        printf("FAULT_INJECT error: input inject type is wrong -- %s\n", argv[INJECT_TYPE_INDEX]);
+        return num_cmd;
+    }
+
+    int32_t inject_rule_count = sizeof(g_gazelle_fault_inject_rule_list) / sizeof(g_gazelle_fault_inject_rule_list[0]);
+    for (int32_t i = 0; i < inject_rule_count; ++i) {
+        if (strcmp(g_gazelle_fault_inject_rule_list[i].inject_rule_item, argv[INJECT_RULE_INDEX]) == 0 &&
+            g_gazelle_fault_inject_rule_list[i].rule_parse_assit == req_msg->data.inject.inject_type) {
+            req_msg->data.inject.inject_rule = g_gazelle_fault_inject_rule_list[i].inject_rule_parsed;
+            break;
+        }
+    }
+    if (req_msg->data.inject.inject_rule == INJECT_RULE_ERR) {
+        printf("FAULT_INJECT error: input inject rule is wrong -- %s\n", argv[INJECT_RULE_INDEX]);
+        return num_cmd;
+    }
+
+    num_cmd = parse_fault_inject_digital_data(argv, req_msg);
+    
+    return num_cmd;
+}
+
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+
 static int32_t parse_dfx_cmd_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
 {
     int32_t num_cmd = 0;
@@ -1451,7 +1715,11 @@ static int32_t parse_dfx_cmd_args(int32_t argc, char *argv[], struct gazelle_sta
     if (strcmp(param, "lstack") == 0) {
         num_cmd = parse_dfx_lstack_args(argc, argv, req_msg);
     }
-
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+    if (strcmp(param, "inject") == 0) {
+        num_cmd = parse_dfx_fault_inject_args(argc, argv, req_msg);
+    }
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
     return num_cmd;
 }
 

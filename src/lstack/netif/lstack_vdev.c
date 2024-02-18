@@ -150,7 +150,7 @@ static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pk
     return sent_pkts;
 }
 
-static uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
+uint32_t vdev_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
 {
     uint32_t sent_pkts = 0;
 

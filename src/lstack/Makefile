@@ -47,6 +47,11 @@ ifeq ($(GAZELLE_COVERAGE_ENABLE), 1)
 	CFLAGS += -fprofile-arcs -ftest-coverage
 endif
 
+ifeq ($(GAZELLE_FAULT_INJECT_ENABLE), 1)
+	LDFLAGS += -DGAZELLE_FAULT_INJECT_ENABLE
+	CFLAGS += -DGAZELLE_FAULT_INJECT_ENABLE
+endif
+
 ifeq ($(shell $(CC) -dumpmachine | cut -d"-" -f1), x86_64)
 	CFLAGS += -mssse3
 endif

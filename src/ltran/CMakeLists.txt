@@ -27,6 +27,11 @@ if($ENV{GAZELLE_COVERAGE_ENABLE})
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ftest-coverage -fprofile-arcs")
 endif($ENV{GAZELLE_COVERAGE_ENABLE})
 
+if($ENV{GAZELLE_FAULT_INJECT_ENABLE})
+        message("Enable Fault inject option")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DGAZELLE_FAULT_INJECT_ENABLE")
+endif($ENV{GAZELLE_FAULT_INJECT_ENABLE})
+
 execute_process(
     COMMAND rpm -qa dpdk
     OUTPUT_VARIABLE DPDK_VERSION_FULL
