@@ -291,6 +291,7 @@ static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struc
                 return PROGRAM_FAULT;
             }
         }
+        server_mud->workers->recv_bytes += server_mud->pktlen;
     } else {
         int32_t sermud_listener_accept_connects_ret = sermud_listener_accept_connects(curr_epev, server_mud);
         if (sermud_listener_accept_connects_ret < 0) {
@@ -354,6 +355,23 @@ void *sermud_worker_create_and_run(void *arg)
     return (void *)PROGRAM_OK;
 }
 
+void sermud_memory_recycle(struct ServerMud *server_mud)
+{
+    // recycle mem of epevs
+    if (server_mud->epevs) {
+        free(server_mud->epevs);
+    }
+    struct ServerMudWorker *head = server_mud->workers;
+    while (head) {
+        if (head->epevs) {
+            free(head->epevs);
+        }
+        struct ServerMudWorker *next = head->next;
+        free(head);
+        head = next;
+    }
+}
+
 // create the listener thread, unblock, dissymmetric server and run
 void *sermud_listener_create_and_run(void *arg)
 {
@@ -365,16 +383,19 @@ void *sermud_listener_create_and_run(void *arg)
             if (create_socket_and_listen(server_mud->listener.listen_fd_array, &server_mud->ip, &server_mud->groupip,
                                          htons(port), server_mud->protocol_type_mode) < 0) {
                 PRINT_ERROR("create_socket_and_listen err");
+                sermud_memory_recycle(server_mud);
                 exit(PROGRAM_FAULT);
             }
         }
     }
 
     if (sermud_listener_create_epfd_and_reg(server_mud) < 0) {
-       exit(PROGRAM_FAULT);
+        sermud_memory_recycle(server_mud);
+        exit(PROGRAM_FAULT);
     }
     while (true) {
         if (sermud_listener_proc_epevs(server_mud) < 0) {
+            sermud_memory_recycle(server_mud);
             exit(PROGRAM_FAULT);
         }
     }
@@ -383,10 +404,11 @@ void *sermud_listener_create_and_run(void *arg)
         if (server_mud->listener.listen_fd_array[i] == -1)
             continue;
         if (close(server_mud->listener.listen_fd_array[i]) < 0) {
+            sermud_memory_recycle(server_mud);
             exit(PROGRAM_FAULT);
         }
     }
-
+    sermud_memory_recycle(server_mud);
     return (void *)PROGRAM_OK;
 }
 
@@ -405,7 +427,16 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     for (int32_t i = 0; i < PROTOCOL_MODE_MAX; i++) {
         server_mud->listener.listen_fd_array[i] = -1;
     }
-    server_mud->workers = NULL;
+
+    struct ServerMudWorker *workers = (struct ServerMudWorker *)malloc(sizeof(struct ServerMudWorker));
+    if (workers == NULL) {
+        PRINT_ERROR("malloc truct ServerMudWorker failed ");
+        return PROGRAM_FAULT;
+    }
+    memset_s(workers, sizeof(struct ServerMudWorker), 0, sizeof(struct ServerMudWorker));
+    workers->next = NULL;
+    server_mud->workers = workers;
+
     server_mud->epfd = -1;
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
     server_mud->curr_connect = 0;
@@ -657,6 +688,7 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
                 return PROGRAM_ABORT;
             }
         }
+        server_unit->recv_bytes += server_unit->pktlen;
     } else {
         if (sersum_process_tcp_accept_event(server_unit, curr_epev) != PROGRAM_OK) {
             return PROGRAM_ABORT;
