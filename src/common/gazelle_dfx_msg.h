@@ -73,6 +73,8 @@ struct gazelle_stack_stat {
     uint64_t tx;
     uint64_t tx_prepare_fail;
     uint64_t accept_fail;
+    uint64_t sock_rx_drop;
+    uint64_t sock_tx_merge;
 };
 
 struct gazelle_wakeup_stat {
