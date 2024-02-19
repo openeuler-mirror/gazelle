@@ -22,6 +22,7 @@
 #include <lwip/posix_api.h>
 #include <lwip/api.h>
 #include <lwip/tcp.h>
+#include <lwip/prot/etharp.h>
 #include <securec.h>
 #include <rte_errno.h>
 #include <rte_malloc.h>
@@ -101,7 +102,6 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
     struct pbuf *pbuf = pbuf_alloced_custom(layer, length, type, pbuf_custom, data, MAX_PACKET_SZ);
     if (pbuf) {
         pbuf->allow_in = 1;
-        pbuf->last = pbuf;
         pbuf->addr = *IP_ANY_TYPE;
         pbuf->port = 0;
         pthread_spin_init(&pbuf->pbuf_lock, PTHREAD_PROCESS_SHARED);
@@ -122,7 +122,7 @@ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct lwip_so
         return false;
     }
 
-    if (dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, (struct rte_mbuf **)pbuf, replenish_cnt) != 0) {
+    if (dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, (struct rte_mbuf **)pbuf, replenish_cnt, true) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return true;
     }
@@ -209,10 +209,17 @@ void do_lwip_free_pbuf(struct pbuf *pbuf)
 
 struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type)
 {
+    int ret;
     struct rte_mbuf *mbuf;
     struct protocol_stack *stack = get_protocol_stack();
 
-    if (dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf, 1) != 0) {
+    /* ensure arp packet can be sent */
+    if (layer == PBUF_LINK && length == SIZEOF_ETHARP_HDR) {
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf, 1, false);
+    } else {
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf, 1, true);
+    }
+    if (ret != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return NULL;
     }

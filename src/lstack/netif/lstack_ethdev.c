@@ -543,9 +543,9 @@ void parse_arp_and_transefer(char* buf)
     int32_t ret;
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
         while (ret != 0) {
-            ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
+            ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
             stack->stats.rx_allocmbuf_fail++;
         }
         copy_mbuf(mbuf_copy, mbuf);
@@ -572,9 +572,9 @@ void parse_tcp_and_transefer(char* buf)
     struct rte_mbuf *mbuf_copy = NULL;
     struct protocol_stack *stack = stack_group->stacks[stk_index];
 
-    int32_t ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
+    int32_t ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
     while (ret != 0) {
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1);
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
         stack->stats.rx_allocmbuf_fail++;
     }
 
