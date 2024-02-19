@@ -20,7 +20,7 @@ static struct Client_domain_ip g_cfgmode_map[PROTOCOL_MODE_MAX] = {
     [V4_TCP] = {"tcp", AF_INET},
     [V6_TCP] = {"tcp", AF_INET6},
     [V4_UDP] = {"udp", AF_INET},
-    [V4_UDP] = {"udp", AF_INET6}};
+    [V6_UDP] = {"udp", AF_INET6}};
 
 // the single thread, client prints informations
 void client_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug)
