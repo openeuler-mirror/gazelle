@@ -15,6 +15,35 @@
 
 
 static pthread_mutex_t client_debug_mutex;      // the client mutex for printf
+struct Client *g_client_begin = NULL;
+
+static int32_t client_process_ask(struct ClientHandler *client_handler, struct ClientUnit *client_unit);
+
+static void timer_handle(int signum)
+{
+    if (g_client_begin == NULL) {
+        return;
+    }
+
+    struct ClientUnit *begin_client_unit = g_client_begin->uints;
+    while (begin_client_unit != NULL) {
+        if (begin_client_unit->domain != NULL && strcmp(begin_client_unit->domain, "udp") != 0) {
+            begin_client_unit = begin_client_unit->next;
+            continue;
+        }
+        for (int32_t i = 0; i < begin_client_unit->connect_num; i++) {
+            struct ClientHandler *handle = begin_client_unit->handlers + i;
+            if (handle->sendtime_interverl == TIME_SEND_INTERVAL) {
+                client_process_ask(handle, begin_client_unit);
+            } else {
+                handle->sendtime_interverl++;
+            }
+        }
+
+        begin_client_unit = begin_client_unit->next;
+    }
+    alarm(TIME_SCAN_INTERVAL);
+}
 
 static struct Client_domain_ip g_cfgmode_map[PROTOCOL_MODE_MAX] = {
     [V4_TCP] = {"tcp", AF_INET},
@@ -90,6 +119,31 @@ void client_info_print(struct Client *client)
     }
 }
 
+static int32_t client_process_ask(struct ClientHandler *client_handler, struct ClientUnit *client_unit)
+{
+    int32_t client_ask_ret = client_ask(client_handler, client_unit);
+    if (client_ask_ret == PROGRAM_FAULT) {
+        --client_unit->curr_connect;
+        struct epoll_event ep_ev;
+        if (client_handler->fd > 0 && epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, (client_handler)->fd, &ep_ev) < 0) {
+            PRINT_ERROR("client can't delete socket '%d' to control epoll %d! ", (client_handler)->fd, errno);
+            return PROGRAM_FAULT;
+        }
+    } else if (client_ask_ret == PROGRAM_ABORT) {
+        --client_unit->curr_connect;
+        if (close((client_handler)->fd) < 0) {
+            PRINT_ERROR("client can't close the socket! ");
+            return PROGRAM_FAULT;
+        }
+        client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
+    } else {
+        client_unit->send_bytes += client_unit->pktlen;
+        client_handler->sendtime_interverl = 0;
+        client_debug_print("client unit", "send", &client_unit->ip, client_unit->port, client_unit->debug);
+    }
+    return PROGRAM_OK;
+}
+
 // the single thread, client try to connect to server, register to epoll
 int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop)
 {
@@ -141,27 +195,7 @@ int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct Clien
 
     client_debug_print("client unit", "connect", &remote_ip, remote_port, client_unit->debug);
 
-    int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip:&client_unit->ip, client_unit->port);
-    if (client_ask_ret == PROGRAM_FAULT) {
-        --client_unit->curr_connect;
-        struct epoll_event ep_ev;
-        if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, client_handler->fd, &ep_ev) < 0) {
-            PRINT_ERROR("client can't delete socket '%d' to control epoll %d! ", client_handler->fd, errno);
-            return PROGRAM_FAULT;
-        }
-    } else if (client_ask_ret == PROGRAM_ABORT) {
-        --client_unit->curr_connect;
-        if (close(client_handler->fd) < 0) {
-            PRINT_ERROR("client can't close the socket %d! ", errno);
-            return PROGRAM_FAULT;
-        }
-        client_debug_print("client unit", "close", &remote_ip, remote_port, client_unit->debug);
-    } else {
-        client_unit->send_bytes += client_unit->pktlen;
-        client_debug_print("client unit", "send", &remote_ip, remote_port, client_unit->debug);
-    }
-
-    return PROGRAM_OK;
+    return client_process_ask(client_handler, client_unit);
 }
 
 // the single thread, client connects and gets epoll feature descriptors
@@ -200,24 +234,9 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
 
             client_debug_print("client unit", "connect", &client_unit->ip, client_unit->port, client_unit->debug);
 
-            int32_t client_ask_ret = client_ask(client_unit->handlers + i, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip:&client_unit->ip, client_unit->port);
-            if (client_ask_ret == PROGRAM_FAULT) {
-                --client_unit->curr_connect;
-                struct epoll_event ep_ev;
-                if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, (client_unit->handlers + i)->fd, &ep_ev) < 0) {
-                    PRINT_ERROR("client can't delete socket '%d' to control epoll %d! ", client_unit->epevs[i].data.fd, errno);
-                    return PROGRAM_FAULT;
-                }
-            } else if (client_ask_ret == PROGRAM_ABORT) {
-                --client_unit->curr_connect;
-                if (close((client_unit->handlers + i)->fd) < 0) {
-                    PRINT_ERROR("client can't close the socket! ");
-                    return PROGRAM_FAULT;
-                }
-                client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
-            } else {
-                client_unit->send_bytes += client_unit->pktlen;
-                client_debug_print("client unit", "send", &client_unit->ip, client_unit->port, client_unit->debug);
+            int32_t client_ask_ret = client_process_ask(client_unit->handlers + i, client_unit);
+            if (client_ask_ret != PROGRAM_OK) {
+                return client_ask_ret;
             }
         }
     }
@@ -225,14 +244,96 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
     return PROGRAM_OK;
 }
 
+
+static int32_t clithd_proc_epevs_epollout(struct epoll_event *curr_epev, struct ClientUnit *client_unit)
+{
+    int32_t connect_error = 0;
+    socklen_t connect_error_len = sizeof(connect_error);
+    struct ClientHandler *client_handler = (struct ClientHandler *)curr_epev->data.ptr;
+    if (getsockopt(client_handler->fd, SOL_SOCKET, SO_ERROR, (void *)(&connect_error), &connect_error_len) < 0) {
+        PRINT_ERROR("client can't get socket option %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+    if (connect_error < 0) {
+        if (connect_error == ETIMEDOUT) {
+            if (client_thread_retry_connect(client_unit, client_handler) < 0) {
+                return PROGRAM_FAULT;
+            }
+            return PROGRAM_OK;
+        }
+        PRINT_ERROR("client connect error %d! ", connect_error);
+        return PROGRAM_FAULT;
+    } else {
+        ++(client_unit->curr_connect);
+
+        sockaddr_t server_addr;
+        socklen_t server_addr_len =
+            client_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+        if (getpeername(client_handler->fd, (struct sockaddr *)&server_addr, &server_addr_len) < 0) {
+            PRINT_ERROR("client can't socket peername %d! ", errno);
+            return PROGRAM_FAULT;
+        }
+
+        // sockaddr to ip, port
+        ip_addr_t remote_ip;
+        uint16_t remote_port = ((struct sockaddr_in *)&server_addr)->sin_port;
+        if (((struct sockaddr *)&server_addr)->sa_family == AF_INET) {
+            remote_ip.addr_family = AF_INET;
+            remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&server_addr)->sin_addr;
+        } else if (((struct sockaddr *)&server_addr)->sa_family == AF_INET6) {
+            remote_ip.addr_family = AF_INET6;
+            remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&server_addr)->sin6_addr;
+        }
+
+        client_debug_print("client unit", "connect", &remote_ip, remote_port, client_unit->debug);
+
+        int32_t client_ask_ret = client_process_ask(client_handler, client_unit);
+        if (client_ask_ret != PROGRAM_OK) {
+            return client_ask_ret;
+        }
+    }
+    return PROGRAM_OK;
+}
+
+static int32_t clithd_proc_epevs_epollin(struct epoll_event *curr_epev, struct ClientUnit *client_unit)
+{
+    ip_addr_t *chkans_ip = client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip : &client_unit->ip;
+    int32_t client_chkans_ret = client_chkans((struct ClientHandler *)curr_epev->data.ptr, client_unit->pktlen,
+                                              client_unit->verify, client_unit->api, client_unit->domain, chkans_ip);
+    struct ClientHandler *client_handler = (struct ClientHandler *)curr_epev->data.ptr;
+    int32_t fd = client_handler->fd;
+    if (client_chkans_ret == PROGRAM_FAULT) {
+        --client_unit->curr_connect;
+        struct epoll_event ep_ev;
+        if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, fd, &ep_ev) < 0) {
+            PRINT_ERROR("client can't delete socket '%d' to control epoll %d! ", fd, errno);
+            return PROGRAM_FAULT;
+        }
+    } else if (client_chkans_ret == PROGRAM_ABORT) {
+        --client_unit->curr_connect;
+        if (close(fd) < 0) {
+            PRINT_ERROR("client can't close the socket %d! ", errno);
+            return PROGRAM_FAULT;
+        }
+        client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
+    } else {
+        client_unit->send_bytes += client_unit->pktlen;
+        client_handler->sendtime_interverl = 0;
+        client_debug_print("client unit", "receive", &client_unit->ip, client_unit->port, client_unit->debug);
+    }
+    return PROGRAM_OK;
+}
+
 // the single thread, client processes epoll events
 int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
 {
     int32_t epoll_nfds = epoll_wait(client_unit->epfd, client_unit->epevs, CLIENT_EPOLL_SIZE_MAX, CLIENT_EPOLL_WAIT_TIMEOUT);
+    int ret = 0;
     if (epoll_nfds < 0) {
         PRINT_ERROR("client epoll wait error %d! ", errno);
         return PROGRAM_FAULT;
     }
+
 
     for (int32_t i = 0; i < epoll_nfds; ++i) {
         struct epoll_event *curr_epev = client_unit->epevs + i;
@@ -241,89 +342,17 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
             PRINT_ERROR("client epoll wait error! %d", curr_epev->events);
             return PROGRAM_FAULT;
         } else if (curr_epev->events == EPOLLOUT) {
-            int32_t connect_error = 0;
-            socklen_t connect_error_len = sizeof(connect_error);
-            struct ClientHandler *client_handler = (struct ClientHandler *)curr_epev->data.ptr;
-            if (getsockopt(client_handler->fd, SOL_SOCKET, SO_ERROR, (void *)(&connect_error), &connect_error_len) < 0) {
-                PRINT_ERROR("client can't get socket option %d! ", errno);
-                return PROGRAM_FAULT;
-            }
-            if (connect_error < 0) {
-                if (connect_error == ETIMEDOUT) {
-                    if (client_thread_retry_connect(client_unit, client_handler) < 0) {
-                        return PROGRAM_FAULT;
-                    }
-                    continue;
-                }
-                PRINT_ERROR("client connect error %d! ", connect_error);
-                return PROGRAM_FAULT;
-            } else {
-                ++(client_unit->curr_connect);
-
-                sockaddr_t server_addr;
-                socklen_t server_addr_len = client_unit->ip.addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-                if (getpeername(client_handler->fd, (struct sockaddr *)&server_addr, &server_addr_len) < 0) {
-                    PRINT_ERROR("client can't socket peername %d! ", errno);
-                    return PROGRAM_FAULT;
-                }
-
-                // sockaddr to ip, port
-                ip_addr_t remote_ip;
-                uint16_t remote_port = ((struct sockaddr_in*)&server_addr)->sin_port;
-                if (((struct sockaddr *)&server_addr)->sa_family == AF_INET) {
-                    remote_ip.addr_family = AF_INET;
-                    remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&server_addr)->sin_addr;
-                } else if (((struct sockaddr *)&server_addr)->sa_family == AF_INET6) {
-                    remote_ip.addr_family = AF_INET6;
-                    remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&server_addr)->sin6_addr;
-                }
-
-                client_debug_print("client unit", "connect", &remote_ip, remote_port, client_unit->debug);
-                
-                int32_t client_ask_ret = client_ask(client_handler, client_unit->pktlen, client_unit->api, client_unit->domain, client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip:&client_unit->ip, client_unit->port);
-                if (client_ask_ret == PROGRAM_FAULT) {
-                    --client_unit->curr_connect;
-                    struct epoll_event ep_ev;
-                    if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, curr_epev->data.fd, &ep_ev) < 0) {
-                        PRINT_ERROR("client can't delete socket '%d' to control epoll %d! ", curr_epev->data.fd, errno);
-                        return PROGRAM_FAULT;
-                    }
-                } else if (client_ask_ret == PROGRAM_ABORT) {
-                    --client_unit->curr_connect;
-                    if (close(client_handler->fd) < 0) {
-                        PRINT_ERROR("client can't close the socket! ");
-                        return PROGRAM_FAULT;
-                    }
-                    client_debug_print("client unit", "close", &remote_ip, remote_port, client_unit->debug);
-                } else {
-                    client_unit->send_bytes += client_unit->pktlen;
-                    client_debug_print("client unit", "send", &remote_ip, remote_port, client_unit->debug);
-                }
+            ret = clithd_proc_epevs_epollout(curr_epev, client_unit);
+            if (ret != PROGRAM_OK) {
+                return ret;
             }
         } else if (curr_epev->events == EPOLLIN) {
-            ip_addr_t *chkans_ip = client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip : &client_unit->ip;
-            int32_t client_chkans_ret = client_chkans((struct ClientHandler *)curr_epev->data.ptr, client_unit->pktlen, client_unit->verify, client_unit->api, client_unit->domain, chkans_ip);
-            if (client_chkans_ret == PROGRAM_FAULT) {
-                --client_unit->curr_connect;
-                struct epoll_event ep_ev;
-                if (epoll_ctl(client_unit->epfd, EPOLL_CTL_DEL, ((struct ClientHandler *)curr_epev->data.ptr)->fd, &ep_ev) < 0) {
-                    PRINT_ERROR("client can't delete socket '%d' to control epoll %d! ", curr_epev->data.fd, errno);
-                    return PROGRAM_FAULT;
-                }
-            } else if (client_chkans_ret == PROGRAM_ABORT) {
-                --client_unit->curr_connect;
-                if (close(((struct ClientHandler *)curr_epev->data.ptr)->fd) < 0) {
-                    PRINT_ERROR("client can't close the socket %d! ", errno);
-                    return PROGRAM_FAULT;
-                }
-                client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
-            } else {
-                client_unit->send_bytes += client_unit->pktlen;
-                client_debug_print("client unit", "receive", &client_unit->ip, client_unit->port, client_unit->debug);
+            ret = clithd_proc_epevs_epollin(curr_epev, client_unit);
+            if (ret != PROGRAM_OK) {
+                return ret;
             }
         }
     }
-
     return PROGRAM_OK;
 }
 
@@ -377,6 +406,15 @@ static void client_get_domain_ipversion(uint8_t protocol_type, struct ClientUnit
     client_unit->ip.addr_family = g_cfgmode_map[protocol_type].ip_family;
 }
 
+static void alarm_init()
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = &timer_handle;
+    sigaction(SIGALRM, &sa, NULL);
+    alarm(TIME_SCAN_INTERVAL);
+}
+
 // create client and run
 int32_t client_create_and_run(struct ProgramParams *params)
 {
@@ -384,6 +422,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
     const uint32_t thread_num = params->thread_num;
     pthread_t *tids = (pthread_t *)malloc(thread_num * sizeof(pthread_t));
     struct Client *client = (struct Client *)malloc(sizeof(struct Client));
+    g_client_begin = client;
     struct ClientUnit *client_unit = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
     memset_s(client_unit, sizeof(struct ClientUnit), 0, sizeof(struct ClientUnit));
     int32_t protocol_support_array[PROTOCOL_MODE_MAX] = {0};
@@ -404,6 +443,8 @@ int32_t client_create_and_run(struct ProgramParams *params)
     uint32_t sport = 0;
     uint32_t sp = 0;
 
+    alarm_init();
+
     for (uint32_t i = 0; i < thread_num; ++i) {
         client_unit->handlers = (struct ClientHandler *)malloc(connect_num * sizeof(struct ClientHandler));
         for (uint32_t j = 0; j < connect_num; ++j) {
@@ -416,7 +457,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->send_bytes = 0;
         client_unit->ip.addr_family = params->addr_family;
         inet_pton(AF_INET, params->ip, &client_unit->ip.u_addr.ip4);
-        inet_pton(AF_INET6, params->ip, &client_unit->ip.u_addr.ip6);
+        inet_pton(AF_INET6, params->ipv6, &client_unit->ip.u_addr.ip6);
         client_unit->groupip.addr_family = params->addr_family;
         inet_pton(params->addr_family, params->groupip, &client_unit->groupip.u_addr);
 
