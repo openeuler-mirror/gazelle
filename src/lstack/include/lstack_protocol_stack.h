@@ -21,7 +21,7 @@
 #include <lwip/netif.h>
 
 #include "gazelle_dfx_msg.h"
-#include "lstack_lockless_queue.h"
+#include "lstack_thread_rpc.h"
 #include "lstack_ethdev.h"
 #include "gazelle_opt.h"
 
@@ -59,13 +59,15 @@ struct protocol_stack {
     volatile bool low_power;
     bool is_send_thread;
 
-    lockless_queue rpc_queue __rte_cache_aligned;
-    char pad __rte_cache_aligned;
+    char pad1 __rte_cache_aligned;
+    rpc_queue dfx_rpc_queue;
+    rpc_queue rpc_queue;
+    char pad2 __rte_cache_aligned;
 
     /* kernel event thread read/write frequently */
     struct epoll_event kernel_events[KERNEL_EPOLL_MAX];
     int32_t kernel_event_num;
-    char pad1 __rte_cache_aligned;
+    char pad3 __rte_cache_aligned;
 
     struct netif netif;
     struct lstack_dev_ops dev_ops;
@@ -149,36 +151,10 @@ void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup);
 
 void stack_send_pkts(struct protocol_stack *stack);
 
-struct rpc_msg;
 struct thread_params {
     uint16_t queue_id;
     uint16_t idx;
 };
-void stack_clean_epoll(struct rpc_msg *msg);
-void stack_arp(struct rpc_msg *msg);
-void stack_socket(struct rpc_msg *msg);
-void stack_close(struct rpc_msg *msg);
-void stack_shutdown(struct rpc_msg *msg);
-void stack_bind(struct rpc_msg *msg);
-void stack_listen(struct rpc_msg *msg);
-void stack_accept(struct rpc_msg *msg);
-void stack_connect(struct rpc_msg *msg);
-void stack_recv(struct rpc_msg *msg);
-void stack_getpeername(struct rpc_msg *msg);
-void stack_getsockname(struct rpc_msg *msg);
-void stack_getsockopt(struct rpc_msg *msg);
-void stack_setsockopt(struct rpc_msg *msg);
-void stack_fcntl(struct rpc_msg *msg);
-void stack_ioctl(struct rpc_msg *msg);
-void stack_send(struct rpc_msg *msg);
-void stack_mempool_size(struct rpc_msg *msg);
-void stack_rpcpool_size(struct rpc_msg *msg);
-void stack_create_shadow_fd(struct rpc_msg *msg);
-void stack_replenish_sendring(struct rpc_msg *msg);
-void stack_get_conntable(struct rpc_msg *msg);
-void stack_get_connnum(struct rpc_msg *msg);
-void stack_recvlist_count(struct rpc_msg *msg);
-void stack_exit_by_rpc(struct rpc_msg *msg);
 
 int stack_polling(uint32_t wakeup_tick);
 #endif

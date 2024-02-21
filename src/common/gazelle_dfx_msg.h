@@ -101,7 +101,6 @@ struct gazelle_stack_aggregate_stats {
 struct gazelle_stat_pkts {
     uint16_t conn_num;
     uint32_t mbufpool_avail_cnt;
-    uint32_t rpcpool_avail_cnt;
     uint64_t call_msg_cnt;
     uint64_t recv_list_cnt;
     uint64_t call_alloc_fail;

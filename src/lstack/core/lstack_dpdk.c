@@ -45,7 +45,6 @@
 
 #include "lstack_log.h"
 #include "dpdk_common.h"
-#include "lstack_lockless_queue.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_lwip.h"
@@ -258,7 +257,8 @@ struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t si
 
 int32_t create_shared_ring(struct protocol_stack *stack)
 {
-    lockless_queue_init(&stack->rpc_queue);
+    rpc_queue_init(&stack->rpc_queue);
+    rpc_queue_init(&stack->dfx_rpc_queue);
 
     if (use_ltran()) {
         stack->rx_ring = gazelle_ring_create_fast("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);

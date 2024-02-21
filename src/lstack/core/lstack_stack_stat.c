@@ -175,19 +175,16 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
 
     get_wakeup_stat(stack_group, stack, &dfx->data.pkts.wakeup_stat);
 
-    dfx->data.pkts.call_alloc_fail = stack_group->call_alloc_fail;
+    dfx->data.pkts.call_alloc_fail = rpc_stats_get()->call_alloc_fail;
 
-    int32_t rpc_call_result = rpc_call_msgcnt(stack);
+    int32_t rpc_call_result = rpc_msgcnt(&stack->rpc_queue);
     dfx->data.pkts.call_msg_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
-    rpc_call_result = rpc_call_mbufpoolsize(stack);
+    rpc_call_result = rpc_call_mbufpoolsize(&stack->dfx_rpc_queue);
     dfx->data.pkts.mbufpool_avail_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
-    rpc_call_result = rpc_call_recvlistcnt(stack);
+    rpc_call_result = rpc_call_recvlistcnt(&stack->dfx_rpc_queue);
     dfx->data.pkts.recv_list_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
-
-    rpc_call_result = rpc_call_rpcpool_size(stack);
-    dfx->data.pkts.rpcpool_avail_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
 
     dfx->data.pkts.conn_num = stack->conn_num;
 }
@@ -219,9 +216,10 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             }
             break;
         case GAZELLE_STAT_LSTACK_SHOW_CONN:
-            rpc_call_result = rpc_call_conntable(stack, dfx->data.conn.conn_list, GAZELLE_LSTACK_MAX_CONN);
+            rpc_call_result = rpc_call_conntable(&stack->dfx_rpc_queue, dfx->data.conn.conn_list,
+                                                 GAZELLE_LSTACK_MAX_CONN);
             dfx->data.conn.conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
-            rpc_call_result = rpc_call_connnum(stack);
+            rpc_call_result = rpc_call_connnum(&stack->dfx_rpc_queue);
             dfx->data.conn.total_conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
             break;
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
@@ -296,7 +294,7 @@ int handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode)
         }
 
         dfx.tid = stack->tid;
-	dfx.stack_id = i;
+        dfx.stack_id = i;
         if (i == stack_group->stack_num - 1) {
             dfx.eof = 1;
         }
