@@ -454,14 +454,12 @@ int stack_polling(uint32_t wakeup_tick)
 {
     int force_quit;
     struct cfg_params *cfg = get_global_cfg_params();
-    uint8_t use_ltran_flag = cfg->use_ltran;
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     bool kni_switch = cfg->kni_switch;
 #endif
     bool use_sockmap = cfg->use_sockmap;
     bool stack_mode_rtc = cfg->stack_mode_rtc;
     uint32_t rpc_number = cfg->rpc_number;
-    uint32_t nic_read_number = cfg->nic_read_number;
     uint32_t read_connect_number = cfg->read_connect_number;
     struct protocol_stack *stack = get_protocol_stack();
 
@@ -469,7 +467,7 @@ int stack_polling(uint32_t wakeup_tick)
     rpc_poll_msg(&stack->dfx_rpc_queue, 2);
     force_quit = rpc_poll_msg(&stack->rpc_queue, rpc_number);
 
-    gazelle_eth_dev_poll(stack, use_ltran_flag, nic_read_number);
+    eth_dev_poll();
     sys_timer_run();
     if (cfg->low_power_mod != 0) {
         low_power_idling(stack);
@@ -525,10 +523,6 @@ static void* gazelle_stack_thread(void *arg)
     }
     sem_post(&g_stack_group.sem_stack_setup);
 
-    if (!use_ltran() && queue_id == 0) {
-        init_listen_and_user_ports();
-    }
-
     LSTACK_LOG(INFO, LSTACK, "stack_%02hu init success\n", queue_id);
     if (get_global_cfg_params()->stack_mode_rtc) {
         return NULL;
@@ -543,12 +537,6 @@ static void* gazelle_stack_thread(void *arg)
     stack_set_state(stack, WAIT);
 
     return NULL;
-}
-
-static void gazelle_listen_thread(void *arg)
-{
-    struct cfg_params *cfg_param = get_global_cfg_params();
-    recv_pkts_from_other_process(cfg_param->process_idx, arg);
 }
 
 int32_t stack_group_init_mempool(void)
@@ -609,17 +597,6 @@ int32_t stack_group_init(void)
             LSTACK_LOG(ERR, LSTACK, "stack group init mempool failed\n");
             return -1;
         }
-    }
-
-    /* run to completion mode does not currently support multiple process */
-    if (!use_ltran() && !get_global_cfg_params()->stack_mode_rtc) {
-        char name[PATH_MAX];
-        sem_init(&stack_group->sem_listen_thread, 0, 0);
-        sprintf_s(name, sizeof(name), "%s", "listen_thread");
-        struct sys_thread *thread = sys_thread_new(name, gazelle_listen_thread,
-            (void*)(&stack_group->sem_listen_thread), 0, 0);
-        free(thread);
-        sem_wait(&stack_group->sem_listen_thread);
     }
 
     return 0;

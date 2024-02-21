@@ -48,6 +48,7 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_preload.h"
 #include "lstack_wrap.h"
+#include "lstack_flow.h"
 
 static void check_process_start(void)
 {

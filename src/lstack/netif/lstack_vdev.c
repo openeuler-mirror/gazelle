@@ -33,6 +33,7 @@
 #include "lstack_protocol_stack.h"
 #include "gazelle_reg_msg.h"
 #include "lstack_lwip.h"
+#include "lstack_flow.h"
 #include "lstack_vdev.h"
 
 /* INUSE_TX_PKTS_WATERMARK < VDEV_RX_QUEUE_SZ;
