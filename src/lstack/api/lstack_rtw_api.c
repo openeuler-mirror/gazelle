@@ -127,12 +127,7 @@ ssize_t rtw_readv(int s, const struct iovec *iov, int iovcnt)
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
     msg.msg_flags = 0;
-    ssize_t result = do_lwip_recvmsg_from_stack(s, &msg, 0);
-    if (result == -1 && errno == EAGAIN) {
-        errno = 0;
-        return 0;
-    }
-    return result;
+    return do_lwip_recvmsg_from_stack(s, &msg, 0);
 }
 
 ssize_t rtw_write(int s, const void *mem, size_t size)
