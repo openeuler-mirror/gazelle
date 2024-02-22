@@ -889,6 +889,10 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 
         pre_mbuf = mbuf;
         rte_mbuf_refcnt_update(mbuf, 1);
+
+        if (get_protocol_stack_group()->latency_start) {
+            calculate_lstack_latency(&stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LSTACK);
+        }
         pbuf = pbuf->next;
     }
 

@@ -24,6 +24,10 @@
 /* maybe it should be consistent with MEMP_NUM_TCP_PCB */
 #define GAZELLE_LSTACK_MAX_CONN          (20000 + 2000) // same as MAX_CLIENTS + RESERVED_CLIENTS in lwipopts.h
 
+#define GAZELLE_RESULT_LEN               4096
+#define GAZELLE_MAX_LATENCY_TIME         1800 // max latency time 30mins
+#define GAZELLE_RESULT_LINE_LEN          80   // for a single row, the max len of result is 80
+
 enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LTRAN_SHOW = 0,
     GAZELLE_STAT_LTRAN_SHOW_RATE,
@@ -54,8 +58,11 @@ enum GAZELLE_STAT_MODE {
 };
 
 enum GAZELLE_LATENCY_TYPE {
-    GAZELLE_LATENCY_LWIP,
-    GAZELLE_LATENCY_READ,
+    GAZELLE_LATENCY_READ_LWIP,
+    GAZELLE_LATENCY_READ_LSTACK,
+    GAZELLE_LATENCY_WRITE_LWIP,
+    GAZELLE_LATENCY_WRITE_LSTACK,
+    GAZELLE_LATENCY_MAX,
 };
 
 struct gazelle_stack_stat {
@@ -217,9 +224,14 @@ struct stack_latency {
     uint64_t latency_total;
 };
 
+struct gazelle_latency_result {
+    int latency_stat_index;
+    struct stack_latency latency_stat_record;
+    char latency_stat_result[GAZELLE_RESULT_LEN];
+};
+
 struct gazelle_stack_latency {
-    struct stack_latency read_latency;
-    struct stack_latency lwip_latency;
+    struct stack_latency latency[GAZELLE_LATENCY_MAX];
     uint64_t start_time;
     uint64_t g_cycles_per_us;
 };

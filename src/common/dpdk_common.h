@@ -95,6 +95,16 @@ static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct r
     }
 }
 
+static __rte_always_inline void time_stamp_into_pbuf(uint32_t tx_count, struct pbuf *buf[], uint64_t time_stamp)
+{
+    struct latency_timestamp *lt;
+    for (uint32_t i = 0; i < tx_count; i++) {
+        lt = &pbuf_to_private(buf[i])->lt;
+        lt->stamp = time_stamp;
+        lt->check = ~(time_stamp);
+    }
+}
+
 bool get_kni_started(void);
 struct rte_kni* get_gazelle_kni(void);
 int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool);
