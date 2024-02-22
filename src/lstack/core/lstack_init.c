@@ -109,12 +109,11 @@ static int32_t check_process_conflict(void)
 
 void gazelle_exit(void)
 {
-    if (!get_global_cfg_params()->stack_mode_rtc) {
-        wrap_api_set_dummy();
-        /* 1: wait until app thread call send functio complete */
-        sleep(1);
-        stack_group_exit();
-    }
+    wrap_api_set_dummy();
+    /* 1: wait until app thread call send functio complete */
+    sleep(1);
+    stack_group_exit();
+
     if (!use_ltran()) {
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
         dpdk_kni_release();

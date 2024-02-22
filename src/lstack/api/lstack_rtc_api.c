@@ -45,7 +45,7 @@ int rtc_socket(int domain, int type, int protocol)
     int ret;
 
     if (stack_setup_app_thread() < 0) {
-        LSTACK_EXIT(1, "stack_setup_app_thread failed!\n");
+        exit(1);
     }
     
     /* need call stack thread init function */
@@ -74,7 +74,7 @@ int rtc_shutdown(int fd, int how)
 int rtc_epoll_create(int flags)
 {
     if (stack_setup_app_thread() < 0) {
-        LSTACK_EXIT(1, "stack_setup_app_thread failed!\n");
+        exit(1);
     }
 
     return lstack_epoll_create(flags);
@@ -83,7 +83,7 @@ int rtc_epoll_create(int flags)
 int rtc_epoll_create1(int flags)
 {
     if (stack_setup_app_thread() < 0) {
-        LSTACK_EXIT(1, "stack_setup_app_thread failed!\n");
+        exit(1);
     }
 
     return lstack_epoll_create1(flags);
