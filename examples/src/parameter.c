@@ -684,6 +684,9 @@ void program_params_print(struct ProgramParams *params)
         }
     } else {
         printf("--> [server ip]:                %s \n", params->ip);
+        if (strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0) {
+            printf("--> [server ipv6]:              %s \n", params->ipv6);
+        }
     }
 
     printf("--> [server port]:              ");

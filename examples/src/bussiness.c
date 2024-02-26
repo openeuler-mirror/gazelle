@@ -276,9 +276,15 @@ int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* dom
 }
 
 // client asks
-int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api, const char* domain, ip_addr_t *ip, uint16_t port)
+int32_t client_ask(struct ClientHandler *client_handler, struct ClientUnit *client_unit)
 {
-    const uint32_t length = pktlen;
+    const char *api = client_unit->api;
+    const char *domain = client_unit->domain;
+
+    ip_addr_t *ip = client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip : &client_unit->ip;
+    uint16_t port = client_unit->port;
+
+    const uint32_t length = client_unit->pktlen;
     char *buffer_in = (char *)malloc(length * sizeof(char));
     char *buffer_out = (char *)malloc(length * sizeof(char));
     sockaddr_t server_addr;

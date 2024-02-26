@@ -41,6 +41,7 @@ struct ClientHandler
 {
     int32_t fd;                 ///< socket file descriptor
     uint32_t msg_idx;           ///< the start charactors index of message
+    int32_t sendtime_interverl; ///< udp send packet interverl
 };
 
 
@@ -103,14 +104,10 @@ int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* dom
  * @brief client asks server
  * This function asks server.
  * @param client_handler    client handler
- * @param pktlen            the length of package
- * @param api               the api
- * @param domain            the domain
- * @param ip                the ip address of peer
+ * @param client_unit       ClientUnit
  * @return                  the result
  */
-int32_t client_ask(struct ClientHandler *client_handler, uint32_t pktlen, const char* api, const char* domain, ip_addr_t* ip, uint16_t port);
-
+int32_t client_ask(struct ClientHandler *client_handler, struct ClientUnit *client_unit);
 /**
  * @brief client checks the information and answers
  * This function checks the information and answers.
