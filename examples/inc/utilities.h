@@ -78,7 +78,7 @@
                                             } while(0)
 #define PRINT_CLIENT_DATAFLOW(format, ...)  do \
                                             { \
-                                                printf("\033[?25l\033[A\033[K"); \
+                                                printf(" "); \
                                                 printf("--> <client>: "); \
                                                 printf(format, ##__VA_ARGS__); \
                                                 printf("\033[?25h\n"); \
@@ -109,6 +109,22 @@
 
 #define SOCKET_UNIX_DOMAIN_FILE             "unix_domain_file"  ///< socket unix domain file
 
+#define IPV4_STR "V4"
+#define IPV6_STR "V6"
+#define INVAILD_STR "STR_NULL"
+
+#define TIMES_CONVERSION_RATE (1000)
+#define KB (1024)
+#define MB (KB * KB)
+#define GB (MB * MB)
+
+struct ThreadUintInfo {
+    uint64_t send_bytes;                ///< total send bytes
+    uint32_t cur_connect_num;           ///< total connection number
+    char* domain;
+    char* ipversion;
+    pthread_t thread_id;
+};
 
 typedef struct ip_addr {
     struct {
@@ -133,7 +149,6 @@ struct ClientUnit {
     int32_t epfd;                       ///< the connect epoll file descriptor
     struct epoll_event *epevs;          ///< the epoll events
     uint32_t curr_connect;              ///< current connection number
-    uint64_t send_bytes;                ///< total send bytes
     ip_addr_t ip;                       ///< server ip
     ip_addr_t groupip;                  ///< server groupip
     uint32_t port;                      ///< server port
@@ -147,6 +162,7 @@ struct ClientUnit {
     bool debug;                         ///< if we print the debug information
     char* epollcreate;                  ///< epoll_create method
     uint8_t protocol_type_mode;         ///< tcp/udp ipv4/ipv6 protocol mode
+    struct ThreadUintInfo threadVolume;
     struct ClientUnit *next;            ///< next pointer
 };
 
