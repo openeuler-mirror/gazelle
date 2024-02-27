@@ -36,6 +36,27 @@ static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct 
     return msg;
 }
 
+static void rpc_msg_init(struct rpc_msg *msg, rpc_msg_func func, struct rpc_msg_pool *pool)
+{
+    msg->rpcpool = pool;
+    pthread_spin_init(&msg->lock, PTHREAD_PROCESS_PRIVATE);
+    msg->func = func;
+    msg->sync_flag = 1;
+    msg->recall_flag = 0;
+}
+
+static struct rpc_msg *rpc_msg_alloc_except(rpc_msg_func func)
+{
+    struct rpc_msg *msg = calloc(1, sizeof(struct rpc_msg));
+    if (msg == NULL) {
+        return NULL;
+    }
+
+    rpc_msg_init(msg, func, NULL);
+
+    return msg;
+}
+
 static struct rpc_msg *rpc_msg_alloc(rpc_msg_func func)
 {
     struct rpc_msg *msg = NULL;
@@ -45,14 +66,15 @@ static struct rpc_msg *rpc_msg_alloc(rpc_msg_func func)
         if (g_rpc_pool == NULL) {
             LSTACK_LOG(INFO, LSTACK, "g_rpc_pool calloc failed\n");
             g_rpc_stats.call_alloc_fail++;
-            return NULL;
+            exit(-1);
         }
 
         g_rpc_pool->mempool = create_mempool("rpc_pool", RPC_MSG_MAX, sizeof(struct rpc_msg),
             0, rte_gettid());
         if (g_rpc_pool->mempool == NULL) {
+            LSTACK_LOG(INFO, LSTACK, "rpc_pool create failed, errno is %d\n", errno);
             g_rpc_stats.call_alloc_fail++;
-            return NULL;
+            exit(-1);
         }
     }
 
@@ -61,12 +83,8 @@ static struct rpc_msg *rpc_msg_alloc(rpc_msg_func func)
         g_rpc_stats.call_alloc_fail++;
         return NULL;
     }
-    msg->rpcpool = g_rpc_pool;
+    rpc_msg_init(msg, func, g_rpc_pool);
 
-    pthread_spin_init(&msg->lock, PTHREAD_PROCESS_PRIVATE);
-    msg->func = func;
-    msg->sync_flag = 1;
-    msg->recall_flag = 0;
     return msg;
 }
 
@@ -247,7 +265,7 @@ int32_t rpc_call_close(rpc_queue *queue, int fd)
 
 int32_t rpc_call_stack_exit(rpc_queue *queue)
 {
-    struct rpc_msg *msg = rpc_msg_alloc(stack_exit_by_rpc);
+    struct rpc_msg *msg = rpc_msg_alloc_except(stack_exit_by_rpc);
     if (msg == NULL) {
         return -1;
     }
