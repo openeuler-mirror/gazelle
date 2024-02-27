@@ -8,5 +8,5 @@
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-SRC = lstack_ethdev.c lstack_vdev.c
+SRC = lstack_ethdev.c lstack_vdev.c lstack_flow.c
 $(eval $(call register_dir, netif, $(SRC)))
