@@ -116,7 +116,7 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |host_addr|"192.168.xx.xx"|协议栈的IP地址，必须和redis-server配置<br>文件里的“bind”字段保存一致。|
 |mask_addr|"255.255.xx.xx"|掩码地址|
 |gateway_addr|"192.168.xx.1"|网关地址|
-|devices|"aa:bb:cc:dd:ee:ff"|网卡通信的mac地址，需要与ltran.conf的bond_macs配置一致|
+|devices|"aa:bb:cc:dd:ee:ff"|网卡通信的mac地址，需要与ltran.conf的bond_macs配置一致；在lstack bond1模式下，可指定bond1的主接口，取值为bond_slave_mac之一|
 |send_connect_number|4|设置为正整数，表示每次协议栈循环中发包处理的连接个数|
 |read_connect_number|4|设置为正整数，表示每次协议栈循环中收包处理的连接个数|
 |rpc_number|4|设置为正整数，表示每次协议栈循环中rpc消息处理的个数|
@@ -126,6 +126,9 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |nic_rxqueue_size|4096|网卡接收队列深度，范围512-8192，缺省值是4096|
 |nic_txqueue_size|2048|网卡发送队列深度，范围512-8192，缺省值是2048|
 |nic_vlan_mode|-1|vlan模式开关，变量值为vlanid，取值范围-1~4094，-1关闭，缺省值是-1|
+|bond_mode|n|bond模式，目前支持ACTIVE_BACKUP/8023AD/ALB三种模式，对应的取值是1/4/6；当取值为-1或者NULL时，表示未配置bond|
+|bond_slave_mac|"aa:bb:cc:dd:ee:ff;dd:aa:cc:dd:ee:ff"|用于组bond的两个子口的mac地址|
+|bond_miimon|n|链路监控时间，单位为ms，取值范围为1到2^31 - 1，缺省值为10ms|
 
 lstack.conf示例：
 ``` conf
