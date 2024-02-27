@@ -101,6 +101,8 @@ static void gazelle_print_fault_inject_unset_status(void *buf, const struct gaze
 #endif /* GAZELLE_FAULT_INJECT_ENABLE */
 
 static bool g_use_ltran = false;
+static char g_ltran_unix_path[PATH_MAX];
+static char g_lstack_unix_path[PATH_MAX];
 
 static char* g_unix_prefix;
 
@@ -268,7 +270,55 @@ static void gazelle_print_ltran_sock(void *buf, const struct gazelle_stat_msg_re
     printf("ltran sock table num: %u\n", table->conn_num);
 }
 
-static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
+static int dfx_make_unix_addr(struct sockaddr_un *addr, bool use_ltran)
+{
+    int ret;
+    ret = memset_s(addr, sizeof(*addr), 0, sizeof(struct sockaddr_un));
+    if (ret != EOK) {
+        printf("%s:%d memset_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        goto END;
+    }
+
+    ret = strncpy_s(addr->sun_path, sizeof(addr->sun_path), GAZELLE_RUN_DIR,
+                    strlen(GAZELLE_RUN_DIR) + 1);
+    if (ret != EOK) {
+        printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+        goto END;
+    }
+
+    if (g_unix_prefix) {
+        ret = strncat_s(addr->sun_path, sizeof(addr->sun_path), g_unix_prefix,
+                        strlen(g_unix_prefix) + 1);
+        if (ret != EOK) {
+            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            goto END;
+        }
+    }
+
+    addr->sun_family = AF_UNIX;
+    if (use_ltran) {
+        ret = strncat_s(addr->sun_path, sizeof(addr->sun_path), LTRAN_DFX_SOCK_FILENAME,
+            strlen(LTRAN_DFX_SOCK_FILENAME) + 1);
+        if (ret != EOK) {
+            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            goto END;
+        }
+        memcpy_s(g_ltran_unix_path, PATH_MAX, addr->sun_path, sizeof(addr->sun_path));
+    } else {
+        ret = strncat_s(addr->sun_path, sizeof(addr->sun_path), LSTACK_DFX_SOCK_FILENAME,
+            strlen(LSTACK_DFX_SOCK_FILENAME) + 1);
+        if (ret != EOK) {
+            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
+            goto END;
+        }
+        memcpy_s(g_lstack_unix_path, PATH_MAX, addr->sun_path, sizeof(addr->sun_path));
+    }
+       return 0;
+END:
+       return -1;
+}
+
+static int32_t dfx_connect_server(bool use_ltran)
 {
     int32_t ret, fd;
     struct sockaddr_un addr;
@@ -279,65 +329,55 @@ static int32_t dfx_connect_ltran(bool use_ltran, bool probe)
         return GAZELLE_ERR;
     }
 
-    ret = memset_s(&addr, sizeof(addr), 0, sizeof(struct sockaddr_un));
-    if (ret != EOK) {
-        printf("%s:%d memset_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
-        goto END;
-    }
-
-    ret = strncpy_s(addr.sun_path, sizeof(addr.sun_path), GAZELLE_RUN_DIR,
-                    strlen(GAZELLE_RUN_DIR) + 1);
-    if (ret != EOK) {
-        printf("%s:%d strncpy_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
-        goto END;
-    }
-
-    if (g_unix_prefix) {
-        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), g_unix_prefix,
-                        strlen(g_unix_prefix) + 1);
-        if (ret != EOK) {
-            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
-            goto END;
-        }
-    }
-
-    addr.sun_family = AF_UNIX;
-    if (use_ltran) {
-        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), LTRAN_DFX_SOCK_FILENAME,
-            strlen(LTRAN_DFX_SOCK_FILENAME) + 1);
-        if (ret != EOK) {
-            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
-            goto END;
-        }
-    } else {
-        ret = strncat_s(addr.sun_path, sizeof(addr.sun_path), LSTACK_DFX_SOCK_FILENAME,
-            strlen(LSTACK_DFX_SOCK_FILENAME) + 1);
-        if (ret != EOK) {
-            printf("%s:%d strncat_s fail ret=%d\n", __FUNCTION__, __LINE__, ret);
-            goto END;
-        }
-    }
+    ret = dfx_make_unix_addr(&addr, use_ltran);
+       if (ret != 0) {
+               goto END;
+       }
 
     ret = connect(fd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_un));
-    if (ret == -1) {
-        if (!probe) {
-            printf("connect ltran failed. errno: %d ret=%d\n", errno, ret);
-            printf("You may need to use the -u parameter to specify the UNIX_PREFIX that matches the configuration.\n");
-        }
+    if (ret != 0) {
         goto END;
     }
 
     return fd;
 END:
+    ret = errno;
     close(fd);
-    return GAZELLE_ERR;
+    return -ret;
+}
+
+static int dfx_connect_probe(void)
+{
+    int32_t ret1;
+    int32_t ret2;
+    ret1 = dfx_connect_server(true);
+    if (ret1 > 0) {
+        close(ret1);
+        return 1;
+    }
+    ret2 = dfx_connect_server(false);
+    if (ret2 > 0) {
+        close(ret2);
+        return 0;
+    }
+
+    printf("Connect lstack(path:%s), errno: %d; Connect ltran(path:%s) failed, errno: %d\n",
+        g_lstack_unix_path, -ret2, g_ltran_unix_path, -ret1);
+    printf("Please ensure the process is started; If use ltran mode, \
+            set use_ltran=1 in lstack.conf, otherwise set use_ltran=0\n");
+    return -1;
 }
 
 static int32_t dfx_stat_conn_to_ltran(struct gazelle_stat_msg_request *req_msg)
 {
-    int32_t fd = dfx_connect_ltran(g_use_ltran, false);
+    int32_t fd = dfx_connect_server(g_use_ltran);
     if (fd < 0) {
-        return fd;
+        if (g_use_ltran) {
+            printf("Connect ltran(path:%s) failed. errno: %d\n", g_ltran_unix_path, -fd);
+        } else {
+            printf("Connect lstack(path:%s) failed. errno: %d\n", g_lstack_unix_path, -fd);
+        }
+        return GAZELLE_ERR;
     }
 
     int32_t ret = write_specied_len(fd, (char *)req_msg, sizeof(*req_msg));
@@ -1417,12 +1457,12 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
     char *param = argv[GAZELLE_OPTIONS1_ARG_IDX];
     if (strcmp(param, "rate") == 0 || strcmp(param, "-r") == 0) {
         if (g_use_ltran) {
-	    req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW_LB_RATE;
+            req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_SHOW_LB_RATE;
         } else {
-	    req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_START_LATENCY;
-	    req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_STOP_LATENCY;
-  	    req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_RATE;
-	}
+            req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_START_LATENCY;
+            req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LTRAN_STOP_LATENCY;
+            req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_RATE;
+        }
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_MODE_MAX;
     } else if (strcmp(param, "snmp") == 0 || strcmp(param, "-s") == 0) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_SNMP;
@@ -1494,7 +1534,6 @@ static int32_t parse_dfx_lstack_args(int32_t argc, char *argv[], struct gazelle_
     }
     return num_cmd;
 }
-
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
 
@@ -1770,19 +1809,48 @@ static int32_t parse_dfx_fault_inject_args(int32_t argc, char *argv[], struct ga
 
 #endif /* GAZELLE_FAULT_INJECT_ENABLE */
 
+static void parse_unix_arg(int32_t *argc, char *argv[])
+{
+    int unix_arg = 0;
+       for (int i = 1; i < *argc; i++) {
+               if (unix_arg == 0) {
+                       if (!strcmp(argv[i], "-u")) {
+                               unix_arg++;
+                       }
+               } else if (unix_arg == 1) {
+                       g_unix_prefix = argv[i];
+                       unix_arg++;
+               } else {
+                       argv[i - unix_arg] = argv[i];
+               }
+       }
+
+    argv[*argc - unix_arg] = argv[*argc];
+    *argc -= unix_arg;
+}
+
 static int32_t parse_dfx_cmd_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
 {
-    int32_t num_cmd = 0;
+    int num_cmd = 0;
+    int ret;
 
     if (argc < GAZELLE_PARAM_MINNUM) {
         return num_cmd;
     }
 
+    parse_unix_arg(&argc, argv);
+
     char *param = argv[GAZELLE_TARGET_ARG_IDX];
     if (strcmp(param, "ltran") == 0) {
+        g_use_ltran = true;
         num_cmd = parse_dfx_ltran_args(argc, argv, req_msg);
     }
     if (strcmp(param, "lstack") == 0) {
+        ret = dfx_connect_probe();
+        if (ret < 0) {
+            exit(0);
+        }
+        g_use_ltran = ret;
         num_cmd = parse_dfx_lstack_args(argc, argv, req_msg);
     }
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
@@ -1846,28 +1914,6 @@ int32_t main(int32_t argc, char *argv[])
     struct gazelle_stat_msg_request req_msg[GAZELLE_CMD_MAX] = {0};
     int32_t req_msg_num;
 
-    int unix_arg = 0;
-    for (int32_t i = 1; i < argc; i++) {
-        if (unix_arg == 0) {
-            if (!strcmp(argv[i], "-u")) {
-                unix_arg++;
-            }
-        } else if (unix_arg == 1) {
-            g_unix_prefix = argv[i];
-            unix_arg++;
-        } else {
-            argv[i - unix_arg] = argv[i];
-        }
-    }
-
-    argv[argc - unix_arg] = argv[argc];
-    argc -= unix_arg;
-
-    int32_t fd = dfx_connect_ltran(true, true);
-    if (fd > 0) {
-        g_use_ltran = true;
-        close(fd);
-    }
     req_msg_num = parse_dfx_cmd_args(argc, argv, req_msg);
     if (req_msg_num <= 0 || req_msg_num > GAZELLE_CMD_MAX) {
         show_usage();
