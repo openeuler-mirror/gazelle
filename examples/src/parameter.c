@@ -151,9 +151,11 @@ static bool program_ipv4_check(char *ipv4)
     if ((ip >= ntohl(inet_addr("1.0.0.1"))   && ip <= ntohl(inet_addr("126.255.255.254"))) ||
         (ip >= ntohl(inet_addr("127.0.0.1")) && ip <= ntohl(inet_addr("127.255.255.254"))) ||
         (ip >= ntohl(inet_addr("128.0.0.1")) && ip <= ntohl(inet_addr("191.255.255.254"))) ||
-        (ip >= ntohl(inet_addr("192.0.0.1")) && ip <= ntohl(inet_addr("223.255.255.254")))) {
+        (ip >= ntohl(inet_addr("192.0.0.1")) && ip <= ntohl(inet_addr("223.255.255.254"))) ||
+        (ip >= ntohl(inet_addr("224.0.0.1")) && ip <= ntohl(inet_addr("224.255.255.255"))) ) { // Broadcast IP
         return true;
     }
+
     PRINT_ERROR("illigal argument -- %s \n", ipv4);
     return false;
 }
