@@ -993,6 +993,7 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
 {
     ssize_t recvd = 0;
     struct lwip_sock *sock = get_socket_by_fd(fd);
+    bool noblock = (flags & MSG_DONTWAIT) || netconn_is_nonblocking(sock->conn);
 
     if (recv_break_for_err(sock)) {
         return -1;
@@ -1005,9 +1006,9 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
     }
 
     if (NETCONN_IS_UDP(sock)) {
-        recvd = recv_ring_udp_read(sock, buf, len, netconn_is_nonblocking(sock->conn), addr, addrlen);
+        recvd = recv_ring_udp_read(sock, buf, len, noblock, addr, addrlen);
     } else {
-        recvd = recv_ring_tcp_read(sock, buf, len, netconn_is_nonblocking(sock->conn));
+        recvd = recv_ring_tcp_read(sock, buf, len, noblock);
     }
 
     /* rte_ring_count reduce lock */
