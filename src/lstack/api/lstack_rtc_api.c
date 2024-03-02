@@ -63,7 +63,17 @@ int rtc_socket(int domain, int type, int protocol)
 
 int rtc_close(int s)
 {
-    return lwip_close(s);
+    struct lwip_sock *sock = get_socket(s);
+    if (sock != NULL && sock->wakeup != NULL && sock->wakeup->epollfd == s) {
+        return lstack_epoll_close(s);
+    }
+
+    lwip_close(s);
+    if (sock != NULL) {
+        list_del_node_null(&sock->event_list);
+    }
+
+    return posix_api->close_fn(s);
 }
 
 int rtc_shutdown(int fd, int how)
