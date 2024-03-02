@@ -9,4 +9,7 @@
 # See the Mulan PSL v2 for more details.
 
 SRC = lstack_ethdev.c lstack_vdev.c lstack_flow.c
+ifeq ($(GAZELLE_FAULT_INJECT_ENABLE), 1)
+	SRC +=  lstack_fault_inject.c
+endif
 $(eval $(call register_dir, netif, $(SRC)))

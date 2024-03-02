@@ -18,6 +18,10 @@
 
 #include <lwip/reg_sock.h>
 
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+#include "gazelle_fault_inject_common.h"
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+
 #define GAZELLE_CLIENT_NUM_MIN           1
 #define GAZELLE_LOG_LEVEL_MAX            10
 #define GAZELLECTL_TIMEOUT               5000 // millisecond
@@ -54,6 +58,11 @@ enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LSTACK_SHOW_AGGREGATE,
     GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES,
 
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+    GAZELLE_STAT_FAULT_INJECT_SET,
+    GAZELLE_STAT_FAULT_INJECT_UNSET,
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+    
     GAZELLE_STAT_MODE_MAX,
 };
 
@@ -277,6 +286,9 @@ struct gazelle_stack_dfx_data {
         struct gazelle_stat_lstack_snmp snmp;
         struct nic_eth_xstats nic_xstats;
         struct nic_eth_features nic_features;
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+        struct gazelle_fault_inject_data inject;
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
     } data;
 };
 
@@ -307,6 +319,9 @@ struct gazelle_stat_msg_request {
     union stat_param {
         char log_level[GAZELLE_LOG_LEVEL_MAX];
         uint16_t low_power_mod;
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+        struct gazelle_fault_inject_data inject;
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
     } data;
 };
 

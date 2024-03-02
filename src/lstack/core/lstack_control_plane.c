@@ -34,6 +34,10 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_control_plane.h"
 
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+#include "lstack_fault_inject.h"
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+
 /* intervals between two connection attempts and two registration attempts, in second */
 #define CONNECT_TO_LTRAN_INFINITE       (-1)
 #define CONNECT_TO_LTRAN_RETRY_INTERVAL 1
@@ -582,7 +586,14 @@ static int32_t handle_stat_request(int32_t sockfd)
         LSTACK_LOG(ERR, LSTACK, "recv wrong stat mode %d\n", (int32_t)msg.stat_mode);
         return 0;
     }
-
+    
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+    if (msg.stat_mode == GAZELLE_STAT_FAULT_INJECT_SET ||
+        msg.stat_mode == GAZELLE_STAT_FAULT_INJECT_UNSET) {
+        return handle_fault_inject_cmd(sockfd, &msg);
+    }
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */
+    
     if (msg.stat_mode == GAZELLE_STAT_LSTACK_LOG_LEVEL_SET ||
         msg.stat_mode == GAZELLE_STAT_LSTACK_LOW_POWER_MDF) {
         return handle_proc_cmd(sockfd, &msg);
