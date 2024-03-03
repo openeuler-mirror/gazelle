@@ -364,27 +364,46 @@ static inline int32_t do_getsockname(int32_t s, struct sockaddr *name, socklen_t
     return posix_api->getsockname_fn(s, name, namelen);
 }
 
-static bool unsupport_optname(int32_t optname)
+static bool unsupport_tcp_optname(int32_t optname)
 {
-    if (optname == SO_BROADCAST ||
-        optname == SO_PROTOCOL  ||
-        optname == TCP_QUICKACK ||
-        optname == SO_SNDTIMEO  ||
-        optname == SO_RCVTIMEO  ||
-        optname == SO_SNDBUF    ||
-        optname == SO_RCVBUF    ||
-        optname == TCP_INFO     ||
-        optname == TCP_MAXSEG   ||
-        optname == SO_DONTROUTE ||
-        optname == TCP_CONGESTION) {
+    if ((optname == TCP_QUICKACK) ||
+        (optname == TCP_INFO) ||
+        (optname == TCP_MAXSEG) ||
+        (optname == TCP_CONGESTION)) {
         return true;
+    }
+    return false;
+}
+
+static bool unsupport_socket_optname(int32_t optname)
+{
+    if ((optname == SO_BROADCAST) ||
+        (optname == SO_PROTOCOL) ||
+        (optname == SO_SNDTIMEO) ||
+        (optname == SO_RCVTIMEO) ||
+        (optname == SO_SNDBUF) ||
+        (optname == SO_RCVBUF) ||
+        (optname == SO_DONTROUTE)) {
+        return true;
+    }
+    return false;
+}
+
+static bool unsupport_optname(int32_t level, int32_t optname)
+{
+    if (level == SOL_TCP) {
+        return unsupport_tcp_optname(optname);
+    }
+
+    if (level == SOL_SOCKET) {
+        return unsupport_socket_optname(optname);
     }
     return false;
 }
 
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
-    if (select_fd_posix_path(s, NULL) == PATH_LWIP && !unsupport_optname(optname)) {
+    if (select_fd_posix_path(s, NULL) == PATH_LWIP && !unsupport_optname(level, optname)) {
         return g_wrap_api->getsockopt_fn(s, level, optname, optval, optlen);
     }
 
@@ -393,7 +412,7 @@ static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, v
 
 static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, const void *optval, socklen_t optlen)
 {
-    if (select_fd_posix_path(s, NULL) == PATH_KERNEL || unsupport_optname(optname)) {
+    if (select_fd_posix_path(s, NULL) == PATH_KERNEL || unsupport_optname(level, optname)) {
         return posix_api->setsockopt_fn(s, level, optname, optval, optlen);
     }
 

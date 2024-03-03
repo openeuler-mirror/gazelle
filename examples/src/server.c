@@ -154,7 +154,7 @@ static void sermud_accept_get_remote_ip(sockaddr_t *accept_addr, ip_addr_t *remo
 int32_t sermud_set_socket_opt(int32_t accept_fd, struct ServerMud *server_mud)
 {
     if (set_tcp_keep_alive_info(accept_fd, server_mud->tcp_keepalive_idle, server_mud->tcp_keepalive_interval) < 0) {
-        PRINT_ERROR("cant't set_tcp_keep_alive_info ret=%d ! ");
+        PRINT_ERROR("cant't set_tcp_keep_alive_info! ");
         return PROGRAM_FAULT;
     }
 
