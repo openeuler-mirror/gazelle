@@ -72,6 +72,8 @@ struct ServerMudWorker
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
     char* epollcreate;                      ///< epoll_create method
+    char* domain;
+    uint32_t curr_connect;
     struct ServerMudWorker *next;           ///< next pointer
 };
 
@@ -85,7 +87,6 @@ struct ServerMud
     struct ServerMudWorker *workers;        ///< the workers
     int32_t epfd;                           ///< the listen epoll file descriptor
     struct epoll_event *epevs;              ///< the epoll events
-    uint32_t curr_connect;                  ///< current connection number
     ip_addr_t ip;                           ///< server ip
     ip_addr_t groupip;                      ///< server group ip
     bool* port;                             ///< server port point to parameter's port
