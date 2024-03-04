@@ -590,7 +590,7 @@ static int32_t handle_stat_request(int32_t sockfd)
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
     if (msg.stat_mode == GAZELLE_STAT_FAULT_INJECT_SET ||
         msg.stat_mode == GAZELLE_STAT_FAULT_INJECT_UNSET) {
-        return handle_fault_inject_cmd(sockfd, &msg);
+        return handle_fault_inject_cmd(sockfd, msg.data.inject, msg.stat_mode);
     }
 #endif /* GAZELLE_FAULT_INJECT_ENABLE */
     

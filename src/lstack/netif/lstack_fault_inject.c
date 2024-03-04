@@ -150,21 +150,10 @@ static int32_t inject_packet_loss_random(struct protocol_stack *stack, struct rt
     return nr_pkts;
 }
 
-int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_stat_msg_request *msg)
+static int32_t inject_respond_msg(int32_t sockfd)
 {
     struct gazelle_stack_dfx_data rsp = {0};
     int32_t ret = 0;
-    
-    ret = memcpy_s(&g_inject_tbl[msg->data.inject.inject_type].inject_data,
-                   sizeof(struct gazelle_fault_inject_data),
-                   &msg->data.inject, sizeof(struct gazelle_fault_inject_data));
-    if (ret != EOK) {
-        LSTACK_LOG(ERR, LSTACK, "fault inject memcpy_s error, ret = %d", ret);
-        return -1;
-    }
-
-    inject_strategy_update();
-
     for (int32_t i = 0; i < GAZELLE_FAULT_INJECT_TYPE_MAX; ++i) {
         ret = memcpy_s(&rsp.data.inject, sizeof(struct gazelle_fault_inject_data),
                        &g_inject_tbl[i].inject_data, sizeof(struct gazelle_fault_inject_data));
@@ -183,5 +172,52 @@ int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_stat_msg_request 
     }
     
     return 0;
+}
+
+static int32_t inject_unset_cmd(int32_t sockfd, struct gazelle_fault_inject_data inject)
+{
+    if (inject.inject_type == GAZELLE_FAULT_INJECT_TYPE_MAX) {
+        /* means unset all kinds of fault inject type */
+        for (int32_t i = 0; i < GAZELLE_FAULT_INJECT_TYPE_MAX; ++i) {
+            g_inject_tbl[i].inject_data.fault_inject_on = 0;
+        }
+    } else {
+        int32_t ret = 0;
+        ret = memcpy_s(&g_inject_tbl[inject.inject_type].inject_data,
+                       sizeof(struct gazelle_fault_inject_data),
+                       &inject, sizeof(struct gazelle_fault_inject_data));
+        if (ret != EOK) {
+            LSTACK_LOG(ERR, LSTACK, "fault inject memcpy_s error, ret = %d", ret);
+            return -1;
+        }
+    }
+
+    inject_strategy_update();
+
+    return inject_respond_msg(sockfd);
+}
+
+static int32_t inject_set_cmd(int32_t sockfd, struct gazelle_fault_inject_data inject)
+{
+    int32_t ret = 0;
+    ret = memcpy_s(&g_inject_tbl[inject.inject_type].inject_data,
+                   sizeof(struct gazelle_fault_inject_data),
+                   &inject, sizeof(struct gazelle_fault_inject_data));
+    if (ret != EOK) {
+        LSTACK_LOG(ERR, LSTACK, "fault inject memcpy_s error, ret = %d", ret);
+        return -1;
+    }
+
+    inject_strategy_update();
+    
+    return inject_respond_msg(sockfd);
+}
+
+int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_fault_inject_data inject, enum GAZELLE_STAT_MODE stat_mode)
+{
+    if (stat_mode == GAZELLE_STAT_FAULT_INJECT_UNSET) {
+        return inject_unset_cmd(sockfd, inject);
+    }
+    return inject_set_cmd(sockfd, inject);
 }
 
