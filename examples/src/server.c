@@ -126,8 +126,10 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
     ep_ev.events = EPOLLIN | EPOLLET;
     for (int i = 0; i < PROTOCOL_MODE_MAX; i++) {
         if (server_mud->listener.listen_fd_array[i] != -1) {
-            ep_ev.data.ptr = (void *)&(server_mud->listener.listen_fd_array[i]);
-            ep_ev.data.fd = server_mud->listener.listen_fd_array[i];
+            struct ServerHandler *server_handler = (struct ServerHandler *)malloc(sizeof(struct ServerHandler));
+            memset_s(server_handler, sizeof(struct ServerHandler), 0, sizeof(struct ServerHandler));
+            server_handler->fd = server_mud->listener.listen_fd_array[i];
+            ep_ev.data.ptr = (void *)server_handler;
             if (epoll_ctl(server_mud->epfd, EPOLL_CTL_ADD, server_mud->listener.listen_fd_array[i], &ep_ev) < 0) {
                 PRINT_ERROR("epoll_ctl failed %d! listen_fd=%d ", errno, server_mud->listener.listen_fd_array[i]);
                 return PROGRAM_FAULT;
@@ -151,12 +153,13 @@ static void sermud_accept_get_remote_ip(sockaddr_t *accept_addr, ip_addr_t *remo
 // the listener thread, unblock, dissymmetric server accepts the connections
 int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct ServerMud *server_mud)
 {
+    int32_t fd = ((struct ServerHandler*)(curr_epev->data.ptr))->fd;
     fault_inject_delay(INJECT_DELAY_ACCEPT);
     while (true) {
         sockaddr_t accept_addr;
         bool is_tcp_v6_flag = false;
 
-        if (curr_epev->data.fd == server_mud->listener.listen_fd_array[V6_TCP]) {
+        if (fd == server_mud->listener.listen_fd_array[V6_TCP]) {
             is_tcp_v6_flag = true;
         }
         uint32_t sockaddr_in_len = is_tcp_v6_flag ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
@@ -281,10 +284,10 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
 
 static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struct ServerMud *server_mud)
 {
-    if (curr_epev->data.fd == server_mud->listener.listen_fd_array[V4_UDP]) {
-        struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
+    struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
-        int32_t server_ans_ret = server_ans(curr_epev->data.fd, server_mud->pktlen, "recvfromsendto", "udp");
+    if (server_handler->fd == server_mud->listener.listen_fd_array[V4_UDP]) {
+        int32_t server_ans_ret = server_ans(server_handler->fd, server_mud->pktlen, "recvfromsendto", "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_mud->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close server_ans_ret %d! \n", server_ans_ret);
@@ -544,8 +547,11 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
 
     for (int32_t i = 0; i < PROTOCOL_MODE_MAX; i++) {
         if (server_unit->listener.listen_fd_array[i] != -1) {
-            ep_ev.data.ptr = (void *)&server_unit->listener.listen_fd_array[0];
-            ep_ev.data.fd = server_unit->listener.listen_fd_array[i];
+            struct ServerHandler *server_handler = (struct ServerHandler *)malloc(sizeof(struct ServerHandler));
+            memset_s(server_handler, sizeof(struct ServerHandler), 0, sizeof(struct ServerHandler));
+            server_handler->fd = server_unit->listener.listen_fd_array[i];
+
+            ep_ev.data.ptr = (void *)server_handler;
             if (epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, server_unit->listener.listen_fd_array[i], &ep_ev) < 0) {
                 PRINT_ERROR("epoll_ctl failed %d! listen_fd=%d ", errno, server_unit->listener.listen_fd_array[i]);
                 return PROGRAM_FAULT;
@@ -562,9 +568,10 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
 int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUnit *server_unit)
 {
     fault_inject_delay(INJECT_DELAY_ACCEPT);
+    int32_t fd = ((struct ServerHandler*)(cur_epev->data.ptr))->fd;
     while (true) {
         sockaddr_t accept_addr;
-        bool is_tcp_v6 = (cur_epev->data.fd == (server_unit->listener.listen_fd_array[V6_TCP])) ? true : false;
+        bool is_tcp_v6 = (fd == (server_unit->listener.listen_fd_array[V6_TCP])) ? true : false;
 
         socklen_t sockaddr_in_len = is_tcp_v6 ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
         int32_t accept_fd;
@@ -671,17 +678,17 @@ static int sersum_process_tcp_accept_event(struct ServerMumUnit *server_unit, st
 
 static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struct epoll_event *curr_epev)
 {
-    if (curr_epev->data.fd == (server_unit->listener.listen_fd_array[V4_TCP]) ||
-        curr_epev->data.fd == (server_unit->listener.listen_fd_array[V6_TCP])) {
+    struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
+    int32_t fd = server_handler->fd;
+    if (fd == (server_unit->listener.listen_fd_array[V4_TCP]) ||
+        fd == (server_unit->listener.listen_fd_array[V6_TCP])) {
         int32_t sersum_accept_connects_ret = sersum_accept_connects(curr_epev, server_unit);
         if (sersum_accept_connects_ret < 0) {
             PRINT_ERROR("server try accept error %d! ", sersum_accept_connects_ret);
             return PROGRAM_ABORT;
         }
-    } else if (curr_epev->data.fd == (server_unit->listener.listen_fd_array[V4_UDP])) {
-        struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
-
-        int32_t server_ans_ret = server_ans(curr_epev->data.fd, server_unit->pktlen, "recvfromsendto", "udp");
+    } else if (fd == (server_unit->listener.listen_fd_array[V4_UDP])) {
+        int32_t server_ans_ret = server_ans(fd, server_unit->pktlen, "recvfromsendto", "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close ret %d! \n", server_ans_ret);
