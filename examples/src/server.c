@@ -38,7 +38,7 @@ void server_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, 
 void sermud_info_print(struct ServerMud *server_mud)
 {
     if (server_mud->debug == false) {
-        uint32_t curr_connect = server_mud->curr_connect;
+        uint32_t curr_connect = 0;
 
         struct timeval begin;
         gettimeofday(&begin, NULL);
@@ -49,6 +49,7 @@ void sermud_info_print(struct ServerMud *server_mud)
         struct ServerMudWorker *begin_uint = server_mud->workers;
         while (begin_uint != NULL) {
             begin_recv_bytes += begin_uint->recv_bytes;
+            curr_connect += begin_uint->curr_connect;
             begin_uint = begin_uint->next;
         }
 
@@ -150,18 +151,30 @@ static void sermud_accept_get_remote_ip(sockaddr_t *accept_addr, ip_addr_t *remo
     }
 }
 
+int32_t sermud_set_socket_opt(int32_t accept_fd, struct ServerMud *server_mud)
+{
+    if (set_tcp_keep_alive_info(accept_fd, server_mud->tcp_keepalive_idle, server_mud->tcp_keepalive_interval) < 0) {
+        PRINT_ERROR("cant't set_tcp_keep_alive_info ret=%d ! ");
+        return PROGRAM_FAULT;
+    }
+
+    if (set_socket_unblock(accept_fd) < 0) {
+        PRINT_ERROR("server can't set the connect socket to unblock! ");
+        return PROGRAM_FAULT;
+    }
+    return PROGRAM_OK;
+}
+
 // the listener thread, unblock, dissymmetric server accepts the connections
 int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct ServerMud *server_mud)
 {
     int32_t fd = ((struct ServerHandler*)(curr_epev->data.ptr))->fd;
     fault_inject_delay(INJECT_DELAY_ACCEPT);
+
     while (true) {
         sockaddr_t accept_addr;
-        bool is_tcp_v6_flag = false;
+        bool is_tcp_v6_flag = (fd == server_mud->listener.listen_fd_array[V6_TCP]) ? true : false;
 
-        if (fd == server_mud->listener.listen_fd_array[V6_TCP]) {
-            is_tcp_v6_flag = true;
-        }
         uint32_t sockaddr_in_len = is_tcp_v6_flag ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
 
         int32_t accept_fd;
@@ -179,12 +192,9 @@ int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct Se
             break;
         }
 
-        if (set_socket_unblock(accept_fd) < 0) {
-            PRINT_ERROR("server can't set the connect socket to unblock! ");
+        if (sermud_set_socket_opt(accept_fd, server_mud) < 0) {
             return PROGRAM_FAULT;
         }
-
-        ++(server_mud->curr_connect);
 
         // sockaddr to ip, port
         ip_addr_t remote_ip;
@@ -205,10 +215,12 @@ int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct Se
         worker->next = server_mud->workers;
         worker->epollcreate = server_mud->epollcreate;
         worker->worker.is_v6 = is_tcp_v6_flag ? 1 : 0;
+        worker->domain = server_mud->domain;
+        worker->curr_connect = 1;
 
         server_mud->workers = worker;
 
-        if (pthread_create(tid, NULL, sermud_worker_create_and_run, server_mud) < 0) {
+        if (pthread_create(tid, NULL, sermud_worker_create_and_run, worker) < 0) {
             PRINT_ERROR("server can't create poisx thread %d! ", errno);
             return PROGRAM_FAULT;
         }
@@ -253,6 +265,7 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
         struct epoll_event *curr_epev = worker_unit->epevs + i;
 
         if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+            worker_unit->curr_connect--;
             PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
             if (server_handler_close(worker_unit->epfd, (struct ServerHandler *)curr_epev->data.ptr) != 0) {
                 return PROGRAM_FAULT;
@@ -264,10 +277,12 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
 
             int32_t server_ans_ret = server_ans(server_handler->fd, worker_unit->pktlen, worker_unit->api, "tcp");
             if (server_ans_ret == PROGRAM_FAULT) {
+                worker_unit->curr_connect--;
                 if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
                     return PROGRAM_FAULT;
                 }
             } else if (server_ans_ret == PROGRAM_ABORT) {
+                worker_unit->curr_connect--;
                 server_debug_print("server mud worker", "close", &worker_unit->ip, worker_unit->port, worker_unit->debug);
                 if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
                     return PROGRAM_FAULT;
@@ -319,7 +334,6 @@ int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
         struct epoll_event *curr_epev = server_mud->epevs + i;
     
         if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
-            server_mud->curr_connect--;
             PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
             server_handler_close(server_mud->epfd, (struct ServerHandler *)curr_epev->data.ptr);
             return PROGRAM_OK;
@@ -340,8 +354,8 @@ void *sermud_worker_create_and_run(void *arg)
 {
     pthread_detach(pthread_self());
 
-    struct ServerMudWorker *worker_unit = ((struct ServerMud *)arg)->workers;
-    char* domain = ((struct ServerMud *)arg)->domain;
+    struct ServerMudWorker *worker_unit = (struct ServerMudWorker *)arg;
+    char *domain = worker_unit->domain;
 
     if (sermud_worker_create_epfd_and_reg(worker_unit) < 0) {
         return (void *)PROGRAM_OK;
@@ -442,7 +456,6 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
 
     server_mud->epfd = -1;
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
-    server_mud->curr_connect = 0;
     server_mud->ip.addr_family = params->addr_family;
 
     inet_pton(AF_INET, params->ip, &server_mud->ip.u_addr.ip4);
