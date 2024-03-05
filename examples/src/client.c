@@ -76,7 +76,8 @@ void client_info_print(struct Client *client)
     if (client->debug == false) {
         struct timeval begin;
         gettimeofday(&begin, NULL);
-        uint64_t begin_time = (uint64_t)begin.tv_sec * 1000 + (uint64_t)begin.tv_usec / 1000;
+        uint64_t begin_time = (uint64_t)begin.tv_sec * TIMES_CONVERSION_RATE +
+                              (uint64_t)begin.tv_usec / TIMES_CONVERSION_RATE;
 
         uint32_t curr_connect = 0;
         double bytes_ps = 0;
@@ -84,38 +85,40 @@ void client_info_print(struct Client *client)
         struct ClientUnit *begin_uint = client->uints;
         while (begin_uint != NULL) {
             curr_connect += begin_uint->curr_connect;
-            begin_send_bytes += begin_uint->send_bytes;
+            begin_send_bytes += begin_uint->threadVolume.send_bytes;
             begin_uint = begin_uint->next;
         }
 
         struct timeval delay;
         delay.tv_sec = 0;
-        delay.tv_usec = TERMINAL_REFRESH_MS * 1000;
+        delay.tv_usec = TERMINAL_REFRESH_MS * TIMES_CONVERSION_RATE;
         select(0, NULL, NULL, NULL, &delay);
 
         uint64_t end_send_bytes = 0;
         struct ClientUnit *end_uint = client->uints;
         while (end_uint != NULL) {
-            end_send_bytes += end_uint->send_bytes;
+            end_send_bytes += end_uint->threadVolume.send_bytes;
             end_uint = end_uint->next;
         }
 
         struct timeval end;
         gettimeofday(&end, NULL);
-        uint64_t end_time = (uint64_t)end.tv_sec * 1000 + (uint64_t)end.tv_usec / 1000;
-        
+        uint64_t end_time = (uint64_t)end.tv_sec * TIMES_CONVERSION_RATE +
+                            (uint64_t)end.tv_usec / TIMES_CONVERSION_RATE;
+
         double bytes_sub = end_send_bytes > begin_send_bytes ? (double)(end_send_bytes - begin_send_bytes) : 0;
-        double time_sub = end_time > begin_time ? (double)(end_time - begin_time) / 1000 : 0;
+        double time_sub = end_time > begin_time ? (double)(end_time - begin_time) / TIMES_CONVERSION_RATE : 0;
 
         bytes_ps = bytes_sub  / time_sub;
 
-        if (bytes_ps < 1024) {
+        if (bytes_ps < KB) {
             PRINT_CLIENT_DATAFLOW("[connect num]: %d, [send]: %.3f B/s", curr_connect, bytes_ps);
-        } else if (bytes_ps < (1024 * 1024)) {
-            PRINT_CLIENT_DATAFLOW("[connect num]: %d, [send]: %.3f KB/s", curr_connect, bytes_ps / 1024);
+        } else if (bytes_ps < MB) {
+            PRINT_CLIENT_DATAFLOW("[connect num]: %d, [send]: %.3f KB/s", curr_connect, bytes_ps / KB);
         } else {
-            PRINT_CLIENT_DATAFLOW("[connect num]: %d, [send]: %.3f MB/s", curr_connect, bytes_ps / (1024 * 1024));
+            PRINT_CLIENT_DATAFLOW("[connect num]: %d, [send]: %.3f MB/s", curr_connect, bytes_ps / MB);
         }
+        printf("\033[?25l\033[A\033[K");
     }
 }
 
@@ -137,11 +140,83 @@ static int32_t client_process_ask(struct ClientHandler *client_handler, struct C
         }
         client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
     } else {
-        client_unit->send_bytes += client_unit->pktlen;
+        client_unit->threadVolume.send_bytes += client_unit->pktlen;
         client_handler->sendtime_interverl = 0;
         client_debug_print("client unit", "send", &client_unit->ip, client_unit->port, client_unit->debug);
     }
     return PROGRAM_OK;
+}
+
+static void client_get_thread_volume(struct Client *client, struct ThreadUintInfo *threadVolume)
+{
+    int index = 0;
+    struct ClientUnit *curUint = client->uints;
+    while (curUint != NULL && index < client->threadNum) {
+        threadVolume[index].send_bytes = curUint->threadVolume.send_bytes;
+
+        threadVolume[index].cur_connect_num = curUint->curr_connect;
+        threadVolume[index].thread_id = curUint->threadVolume.thread_id;
+        threadVolume[index].domain = curUint->threadVolume.domain;
+        threadVolume[index].ipversion = curUint->threadVolume.ipversion;
+        curUint = curUint->next;
+        index++;
+    }
+}
+
+void client_info_print_mixed(struct Client *client, struct ThreadUintInfo *threadVolume,
+                             struct ThreadUintInfo *endThreadVolume)
+{
+    if (client->debug == true) {
+        return;
+    }
+    int32_t pthread_num = client->threadNum;
+    int32_t not_support_thread = 0;
+    struct timeval cur = {0};
+
+    gettimeofday(&cur, NULL);
+    uint64_t begin_time = (uint64_t)cur.tv_sec * TIMES_CONVERSION_RATE + (uint64_t)cur.tv_usec / TIMES_CONVERSION_RATE;
+
+    client_get_thread_volume(client, threadVolume);
+
+    struct timeval delay;
+    delay.tv_sec = 0;
+    delay.tv_usec = TERMINAL_REFRESH_MS * TIMES_CONVERSION_RATE;
+    select(0, NULL, NULL, NULL, &delay);
+
+    client_get_thread_volume(client, endThreadVolume);
+
+    gettimeofday(&cur, NULL);
+    uint64_t end_time = (uint64_t)cur.tv_sec * TIMES_CONVERSION_RATE + (uint64_t)cur.tv_usec / TIMES_CONVERSION_RATE;
+
+    for (int i = 0; i < pthread_num; i++) {
+        uint64_t begin_send_bytes = threadVolume[i].send_bytes;
+        uint64_t end_send_bytes = endThreadVolume[i].send_bytes;
+        pthread_t thread_id = endThreadVolume[i].thread_id;
+        uint32_t connect_num = endThreadVolume[i].cur_connect_num;
+        char *domain = endThreadVolume[i].domain;
+        char *ip_ver = endThreadVolume[i].ipversion;
+
+        if (thread_id == 0) {
+            not_support_thread++;
+            continue;
+        }
+
+        double bytes_sub = end_send_bytes > begin_send_bytes ? (double)(end_send_bytes - begin_send_bytes) : 0;
+        double time_sub = end_time > begin_time ? (double)(end_time - begin_time) / TIMES_CONVERSION_RATE : 0;
+        double bytes_ps = bytes_sub / time_sub;
+
+        if (bytes_ps < KB) {
+            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%s [connect num]: %u, [send]: %.3f B/s",
+                                  thread_id, domain, ip_ver, connect_num, bytes_ps);
+        } else if (bytes_ps < MB) {
+            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%s [connect num]: %u, [send]: %.3f kB/s",
+                                  thread_id, domain, ip_ver, connect_num, bytes_ps / KB);
+        } else {
+            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%s [connect num]: %u, [send]: %.3f MB/s",
+                                  thread_id, domain, ip_ver, connect_num, bytes_ps / MB);
+        }
+    }
+    printf("\033[?25l\033[%dA\033[K", pthread_num - not_support_thread);
 }
 
 // the single thread, client try to connect to server, register to epoll
@@ -317,7 +392,7 @@ static int32_t clithd_proc_epevs_epollin(struct epoll_event *curr_epev, struct C
         }
         client_debug_print("client unit", "close", &client_unit->ip, client_unit->port, client_unit->debug);
     } else {
-        client_unit->send_bytes += client_unit->pktlen;
+        client_unit->threadVolume.send_bytes += client_unit->pktlen;
         client_handler->sendtime_interverl = 0;
         client_debug_print("client unit", "receive", &client_unit->ip, client_unit->port, client_unit->debug);
     }
@@ -365,6 +440,10 @@ void *client_s_create_and_run(void *arg)
         PRINT_ERROR("client: not supported udp_v6 currently");
         return (void *)PROGRAM_OK;
     }
+
+    client_unit->threadVolume.thread_id = pthread_self();
+    client_unit->threadVolume.ipversion = (client_unit->ip.addr_family == AF_INET ? IPV4_STR : IPV6_STR);
+    client_unit->threadVolume.domain = client_unit->domain;
 
     if (client_thread_create_epfd_and_reg(client_unit) < 0) {
        exit(PROGRAM_FAULT);
@@ -423,6 +502,8 @@ int32_t client_create_and_run(struct ProgramParams *params)
     pthread_t *tids = (pthread_t *)malloc(thread_num * sizeof(pthread_t));
     struct Client *client = (struct Client *)malloc(sizeof(struct Client));
     g_client_begin = client;
+    client->threadNum = thread_num;
+
     struct ClientUnit *client_unit = (struct ClientUnit *)malloc(sizeof(struct ClientUnit));
     memset_s(client_unit, sizeof(struct ClientUnit), 0, sizeof(struct ClientUnit));
     int32_t protocol_support_array[PROTOCOL_MODE_MAX] = {0};
@@ -444,6 +525,11 @@ int32_t client_create_and_run(struct ProgramParams *params)
     uint32_t sp = 0;
 
     alarm_init();
+    bool mixed_mode_flag = false;
+    if (strchr(params->domain, ',') != NULL ||
+        (strcmp(params->ip, PARAM_DEFAULT_IP) != 0 && strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0)) {
+        mixed_mode_flag = true;
+    }
 
     for (uint32_t i = 0; i < thread_num; ++i) {
         client_unit->handlers = (struct ClientHandler *)malloc(connect_num * sizeof(struct ClientHandler));
@@ -454,7 +540,13 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->epfd = -1;
         client_unit->epevs = (struct epoll_event *)malloc(CLIENT_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
         client_unit->curr_connect = 0;
-        client_unit->send_bytes = 0;
+
+        client_unit->threadVolume.cur_connect_num = 0;
+        client_unit->threadVolume.thread_id = 0;
+        client_unit->threadVolume.send_bytes = 0;
+        client_unit->threadVolume.ipversion = INVAILD_STR;
+        client_unit->threadVolume.domain = INVAILD_STR;
+
         client_unit->ip.addr_family = params->addr_family;
         inet_pton(AF_INET, params->ip, &client_unit->ip.u_addr.ip4);
         inet_pton(AF_INET6, params->ipv6, &client_unit->ip.u_addr.ip6);
@@ -505,9 +597,27 @@ int32_t client_create_and_run(struct ProgramParams *params)
     if (client->debug == false) {
         printf("[program informations]: \n\n");
     }
-    while (true) {
-        client_info_print(client);
+
+    struct ThreadUintInfo *beginVolume = (struct ThreadUintInfo *)malloc(thread_num * sizeof(struct ThreadUintInfo));
+    if (beginVolume == NULL) {
+        return PROGRAM_FAULT;
     }
+    memset_s(beginVolume, thread_num * sizeof(struct ThreadUintInfo), 0, thread_num * sizeof(struct ThreadUintInfo));
+    struct ThreadUintInfo *endVolume = (struct ThreadUintInfo *)malloc(thread_num * sizeof(struct ThreadUintInfo));
+    if (endVolume == NULL) {
+        return PROGRAM_FAULT;
+    }
+    memset_s(endVolume, thread_num * sizeof(struct ThreadUintInfo), 0, thread_num * sizeof(struct ThreadUintInfo));
+
+    while (true) {
+        if (mixed_mode_flag == true) {
+            client_info_print_mixed(client, beginVolume, endVolume);
+        } else {
+            client_info_print(client);
+        }
+    }
+    free(beginVolume);
+    free(endVolume);
 
     pthread_mutex_destroy(&client_debug_mutex);
 
