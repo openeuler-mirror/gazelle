@@ -398,10 +398,7 @@ static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, c
     }
 
     /* we both set kernel and lwip */
-    int32_t ret = posix_api->setsockopt_fn(s, level, optname, optval, optlen);
-    if (ret != 0) {
-        return ret;
-    }
+    posix_api->setsockopt_fn(s, level, optname, optval, optlen);
 
     return g_wrap_api->setsockopt_fn(s, level, optname, optval, optlen);
 }
