@@ -97,7 +97,7 @@ static struct gazelle_fault_inject_rule_list g_gazelle_fault_inject_rule_list[] 
 };
 
 static void gazelle_print_fault_inject_set_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
-
+static void gazelle_print_fault_inject_unset_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
 #endif /* GAZELLE_FAULT_INJECT_ENABLE */
 
 static bool g_use_ltran = false;
@@ -1504,6 +1504,7 @@ static int32_t parse_dfx_lstack_args(int32_t argc, char *argv[], struct gazelle_
 #define INJECT_DIGITAL_FIRST_INDEX              3
 #define INJECT_DIGITAL_SECOND_INDEX             4
 #define INJECT_RULE_INDEX                       5
+#define INJECT_UNSET_TYPE_INDEX                 3
 
 
 static void gazelle_print_fault_inject_type_info(struct gazelle_fault_inject_data *inject)
@@ -1549,6 +1550,33 @@ static void gazelle_print_fault_inject_set_status(void *buf, const struct gazell
 
 static void gazelle_print_fault_inject_unset_status(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
+    int32_t ret;
+    static int32_t inject_enable[GAZELLE_FAULT_INJECT_TYPE_MAX];
+    struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
+    struct gazelle_fault_inject_data *inject = &stat->data.inject;
+
+        printf("\n\t\t\t\t\t **** INJECT ENABLE ITEM **** \n\n");
+    do {
+        inject_enable[inject->inject_type] = inject->fault_inject_on;
+        gazelle_print_fault_inject_type_info(inject);
+        if (stat->eof != 0) {
+            break;
+        }
+        ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
+        if (ret != GAZELLE_OK) {
+            return;
+        }
+    } while (true);
+
+    printf("\n\n\t\t\t\t\t **** INJECT DISABLE ITEM **** \n\n");
+    printf("\tThe currently closed inject types are: ");
+    for (int32_t i = 1; i < GAZELLE_FAULT_INJECT_TYPE_MAX; ++i) {
+        if (!inject_enable[i]) {
+            /* i - 1 means fault inject type mapping inject_type_item name */
+            printf("\"%s\" ", inject_type_list[i - 1].inject_type_item);
+        }
+    }
+    printf("\n");
     return;
 }
 
@@ -1653,21 +1681,45 @@ static int32_t parse_fault_inject_digital_data(char *argv[], struct gazelle_stat
     return parse_success;
 }
 
-static int32_t parse_dfx_fault_inject_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+static int32_t parse_fault_inject_unset_type(char *argv[], struct gazelle_stat_msg_request *req_msg)
 {
-    int32_t num_cmd = 0; /* while parse error, num_cmd will return as 0, or num_cmd should be returned as 1. */
+    int32_t num_cmd = 0;
+    
+    if (strcmp(argv[INJECT_TYPE_INDEX], "unset") != 0) {
+        printf("FAULT_INJECT error: unrecognized input -- %s, should be \"unset\"\n", argv[INJECT_TYPE_INDEX]);
+        return num_cmd;
+    }
+    
+    req_msg->data.inject.fault_inject_on = 0; /* unset fault inject */
+    req_msg->stat_mode = GAZELLE_STAT_FAULT_INJECT_UNSET;
+    
+    if (strcmp(argv[INJECT_UNSET_TYPE_INDEX], "all") == 0) {
+        req_msg->data.inject.inject_type = GAZELLE_FAULT_INJECT_TYPE_MAX;
+        return ++num_cmd;
+    }
 
-    req_msg->data.inject.fault_inject_on = 1; /* set fault inject on */
-
-    if (argc == GAZELLE_SET_FAULT_INJECT_PARAM_COUNT) {
-        req_msg->stat_mode = GAZELLE_STAT_FAULT_INJECT_SET;
-    } else if (argc == GAZELLE_UNSET_FAULT_INJECT_PARAM_COUNT) {
-        req_msg->stat_mode = GAZELLE_STAT_FAULT_INJECT_UNSET;
-    } else {
-        printf("FAULT_INJECT error: Count of params wrong , correct count is 6 or 4, now is %d\n", argc);
+    int32_t inject_type_count = sizeof(inject_type_list) / sizeof(inject_type_list[0]);
+    for (int32_t i = 0; i < inject_type_count; ++i) {
+        if (strcmp(inject_type_list[i].inject_type_item, argv[INJECT_UNSET_TYPE_INDEX]) == 0) {
+            req_msg->data.inject.inject_type = inject_type_list[i].inject_type_parsed;
+            break;
+        }
+    }
+    if (req_msg->data.inject.inject_type == GAZELLE_FAULT_INJECT_TYPE_ERR) {
+        printf("FAULT_INJECT error: input inject type is wrong -- %s\n", argv[INJECT_TYPE_INDEX]);
         return num_cmd;
     }
 
+    return ++num_cmd;
+}
+
+static int32_t parse_fault_inject_set_type(char *argv[], struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t num_cmd = 0;
+    
+    req_msg->data.inject.fault_inject_on = 1; /* set fault inject on */
+    req_msg->stat_mode = GAZELLE_STAT_FAULT_INJECT_SET;
+    
     int32_t inject_type_count = sizeof(inject_type_list) / sizeof(inject_type_list[0]);
     for (int32_t i = 0; i < inject_type_count; ++i) {
         if (strcmp(inject_type_list[i].inject_type_item, argv[INJECT_TYPE_INDEX]) == 0) {
@@ -1695,6 +1747,24 @@ static int32_t parse_dfx_fault_inject_args(int32_t argc, char *argv[], struct ga
 
     num_cmd = parse_fault_inject_digital_data(argv, req_msg);
     
+    return num_cmd;
+}
+
+static int32_t parse_dfx_fault_inject_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t num_cmd = 0; /* while parse error, num_cmd will return as 0, or num_cmd should be returned as 1. */
+
+    if (argc == GAZELLE_UNSET_FAULT_INJECT_PARAM_COUNT) {
+        num_cmd = parse_fault_inject_unset_type(argv, req_msg);
+        return num_cmd;
+    }
+    
+    if (argc == GAZELLE_SET_FAULT_INJECT_PARAM_COUNT) {
+        num_cmd = parse_fault_inject_set_type(argv, req_msg);
+        return num_cmd;
+    }
+    
+    printf("FAULT_INJECT error: Count of params wrong , correct count is 6 or 4, now is %d\n", argc);
     return num_cmd;
 }
 

@@ -15,6 +15,6 @@
 
 #include <stdbool.h>
 
-int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_stat_msg_request *msg);
+int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_fault_inject_data inject, enum GAZELLE_STAT_MODE stat_mode);
 
 #endif /* __GAZELLE_INJECT_H__ */
