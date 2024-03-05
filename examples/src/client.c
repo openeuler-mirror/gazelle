@@ -124,6 +124,11 @@ void client_info_print(struct Client *client)
 
 static int32_t client_process_ask(struct ClientHandler *client_handler, struct ClientUnit *client_unit)
 {
+    // not support udp+v6 currently
+    if (strcmp(client_unit->domain, "udp") == 0 && client_unit->ip.addr_family == AF_INET6) {
+        return PROGRAM_OK;
+    }
+
     int32_t client_ask_ret = client_ask(client_handler, client_unit);
     if (client_ask_ret == PROGRAM_FAULT) {
         --client_unit->curr_connect;
