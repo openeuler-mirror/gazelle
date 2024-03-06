@@ -21,7 +21,7 @@
 
 #define KNI_NB_MBUF          (DEFAULT_RING_SIZE << 4)
 
-#define MAX_PACKET_SZ        1530
+#define MAX_PACKET_SZ        1538
 
 #define RING_SIZE(x)         ((x) - 1)
 

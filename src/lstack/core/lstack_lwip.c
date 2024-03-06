@@ -252,6 +252,13 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
         return NULL;
     }
 
+    /* udp send a pbuf chain, dequeue all pbufs except head pbuf */
+    if (NETCONN_IS_UDP(sock) && remain_size > MBUF_MAX_DATA_LEN) {
+        int size = (remain_size + MBUF_MAX_DATA_LEN - 1) / MBUF_MAX_DATA_LEN - 1;
+        struct pbuf *pbuf_used[size];
+        gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbuf_used, size);
+    }
+
     if (get_protocol_stack_group()->latency_start) {
         calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LWIP);
     }
@@ -285,7 +292,7 @@ void do_lwip_get_from_sendring_over(struct lwip_sock *sock)
     sock->stack->stats.write_lwip_cnt++;
 }
 
-static ssize_t do_app_write(struct pbuf *pbufs[], void *buf, size_t len, uint32_t write_num)
+static ssize_t do_app_write(struct lwip_sock *sock, struct pbuf *pbufs[], void *buf, size_t len, uint32_t write_num)
 {
     ssize_t send_len = 0;
     uint32_t i = 0;
@@ -297,6 +304,11 @@ static ssize_t do_app_write(struct pbuf *pbufs[], void *buf, size_t len, uint32_
         rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, MBUF_MAX_DATA_LEN);
         pbufs[i]->tot_len = pbufs[i]->len = MBUF_MAX_DATA_LEN;
         send_len += MBUF_MAX_DATA_LEN;
+
+        /* if udp pkg len > mtu, use pbuf chain to send it */
+        if (NETCONN_IS_UDP(sock) && i > 0) {
+            pbuf_cat(pbufs[0], pbufs[i]);
+        }
     }
 
     /* reduce the branch in loop */
@@ -304,6 +316,10 @@ static ssize_t do_app_write(struct pbuf *pbufs[], void *buf, size_t len, uint32_
     rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, copy_len);
     pbufs[i]->tot_len = pbufs[i]->len = copy_len;
     send_len += copy_len;
+
+    if (NETCONN_IS_UDP(sock) && i > 0) {
+        pbuf_cat(pbufs[0], pbufs[i]);
+    }
 
     return send_len;
 }
@@ -320,7 +336,7 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
         time_stamp_into_pbuf(write_num, pbufs, time_stamp);
     }
 
-    ssize_t send_len = do_app_write(pbufs, buf, len, write_num);
+    ssize_t send_len = do_app_write(sock, pbufs, buf, len, write_num);
 
     if (addr) {
         if (addr->sa_family == AF_INET) {
