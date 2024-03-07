@@ -18,6 +18,7 @@ static pthread_mutex_t client_debug_mutex;      // the client mutex for printf
 struct Client *g_client_begin = NULL;
 
 static int32_t client_process_ask(struct ClientHandler *client_handler, struct ClientUnit *client_unit);
+static void client_get_domain_ipversion(uint8_t protocol_type, struct ClientUnit *client_unit);
 
 static void timer_handle(int signum)
 {
@@ -440,11 +441,8 @@ int32_t clithd_proc_epevs(struct ClientUnit *client_unit)
 void *client_s_create_and_run(void *arg)
 {
     struct ClientUnit *client_unit = (struct ClientUnit *)arg;
-    // not supported udp_v6 currently
-    if (strcmp(client_unit->domain, "udp") == 0 && client_unit->ip.addr_family == AF_INET6) {
-        PRINT_ERROR("client: not supported udp_v6 currently");
-        return (void *)PROGRAM_OK;
-    }
+    // update domain ip info.
+    client_get_domain_ipversion(client_unit->protocol_type_mode, client_unit);
 
     client_unit->threadVolume.thread_id = pthread_self();
     client_unit->threadVolume.ipversion = (client_unit->ip.addr_family == AF_INET ? IPV4_STR : IPV6_STR);
@@ -472,6 +470,9 @@ static void client_get_protocol_type_by_cfgmode(uint8_t mode, int32_t *support_t
 {
     int32_t index = 0;
     for (uint8_t i = V4_TCP; i < PROTOCOL_MODE_MAX; i++) {
+        if (i == V6_UDP) {
+            continue;
+        }
         if (getbit_num(mode, i) == 1) {
             if (index >= buff_len) {
                 PRINT_ERROR("index is over, index =%d", index);
@@ -519,10 +520,17 @@ int32_t client_create_and_run(struct ProgramParams *params)
         return PROGRAM_FAULT;
     }
 
+    bool mixed_mode_flag = false;
+    if (strchr(params->domain, ',') != NULL ||
+        (strcmp(params->ip, PARAM_DEFAULT_IP) != 0 && strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0)) {
+        mixed_mode_flag = true;
+    }
+
     client->uints = client_unit;
     client->debug = params->debug;
-    client_unit->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6);
-    client_get_protocol_type_by_cfgmode(client_unit->protocol_type_mode, protocol_support_array, PROTOCOL_MODE_MAX,
+
+    uint8_t protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6);
+    client_get_protocol_type_by_cfgmode(protocol_type_mode, protocol_support_array, PROTOCOL_MODE_MAX,
         &number_of_support_type);
 
     uint32_t port = UNIX_TCP_PORT_MIN;
@@ -530,11 +538,6 @@ int32_t client_create_and_run(struct ProgramParams *params)
     uint32_t sp = 0;
 
     alarm_init();
-    bool mixed_mode_flag = false;
-    if (strchr(params->domain, ',') != NULL ||
-        (strcmp(params->ip, PARAM_DEFAULT_IP) != 0 && strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0)) {
-        mixed_mode_flag = true;
-    }
 
     for (uint32_t i = 0; i < thread_num; ++i) {
         client_unit->handlers = (struct ClientHandler *)malloc(connect_num * sizeof(struct ClientHandler));
@@ -556,7 +559,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         inet_pton(AF_INET, params->ip, &client_unit->ip.u_addr.ip4);
         inet_pton(AF_INET6, params->ipv6, &client_unit->ip.u_addr.ip6);
         client_unit->groupip.addr_family = params->addr_family;
-        inet_pton(params->addr_family, params->groupip, &client_unit->groupip.u_addr);
+        inet_pton(AF_INET, params->groupip, &client_unit->groupip.u_addr);
 
         /* loop to set ports to each client_units */
         while (!((params->port)[port])) {
@@ -589,7 +592,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
 
         if (number_of_support_type > 0) {
             int32_t index = i % number_of_support_type;
-            client_get_domain_ipversion(protocol_support_array[index], client_unit);
+            client_unit->protocol_type_mode = protocol_support_array[index];
         }
 
         if (pthread_create((tids + i), NULL, client_s_create_and_run, client_unit) < 0) {
