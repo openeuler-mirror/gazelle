@@ -60,6 +60,8 @@
 
 #define DPDK_PKT_BURST_SIZE         512
 
+#define GAZELLE_UDP_PKGLEN_MAX      (65535 - IP_HLEN - UDP_HLEN)
+
 /* total:33 client, index 32 is invaild client */
 #define GAZELLE_CLIENT_NUM_ALL      33
 #define GAZELLE_NULL_CLIENT         (GAZELLE_CLIENT_NUM_ALL - 1)

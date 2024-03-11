@@ -779,6 +779,11 @@ ssize_t do_lwip_send_to_stack(int32_t fd, const void *buf, size_t len, int32_t f
         return 0;
     }
 
+    if (NETCONN_IS_UDP(sock) && (len > GAZELLE_UDP_PKGLEN_MAX)) {
+        LSTACK_LOG(ERR, LSTACK, "Message too long\n");
+        GAZELLE_RETURN(EMSGSIZE);
+    }
+
     thread_bind_stack(sock);
 
     if (sock->same_node_tx_ring != NULL) {
