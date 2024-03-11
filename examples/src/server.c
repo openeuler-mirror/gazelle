@@ -302,7 +302,7 @@ static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struc
     struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
     if (server_handler->fd == server_mud->listener.listen_fd_array[V4_UDP]) {
-        int32_t server_ans_ret = server_ans(server_handler->fd, server_mud->pktlen, "recvfromsendto", "udp");
+        int32_t server_ans_ret = server_ans(server_handler->fd, server_mud->pktlen, server_mud->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_mud->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close server_ans_ret %d! \n", server_ans_ret);
@@ -701,7 +701,7 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
             return PROGRAM_ABORT;
         }
     } else if (fd == (server_unit->listener.listen_fd_array[V4_UDP])) {
-        int32_t server_ans_ret = server_ans(fd, server_unit->pktlen, "recvfromsendto", "udp");
+        int32_t server_ans_ret = server_ans(fd, server_unit->pktlen, server_unit->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close ret %d! \n", server_ans_ret);
