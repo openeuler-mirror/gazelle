@@ -584,6 +584,7 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
         dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
         dev_info.tx_offload_capa = slave_dev_info.tx_offload_capa;
         dev_info.reta_size = slave_dev_info.reta_size;
+        dev_info.flow_type_rss_offloads = slave_dev_info.flow_type_rss_offloads;
     }
 
     eth_params_checksum(&eth_params->conf, &dev_info);
