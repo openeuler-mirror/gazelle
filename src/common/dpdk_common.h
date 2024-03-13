@@ -23,6 +23,8 @@
 
 #define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
 
+#define GAZELLE_LATENCY_RD      0
+#define GAZELLE_LATENCY_WR      1
 
 /* Layout:
  * | rte_mbuf | mbuf_private | payload |
@@ -31,6 +33,7 @@
 struct latency_timestamp {
         uint64_t stamp; // time stamp
         uint64_t check; // just for later vaild check
+        uint16_t type;  // latency type
 };
 struct mbuf_private {
     /* struct pbuf_custom must at first */
@@ -92,6 +95,7 @@ static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct r
         lt = &mbuf_to_private(buf[i])->lt;
         lt->stamp = time_stamp;
         lt->check = ~(time_stamp);
+        lt->type = GAZELLE_LATENCY_RD;
     }
 }
 
@@ -102,6 +106,7 @@ static __rte_always_inline void time_stamp_into_pbuf(uint32_t tx_count, struct p
         lt = &pbuf_to_private(buf[i])->lt;
         lt->stamp = time_stamp;
         lt->check = ~(time_stamp);
+        lt->type = GAZELLE_LATENCY_WR;
     }
 }
 

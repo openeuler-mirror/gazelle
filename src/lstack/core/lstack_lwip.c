@@ -257,6 +257,10 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
         int size = (remain_size + MBUF_MAX_DATA_LEN - 1) / MBUF_MAX_DATA_LEN - 1;
         struct pbuf *pbuf_used[size];
         gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbuf_used, size);
+
+        for (uint32_t i = 0; get_protocol_stack_group()->latency_start && i < size; i++) {
+            calculate_lstack_latency(&sock->stack->latency, pbuf_used[i], GAZELLE_LATENCY_WRITE_LWIP);
+        }
     }
 
     if (get_protocol_stack_group()->latency_start) {
