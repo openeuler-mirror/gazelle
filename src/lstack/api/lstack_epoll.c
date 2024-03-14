@@ -927,13 +927,17 @@ static void fds_poll2select(struct pollfd *fds, nfds_t nfds, fd_set *readfds, fd
     }
 }
 
-static inline int timeval_to_ms(struct timeval *timeval)
+static inline int timeval_to_ms(struct timeval *timeval, int32_t *timeout)
 {
-    if (timeval == NULL) {
+    if (!timeval) {
+        *timeout = -1;
+        return 0;
+    }
+    if (unlikely((timeval->tv_sec < 0 || timeval->tv_usec < 0 || timeval->tv_usec >= 1000000))) {
         return -1;
     }
-
-    return (timeval->tv_sec * 1000 + timeval->tv_usec / 1000);
+    *timeout = timeval->tv_sec * 1000 + timeval->tv_usec / 1000;
+    return 0;
 }
 
 static nfds_t fds_select2poll(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct pollfd *fds)
@@ -969,7 +973,11 @@ int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfd
     /* Convert the select parameter to the poll parameter. */
     struct pollfd fds[FD_SETSIZE] = { 0 };
     nfds_t nfds = fds_select2poll(maxfd, readfds, writefds, exceptfds, fds);
-    int timeout = timeval_to_ms(timeval);
+    int timeout = 0;
+    if (timeval_to_ms(timeval, &timeout)) {
+        LSTACK_LOG(ERR, LSTACK, "select input param timeout error.\n");
+        GAZELLE_RETURN(EINVAL);
+    }
 
     int event_num = lstack_poll(fds, nfds, timeout);
     
