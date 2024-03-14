@@ -104,7 +104,11 @@ static inline __attribute__((always_inline)) void rpc_call(rpc_queue *queue, str
 static inline __attribute__((always_inline)) void rpc_msg_free(struct rpc_msg *msg)
 {
     pthread_spin_destroy(&msg->lock);
-    rte_mempool_put(msg->rpcpool->mempool, (void *)msg);
+    if (msg->rpcpool != NULL && msg->rpcpool->mempool != NULL) {
+        rte_mempool_put(msg->rpcpool->mempool, (void *)msg);
+    } else {
+        free(msg);
+    }
 }
 
 #endif
