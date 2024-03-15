@@ -77,10 +77,10 @@ struct gazelle_fault_inject_type_list {
 };
 
 static struct gazelle_fault_inject_type_list inject_type_list[] = {
-    {"delay",     GAZELLE_FAULT_INJECT_PACKET_DELAY,      parse_inject_packet_delay_digit},
     {"loss",      GAZELLE_FAULT_INJECT_PACKET_LOSS,       parse_inject_packet_loss_digit},
-    {"duplicate", GAZELLE_FAULT_INJECT_PACKAET_DUPLICATE, parse_inject_packet_duplicate_digit},
     {"reorder",  GAZELLE_FAULT_INJECT_PACKET_REORDER,   parse_inject_packet_reorder_digit},
+    {"delay",     GAZELLE_FAULT_INJECT_PACKET_DELAY,      parse_inject_packet_delay_digit},
+    {"duplicate", GAZELLE_FAULT_INJECT_PACKAET_DUPLICATE, parse_inject_packet_duplicate_digit},
 };
 
 struct gazelle_fault_inject_rule_list {
@@ -1553,7 +1553,7 @@ static void gazelle_print_fault_inject_type_info(struct gazelle_fault_inject_dat
     }
     
     if (inject->inject_type == GAZELLE_FAULT_INJECT_PACKET_DELAY) {
-        printf("\t| inject_type: delay   | delay_time: %-7d | delay_range: %-3d             | "
+        printf("\t| inject_type: delay     | delay_time: %-7d   | delay_range: %-3d             | "
                "inject_rule: random |\n", inject->inject_data.delay.delay_time,
                inject->inject_data.delay.delay_range);
     }
@@ -1561,9 +1561,21 @@ static void gazelle_print_fault_inject_type_info(struct gazelle_fault_inject_dat
 #define INJECT_PERCENT                          100
     
     if (inject->inject_type == GAZELLE_FAULT_INJECT_PACKET_LOSS) {
-        printf("\t| inject_type: loss    | loss_rate: %-3.1f%%    | loss_single_count: %-3d       | "
+        printf("\t| inject_type: loss      | loss_rate: %-4.1f%%      | loss_single_count: %-3d       | "
                "inject_rule: random |\n", inject->inject_data.loss.loss_rate * INJECT_PERCENT,
                inject->inject_data.loss.loss_sigle_count);
+    }
+    
+    if (inject->inject_type == GAZELLE_FAULT_INJECT_PACKAET_DUPLICATE) {
+        printf("\t| inject_type: duplicate | duplicate_rate: %-4.1f%% | duplicate_single_count: %-3d  | "
+               "inject_rule: random |\n", inject->inject_data.duplicate.duplicate_rate * INJECT_PERCENT,
+               inject->inject_data.duplicate.duplicate_sigle_count);
+    }
+
+    if (inject->inject_type == GAZELLE_FAULT_INJECT_PACKET_REORDER) {
+        printf("\t| inject_type: reorder   | reorder_rate: %-4.1f%%   | reorder_sigle_count: %-3d     | "
+               "inject_rule: random |\n", inject->inject_data.reorder.reorder_rate * INJECT_PERCENT,
+               inject->inject_data.reorder.reorder_sigle_count);
     }
     printf("\n");
 }
