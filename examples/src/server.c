@@ -301,7 +301,8 @@ static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struc
 {
     struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
-    if (server_handler->fd == server_mud->listener.listen_fd_array[V4_UDP]) {
+    if (server_handler->fd == server_mud->listener.listen_fd_array[V4_UDP] ||
+        server_handler->fd == server_mud->listener.listen_fd_array[UDP_MULTICAST]) {
         int32_t server_ans_ret = server_ans(server_handler->fd, server_mud->pktlen, server_mud->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_mud->epfd, server_handler) != 0) {
@@ -397,7 +398,7 @@ void *sermud_listener_create_and_run(void *arg)
     uint32_t port = 0;
     for (; port < UNIX_TCP_PORT_MAX; port++) {
         if ((server_mud->port)[port]) {
-            if (create_socket_and_listen(server_mud->listener.listen_fd_array, &server_mud->ip, &server_mud->groupip,
+            if (create_socket_and_listen(server_mud->listener.listen_fd_array, &(server_mud->server_ip_info),
                                          htons(port), server_mud->protocol_type_mode) < 0) {
                 PRINT_ERROR("create_socket_and_listen err");
                 sermud_memory_recycle(server_mud);
@@ -456,17 +457,22 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
 
     server_mud->epfd = -1;
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
-    server_mud->ip.addr_family = params->addr_family;
+    server_mud->server_ip_info.ip.addr_family = params->addr_family;
 
-    inet_pton(AF_INET, params->ip, &server_mud->ip.u_addr.ip4);
-    inet_pton(AF_INET6, params->ipv6, &server_mud->ip.u_addr.ip6);
+    inet_pton(AF_INET, params->ip, &server_mud->server_ip_info.ip.u_addr.ip4);
+    inet_pton(AF_INET6, params->ipv6, &server_mud->server_ip_info.ip.u_addr.ip6);
 
-    server_mud->groupip.addr_family = params->addr_family;
-    inet_pton(AF_INET, params->groupip, &server_mud->groupip.u_addr);
+    server_mud->server_ip_info.groupip.addr_family = params->addr_family;
+    inet_pton(AF_INET, params->groupip, &server_mud->server_ip_info.groupip.u_addr);
+
+    server_mud->server_ip_info.groupip_interface.addr_family = params->addr_family;
+    inet_pton(AF_INET, params->groupip_interface, &server_mud->server_ip_info.groupip_interface.u_addr);
+
     server_mud->port = params->port;
     server_mud->pktlen = params->pktlen;
 
-    server_mud->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6);
+    server_mud->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6,
+                                                                            params->groupip);
 
     server_mud->api = params->api;
     server_mud->debug = params->debug;
@@ -572,7 +578,8 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
         }
     }
 
-    server_debug_print("server mum unit", "waiting", &server_unit->ip, server_unit->port, server_unit->debug);
+    server_debug_print("server mum unit", "waiting", &server_unit->server_ip_info.ip, server_unit->port,
+                       server_unit->debug);
 
     return PROGRAM_OK;
 }
@@ -700,7 +707,8 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
             PRINT_ERROR("server try accept error %d! ", sersum_accept_connects_ret);
             return PROGRAM_ABORT;
         }
-    } else if (fd == (server_unit->listener.listen_fd_array[V4_UDP])) {
+    } else if (fd == (server_unit->listener.listen_fd_array[V4_UDP]) ||
+               fd == (server_unit->listener.listen_fd_array[UDP_MULTICAST])) {
         int32_t server_ans_ret = server_ans(fd, server_unit->pktlen, server_unit->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_unit->epfd, server_handler) != 0) {
@@ -751,7 +759,7 @@ void *sersum_create_and_run(void *arg)
 {
     struct ServerMumUnit *server_unit = (struct ServerMumUnit *)arg;
 
-    if (create_socket_and_listen(server_unit->listener.listen_fd_array, &server_unit->ip, &server_unit->groupip,
+    if (create_socket_and_listen(server_unit->listener.listen_fd_array, &(server_unit->server_ip_info),
                                  server_unit->port, server_unit->protocol_type_mode) < 0) {
         PRINT_ERROR("create_socket_and_listen err! \n");
         exit(PROGRAM_FAULT);
@@ -798,12 +806,15 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
         server_unit->curr_connect = 0;
         server_unit->recv_bytes = 0;
-        server_unit->ip.addr_family = params->addr_family;
-        inet_pton(AF_INET, params->ip, &server_unit->ip.u_addr.ip4);
-        inet_pton(AF_INET6, params->ipv6, &server_unit->ip.u_addr.ip6);
+        server_unit->server_ip_info.ip.addr_family = params->addr_family;
+        inet_pton(AF_INET, params->ip, &server_unit->server_ip_info.ip.u_addr.ip4);
+        inet_pton(AF_INET6, params->ipv6, &server_unit->server_ip_info.ip.u_addr.ip6);
 
-        server_unit->groupip.addr_family = AF_INET;
-        inet_pton(AF_INET, params->groupip, &server_unit->groupip.u_addr);
+        server_unit->server_ip_info.groupip.addr_family = AF_INET;
+        inet_pton(AF_INET, params->groupip, &server_unit->server_ip_info.groupip.u_addr);
+
+        server_unit->server_ip_info.groupip_interface.addr_family = AF_INET;
+        inet_pton(AF_INET, params->groupip_interface, &server_unit->server_ip_info.groupip_interface.u_addr);
 
         /* loop to set ports to each server_mums */
         while (!((params->port)[port])) {
@@ -813,7 +824,7 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->pktlen = params->pktlen;
 
         server_unit->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip,
-                                                                                 params->ipv6);
+                                                                                 params->ipv6, params->groupip);
 
         server_unit->api = params->api;
         server_unit->debug = params->debug;

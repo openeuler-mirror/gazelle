@@ -90,7 +90,7 @@ uint8_t getbit_num(uint8_t mode, uint8_t index);
 uint8_t setbitnum_on(uint8_t mode, uint8_t index);
 uint8_t setbitnum_off(uint8_t mode, uint8_t index);
 
-uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* ipv6);
+uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* ipv6, char* group_ip);
 
 struct ServerBaseCfgInfo {
     const char *domain;
@@ -131,6 +131,7 @@ struct ProgramParams {
     char*               accept;             ///< accept connections method
     bool                ringpmd;            ///< if we use ring PMD or not
     char*               groupip;            ///< group IP address>
+    char*               groupip_interface;  ///< udp multicast interface address>
     uint32_t            addr_family;        ///< IP address family
     int32_t             tcp_keepalive_idle; ///< tcp keepalive idle time
     int32_t             tcp_keepalive_interval;  ///< tcp keepalive interval time
@@ -160,6 +161,7 @@ typedef enum {
     V6_TCP,
     V4_UDP,
     V6_UDP,
+    UDP_MULTICAST,
     UNIX,
     PROTOCOL_MODE_MAX
 } PROTOCOL_MODE_ENUM_TYPE;
