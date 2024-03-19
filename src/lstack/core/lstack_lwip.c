@@ -859,39 +859,33 @@ static bool recv_break_for_err(struct lwip_sock *sock)
     return break_wait;
 }
 
-static void recv_block_wait(struct lwip_sock *sock)
-{
-    lstack_block_wait(sock->wakeup);
-}
-
 /*
  * return 0 on success, -1 on error
  * pbuf maybe NULL(tcp fin packet)
  */
 static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf **pbuf)
 {
+    int32_t expect = 1; // only get one pbuf
+
     if (sock->recv_lastdata != NULL) {
         *pbuf = sock->recv_lastdata;
         sock->recv_lastdata = NULL;
         return 0;
     }
 
-    if (noblock) {
-        if (gazelle_ring_read(sock->recv_ring, (void **)pbuf, 1) != 1) {
-            errno = EAGAIN;
+    while (gazelle_ring_read(sock->recv_ring, (void **)pbuf, expect) != expect) {
+        if (noblock) {
+            GAZELLE_RETURN(EAGAIN);
+        }
+        if (recv_break_for_err(sock)) {
             return -1;
-        } else {
-            return 0;
         }
-    } else  {
-        while (gazelle_ring_read(sock->recv_ring, (void **)pbuf, 1) != 1) {
-            if (recv_break_for_err(sock)) {
-                return -1;
-            }
-            recv_block_wait(sock);
+        if (lstack_block_wait(sock->wakeup, sock->conn->recv_timeout) == ETIMEDOUT) {
+            noblock = true;
         }
-        return 0;
     }
+    
+    return 0;
 }
 
 /* return true: fin is read to user, false: pend fin */

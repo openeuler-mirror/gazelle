@@ -80,15 +80,7 @@ int32_t lstack_rtc_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
 int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout);
 int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeval);
 
-static inline void lstack_block_wait(struct wakeup_poll *wakeup)
-{
-    if (wakeup == NULL) {
-        return;
-    }
-
-    __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
-    pthread_mutex_lock(&wakeup->wait);
-}
+int32_t lstack_block_wait(struct wakeup_poll *wakeup, int32_t timeout);
 
 static inline void lstack_block_wakeup(struct wakeup_poll *wakeup)
 {

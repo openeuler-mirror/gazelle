@@ -1270,7 +1270,7 @@ int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *ad
         min_sock = get_min_accept_sock(fd);
     } else {
         while ((min_sock = get_min_accept_sock(fd)) == NULL) {
-            lstack_block_wait(sock->wakeup);
+            lstack_block_wait(sock->wakeup, 0);
 	}
     }
 

@@ -586,6 +586,41 @@ static void ms_to_timespec(struct timespec *timespec, int32_t timeout)
     timespec->tv_nsec = timespec->tv_nsec % SEC_TO_NSEC;
 }
 
+/**
+ * Block lstack thread
+ *
+ * @param wakeup
+ *  The pointer to the wakeup_poll.
+ * @param timeout
+ *  The time to wait, if 'timeout <= 0' will block until unlock
+ *
+ * @return
+ * - return '0' on unlock
+ * - return 'ETIMEDOUT' on timeout
+ */
+int32_t lstack_block_wait(struct wakeup_poll *wakeup, int32_t timeout)
+{
+    int ret = 0;
+    if (wakeup == NULL) {
+        return ret;
+    }
+
+    __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
+    if (timeout > 0) {
+        struct timespec timespec;
+        ms_to_timespec(&timespec, timeout);
+        ret = pthread_mutex_timedlock(&wakeup->wait, &timespec);
+    } else {
+        ret = pthread_mutex_lock(&wakeup->wait);
+    }
+
+    if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
+        __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
+    }
+
+    return ret;
+}
+
 int32_t lstack_rtc_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
     struct lwip_sock *sock = get_socket_by_fd(epfd);
@@ -645,7 +680,6 @@ int32_t lstack_rtw_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
     struct wakeup_poll *wakeup = sock->wakeup;
     int32_t kernel_num = 0;
     int32_t lwip_num = 0;
-    int32_t ret = 0;
 
     if (get_global_cfg_params()->app_bind_numa) {
         epoll_bind_statck(sock->wakeup);
@@ -669,15 +703,7 @@ int32_t lstack_rtw_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
         if (timeout == 0) {
             break;
         }
-
-        if (timeout < 0) {
-            ret = pthread_mutex_lock(&wakeup->wait);
-        } else {
-            struct timespec epoll_time;
-            ms_to_timespec(&epoll_time, timeout);
-            ret = pthread_mutex_timedlock(&wakeup->wait, &epoll_time);
-        }
-    } while (ret == 0);
+    } while (lstack_block_wait(wakeup, timeout) == 0);
 
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
     wakeup->stat.app_events += lwip_num;
@@ -857,7 +883,6 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 
     int32_t kernel_num = 0;
     int32_t lwip_num = 0;
-    int32_t ret;
 
     do {
         __atomic_store_n(&wakeup->in_wait, true, __ATOMIC_RELEASE);
@@ -881,15 +906,7 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         if (timeout == 0) {
             break;
         }
-
-        if (timeout < 0) {
-            ret = pthread_mutex_lock(&wakeup->wait);
-        } else {
-            struct timespec epoll_time;
-            ms_to_timespec(&epoll_time, timeout);
-            ret = pthread_mutex_timedlock(&wakeup->wait, &epoll_time);
-        }
-    } while (ret == 0);
+    } while (lstack_block_wait(wakeup, timeout) == 0);
 
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
     wakeup->stat.app_events += lwip_num;
