@@ -364,6 +364,14 @@ static inline int32_t do_getsockname(int32_t s, struct sockaddr *name, socklen_t
     return posix_api->getsockname_fn(s, name, namelen);
 }
 
+static bool unsupport_ip_optname(int32_t optname)
+{
+    if (optname == IP_RECVERR) {
+        return true;
+    }
+    return false;
+}
+
 static bool unsupport_tcp_optname(int32_t optname)
 {
     if ((optname == TCP_QUICKACK) ||
@@ -391,6 +399,10 @@ static bool unsupport_socket_optname(int32_t optname)
 
 static bool unsupport_optname(int32_t level, int32_t optname)
 {
+    if (level == SOL_IP) {
+        return unsupport_ip_optname(optname);
+    }
+
     if (level == SOL_TCP) {
         return unsupport_tcp_optname(optname);
     }
