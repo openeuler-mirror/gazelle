@@ -223,6 +223,12 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
         COMMON_INFO("RTE_ETH_RX_OFFLOAD_VLAN_STRIP\n");
     }
 
+    // rx vlan filter
+    if (rx_ol_capa & RTE_ETH_RX_OFFLOAD_VLAN_FILTER) {
+        rx_ol |= RTE_ETH_RX_OFFLOAD_VLAN_FILTER;
+        COMMON_INFO("RTE_ETH_RX_OFFLOAD_VLAN_STRIP\n");
+    }
+
     // tx ip
     if (tx_ol_capa & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM) {
         tx_ol |= RTE_ETH_TX_OFFLOAD_IPV4_CKSUM;
