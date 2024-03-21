@@ -48,10 +48,27 @@ uint64_t get_current_time(void)
     return (rte_rdtsc() / g_cycles_per_us);
 }
 
+void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new)
+{
+    if (!get_protocol_stack_group()->latency_start) {
+        return;
+    }
+    struct latency_timestamp *lt_old;
+    struct latency_timestamp *lt_new;
+
+    lt_old = &pbuf_to_private(pbuf_old)->lt;
+    lt_new = &pbuf_to_private(pbuf_new)->lt;
+
+    lt_new->stamp = lt_old->stamp;
+    lt_new->check = lt_old->check;
+    lt_new->type = lt_old->type;
+}
+
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
     enum GAZELLE_LATENCY_TYPE type)
 {
     uint64_t latency;
+    uint16_t lt_type;
     const struct latency_timestamp *lt;
     struct stack_latency *latency_stat;
 
@@ -60,7 +77,8 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
     }
 
     lt = &pbuf_to_private(pbuf)->lt;
-    if (lt->stamp != ~(lt->check) || lt->stamp < stack_latency->start_time) {
+    lt_type = (type / GAZELLE_LATENCY_READ_MAX) ? GAZELLE_LATENCY_WR : GAZELLE_LATENCY_RD;
+    if (lt->stamp != ~(lt->check) || lt->stamp < stack_latency->start_time || lt_type != lt->type) {
         return;
     }
 
