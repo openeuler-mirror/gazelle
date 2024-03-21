@@ -111,6 +111,7 @@
 
 #define IPV4_STR "V4"
 #define IPV6_STR "V6"
+#define IPV4_MULTICAST "Multicast"
 #define INVAILD_STR "STR_NULL"
 
 #define TIMES_CONVERSION_RATE (1000)
@@ -122,7 +123,7 @@ struct ThreadUintInfo {
     uint64_t send_bytes;                ///< total send bytes
     uint32_t cur_connect_num;           ///< total connection number
     char* domain;
-    char* ipversion;
+    char* ip_type_info;
     pthread_t thread_id;
 };
 
@@ -152,6 +153,7 @@ struct ClientUnit {
     ip_addr_t ip;                       ///< server ip
     ip_addr_t groupip;                  ///< server groupip
     uint32_t port;                      ///< server port
+    ip_addr_t groupip_interface;        ///< udp multicast interface address>
     uint32_t sport;                     ///< client sport
     uint32_t connect_num;               ///< total connection number
     uint32_t pktlen;                    ///< the length of peckage
@@ -165,7 +167,11 @@ struct ClientUnit {
     struct ThreadUintInfo threadVolume;
     struct ClientUnit *next;            ///< next pointer
 };
-
+struct ServerIpInfo {
+    ip_addr_t ip;                           ///< server ip
+    ip_addr_t groupip;                      ///< server group ip
+    ip_addr_t groupip_interface;            ///< server group interface ip
+};
 /**
  * @brief create the socket and listen
  * Thi function creates the socket and listen.
@@ -176,7 +182,7 @@ struct ClientUnit {
  * @param domain        domain
  * @return              the result
  */
-int32_t create_socket_and_listen(int32_t *listen_fd_array, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port,
+int32_t create_socket_and_listen(int32_t *listen_fd_array, struct ServerIpInfo *server_ip_info, uint16_t port,
                                  uint8_t protocol_mode);
 
 /**
@@ -190,7 +196,7 @@ int32_t create_socket_and_listen(int32_t *listen_fd_array, ip_addr_t *ip, ip_add
  * @param api           api
  * @return              the result
  */
-int32_t create_socket_and_connect(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop);
+int32_t create_socket_and_connect(int32_t *socket_fd, struct ClientUnit *client_unit);
 
 /**
  * @brief set the socket to unblock

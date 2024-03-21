@@ -97,7 +97,7 @@ static uint8_t program_set_protocol_mode(uint8_t protocol_mode, char *ipv4, char
     return protocol_mode_temp;
 }
 
-uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* ipv6)
+uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* ipv6, char* groupip)
 {
     uint8_t protocol_mode = 0;
     char *cur_ptr = NULL;
@@ -113,6 +113,11 @@ uint8_t program_get_protocol_mode_by_domain_ip(char* domain, char* ipv4, char* i
         }
         cur_ptr = strtok_s(NULL, ",", &next_Ptr);
     }
+
+    if (strcmp(groupip, PARAM_DEFAULT_GROUPIP) != 0) {
+        protocol_mode = setbitnum_on(protocol_mode, UDP_MULTICAST);
+    }
+
     return protocol_mode;
 }
 
@@ -376,9 +381,19 @@ void program_param_parse_keepalive(struct ProgramParams *params)
 // set `group ip` parameter
 void program_param_parse_groupip(struct ProgramParams *params)
 {
-    in_addr_t ip = ntohl(inet_addr(optarg));
+    char *cup_ptr = NULL;
+    char *next_ptr = NULL;
+
+    cup_ptr = strtok_s(optarg, ",", &next_ptr);
+    if (cup_ptr == NULL || next_ptr == NULL) {
+        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        exit(PROGRAM_ABORT);
+    }
+    params->groupip_interface = cup_ptr;
+
+    in_addr_t ip = ntohl(inet_addr(next_ptr));
     if (ip != INADDR_NONE && ip >= ntohl(inet_addr("224.0.0.0")) && ip <= ntohl(inet_addr("239.255.255.255"))) {
-        params->groupip = optarg;
+        params->groupip = next_ptr;
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
         exit(PROGRAM_ABORT);
@@ -536,6 +551,7 @@ void program_params_init(struct ProgramParams *params)
     params->epollcreate = PARAM_DEFAULT_EPOLLCREATE;
     params->accept = PARAM_DEFAULT_ACCEPT;
     params->groupip = PARAM_DEFAULT_GROUPIP;
+    params->groupip_interface = PARAM_DEFAULT_GROUPIP;
     params->tcp_keepalive_idle = PARAM_DEFAULT_KEEPALIVEIDLE;
     params->tcp_keepalive_interval = PARAM_DEFAULT_KEEPALIVEIDLE;
 }
@@ -678,17 +694,16 @@ void program_params_print(struct ProgramParams *params)
     printf("--> [as]:                       %s \n", params->as);
     if (strcmp(params->groupip, PARAM_DEFAULT_GROUPIP) != 0) {
         if (strcmp(params->as, "server") == 0) {
-            printf("--> [server ip]:                %s \n", params->ip);
             printf("--> [server group ip]:          %s \n", params->groupip);
+            printf("--> [server groupip_interface]: %s \n", params->groupip_interface);
         } else {
-            printf("--> [server ip]:                %s \n", params->groupip);
-            printf("--> [client send ip]:           %s \n", params->ip);
+            printf("--> [client group ip]:          %s \n", params->groupip);
+            printf("--> [client groupip_interface]: %s \n", params->groupip_interface);
         }
-    } else {
-        printf("--> [server ip]:                %s \n", params->ip);
-        if (strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0) {
-            printf("--> [server ipv6]:              %s \n", params->ipv6);
-        }
+    }
+    printf("--> [server ip]:                %s \n", params->ip);
+    if (strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0) {
+        printf("--> [server ipv6]:              %s \n", params->ipv6);
     }
 
     printf("--> [server port]:              ");

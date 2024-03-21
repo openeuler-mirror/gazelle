@@ -31,8 +31,7 @@ struct ServerMumUnit
     struct epoll_event *epevs;              ///< the epoll events
     uint32_t curr_connect;                  ///< current connection number
     uint64_t recv_bytes;                    ///< total receive bytes
-    ip_addr_t ip;                           ///< server ip
-    ip_addr_t groupip;                      ///< server group ip
+    struct ServerIpInfo server_ip_info;
     uint16_t port;                          ///< server port
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
@@ -87,8 +86,7 @@ struct ServerMud
     struct ServerMudWorker *workers;        ///< the workers
     int32_t epfd;                           ///< the listen epoll file descriptor
     struct epoll_event *epevs;              ///< the epoll events
-    ip_addr_t ip;                           ///< server ip
-    ip_addr_t groupip;                      ///< server group ip
+    struct ServerIpInfo server_ip_info;
     bool* port;                             ///< server port point to parameter's port
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain

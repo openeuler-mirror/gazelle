@@ -50,7 +50,8 @@ static struct Client_domain_ip g_cfgmode_map[PROTOCOL_MODE_MAX] = {
     [V4_TCP] = {"tcp", AF_INET},
     [V6_TCP] = {"tcp", AF_INET6},
     [V4_UDP] = {"udp", AF_INET},
-    [V6_UDP] = {"udp", AF_INET6}};
+    [V6_UDP] = {"udp", AF_INET6},
+    [UDP_MULTICAST] = {"udp", AF_INET}};
 
 // the single thread, client prints informations
 void client_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug)
@@ -163,7 +164,7 @@ static void client_get_thread_volume(struct Client *client, struct ThreadUintInf
         threadVolume[index].cur_connect_num = curUint->curr_connect;
         threadVolume[index].thread_id = curUint->threadVolume.thread_id;
         threadVolume[index].domain = curUint->threadVolume.domain;
-        threadVolume[index].ipversion = curUint->threadVolume.ipversion;
+        threadVolume[index].ip_type_info = curUint->threadVolume.ip_type_info;
         curUint = curUint->next;
         index++;
     }
@@ -200,7 +201,7 @@ void client_info_print_mixed(struct Client *client, struct ThreadUintInfo *threa
         pthread_t thread_id = endThreadVolume[i].thread_id;
         uint32_t connect_num = endThreadVolume[i].cur_connect_num;
         char *domain = endThreadVolume[i].domain;
-        char *ip_ver = endThreadVolume[i].ipversion;
+        char *ip_ver = endThreadVolume[i].ip_type_info;
 
         if (thread_id == 0) {
             not_support_thread++;
@@ -212,13 +213,13 @@ void client_info_print_mixed(struct Client *client, struct ThreadUintInfo *threa
         double bytes_ps = bytes_sub / time_sub;
 
         if (bytes_ps < KB) {
-            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%s [connect num]: %u, [send]: %.3f B/s",
+            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%-9s [connect num]: %u, [send]: %.3f B/s",
                                   thread_id, domain, ip_ver, connect_num, bytes_ps);
         } else if (bytes_ps < MB) {
-            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%s [connect num]: %u, [send]: %.3f kB/s",
+            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%-9s [connect num]: %u, [send]: %.3f kB/s",
                                   thread_id, domain, ip_ver, connect_num, bytes_ps / KB);
         } else {
-            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%s [connect num]: %u, [send]: %.3f MB/s",
+            PRINT_CLIENT_DATAFLOW("threadID=%-15lu, %s_%-9s [connect num]: %u, [send]: %.3f MB/s",
                                   thread_id, domain, ip_ver, connect_num, bytes_ps / MB);
         }
     }
@@ -226,9 +227,9 @@ void client_info_print_mixed(struct Client *client, struct ThreadUintInfo *threa
 }
 
 // the single thread, client try to connect to server, register to epoll
-int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t epoll_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop)
+int32_t client_thread_try_connect(struct ClientHandler *client_handler, struct ClientUnit *client_unit)
 {
-    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), ip, groupip, port, sport, domain, api, loop);
+    int32_t create_socket_and_connect_ret = create_socket_and_connect(&(client_handler->fd), client_unit);
     if (create_socket_and_connect_ret == PROGRAM_INPROGRESS) {
         return PROGRAM_OK;
     }
@@ -238,8 +239,7 @@ int32_t client_thread_try_connect(struct ClientHandler *client_handler, int32_t 
 // the single thread, client retry to connect to server, register to epoll
 int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct ClientHandler *client_handler)
 {
-    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit->epfd, &client_unit->ip,
-          &client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
+    int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_handler, client_unit);
     if (clithd_try_cnntask_ret < 0) {
         if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
             return PROGRAM_OK;
@@ -296,7 +296,7 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
     }
 
     for (uint32_t i = 0; i < connect_num; ++i) {
-        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit->epfd, &client_unit->ip, &client_unit->groupip, client_unit->port, client_unit->sport, client_unit->domain, client_unit->api, client_unit->loop);
+        int32_t clithd_try_cnntask_ret = client_thread_try_connect(client_unit->handlers + i, client_unit);
         if (clithd_try_cnntask_ret < 0) {
             if (clithd_try_cnntask_ret == PROGRAM_INPROGRESS) {
                 continue;
@@ -378,7 +378,7 @@ static int32_t clithd_proc_epevs_epollout(struct epoll_event *curr_epev, struct 
 
 static int32_t clithd_proc_epevs_epollin(struct epoll_event *curr_epev, struct ClientUnit *client_unit)
 {
-    ip_addr_t *chkans_ip = client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip : &client_unit->ip;
+    ip_addr_t *chkans_ip = client_unit->protocol_type_mode == UDP_MULTICAST ? &client_unit->groupip : &client_unit->ip;
     int32_t client_chkans_ret = client_chkans((struct ClientHandler *)curr_epev->data.ptr, client_unit->pktlen,
                                               client_unit->verify, client_unit->api, client_unit->domain, chkans_ip);
     struct ClientHandler *client_handler = (struct ClientHandler *)curr_epev->data.ptr;
@@ -444,8 +444,13 @@ void *client_s_create_and_run(void *arg)
     // update domain ip info.
     client_get_domain_ipversion(client_unit->protocol_type_mode, client_unit);
 
+    if (client_unit->protocol_type_mode == UDP_MULTICAST) {
+        client_unit->threadVolume.ip_type_info = IPV4_MULTICAST;
+    } else {
+        client_unit->threadVolume.ip_type_info = (client_unit->ip.addr_family == AF_INET ? IPV4_STR : IPV6_STR);
+    }
     client_unit->threadVolume.thread_id = pthread_self();
-    client_unit->threadVolume.ipversion = (client_unit->ip.addr_family == AF_INET ? IPV4_STR : IPV6_STR);
+
     client_unit->threadVolume.domain = client_unit->domain;
 
     if (client_thread_create_epfd_and_reg(client_unit) < 0) {
@@ -520,16 +525,22 @@ int32_t client_create_and_run(struct ProgramParams *params)
         return PROGRAM_FAULT;
     }
 
+    bool v4_cfg_flag = (strcmp(params->ip, PARAM_DEFAULT_IP) != 0);
+    bool v6_cfg_flag = (strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0);
+    bool multcact_cfg_flag = (strcmp(params->groupip, PARAM_DEFAULT_GROUPIP) != 0);
+
     bool mixed_mode_flag = false;
-    if (strchr(params->domain, ',') != NULL ||
-        (strcmp(params->ip, PARAM_DEFAULT_IP) != 0 && strcmp(params->ipv6, PARAM_DEFAULT_IP_V6) != 0)) {
+    if ((strchr(params->domain, ',') != NULL) || (v4_cfg_flag && v6_cfg_flag) ||
+        (multcact_cfg_flag && (v4_cfg_flag || v6_cfg_flag))) {
         mixed_mode_flag = true;
     }
 
     client->uints = client_unit;
     client->debug = params->debug;
 
-    uint8_t protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6);
+    uint8_t protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6,
+                                                                        params->groupip);
+
     client_get_protocol_type_by_cfgmode(protocol_type_mode, protocol_support_array, PROTOCOL_MODE_MAX,
         &number_of_support_type);
 
@@ -552,7 +563,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->threadVolume.cur_connect_num = 0;
         client_unit->threadVolume.thread_id = 0;
         client_unit->threadVolume.send_bytes = 0;
-        client_unit->threadVolume.ipversion = INVAILD_STR;
+        client_unit->threadVolume.ip_type_info = INVAILD_STR;
         client_unit->threadVolume.domain = INVAILD_STR;
 
         client_unit->ip.addr_family = params->addr_family;
@@ -560,6 +571,8 @@ int32_t client_create_and_run(struct ProgramParams *params)
         inet_pton(AF_INET6, params->ipv6, &client_unit->ip.u_addr.ip6);
         client_unit->groupip.addr_family = params->addr_family;
         inet_pton(AF_INET, params->groupip, &client_unit->groupip.u_addr);
+        client_unit->groupip_interface.addr_family = params->addr_family;
+        inet_pton(AF_INET, params->groupip_interface, &client_unit->groupip_interface.u_addr);
 
         /* loop to set ports to each client_units */
         while (!((params->port)[port])) {

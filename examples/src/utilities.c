@@ -72,12 +72,13 @@ static int32_t process_unix_fd(int32_t *socket_fd, int32_t *listen_fd_array)
     return PROGRAM_OK;
 }
 
-static int32_t process_udp_groupip(int32_t fd, ip_addr_t *ip, ip_addr_t *groupip, sockaddr_t *socker_add_info)
+static int32_t process_udp_groupip(int32_t fd, ip_addr_t *ip, ip_addr_t *groupip, sockaddr_t *socker_add_info,
+                                   ip_addr_t *groupip_interface)
 {
     struct ip_mreq mreq;
     if (groupip->u_addr.ip4.s_addr) {
         mreq.imr_multiaddr = groupip->u_addr.ip4;
-        mreq.imr_interface = ip->u_addr.ip4;
+        mreq.imr_interface = groupip_interface->u_addr.ip4;
         if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(struct ip_mreq)) == -1) {
             PRINT_ERROR("can't set the address to group %d! ", errno);
             return PROGRAM_FAULT;
@@ -100,6 +101,8 @@ static int32_t server_create_sock(uint8_t protocol_mode, int32_t* fd_arry)
             fd_arry[i] = socket(AF_INET6, SOCK_STREAM, 0);
         } else if (i == V4_UDP) {
             fd_arry[i] = socket(AF_INET, SOCK_DGRAM, 0);
+        } else if (i == UDP_MULTICAST) {
+            fd_arry[i] = socket(AF_INET, SOCK_DGRAM, 0);
         } else {
             continue;
         }
@@ -121,8 +124,35 @@ static int32_t server_create_sock(uint8_t protocol_mode, int32_t* fd_arry)
     return PROGRAM_OK;
 }
 
+static int32_t socket_add_info_init(int32_t idx, uint16_t port, struct ServerIpInfo *server_ip_info,
+                                    sockaddr_t *socker_add_info, int32_t *listen_fd_array)
+{
+    ip_addr_t *ip = &(server_ip_info->ip);
+    ip_addr_t *groupip = &(server_ip_info->groupip);
+    ip_addr_t *groupip_interface = &(server_ip_info->groupip_interface);
+
+    uint32_t len = ((idx == V4_TCP || idx == V4_UDP || idx == UDP_MULTICAST) ?
+        sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
+    memset_s(socker_add_info, len, 0, len);
+
+    if (idx == V4_TCP || idx == V4_UDP) {
+        ((struct sockaddr_in *)socker_add_info)->sin_addr = ip->u_addr.ip4;
+    } else if (idx == V6_TCP) {
+        ((struct sockaddr_in6 *)socker_add_info)->sin6_addr = ip->u_addr.ip6;
+    } else if (idx == UDP_MULTICAST) {
+        if (process_udp_groupip(listen_fd_array[idx], ip, groupip, socker_add_info, groupip_interface) != PROGRAM_OK) {
+            return PROGRAM_FAULT;
+        }
+    }
+
+    ((struct sockaddr *)socker_add_info)->sa_family = ((idx == V4_TCP || idx == V4_UDP || idx == UDP_MULTICAST) ?
+                                                        AF_INET : AF_INET6);
+    ((struct sockaddr_in *)socker_add_info)->sin_port = port;
+    return PROGRAM_OK;
+}
+
 // create the socket and listen
-int32_t create_socket_and_listen(int32_t *listen_fd_array, ip_addr_t *ip, ip_addr_t *groupip,
+int32_t create_socket_and_listen(int32_t *listen_fd_array, struct ServerIpInfo *server_ip_info,
                                  uint16_t port, uint8_t protocol_mode)
 {
     int32_t port_multi = 1;
@@ -151,20 +181,12 @@ int32_t create_socket_and_listen(int32_t *listen_fd_array, ip_addr_t *ip, ip_add
             PRINT_ERROR("can't set the socket to unblock! ");
             return PROGRAM_FAULT;
         }
-        len = ((i == V4_TCP || i== V4_UDP) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
-        memset_s(&socker_add_info, len, 0, len);
-
-        if (i == V4_TCP || i == V4_UDP) {
-            ((struct sockaddr_in *)&socker_add_info)->sin_addr = ip->u_addr.ip4;
-            if (i == V4_UDP && process_udp_groupip(listen_fd_array[i], ip, groupip, &socker_add_info) != PROGRAM_OK) {
-                return PROGRAM_FAULT;
-            }
-        } else if (i == V6_TCP) {
-            ((struct sockaddr_in6 *)&socker_add_info)->sin6_addr = ip->u_addr.ip6;
+        if (socket_add_info_init(i, port, server_ip_info, &socker_add_info, listen_fd_array) != PROGRAM_OK) {
+            return PROGRAM_FAULT;
         }
 
-        ((struct sockaddr *)&socker_add_info)->sa_family = ((i == V4_TCP || i== V4_UDP) ? AF_INET : AF_INET6);
-        ((struct sockaddr_in *)&socker_add_info)->sin_port = port;
+        len = ((i == V4_TCP || i == V4_UDP || i == UDP_MULTICAST) ?
+                sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
 
         if (bind(listen_fd_array[i], (struct sockaddr *)&socker_add_info, len) < 0) {
             PRINT_ERROR("can't bind the address %d!, i=%d, listen_fd_array[i]=%d ", errno, i, listen_fd_array[i]);
@@ -181,63 +203,133 @@ int32_t create_socket_and_listen(int32_t *listen_fd_array, ip_addr_t *ip, ip_add
     return PROGRAM_OK;
 }
 
-// create the socket and connect
-int32_t create_socket_and_connect(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *groupip, uint16_t port, uint16_t sport, const char *domain, const char *api, const uint32_t loop)
+static int32_t creat_socket_init(int32_t *socket_fd, struct ClientUnit *client_unit, sockaddr_t *server_addr)
 {
-    if (strcmp(domain, "tcp") == 0 || strcmp(domain, "udp") == 0) {
-        if (strcmp(domain, "tcp") == 0) {
-            *socket_fd = socket(ip->addr_family, SOCK_STREAM, 0);
+    ip_addr_t *ip = &client_unit->ip;
+    const char *domain = client_unit->domain;
+
+    if (strcmp(domain, "tcp") == 0) {
+        *socket_fd = socket(ip->addr_family, SOCK_STREAM, 0);
+    } else {
+        *socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    }
+    if (*socket_fd < 0) {
+        PRINT_ERROR("client can't create socket %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+
+    if (set_socket_unblock(*socket_fd) < 0) {
+        PRINT_ERROR("can't set the socket to unblock! ");
+        return PROGRAM_FAULT;
+    }
+
+    ((struct sockaddr *)server_addr)->sa_family = ip->addr_family;
+
+    return PROGRAM_OK;
+}
+
+static int32_t pocess_connect_sport(int32_t *socket_fd, struct ClientUnit *client_unit, sockaddr_t *server_addr)
+{
+    uint16_t sport = client_unit->sport;
+    ip_addr_t *ip = &client_unit->ip;
+    uint32_t addr_len = ip->addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+
+    if (sport) {
+        if (ip->addr_family == AF_INET) {
+            ((struct sockaddr_in *)server_addr)->sin_addr.s_addr = htonl(INADDR_ANY);
+        } else if (ip->addr_family == AF_INET6) {
+            ((struct sockaddr_in6 *)server_addr)->sin6_addr = in6addr_any;
+        }
+        ((struct sockaddr_in *)server_addr)->sin_port = sport;
+        if (bind(*socket_fd, (struct sockaddr *)server_addr, addr_len) < 0) {
+            PRINT_ERROR("can't bind the address to socket %d! ", errno);
+            return PROGRAM_FAULT;
+        }
+    }
+    return PROGRAM_OK;
+}
+
+static int32_t pocess_unix_create_connect(int32_t *socket_fd)
+{
+    *socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (*socket_fd < 0) {
+        PRINT_ERROR("client can't create socket %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+
+    struct sockaddr_un server_addr;
+    server_addr.sun_family = AF_UNIX;
+    strcpy_s(server_addr.sun_path, sizeof(server_addr.sun_path), SOCKET_UNIX_DOMAIN_FILE);
+    if (connect(*socket_fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_un)) < 0) {
+        if (errno == EINPROGRESS) {
+            return PROGRAM_INPROGRESS;
         } else {
-            *socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+            PRINT_ERROR("client can't connect to the server %d! ", errno);
+            return PROGRAM_FAULT;
         }
-        if (*socket_fd < 0) {
-            PRINT_ERROR("client can't create socket %d! ", errno);
+    }
+    return PROGRAM_OK;
+}
+
+static int32_t pocess_udp_multicast(int32_t *socket_fd, struct ClientUnit *client_unit, sockaddr_t *server_addr)
+{
+    const uint32_t loop = client_unit->loop;
+    ip_addr_t *groupip = &client_unit->groupip;
+    if (client_unit->protocol_type_mode == UDP_MULTICAST) {
+        /* set the local device for a multicast socket */
+        ((struct sockaddr_in *)server_addr)->sin_addr = groupip->u_addr.ip4;
+
+        struct in_addr localInterface;
+        localInterface.s_addr = client_unit->groupip_interface.u_addr.ip4.s_addr;
+        if (setsockopt(*socket_fd, IPPROTO_IP, IP_MULTICAST_IF, (char *)&localInterface, sizeof(localInterface)) < 0) {
+            PRINT_ERROR("can't set the multicast interface %d! ", errno);
             return PROGRAM_FAULT;
         }
 
-        if (set_socket_unblock(*socket_fd) < 0) {
-            PRINT_ERROR("can't set the socket to unblock! ");
+        /* sent multicast packets should be looped back to the local socket */
+        if (setsockopt(*socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop)) == -1) {
+            PRINT_ERROR("can't set the multicast loop %d! ", errno);
             return PROGRAM_FAULT;
         }
+    }
+    return PROGRAM_OK;
+}
 
-        sockaddr_t server_addr;
+// create the socket and connect
+int32_t create_socket_and_connect(int32_t *socket_fd,  struct ClientUnit *client_unit)
+{
+    ip_addr_t *ip = &client_unit->ip;
+    const char *domain = client_unit->domain;
+    const char *api = client_unit->api;
+
+    sockaddr_t server_addr;
+
+    if (strcmp(domain, "tcp") == 0 || strcmp(domain, "udp") == 0) {
         uint32_t addr_len = ip->addr_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
         memset_s(&server_addr, addr_len, 0, addr_len);
-        ((struct sockaddr*)&server_addr)->sa_family = ip->addr_family;
-        if (sport) {
-            if (ip->addr_family == AF_INET) {
-                ((struct sockaddr_in*)&server_addr)->sin_addr.s_addr = htonl(INADDR_ANY);
-            } else if (ip->addr_family == AF_INET6) {
-                ((struct sockaddr_in6*)&server_addr)->sin6_addr = in6addr_any;
-            }
-            ((struct sockaddr_in*)&server_addr)->sin_port = sport;
-            if (bind(*socket_fd, (struct sockaddr *)&server_addr, addr_len) < 0) {
-                PRINT_ERROR("can't bind the address to socket %d! ", errno);
-                return PROGRAM_FAULT;
-            }
-        }
-        if (ip->addr_family == AF_INET) {
-            ((struct sockaddr_in*)&server_addr)->sin_addr = ip->u_addr.ip4;
-        } else if (ip->addr_family == AF_INET6) {
-            ((struct sockaddr_in6*)&server_addr)->sin6_addr = ip->u_addr.ip6;
-        }
-        ((struct sockaddr_in*)&server_addr)->sin_port = port;
-        if (strcmp(domain, "udp") == 0) {
-            if (groupip->u_addr.ip4.s_addr) {
-                /* set the local device for a multicast socket */
-                ((struct sockaddr_in*)&server_addr)->sin_addr = groupip->u_addr.ip4;
-                if (setsockopt(*socket_fd, IPPROTO_IP, IP_MULTICAST_IF, &ip->u_addr.ip4, sizeof(struct in_addr)) != 0) {
-                    PRINT_ERROR("can't set the multicast interface %d! ", errno);
-                    return PROGRAM_FAULT;
-                }
 
-                /* sent multicast packets should be looped back to the local socket */
-                if (setsockopt(*socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop)) == -1) {
-                    PRINT_ERROR("can't set the multicast loop %d! ", errno);
-                    return PROGRAM_FAULT;
-                }
+        if (creat_socket_init(socket_fd, client_unit, &server_addr) != PROGRAM_OK) {
+            return PROGRAM_FAULT;
+        }
+
+        if (pocess_connect_sport(socket_fd, client_unit, &server_addr) < 0) {
+            return PROGRAM_FAULT;
+        }
+
+        if (ip->addr_family == AF_INET) {
+            ((struct sockaddr_in *)&server_addr)->sin_addr = ip->u_addr.ip4;
+        } else if (ip->addr_family == AF_INET6) {
+            ((struct sockaddr_in6 *)&server_addr)->sin6_addr = ip->u_addr.ip6;
+        }
+        ((struct sockaddr_in *)&server_addr)->sin_port = client_unit->port;
+
+        if (strcmp(domain, "udp") == 0) {
+            int32_t ret = pocess_udp_multicast(socket_fd, client_unit, &server_addr);
+            if (ret != PROGRAM_OK) {
+                return ret;
             }
         }
+
         if (strcmp(domain, "udp") != 0 || strcmp(api, "recvfromsendto") != 0) {
             if (connect(*socket_fd, (struct sockaddr *)&server_addr, addr_len) < 0) {
                 if (errno == EINPROGRESS) {
@@ -249,25 +341,11 @@ int32_t create_socket_and_connect(int32_t *socket_fd, ip_addr_t *ip, ip_addr_t *
             }
         }
     } else if (strcmp(domain, "unix") == 0) {
-        *socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (*socket_fd < 0) {
-            PRINT_ERROR("client can't create socket %d! ", errno);
-            return PROGRAM_FAULT;
-        }
-
-        struct sockaddr_un server_addr;
-        server_addr.sun_family = AF_UNIX;
-        strcpy_s(server_addr.sun_path, sizeof(server_addr.sun_path), SOCKET_UNIX_DOMAIN_FILE);
-        if (connect(*socket_fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_un)) < 0) {
-            if (errno == EINPROGRESS) {
-                return PROGRAM_INPROGRESS;
-            } else {
-                PRINT_ERROR("client can't connect to the server %d! ", errno);
-                return PROGRAM_FAULT;
-            }
+        int32_t ret = pocess_unix_create_connect(socket_fd);
+        if (ret != PROGRAM_OK) {
+            return ret;
         }
     }
-
     return PROGRAM_OK;
 }
 

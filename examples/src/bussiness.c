@@ -281,7 +281,7 @@ int32_t client_ask(struct ClientHandler *client_handler, struct ClientUnit *clie
     const char *api = client_unit->api;
     const char *domain = client_unit->domain;
 
-    ip_addr_t *ip = client_unit->groupip.u_addr.ip4.s_addr ? &client_unit->groupip : &client_unit->ip;
+    ip_addr_t *ip = client_unit->protocol_type_mode == UDP_MULTICAST ? &client_unit->groupip : &client_unit->ip;
     uint16_t port = client_unit->port;
 
     const uint32_t length = client_unit->pktlen;
