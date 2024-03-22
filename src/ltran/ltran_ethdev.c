@@ -378,7 +378,7 @@ static int32_t ltran_bond_port_attr_set(uint16_t port_num, uint16_t bond_port_id
     
     struct rte_eth_dev_info dev_info;
     if (rte_eth_dev_info_get(bond_port_id, &dev_info) != 0) {
-        LTRAN_ERR("faile rte_eth_dev_info_get\n");
+        LTRAN_ERR("rte_eth_dev_info_get failed\n");
         return GAZELLE_ERR;
     }
 
