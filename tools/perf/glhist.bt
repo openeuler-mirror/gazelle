@@ -1,0 +1,21 @@
+#!/usr/bin/env bpftrace
+/* 
+reference: https://github.com/bpftrace/bpftrace/blob/master/man/adoc/bpftrace.adoc
+prepare: yum install bpftrace
+example: ./glhist.bt rpc_poll_msg
+*/
+
+uprobe:/usr/lib64/liblstack.so:$1
+{
+    @t_start[tid] = nsecs;
+}
+
+uretprobe:/usr/lib64/liblstack.so:$1
+{
+    @t_dur[tid] = nsecs - @t_start[tid];
+    @t_count[tid] = count();
+    if (@t_dur[tid] < 1000000000) {
+        // lhist(int64 n, int64 min, int64 max, int64 step)
+        @t_hist[tid] = lhist(@t_dur[tid], 0, 4000, 100);
+    }
+}
