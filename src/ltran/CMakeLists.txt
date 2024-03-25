@@ -63,6 +63,9 @@ if (DPDK_VERSION  GREATER_EQUAL 23.11)
     set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -lrte_log -larchive -Wl,-lrte_eal")
 else()
     set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -lrte_kni -Wl,-Bstatic -lrte_eal -Wl,-Bdynamic")
+    if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "ppc64le")
+        set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-larchive")
+    endif()
 endif()
 
 add_executable(ltran main.c ltran_param.c ltran_config.c ltran_ethdev.c ltran_stat.c ltran_errno.c
@@ -79,7 +82,7 @@ target_compile_options(ltran PRIVATE -fno-strict-aliasing -D__ARM_FEATURE_CRC32=
                -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2 -Wno-error=deprecated-declarations)
 
 # gcc coredump in openEuler-20.03-LTS-XX aarch64 when add -march=native 
-if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "sw_64|aarch64" )
+if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "sw_64|aarch64|ppc64le" )
     target_compile_options(ltran PRIVATE -march=native -Wcast-align)
 endif()
 
