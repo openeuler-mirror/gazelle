@@ -350,7 +350,7 @@ void program_param_parse_keepalive(struct ProgramParams *params)
 {
     char *token = NULL;
     char *next_token = NULL;
-    token = strtok_s(optarg, ":", &next_token);
+    token = strtok_s(optarg, ",", &next_token);
     if (token == NULL) {
         PRINT_ERROR("parse keep_alive idle null, illigal argument(%s) \n", optarg);
         exit(PROGRAM_ABORT);
@@ -364,7 +364,7 @@ void program_param_parse_keepalive(struct ProgramParams *params)
         exit(PROGRAM_ABORT);
     }
 
-    token = strtok_s(NULL, ":", &next_token);
+    token = strtok_s(NULL, ",", &next_token);
     if (token == NULL) {
         PRINT_ERROR("parse keep_alive interval null, illigal argument(%s) \n", optarg);
         exit(PROGRAM_ABORT);
