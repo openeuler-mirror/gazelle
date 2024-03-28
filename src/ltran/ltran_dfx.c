@@ -361,10 +361,10 @@ static int dfx_connect_probe(void)
         return 0;
     }
 
-    printf("Connect lstack(path:%s), errno: %d; Connect ltran(path:%s) failed, errno: %d\n",
+    printf("Connect lstack(path:%s) failed, errno: %d; Connect ltran(path:%s) failed, errno: %d\n",
         g_lstack_unix_path, -ret2, g_ltran_unix_path, -ret1);
-    printf("Please ensure the process is started; If use ltran mode, \
-            set use_ltran=1 in lstack.conf, otherwise set use_ltran=0\n");
+    printf("Please ensure the process is started; If use ltran mode, "
+           "set use_ltran=1 in lstack.conf, otherwise set use_ltran=0\n");
     return -1;
 }
 
@@ -1860,7 +1860,7 @@ static int32_t parse_dfx_cmd_args(int32_t argc, char *argv[], struct gazelle_sta
     if (strcmp(param, "lstack") == 0) {
         ret = dfx_connect_probe();
         if (ret < 0) {
-            exit(0);
+            exit(-1);
         }
         g_use_ltran = ret;
         num_cmd = parse_dfx_lstack_args(argc, argv, req_msg);
