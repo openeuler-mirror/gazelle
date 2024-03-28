@@ -24,6 +24,7 @@
 
 #define GAZELLE_CLIENT_NUM_MIN           1
 #define GAZELLE_LOG_LEVEL_MAX            10
+#define MAX_PROTOCOL_LENGTH              20
 #define GAZELLECTL_TIMEOUT               5000 // millisecond
 /* maybe it should be consistent with MEMP_NUM_TCP_PCB */
 #define GAZELLE_LSTACK_MAX_CONN          (20000 + 2000) // same as MAX_CLIENTS + RESERVED_CLIENTS in lwipopts.h
@@ -46,6 +47,7 @@ enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LTRAN_SHOW_SOCKTABLE,
     GAZELLE_STAT_LTRAN_SHOW_CONNTABLE,
     GAZELLE_STAT_LTRAN_SHOW_LSTACK,
+    GAZELLE_STAT_LSTACK_SHOW_PROTOCOL,
 
     GAZELLE_STAT_LSTACK_SHOW,
     GAZELLE_STAT_LSTACK_LOG_LEVEL_SET,
@@ -193,6 +195,24 @@ struct gazelle_stat_lstack_snmp {
     uint32_t icmp_out_echo_reps;
 };
 
+/* same as define in lwip/stats.h - struct stats_proto */
+struct gazelle_stat_lstack_proto {
+    /* data */
+    uint16_t xmit;             /* Transmitted packets. */
+    uint16_t recv;             /* Received packets. */
+    uint16_t fw;               /* Forwarded packets. */
+    uint16_t drop;             /* Dropped packets. */
+    uint16_t chkerr;           /* Checksum error. */
+    uint16_t lenerr;           /* Invalid length error. */
+    uint16_t memerr;           /* Out of memory error. */
+    uint16_t rterr;            /* Routing error. */
+    uint16_t proterr;          /* Protocol error. */
+    uint16_t opterr;           /* Error in options. */
+    uint16_t err;              /* Misc error. */
+    uint16_t cachehit;
+};
+
+
 /* same as define in lwip/tcp.h - struct tcp_pcb_dp */
 struct gazelle_stat_lstack_conn_info {
     uint32_t state;
@@ -288,6 +308,8 @@ struct gazelle_stack_dfx_data {
         struct gazelle_stat_lstack_snmp snmp;
         struct nic_eth_xstats nic_xstats;
         struct nic_eth_features nic_features;
+        struct gazelle_stat_lstack_proto  proto_data;
+
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
         struct gazelle_fault_inject_data inject;
 #endif /* GAZELLE_FAULT_INJECT_ENABLE */
@@ -321,6 +343,7 @@ struct gazelle_stat_msg_request {
     union stat_param {
         char log_level[GAZELLE_LOG_LEVEL_MAX];
         uint16_t low_power_mod;
+        char protocol[MAX_PROTOCOL_LENGTH];
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
         struct gazelle_fault_inject_data inject;
 #endif /* GAZELLE_FAULT_INJECT_ENABLE */

@@ -601,7 +601,7 @@ static int32_t handle_stat_request(int32_t sockfd)
         msg.stat_mode == GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES) {
         return handle_dpdk_cmd(sockfd, msg.stat_mode);
     } else {
-        ret = handle_stack_cmd(sockfd, msg.stat_mode);
+        ret = handle_stack_cmd(sockfd, &msg);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "get_stats failed ret=%d\n", ret);
         }
