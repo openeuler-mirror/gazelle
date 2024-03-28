@@ -870,6 +870,31 @@ static int dpdk_nic_xstats_name_get(struct nic_eth_xstats_name *names, uint16_t 
     return len;
 }
 
+void dpdk_nic_bond_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id, uint16_t *slaves, int count)
+{
+    dfx->data.nic_xstats.bonding.mode = rte_eth_bond_mode_get(port_id);
+    if (dfx->data.nic_xstats.bonding.mode < 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_eth_bond_mode_get failed.\n");
+        return;
+    }
+
+    dfx->data.nic_xstats.bonding.primary_port_id = rte_eth_bond_primary_get(port_id);
+    if (dfx->data.nic_xstats.bonding.primary_port_id < 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_eth_bond_primary_get failed.\n");
+        return;
+    }
+
+    dfx->data.nic_xstats.bonding.miimon = rte_eth_bond_link_monitoring_get(port_id);
+    if (dfx->data.nic_xstats.bonding.miimon <= 0) {
+        LSTACK_LOG(ERR, LSTACK, "rte_eth_bond_link_monitoring_get failed.\n");
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        dfx->data.nic_xstats.bonding.slaves[i] = slaves[i];
+    }
+}
+
 void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
 {
     struct rte_eth_dev_info dev_info;
@@ -878,6 +903,7 @@ void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
 
     dfx->data.nic_xstats.len = -1;
     dfx->data.nic_xstats.port_id = port_id;
+    dfx->data.nic_xstats.bonding.mode = -1;
     ret = rte_eth_dev_info_get(port_id, &dev_info);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "rte_eth_dev_info_get failed.\n");
@@ -904,6 +930,7 @@ void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
         if (dpdk_nic_xstats_value_get(dfx->data.nic_xstats.values, len, slaves, slave_count) != 0) {
             return;
         }
+        dpdk_nic_bond_xstats_get(dfx, port_id, slaves, slave_count);
     } else {
         len = dpdk_nic_xstats_name_get(dfx->data.nic_xstats.xstats_name, port_id);
         if (len <= 0) {
