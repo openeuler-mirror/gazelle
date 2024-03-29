@@ -259,6 +259,11 @@ bool is_dst_ip_localhost(const struct sockaddr *addr)
         if (get_global_cfg_params()->host_addr.addr == ((struct sockaddr_in *)addr)->sin_addr.s_addr) {
             return true;
         }
+    } else if (addr->sa_family == AF_INET6) {
+        if (memcmp(get_global_cfg_params()->host_addr6.addr, &((struct sockaddr_in6 *)addr)->sin6_addr,
+                   sizeof(struct in6_addr)) == 0) {
+            return true;
+        }
     }
 
     if (getifaddrs(&ifap) == -1) {
