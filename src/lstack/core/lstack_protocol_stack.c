@@ -876,6 +876,10 @@ void stack_send(struct rpc_msg *msg)
     struct protocol_stack *stack = get_protocol_stack();
     int replenish_again;
 
+    if (get_protocol_stack_group()->latency_start) {
+        calculate_rpcmsg_latency(&stack->latency, msg, GAZELLE_LATENCY_WRITE_RPC_MSG);
+    }
+
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
