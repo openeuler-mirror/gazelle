@@ -259,12 +259,12 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
         gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbuf_used, size);
 
         for (uint32_t i = 0; get_protocol_stack_group()->latency_start && i < size; i++) {
-            calculate_lstack_latency(&sock->stack->latency, pbuf_used[i], GAZELLE_LATENCY_WRITE_LWIP);
+            calculate_lstack_latency(&sock->stack->latency, pbuf_used[i], GAZELLE_LATENCY_WRITE_LWIP, 0);
         }
     }
 
     if (get_protocol_stack_group()->latency_start) {
-        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LWIP);
+        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LWIP, 0);
     }
 
     sock->send_pre_del = pbuf;
@@ -359,6 +359,12 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
             }
         } else {
             return 0;
+        }
+    }
+
+    for (int i = 0; get_protocol_stack_group()->latency_start && i < write_num; i++) {
+        if (pbufs[i] != NULL) {
+            calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_WRITE_INTO_RING, 0);
         }
     }
 
@@ -611,7 +617,7 @@ ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, u8_t apifl
 
     for (uint32_t i = 0; get_protocol_stack_group()->latency_start && i < read_count; i++) {
         if (pbufs[i] != NULL) {
-            calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_READ_LWIP);
+            calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_READ_LWIP, 0);
         }
     }
 
@@ -870,6 +876,7 @@ static bool recv_break_for_err(struct lwip_sock *sock)
 static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf **pbuf)
 {
     int32_t expect = 1; // only get one pbuf
+    uint64_t time_stamp = get_current_time();
 
     if (sock->recv_lastdata != NULL) {
         *pbuf = sock->recv_lastdata;
@@ -888,7 +895,11 @@ static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf *
             noblock = true;
         }
     }
-    
+
+    if (get_protocol_stack_group()->latency_start) {
+        calculate_lstack_latency(&sock->stack->latency, *pbuf, GAZELLE_LATENCY_READ_APP_CALL, time_stamp);
+    }
+
     return 0;
 }
 
@@ -954,7 +965,7 @@ static ssize_t recv_ring_tcp_read(struct lwip_sock *sock, void *buf, size_t len,
             }
 
             if (get_protocol_stack_group()->latency_start) {
-                calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ_LSTACK);
+                calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ_LSTACK, 0);
             }
 
             gazelle_ring_read_over(sock->recv_ring);
@@ -1001,7 +1012,7 @@ static ssize_t recv_ring_udp_read(struct lwip_sock *sock, void *buf, size_t len,
         sock->wakeup->stat.app_read_cnt++;
     }
     if (get_protocol_stack_group()->latency_start) {
-        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ_LSTACK);
+        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_READ_LSTACK, 0);
     }
 
     return copy_len;

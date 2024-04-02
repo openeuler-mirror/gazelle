@@ -62,15 +62,52 @@ void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new)
     lt_new->stamp = lt_old->stamp;
     lt_new->check = lt_old->check;
     lt_new->type = lt_old->type;
+    for (int i = 0; i < GAZELLE_LATENCY_MAX; i++) {
+        lt_new->stamp_seg[i] = lt_old->stamp_seg[i];
+    }
 }
 
-void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+void time_stamp_into_rpcmsg(struct rpc_msg *msg)
+{
+    msg->time_stamp = get_current_time();
+}
+
+void calculate_rpcmsg_latency(struct gazelle_stack_latency *stack_latency, struct rpc_msg *msg,
     enum GAZELLE_LATENCY_TYPE type)
 {
     uint64_t latency;
-    uint16_t lt_type;
-    const struct latency_timestamp *lt;
     struct stack_latency *latency_stat;
+    if (msg == NULL || msg->time_stamp < stack_latency->start_time || type >= GAZELLE_LATENCY_MAX) {
+        return;
+    }
+
+    latency = get_current_time() - msg->time_stamp;
+    latency_stat = &stack_latency->latency[type];
+
+    latency_stat->latency_total += latency;
+    latency_stat->latency_max = (latency_stat->latency_max > latency) ? latency_stat->latency_max : latency;
+    latency_stat->latency_min = (latency_stat->latency_min < latency) ? latency_stat->latency_min : latency;
+    latency_stat->latency_pkts++;
+}
+
+void calculate_latency_stat(struct gazelle_stack_latency *stack_latency, uint64_t latency,
+    enum GAZELLE_LATENCY_TYPE type)
+{
+    struct stack_latency *latency_stat;
+
+    latency_stat = &stack_latency->latency[type];
+    latency_stat->latency_total += latency;
+    latency_stat->latency_max = (latency_stat->latency_max > latency) ? latency_stat->latency_max : latency;
+    latency_stat->latency_min = (latency_stat->latency_min < latency) ? latency_stat->latency_min : latency;
+    latency_stat->latency_pkts++;
+}
+
+void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+    enum GAZELLE_LATENCY_TYPE type, uint64_t time_record)
+{
+    uint64_t latency;
+    uint16_t lt_type;
+    struct latency_timestamp *lt;
 
     if (pbuf == NULL || type >= GAZELLE_LATENCY_MAX) {
         return;
@@ -82,13 +119,26 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
         return;
     }
 
-    latency = get_current_time() - lt->stamp;
-    latency_stat = &stack_latency->latency[type];
+    if (time_record == 0) {
+        lt->stamp_seg[type] = get_current_time() - lt->stamp;
+    } else {
+        lt->stamp_seg[type] = time_record > (lt->stamp_seg[type - 1] + lt->stamp) ?
+            (time_record - lt->stamp) : lt->stamp_seg[type - 1];
+    }
 
-    latency_stat->latency_total += latency;
-    latency_stat->latency_max = (latency_stat->latency_max > latency) ? latency_stat->latency_max : latency;
-    latency_stat->latency_min = (latency_stat->latency_min < latency) ? latency_stat->latency_min : latency;
-    latency_stat->latency_pkts++;
+    latency = lt->stamp_seg[type];
+    if (((lt_type == GAZELLE_LATENCY_RD && type > GAZELLE_LATENCY_READ_LWIP) ||
+        (lt_type == GAZELLE_LATENCY_WR && type > GAZELLE_LATENCY_WRITE_INTO_RING)) &&
+        latency >= lt->stamp_seg[type - 1]) {
+        latency -= lt->stamp_seg[type - 1];
+    }
+
+    /* calculate the time of the entire read/write process */
+    if (type == GAZELLE_LATENCY_READ_MAX - 1 || type == GAZELLE_LATENCY_WRITE_MAX - 1) {
+        calculate_latency_stat(stack_latency, lt->stamp_seg[type], type + 1);
+    }
+
+    calculate_latency_stat(stack_latency, latency, type);
 }
 
 void lstack_calculate_aggregate(int type, uint32_t len)

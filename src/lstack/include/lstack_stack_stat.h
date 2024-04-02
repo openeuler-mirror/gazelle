@@ -15,6 +15,7 @@
 
 struct gazelle_stack_latency;
 struct pbuf;
+struct rpc_msg;
 struct gazelle_stat_low_power_info;
 struct wakeup_poll;
 struct protocol_stack;
@@ -22,6 +23,8 @@ enum GAZELLE_LATENCY_TYPE;
 enum GAZELLE_STAT_MODE;
 
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+    enum GAZELLE_LATENCY_TYPE type, uint64_t time_record);
+void calculate_rpcmsg_latency(struct gazelle_stack_latency *stack_latency, struct rpc_msg *msg,
     enum GAZELLE_LATENCY_TYPE type);
 void stack_stat_init(void);
 int handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode);
@@ -31,5 +34,6 @@ void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_inf
 void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 void lstack_calculate_aggregate(int type, uint32_t len);
 void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new);
+void time_stamp_into_rpcmsg(struct rpc_msg *msg);
 
 #endif /* GAZELLE_STACK_STAT_H */

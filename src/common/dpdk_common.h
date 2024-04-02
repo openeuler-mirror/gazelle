@@ -19,6 +19,7 @@
 #include <lwip/pbuf.h>
 #include <lwip/dpdk_version.h>
 
+#include "gazelle_dfx_msg.h"
 #include "gazelle_opt.h"
 
 #define GAZELLE_KNI_NAME                     "kni"   // will be removed during dpdk update
@@ -33,6 +34,7 @@
 struct latency_timestamp {
         uint64_t stamp; // time stamp
         uint64_t check; // just for later vaild check
+        uint16_t stamp_seg[GAZELLE_LATENCY_MAX]; // time stamp segment
         uint16_t type;  // latency type
 };
 struct mbuf_private {

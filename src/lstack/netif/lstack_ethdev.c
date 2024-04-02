@@ -224,7 +224,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
         rte_mbuf_refcnt_update(mbuf, 1);
 
         if (get_protocol_stack_group()->latency_start) {
-            calculate_lstack_latency(&stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LSTACK);
+            calculate_lstack_latency(&stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LSTACK, 0);
         }
         pbuf = pbuf->next;
     }
