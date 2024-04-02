@@ -1307,6 +1307,14 @@ void netif_poll(struct netif *netif)
 /* processes on same node handshake packet use this function */
 err_t netif_loop_output(struct netif *netif, struct pbuf *p)
 {
+    if (p != NULL) {
+        const struct ip_hdr *iphdr;
+        iphdr = (const struct ip_hdr *)p->payload;
+        if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
+            return udp_netif_loop_output(netif, p);
+        }
+    }
+
     struct tcp_pcb *pcb = p->pcb;
     struct pbuf *head = NULL;
 

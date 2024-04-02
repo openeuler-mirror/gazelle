@@ -491,6 +491,10 @@ int stack_polling(uint32_t wakeup_tick)
         }
     }
 
+    if (cfg->udp_enable) {
+        udp_netif_poll(&stack->netif);
+    }
+
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     /* run to completion mode currently does not support kni */
     /* KNI requests are generally low-rate I/Os,
