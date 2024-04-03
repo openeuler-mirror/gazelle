@@ -624,10 +624,12 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     }
 
     /* after rte_eth_dev_configure */
-    ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->nic.vlan_mode, 1);
-    if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "dpdk add vlan filter failed ret = %d\n", ret);
-        return -1;
+    if (get_global_cfg_params()->nic.vlan_mode != -1) {
+        ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->nic.vlan_mode, 1);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk add vlan filter failed ret = %d\n", ret);
+            return -1;
+        }
     }
 
     rte_eth_allmulticast_enable(port_id);
