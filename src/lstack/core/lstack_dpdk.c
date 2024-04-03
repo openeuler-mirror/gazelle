@@ -572,13 +572,13 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
         int slave_id = rte_eth_bond_primary_get(port_id);
         if (slave_id < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk get bond primary port failed port = %d\n", slave_id);
-	    free(eth_params);
+            free(eth_params);
             return slave_id;
         }
         ret = rte_eth_dev_info_get(slave_id, &slave_dev_info);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk get bond dev info failed ret = %d\n", ret);
-	    free(eth_params);
+            free(eth_params);
             return ret;
         }
         dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
@@ -621,6 +621,13 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
             rss_setup(port_id, nb_queues);
             stack_group->reta_mask = dev_info.reta_size - 1;
         }
+    }
+
+    /* after rte_eth_dev_configure */
+    ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->nic.vlan_mode, 1);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk add vlan filter failed ret = %d\n", ret);
+        return -1;
     }
 
     rte_eth_allmulticast_enable(port_id);
@@ -733,7 +740,7 @@ int32_t init_dpdk_ethdev(void)
         }
 
         ret = dpdk_ethdev_init(bond_port_id, 1);
-	if (ret != 0) {
+        if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
             return -1;
         }
@@ -765,18 +772,18 @@ int32_t init_dpdk_ethdev(void)
 
         ret = rte_eth_promiscuous_enable(bond_port_id);
         if (ret < 0) {
-	    LSTACK_LOG(ERR, LSTACK, "dpdk enable promiscuous failed ret = %d\n", ret);
+            LSTACK_LOG(ERR, LSTACK, "dpdk enable promiscuous failed ret = %d\n", ret);
             return -1;
         }
 
         ret = rte_eth_allmulticast_enable(bond_port_id);
         if (ret < 0) {
-	    LSTACK_LOG(ERR, LSTACK, "dpdk enable allmulticast failed ret = %d\n", ret);
+            LSTACK_LOG(ERR, LSTACK, "dpdk enable allmulticast failed ret = %d\n", ret);
             return -1;
         }
 
         ret = rte_eth_dev_start(bond_port_id);
-	if (ret < 0) {
+        if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk start bond port failed ret = %d\n", ret);
             return -1;
         }
