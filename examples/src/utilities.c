@@ -78,7 +78,12 @@ static int32_t process_udp_groupip(int32_t fd, ip_addr_t *ip, ip_addr_t *groupip
     struct ip_mreq mreq;
     if (groupip->u_addr.ip4.s_addr) {
         mreq.imr_multiaddr = groupip->u_addr.ip4;
-        mreq.imr_interface = groupip_interface->u_addr.ip4;
+        if (groupip_interface->u_addr.ip4.s_addr) {
+            mreq.imr_interface = groupip_interface->u_addr.ip4;
+        } else {
+            mreq.imr_interface = ip->u_addr.ip4;
+        }
+
         if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(struct ip_mreq)) == -1) {
             PRINT_ERROR("can't set the address to group %d! ", errno);
             return PROGRAM_FAULT;
@@ -281,9 +286,12 @@ static int32_t pocess_udp_multicast(int32_t *socket_fd, struct ClientUnit *clien
 
         struct in_addr localInterface;
         localInterface.s_addr = client_unit->groupip_interface.u_addr.ip4.s_addr;
-        if (setsockopt(*socket_fd, IPPROTO_IP, IP_MULTICAST_IF, (char *)&localInterface, sizeof(localInterface)) < 0) {
-            PRINT_ERROR("can't set the multicast interface %d! ", errno);
-            return PROGRAM_FAULT;
+        if (localInterface.s_addr) {
+            if (setsockopt(*socket_fd, IPPROTO_IP, IP_MULTICAST_IF, (char *)&localInterface,
+                           sizeof(localInterface)) < 0) {
+                PRINT_ERROR("can't set the multicast interface %d! ", errno);
+                return PROGRAM_FAULT;
+            }
         }
 
         /* sent multicast packets should be looped back to the local socket */

@@ -381,22 +381,30 @@ void program_param_parse_keepalive(struct ProgramParams *params)
 // set `group ip` parameter
 void program_param_parse_groupip(struct ProgramParams *params)
 {
-    char *cup_ptr = NULL;
+    char *cur_ptr = NULL;
     char *next_ptr = NULL;
 
-    cup_ptr = strtok_s(optarg, ",", &next_ptr);
-    if (cup_ptr == NULL || next_ptr == NULL) {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
+    cur_ptr = strtok_s(optarg, ",", &next_ptr);
+    if (program_ipv4_check(cur_ptr) == false) {
+        PRINT_ERROR("illigal argument -- %s \n", cur_ptr);
         exit(PROGRAM_ABORT);
     }
-    params->groupip_interface = cup_ptr;
 
-    in_addr_t ip = ntohl(inet_addr(next_ptr));
+    in_addr_t ip = ntohl(inet_addr(cur_ptr));
     if (ip != INADDR_NONE && ip >= ntohl(inet_addr("224.0.0.0")) && ip <= ntohl(inet_addr("239.255.255.255"))) {
-        params->groupip = next_ptr;
+        params->groupip = cur_ptr;
     } else {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
+        PRINT_ERROR("illigal argument -- %s \n", cur_ptr);
         exit(PROGRAM_ABORT);
+    }
+
+    if (*next_ptr) {
+        if (program_ipv4_check(next_ptr)) {
+            params->groupip_interface = next_ptr;
+        } else {
+            PRINT_ERROR("illigal argument -- %s \n", next_ptr);
+            exit(PROGRAM_ABORT);
+        }
     }
 }
 
