@@ -262,8 +262,16 @@ struct gazelle_stat_low_power_info {
 
 #define RTE_ETH_XSTATS_NAME_SIZE 64
 #define RTE_ETH_XSTATS_MAX_LEN 256
+#define RTE_MAX_ETHPORTS 32
 struct nic_eth_xstats_name {
     char name[RTE_ETH_XSTATS_NAME_SIZE];
+};
+
+struct bonding {
+    int8_t mode;
+    int32_t miimon;
+    uint16_t primary_port_id;
+    uint16_t slaves[RTE_MAX_ETHPORTS];
 };
 
 struct nic_eth_xstats {
@@ -271,6 +279,7 @@ struct nic_eth_xstats {
     uint64_t values[RTE_ETH_XSTATS_MAX_LEN];
     uint32_t len;
     uint16_t port_id;
+    struct bonding bonding;
 };
 
 struct nic_eth_features {
