@@ -104,15 +104,15 @@
 * `-a, --as [server | client]`：作为服务端还是客户端。
   * `server`：作为服务端。
   * `client`：作为客户端。
-* `-i, --ip [xxx.xxx.xxx.xxx]`：IP地址。
-* `-g, --groupip [xxx.xxx.xxx.xxx]`：UDP组播地址。
+* `-i, --ip [xxx.xxx.xxx.xxx]`：server端IP地址。当v4与v6地址同时存在时，以","分隔。例如：`-i 192.168.1.88,aa22:bb11:1122:cdef:1234:aa99:7654:7410`
+* `-g, --groupip [xxx.xxx.xxx.xxx,xxx.xxx.xxx.xxx]`：配置UDP组播地址与interface地址，以','分隔，其中interface地址为可选项。例如：`-g 224.0.0.24,192.168.1.202`或`-g 224.0.0.24`
 * `-p, --port [xxxx]`：端口。
 * `-m, --model [mum | mud]`：采用的网络模型类型。
   * `mum (multi thread, unblock, multiplexing IO)`：多线程非阻塞IO复用。
   * `mud (multi thread, unblock, dissymmetric)`：多线程非阻塞非对称。
 * `-t, --threadnum`：线程数设置。
 * `-c, --connectnum`：连接数设置。当 `domain` 设置为 `udp` 时，`connectnum` 会被设置为1。
-* `-D, --domain [unix | tcp | udp]`：通信协议。
+* `-D, --domain [unix | tcp | udp]`：通信协议。当支持多个通信协议时以","分隔。例如：`-D tcp,udp`
   * `unix`：基于 unix 协议实现。
   * `tcp`：基于 tcp 协议实现。
   * `udp`：基于 udp 协议实现。
@@ -249,12 +249,12 @@ make
  * 创建udp组播服务端
 
 ```
-./example -A server -D udp -i 192.168.0.1 -g 225.0.0.1 -A recvfromsendto
+./example -A server -D udp -g 225.0.0.1,192.168.0.1 -A recvfromsendto
 
 [program parameters]: 
 --> [as]:                       server 
---> [server ip]:                192.168.0.1
 --> [server group ip]:          225.0.0.1
+--> [server groupip_interface]: 192.168.0.1
 --> [server port]:              5050 
 --> [model]:                    mum 
 --> [thread number]:            1 
@@ -274,12 +274,12 @@ make
  * 创建udp组播客户端
 
 ```
-./example -A client -D udp -i 192.168.0.1 -g 225.0.0.1 -A recvfromsendto
+./example -A client -D udp -g 225.0.0.1,192.168.0.1 -A recvfromsendto
 
 [program parameters]: 
---> [as]:                       server 
---> [server ip]:                225.0.0.1
---> [client send ip]:           192.168.0.1
+--> [as]:                       client 
+--> [client group ip]:          225.0.0.1
+--> [client groupip_interface]: 192.168.0.1
 --> [server port]:              5050 
 --> [thread number]:            1
 --> [connection number]:        1 
@@ -293,4 +293,51 @@ make
 
 [program informations]: 
 --> <client>: [connect num]: 0, [send]: 0.000 B/s
+```
+
+* 混杂模式下server 与 client 配置
+```
+./example -a server -D tcp,udp -i 192.168.1.88 -p 33333 -g 224.0.0.24,192.168.1.188
+[program parameters]: 
+--> [as]:                       server 
+--> [server group ip]:          224.0.0.24 
+--> [server groupip_interface]: 192.168.1.188 
+--> [server ip]:                192.168.1.888 
+--> [server port]:              33333 
+--> [model]:                    mum 
+--> [thread number]:            1 
+--> [domain]:                   tcp,udp 
+--> [api]:                      read & write 
+--> [packet length]:            1024 
+--> [verify]:                   off 
+--> [ringpmd]:                  off 
+--> [debug]:                    off 
+--> [epoll create]:             ec 
+--> [accept]:                   ac 
+--> [inject]:                   none 
+
+[program informations]:
+```
+```
+./example -a client -D tcp,udp -i 192.168.1.188 -p 33333 -g 192.168.1.202,224.0.0.24
+[program parameters]: 
+--> [as]:                       client 
+--> [client group ip]:          224.0.0.24 
+--> [client groupip_interface]: 192.168.1.202 
+--> [server ip]:                192.168.1.188 
+--> [server port]:              33333 
+--> [thread number]:            1 
+--> [connection number]:        1 
+--> [domain]:                   tcp,udp 
+--> [api]:                      read & write 
+--> [packet length]:            1024 
+--> [verify]:                   off 
+--> [ringpmd]:                  off 
+--> [debug]:                    off 
+--> [epoll create]:             ec 
+--> [accept]:                   ac 
+--> [inject]:                   none 
+
+[program informations]: 
+
 ```
