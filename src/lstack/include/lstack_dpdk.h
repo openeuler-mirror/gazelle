@@ -48,9 +48,11 @@ int32_t create_shared_ring(struct protocol_stack *stack);
 void lstack_log_level_init(void);
 int dpdk_ethdev_init(int port_id, bool bond_port);
 int dpdk_ethdev_start(void);
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 void dpdk_skip_nic_init(void);
-int32_t dpdk_init_lstack_kni(void);
 void dpdk_restore_pci(void);
+#endif
+int32_t dpdk_init_lstack_kni(void);
 bool port_in_stack_queue(gz_addr_t *src_ip, gz_addr_t *dst_ip, uint16_t src_port, uint16_t dst_port);
 struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
                                            uint32_t mbuf_cache_size, uint16_t queue_id, unsigned numa_id);
