@@ -92,13 +92,14 @@
 #define PROGRAM_INPROGRESS                  (-2)                ///< program in progress flag
 
 #define UNIX_TCP_PORT_MIN                   (1024)              ///< TCP minimum port number in unix
-#define UNIX_TCP_PORT_MAX                   (65535)             ///< TCP minimum port number in unix
+#define UNIX_TCP_PORT_MAX                   (65535)             ///< TCP maximum port number in unix
 #define THREAD_NUM_MIN                      (1)                 ///< minimum number of thead
 #define THREAD_NUM_MAX                      (1000)              ///< maximum number of thead
 #define MESSAGE_PKTLEN_MIN                  (2)                 ///< minimum length of message (1 byte)
 #define MESSAGE_PKTLEN_MAX                  (1024 * 1024 * 10)  ///< maximum length of message (10 Mb)
+#define UDP_PKTLEN_MAX                      (65507)             ///< maximum length of udp message
 
-#define SERVER_SOCKET_LISTEN_BACKLOG        (4096)               ///< the queue of socket
+#define SERVER_SOCKET_LISTEN_BACKLOG        (4096)              ///< the queue of socket
 #define SERVER_EPOLL_SIZE_MAX               (10000)             ///< the max wait event of epoll
 #define SERVER_EPOLL_WAIT_TIMEOUT           (-1)                ///< the timeout value of epoll
 

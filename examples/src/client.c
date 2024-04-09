@@ -13,7 +13,6 @@
 
 #include "client.h"
 
-
 static pthread_mutex_t client_debug_mutex;      // the client mutex for printf
 struct Client *g_client_begin = NULL;
 
@@ -607,7 +606,12 @@ int32_t client_create_and_run(struct ProgramParams *params)
             int32_t index = i % number_of_support_type;
             client_unit->protocol_type_mode = protocol_support_array[index];
         }
-
+        if (client_unit->protocol_type_mode == V4_UDP || client_unit->protocol_type_mode == V6_UDP ||
+            client_unit->protocol_type_mode == UDP_MULTICAST) {
+            client_unit->pktlen = params->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : params->pktlen;
+        } else {
+            client_unit->pktlen = params->pktlen;
+        }
         if (pthread_create((tids + i), NULL, client_s_create_and_run, client_unit) < 0) {
             PRINT_ERROR("client can't create thread of poisx %d! ", errno);
             return PROGRAM_FAULT;
