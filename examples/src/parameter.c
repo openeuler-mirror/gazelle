@@ -317,6 +317,9 @@ void program_param_parse_pktlen(struct ProgramParams *params)
     int32_t pktlen_arg = strtol(optarg, NULL, 0);
     if (CHECK_VAL_RANGE(pktlen_arg, MESSAGE_PKTLEN_MIN, MESSAGE_PKTLEN_MAX) == true) {
         params->pktlen = (uint32_t)pktlen_arg;
+        if (strstr(params->domain, "udp") && params->pktlen > UDP_PKTLEN_MAX) {
+            PRINT_WARNNING("udp message too long, change it to %d \n", UDP_PKTLEN_MAX);
+        }
     } else {
         PRINT_ERROR("illigal argument -- %s \n", optarg);
         exit(PROGRAM_ABORT);

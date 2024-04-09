@@ -303,14 +303,15 @@ static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struc
 
     if (server_handler->fd == server_mud->listener.listen_fd_array[V4_UDP] ||
         server_handler->fd == server_mud->listener.listen_fd_array[UDP_MULTICAST]) {
-        int32_t server_ans_ret = server_ans(server_handler->fd, server_mud->pktlen, server_mud->api, "udp");
+        uint32_t pktlen = server_mud->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : server_mud->pktlen;
+        int32_t server_ans_ret = server_ans(server_handler->fd, pktlen, server_mud->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_mud->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close server_ans_ret %d! \n", server_ans_ret);
                 return PROGRAM_FAULT;
             }
         }
-        server_mud->workers->recv_bytes += server_mud->pktlen;
+        server_mud->workers->recv_bytes += pktlen;
     } else {
         int32_t sermud_listener_accept_connects_ret = sermud_listener_accept_connects(curr_epev, server_mud);
         if (sermud_listener_accept_connects_ret < 0) {
@@ -709,14 +710,15 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
         }
     } else if (fd == (server_unit->listener.listen_fd_array[V4_UDP]) ||
                fd == (server_unit->listener.listen_fd_array[UDP_MULTICAST])) {
-        int32_t server_ans_ret = server_ans(fd, server_unit->pktlen, server_unit->api, "udp");
+        uint32_t pktlen = server_unit->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : server_unit->pktlen;
+        int32_t server_ans_ret = server_ans(fd, pktlen, server_unit->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close ret %d! \n", server_ans_ret);
                 return PROGRAM_ABORT;
             }
         }
-        server_unit->recv_bytes += server_unit->pktlen;
+        server_unit->recv_bytes += pktlen;
     } else {
         if (sersum_process_tcp_accept_event(server_unit, curr_epev) != PROGRAM_OK) {
             return PROGRAM_ABORT;
