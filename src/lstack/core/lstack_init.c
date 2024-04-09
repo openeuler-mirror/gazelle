@@ -144,7 +144,9 @@ static void create_control_thread(void)
     pthread_t tid;
     if (use_ltran()) {
         /* The function call here should be in strict order. */
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
         dpdk_skip_nic_init();
+#endif
         if (control_init_client(false) != 0) {
             LSTACK_EXIT(1, "control_init_client failed\n");
         }
@@ -279,7 +281,9 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     /* Init control plane and dpdk init */
     create_control_thread();
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     dpdk_restore_pci();
+#endif
 
     /* cancel the core binding from DPDK initialization */
     if (!get_global_cfg_params()->main_thread_affinity) {
