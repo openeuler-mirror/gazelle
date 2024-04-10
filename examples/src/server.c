@@ -14,6 +14,7 @@
 #include "server.h"
 
 static pthread_mutex_t server_debug_mutex;      // the server mutex for debug
+static uint16_t g_ready_thread_num_server = 0;
 
 // server debug information print
 void server_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug)
@@ -412,6 +413,7 @@ void *sermud_listener_create_and_run(void *arg)
         sermud_memory_recycle(server_mud);
         exit(PROGRAM_FAULT);
     }
+    __sync_fetch_and_add(&g_ready_thread_num_server, 1);
     while (true) {
         if (sermud_listener_proc_epevs(server_mud) < 0) {
             sermud_memory_recycle(server_mud);
@@ -429,6 +431,23 @@ void *sermud_listener_create_and_run(void *arg)
     }
     sermud_memory_recycle(server_mud);
     return (void *)PROGRAM_OK;
+}
+
+static void sermud_init_ip_info(struct ProgramParams *params, struct ServerMud *server_mud)
+{
+    server_mud->server_ip_info.ip.addr_family = params->addr_family;
+
+    inet_pton(AF_INET, params->ip, &server_mud->server_ip_info.ip.u_addr.ip4);
+    inet_pton(AF_INET6, params->ipv6, &server_mud->server_ip_info.ip.u_addr.ip6);
+
+    server_mud->server_ip_info.groupip.addr_family = params->addr_family;
+    inet_pton(AF_INET, params->groupip, &server_mud->server_ip_info.groupip.u_addr);
+
+    server_mud->server_ip_info.groupip_interface.addr_family = params->addr_family;
+    inet_pton(AF_INET, params->groupip_interface, &server_mud->server_ip_info.groupip_interface.u_addr);
+
+    server_mud->port = params->port;
+    server_mud->pktlen = params->pktlen;
 }
 
 // create the multi thread, unblock, dissymmetric server and run
@@ -458,19 +477,8 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
 
     server_mud->epfd = -1;
     server_mud->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
-    server_mud->server_ip_info.ip.addr_family = params->addr_family;
 
-    inet_pton(AF_INET, params->ip, &server_mud->server_ip_info.ip.u_addr.ip4);
-    inet_pton(AF_INET6, params->ipv6, &server_mud->server_ip_info.ip.u_addr.ip6);
-
-    server_mud->server_ip_info.groupip.addr_family = params->addr_family;
-    inet_pton(AF_INET, params->groupip, &server_mud->server_ip_info.groupip.u_addr);
-
-    server_mud->server_ip_info.groupip_interface.addr_family = params->addr_family;
-    inet_pton(AF_INET, params->groupip_interface, &server_mud->server_ip_info.groupip_interface.u_addr);
-
-    server_mud->port = params->port;
-    server_mud->pktlen = params->pktlen;
+    sermud_init_ip_info(params, server_mud);
 
     server_mud->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip, params->ipv6,
                                                                             params->groupip);
@@ -490,6 +498,11 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     if (server_mud->debug == false) {
         printf("[program informations]: \n\n");
     }
+    while (g_ready_thread_num_server < 1) {
+        sleep(1);
+    }
+    printf(" \n all threads is ready: thread_num %d \n \n", g_ready_thread_num_server);
+
     while (true) {
         sermud_info_print(server_mud);
     }
@@ -769,6 +782,7 @@ void *sersum_create_and_run(void *arg)
     if (sersum_create_epfd_and_reg(server_unit) < 0) {
        exit(PROGRAM_FAULT);
     }
+    __sync_fetch_and_add(&g_ready_thread_num_server, 1);
     while (true) {
         if (sersum_proc_epevs(server_unit) < 0) {
             exit(PROGRAM_FAULT);
@@ -849,6 +863,11 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
     if (server_mum->debug == false) {
         printf("[program informations]: \n\n");
     }
+
+    while (g_ready_thread_num_server < thread_num) {
+        sleep(1);
+    }
+    printf(" \n all threads is ready: thread_num %d \n \n", g_ready_thread_num_server);
 
     if (strcmp(params->as, "server") == 0) {
         while (true) {
