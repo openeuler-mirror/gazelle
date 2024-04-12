@@ -624,7 +624,8 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
     }
 
     /* after rte_eth_dev_configure */
-    if (get_global_cfg_params()->nic.vlan_mode != -1) {
+    if ((get_global_cfg_params()->nic.vlan_mode != -1) &&
+        ((stack_group->rx_offload & RTE_ETH_RX_OFFLOAD_VLAN_FILTER) == RTE_ETH_RX_OFFLOAD_VLAN_FILTER)) {
         ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->nic.vlan_mode, 1);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk add vlan filter failed ret = %d\n", ret);
