@@ -276,13 +276,14 @@ gazelle使用的网卡由dpdk接管，因此普通的tcpdump无法抓到gazelle�
 - 将用户态网卡绑回到内核驱动，必须先退出Gazelle。
 - 大页内存不支持在挂载点里创建子目录重新挂载。
 - ltran需要最低大页内存为1064MB。
-- 每个应用实例协议栈线程最低大页内存为800MB 。
+- 每个应用实例协议栈线程最低大页内存为800MB。
 - 仅支持64位系统。
 - 构建x86版本的Gazelle使用了-march=native选项，基于构建环境的CPU（Intel® Xeon® Gold 5118 CPU @ 2.30GHz指令集进行优化。要求运行环境CPU支持 SSE4.2、AVX、AVX2、AVX-512 指令集。
 - IP数据报重组的最大IP分片数为10（ping 最大包长14792B），TCP协议不使用IP分片。
 - sysctl配置网卡rp_filter参数为1，否则可能不按预期使用Gazelle协议栈，而是依然使用内核协议栈。
 - 不使用ltran模式，KNI网口不可配置只支持本地通讯使用，且需要启动前配置NetworkManager不管理KNI网卡。
-- 虚拟KNI网口的IP及mac地址，需要与lstack.conf配置文件保持一致 。
+- 虚拟KNI网口的IP及mac地址，需要与lstack.conf配置文件保持一致。
+- 发送udp报文包长超过45952(32 * 1436)B时，需要将send_ring_size扩大为至少64个。
 
 ## 风险提示
 Gazelle可能存在如下安全风险，用户需要根据使用场景评估风险。
