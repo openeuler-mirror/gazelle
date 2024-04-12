@@ -21,13 +21,14 @@ struct wakeup_poll;
 struct protocol_stack;
 enum GAZELLE_LATENCY_TYPE;
 enum GAZELLE_STAT_MODE;
+struct gazelle_stat_msg_request;
 
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
     enum GAZELLE_LATENCY_TYPE type, uint64_t time_record);
 void calculate_rpcmsg_latency(struct gazelle_stack_latency *stack_latency, struct rpc_msg *msg,
     enum GAZELLE_LATENCY_TYPE type);
 void stack_stat_init(void);
-int handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode);
+int handle_stack_cmd(int fd, struct gazelle_stat_msg_request *msg);
 int handle_dpdk_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode);
 uint64_t get_current_time(void);
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info);

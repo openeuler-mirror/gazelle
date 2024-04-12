@@ -136,6 +136,7 @@ static void gazelle_print_ltran_conn(void *buf, const struct gazelle_stat_msg_re
 static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_lstack_stat_proto(void *buf, const struct gazelle_stat_msg_request *req_msg);
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
 static void gazelle_print_fault_inject_set_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
@@ -168,7 +169,8 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LSTACK_SHOW_XSTATS, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_xstats},
     {GAZELLE_STAT_LSTACK_SHOW_AGGREGATE, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_aggregate},
     {GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_nic_features},
-
+    {GAZELLE_STAT_LSTACK_SHOW_PROTOCOL,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_proto},
+    
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
     {GAZELLE_STAT_FAULT_INJECT_SET, sizeof(struct gazelle_stack_dfx_data), gazelle_print_fault_inject_set_status},
     {GAZELLE_STAT_FAULT_INJECT_UNSET, sizeof(struct gazelle_stack_dfx_data), gazelle_print_fault_inject_unset_status},
@@ -1108,6 +1110,20 @@ static void gazelle_print_lstack_stat_snmp_core(const struct gazelle_stack_dfx_d
     printf("icmp_out_echo_reps: %u\n", snmp->icmp_out_echo_reps);
 }
 
+static void gazelle_print_lstack_stat_proto_core(const struct gazelle_stack_dfx_data *stat,
+                                                 const struct gazelle_stat_lstack_proto *proto)
+{
+    printf("\n------ stack tid: %6u ------\n", stat->tid);
+    printf("xmit: %u\n",     proto->xmit);
+    printf("recv: %u\n",    proto->recv);
+    printf("fw: %u\n", proto->fw);
+    printf("drop: %u\n",    proto->drop);
+    printf("chkerr: %u\n",    proto->chkerr);
+    printf("lenerr: %u\n",       proto->lenerr);
+    printf("memerr: %u\n",   proto->memerr);
+    printf("rterr: %u\n",       proto->rterr);
+}
+
 static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
     int32_t ret;
@@ -1117,6 +1133,26 @@ static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_
     printf("Statistics of lstack snmp:\n");
     do {
         gazelle_print_lstack_stat_snmp_core(stat, snmp);
+        if (stat->eof != 0) {
+            break;
+        }
+        ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
+        if (ret != GAZELLE_OK) {
+            return;
+        }
+    } while (true);
+}
+
+static void gazelle_print_lstack_stat_proto(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t ret;
+    struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
+    struct gazelle_stat_lstack_proto *proto = NULL;
+
+    proto = &stat->data.proto_data;
+    printf("Statistics of lstack proto:\n");
+    do {
+        gazelle_print_lstack_stat_proto_core(stat, proto);
         if (stat->eof != 0) {
             break;
         }
@@ -1265,6 +1301,7 @@ static void show_usage(void)
            "  loglevel        {error | info | debug}  set lstack loglevel \n"
            "  lowpower        {0 | 1}  set lowpower enable \n"
            "  [time]          measure latency time default 1S, maximum 30mins \n\n"
+           "  -p, protocol    {UDP | TCP | ICMP | IP | ETHARP | IP_FRAG} show lstack protocol statistics \n"
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
            "                                     *inject params*\n"
            " |inject_type    |     digit_param_1      |      digit_param_2     |     inject_rule   |\n"
@@ -1469,6 +1506,25 @@ static int parse_delay_arg(int32_t argc, char *argv[], long int delay)
     return 0;
 }
 
+static int32_t parse_dfx_lstack_show_proto_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t cmd_index = 0;
+    int32_t ret;
+
+    char *param = argv[GAZELLE_OPTIONS2_ARG_IDX];
+    if (strcmp(param, "UDP") != 0 && strcmp(param, "TCP") != 0 && strcmp(param, "IP") &&
+        strcmp(param, "ICMP") && strcmp(param, "ETHARP") != 0) {
+        return cmd_index;
+    }
+    ret = strncpy_s(req_msg[cmd_index].data.protocol, MAX_PROTOCOL_LENGTH, argv[GAZELLE_OPTIONS2_ARG_IDX],
+        MAX_PROTOCOL_LENGTH - 1);
+    if (ret != EOK) {
+        return -1;
+    }
+    req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_PROTOCOL;
+    return cmd_index;
+}
+
 static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
 {
     int32_t cmd_index = 0;
@@ -1515,8 +1571,9 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
         }
     } else if (strcmp(param, "-k") == 0 || strcmp(param, "nic-features") == 0) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES;
+    } else if (strcmp(param, "protocol") == 0 || strcmp(param, "-p") == 0) {
+	    cmd_index = parse_dfx_lstack_show_proto_args(argc, argv, req_msg);
     }
-
     return cmd_index;
 }
 

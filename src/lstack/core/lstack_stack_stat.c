@@ -260,11 +260,42 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     dfx->data.pkts.conn_num = stack->conn_num;
 }
 
+static void get_stack_dfx_data_proto(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack,
+    struct gazelle_stat_msg_request *msg)
+{
+    int32_t ret = 0;
+    msg->data.protocol[MAX_PROTOCOL_LENGTH - 1] = '\0';
+    const char* proto_mode = msg->data.protocol;
+
+    if (strcmp(proto_mode, "UDP") == 0) {
+        ret = memcpy_s(&dfx->data.proto_data, sizeof(dfx->data.proto_data),
+                       &stack->lwip_stats->udp, sizeof(stack->lwip_stats->udp));
+    } else if (strcmp(proto_mode, "TCP") == 0) {
+        ret = memcpy_s(&dfx->data.proto_data, sizeof(dfx->data.proto_data),
+                       &stack->lwip_stats->tcp, sizeof(stack->lwip_stats->tcp));
+    } else if (strcmp(proto_mode, "IP") == 0) {
+        ret = memcpy_s(&dfx->data.proto_data, sizeof(dfx->data.proto_data),
+                       &stack->lwip_stats->ip, sizeof(stack->lwip_stats->ip));
+    } else if (strcmp(proto_mode, "ICMP") == 0) {
+        ret = memcpy_s(&dfx->data.proto_data, sizeof(dfx->data.proto_data),
+                       &stack->lwip_stats->icmp, sizeof(stack->lwip_stats->icmp));
+    } else if (strcmp(proto_mode, "ETHARP") == 0) {
+        ret = memcpy_s(&dfx->data.proto_data, sizeof(dfx->data.proto_data),
+                       &stack->lwip_stats->etharp, sizeof(stack->lwip_stats->etharp));
+    } else {
+        printf("Error: Invalid protocol\n");
+    }
+    if (ret != EOK) {
+        LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+    }
+}
+
 static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack,
-    enum GAZELLE_STAT_MODE stat_mode)
+    struct gazelle_stat_msg_request *msg)
 {
     int32_t rpc_call_result;
     int32_t ret;
+    enum GAZELLE_STAT_MODE stat_mode = msg->stat_mode;
 
     switch (stat_mode) {
         case GAZELLE_STAT_LSTACK_SHOW:
@@ -304,6 +335,9 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             break;
         case GAZELLE_STAT_LTRAN_STOP_LATENCY:
             set_latency_start_flag(false);
+            break;
+        case GAZELLE_STAT_LSTACK_SHOW_PROTOCOL:
+            get_stack_dfx_data_proto(dfx, stack, msg);
             break;
         default:
             break;
@@ -348,16 +382,17 @@ int handle_dpdk_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode)
     return 0;
 }
 
-int handle_stack_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode)
+int handle_stack_cmd(int fd, struct gazelle_stat_msg_request *msg)
 {
     struct gazelle_stack_dfx_data dfx;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    enum GAZELLE_STAT_MODE stat_mode = msg->stat_mode;
 
     for (uint32_t i = 0; i < stack_group->stack_num; i++) {
         struct protocol_stack *stack = stack_group->stacks[i];
 
         memset_s(&dfx, sizeof(dfx), 0, sizeof(dfx));
-        get_stack_dfx_data(&dfx, stack, stat_mode);
+        get_stack_dfx_data(&dfx, stack, msg);
 
         if (!use_ltran() &&
             (stat_mode == GAZELLE_STAT_LTRAN_START_LATENCY || stat_mode == GAZELLE_STAT_LTRAN_STOP_LATENCY)) {

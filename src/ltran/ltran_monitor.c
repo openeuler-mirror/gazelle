@@ -347,6 +347,7 @@ static int32_t lstack_req_mode_process(int32_t fd, const struct gazelle_stat_msg
         case GAZELLE_STAT_LSTACK_SHOW_CONN:
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
         case GAZELLE_STAT_LSTACK_LOW_POWER_MDF:
+        case GAZELLE_STAT_LSTACK_SHOW_PROTOCOL:
             handle_resp_lstack_transfer(req_msg, fd);
             break;
         default:
