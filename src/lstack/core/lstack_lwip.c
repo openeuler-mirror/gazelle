@@ -936,7 +936,9 @@ static ssize_t recv_ring_tcp_read(struct lwip_sock *sock, void *buf, size_t len,
     }
 
     while (recv_left > 0) {
-        if (recv_ring_get_one(sock, noblock, &pbuf) != 0)  {
+        if (recv_ring_get_one(sock, noblock | recvd, &pbuf) != 0) {
+            /* When the buffer is empty, it will be returned directly
+            if in non-blocking mode or if data has already been received */
             break;
         }
 
