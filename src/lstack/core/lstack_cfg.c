@@ -1159,6 +1159,7 @@ static int parse_tuple_filter(void)
         return 0;
     }
     if (g_config_params.use_ltran || g_config_params.listen_shadow) {
+	LSTACK_LOG(ERR, LSTACK, "tuple filter and (ltran or listen_shadow) cannot be enabled at the same time\n");
         return -EINVAL;
     }
 
