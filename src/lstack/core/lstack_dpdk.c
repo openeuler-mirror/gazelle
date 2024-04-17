@@ -694,6 +694,7 @@ int32_t dpdk_ethdev_start(void)
     return 0;
 }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 int32_t dpdk_init_lstack_kni(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
@@ -712,7 +713,6 @@ int32_t dpdk_init_lstack_kni(void)
     return 0;
 }
 
-#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 void dpdk_skip_nic_init(void)
 {
     /* when lstack init nic again, ltran can't read pkts from nic. unregister pci_bus to avoid init nic in lstack */
@@ -799,12 +799,14 @@ int32_t init_dpdk_ethdev(void)
         }
     }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     if (get_global_cfg_params()->kni_switch && get_global_cfg_params()->is_primary) {
         ret = dpdk_init_lstack_kni();
         if (ret < 0) {
             return -1;
         }
     }
+#endif
 
     return 0;
 }

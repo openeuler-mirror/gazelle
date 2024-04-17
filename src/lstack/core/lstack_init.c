@@ -183,6 +183,7 @@ static void gazelle_signal_init(void)
     lstack_signal_init();
 }
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 static void set_kni_ip_mac()
 {
     struct cfg_params *cfg = get_global_cfg_params();
@@ -230,6 +231,7 @@ static void set_kni_ip_mac()
 
     posix_api->close_fn(fd);
 }
+#endif
 
 __attribute__((constructor)) void gazelle_network_init(void)
 {
@@ -315,9 +317,11 @@ __attribute__((constructor)) void gazelle_network_init(void)
     /* lwip initialization */
     lwip_sock_init();
 
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     if (get_global_cfg_params()->kni_switch) {
         set_kni_ip_mac();
     }
+#endif
 
     if (set_process_start_flag() != 0) {
         gazelle_exit();
