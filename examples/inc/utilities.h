@@ -106,7 +106,7 @@
 #define CLIENT_EPOLL_SIZE_MAX               (10000)             ///< the max wait event of epoll
 #define CLIENT_EPOLL_WAIT_TIMEOUT           (-1)                ///< the timeout value of epoll
 
-#define TERMINAL_REFRESH_MS                 (100)               ///< the time cut off between of terminal refresh
+#define TERMINAL_REFRESH_MS                 (1000)               ///< the time cut off between of terminal refresh
 
 #define SOCKET_UNIX_DOMAIN_FILE             "unix_domain_file"  ///< socket unix domain file
 
