@@ -19,7 +19,7 @@
 
 ## 提升mysql性能遇到的问题
 
-​		mysql的网络模型属于上述非对称模型，TCP会跨线程迁移。目前业界常见的用户态协议栈都是针对非对称应用设计（如f-stack），不能支持TCP跨线程迁移常见；或使用全局的TCP资源（如lwip），当连接数超过40时，因为竞争问题性能迅速恶化。
+​		mysql的网络模型属于上述非对称模型，TCP会跨线程迁移。目前业界常见的用户态协议栈都是针对非对称应用设计（如f-stack），不能支持TCP跨线程迁移场景；或使用全局的TCP资源（如lwip），当连接数超过40时，因为竞争问题性能迅速恶化。
 
 <img src="images/mysql模型.png" width="400" High="100"><img src="images/业界加速mysql效果.png">
 
@@ -51,7 +51,7 @@
 
 <img src="images/mysql_gazelle.png"> 
 
-效果如图，使用内核协议栈跑分为54.84万，使用Gazelle跑分为66.85万，Gazelle提升20%+：
+效果如图，使用内核协议栈跑分为54.84万，使用Gazelle跑分为66.85万，Gazelle提升20%+。
 
 ## Gazelle加速mysql测试步骤
 
