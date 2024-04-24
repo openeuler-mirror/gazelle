@@ -119,7 +119,7 @@ void client_info_print(struct Client *client)
         } else {
             PRINT_CLIENT_DATAFLOW("[connect num]: %d, [send]: %.3f MB/s", curr_connect, bytes_ps / MB);
         }
-        printf("\033[?25l\033[A\033[K");
+        printf("\033[A\033[K");
     }
 }
 
@@ -222,7 +222,7 @@ void client_info_print_mixed(struct Client *client, struct ThreadUintInfo *threa
                                   thread_id, domain, ip_ver, connect_num, bytes_ps / MB);
         }
     }
-    printf("\033[?25l\033[%dA\033[K", pthread_num - not_support_thread);
+    printf("\033[%dA\033[K", pthread_num - not_support_thread);
 }
 
 // the single thread, client try to connect to server, register to epoll
