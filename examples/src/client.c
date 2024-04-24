@@ -568,7 +568,7 @@ int32_t client_create_and_run(struct ProgramParams *params)
         client_unit->ip.addr_family = params->addr_family;
         inet_pton(AF_INET, params->ip, &client_unit->ip.u_addr.ip4);
         inet_pton(AF_INET6, params->ipv6, &client_unit->ip.u_addr.ip6);
-        client_unit->groupip.addr_family = params->addr_family;
+        client_unit->groupip.addr_family = AF_INET;
         inet_pton(AF_INET, params->groupip, &client_unit->groupip.u_addr);
         client_unit->groupip_interface.addr_family = params->addr_family;
         inet_pton(AF_INET, params->groupip_interface, &client_unit->groupip_interface.u_addr);
