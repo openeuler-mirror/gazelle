@@ -195,9 +195,9 @@ static int32_t server_ans_write(int32_t socket_fd, struct ServerBaseCfgInfo *ser
 
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
-            nwrite = sendto(socket_fd, buffer_out, length, 0, client_addr, len);
+            nwrite = sendto(socket_fd, buffer_out, swrite - cwrite, 0, client_addr, len);
         } else {
-            nwrite = write_api(socket_fd, buffer_out, length, api);
+            nwrite = write_api(socket_fd, buffer_out, swrite - cwrite, api);
         }
 
         if (nwrite == 0) {
@@ -315,9 +315,9 @@ int32_t client_ask(struct ClientHandler *client_handler, struct ClientUnit *clie
     
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
-            nwrite = sendto(client_handler->fd, buffer_out, length, 0, (struct sockaddr *)&server_addr, len);
+            nwrite = sendto(client_handler->fd, buffer_out, swrite - cwrite, 0, (struct sockaddr *)&server_addr, len);
         } else {
-            nwrite = write_api(client_handler->fd, buffer_out, length, api);
+            nwrite = write_api(client_handler->fd, swrite - cwrite, length, api);
         }
         if (nwrite == 0) {
             return PROGRAM_ABORT;
@@ -392,9 +392,9 @@ int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, boo
 
     while (cwrite < swrite) {
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
-            nwrite = sendto(client_handler->fd, buffer_out, length, 0, (struct sockaddr *)&server_addr, len);
+            nwrite = sendto(client_handler->fd, buffer_out, swrite - cwrite, 0, (struct sockaddr *)&server_addr, len);
         } else {
-            nwrite = write_api(client_handler->fd, buffer_out, length, api);
+            nwrite = write_api(client_handler->fd, buffer_out, swrite - cwrite, api);
         }
         if (nwrite == 0) {
             return PROGRAM_ABORT;
