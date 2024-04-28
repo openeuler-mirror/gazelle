@@ -690,12 +690,26 @@ static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set
         if (select_posix_path() == PATH_KERNEL || \
             select_fd_posix_path(_fd, &sock) == PATH_KERNEL) \
             return _fcntl_fn(_fd, _cmd, val); \
-        int32_t ret = _fcntl_fn(_fd, _cmd, val); \
-        if (ret == -1) \
-            return ret; \
-        return _lwip_fcntl(_fd, _cmd, val); \
+        int32_t ret1 = _fcntl_fn(_fd, _cmd, val); \
+        if (ret1 == -1) { \
+            LSTACK_LOG(ERR, LSTACK, "fd(%d) kernel path call failed, errno is %d, maybe not error\n", \
+                       _fd, errno); \
+            return ret1; \
+        } \
+        int32_t ret2 = _lwip_fcntl(_fd, _cmd, val); \
+        /* 
+         * if function not implemented, fcntl get/set context will not be modifyed by user path,
+         * return kernel path result
+         */ \
+        if (ret2 == -1) { \
+            if (errno == ENOSYS) { \
+                return ret1; \
+            } \
+            LSTACK_LOG(ERR, LSTACK, "fd(%d) user path call failed, errno is %d, maybe not error\n", \
+                       _fd, errno); \
+        } \
+        return ret2; \
     } while (0)
-
 
 /*  --------------------------------------------------------
  *  -------  LD_PRELOAD mode replacement interface  --------
