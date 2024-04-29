@@ -1210,6 +1210,16 @@ static int32_t parse_bond_miimon(void)
     return ret;
 }
 
+static bool validate_bond_mac(uint8_t *mac_addr, struct rte_ether_addr *bond_slave_mac, int num_slaves)
+{
+    for (int i = 0; i < num_slaves; i++) {
+        if (memcmp(mac_addr, bond_slave_mac[i].addr_bytes, ETHER_ADDR_LEN) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static int32_t parse_bond_slave_mac(void)
 {
     if (g_config_params.bond_mode == -1) {
@@ -1252,6 +1262,12 @@ static int32_t parse_bond_slave_mac(void)
         k = k + 1;
     }
     free(bond_slave_mac_tmp);
+    if (g_config_params.bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
+        if (!validate_bond_mac(g_config_params.mac_addr, g_config_params.bond_slave_mac_addr, GAZELLE_MAX_BOND_NUM)) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg: devices must be in bond_slave_mac for BONDING_MODE_ACTIVE_BACKUP.\n");
+            return -EINVAL;
+        }
+    }
     return ret;
 }
 
