@@ -244,6 +244,11 @@ static int32_t parse_host_addr(void)
     if (g_config_params.host_addr.addr == INADDR_NONE) {
         return -EINVAL;
     }
+
+    if (IN_MULTICAST(g_config_params.host_addr.addr)) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: host_addr:%s should not be a multicast IP.", value);
+        return -EINVAL;
+    }
     return 0;
 }
 
