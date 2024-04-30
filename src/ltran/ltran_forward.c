@@ -251,7 +251,7 @@ static __rte_always_inline int32_t tcp_handle(struct rte_mbuf *m, const struct r
 {
     struct gazelle_tcp_conn *tcp_conn = NULL;
     struct gazelle_tcp_sock *tcp_sock = NULL;
-    struct gazelle_quintuple quintuple;
+    struct gazelle_quintuple quintuple = {0};
 
     quintuple.dst_ip.u_addr.ip4.addr = ipv4_hdr->dst_addr;
     quintuple.src_ip.u_addr.ip4.addr = ipv4_hdr->src_addr;
