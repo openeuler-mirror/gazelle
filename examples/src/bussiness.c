@@ -219,8 +219,11 @@ static int32_t server_ans_write(int32_t socket_fd, struct ServerBaseCfgInfo *ser
 int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* domain)
 {
     const uint32_t length = pktlen;
-    char *buffer_in = (char *)malloc(length * sizeof(char));
-    char *buffer_out = (char *)malloc(length * sizeof(char));
+    char *buffer_in = (char *)calloc(length, sizeof(char));
+    char *buffer_out = (char *)calloc(length, sizeof(char));
+    if (buffer_in == NULL || buffer_out == NULL) {
+        return PROGRAM_FAULT;
+    }
 
     struct ServerBaseCfgInfo server_base_info;
     server_base_info.domain = domain;
@@ -285,8 +288,11 @@ int32_t client_ask(struct ClientHandler *client_handler, struct ClientUnit *clie
     uint16_t port = client_unit->port;
 
     const uint32_t length = client_unit->pktlen;
-    char *buffer_in = (char *)malloc(length * sizeof(char));
-    char *buffer_out = (char *)malloc(length * sizeof(char));
+    char *buffer_in = (char *)calloc(length, sizeof(char));
+    char *buffer_out = (char *)calloc(length, sizeof(char));
+    if (buffer_in == NULL || buffer_out == NULL) {
+        return PROGRAM_FAULT;
+    }
     sockaddr_t server_addr;
     socklen_t len = 0;
 
@@ -343,8 +349,11 @@ int32_t client_ask(struct ClientHandler *client_handler, struct ClientUnit *clie
 int32_t client_chkans(struct ClientHandler *client_handler, uint32_t pktlen, bool verify, const char* api, const char* domain, ip_addr_t* ip)
 {
     const uint32_t length = pktlen;
-    char *buffer_in = (char *)malloc(length * sizeof(char));
-    char *buffer_out = (char *)malloc(length * sizeof(char));
+    char *buffer_in = (char *)calloc(length, sizeof(char));
+    char *buffer_out = (char *)calloc(length, sizeof(char));
+    if (buffer_in == NULL || buffer_out == NULL) {
+        return PROGRAM_FAULT;
+    }
 
     int32_t cread = 0;
     int32_t sread = length;
