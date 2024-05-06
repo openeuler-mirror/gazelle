@@ -317,7 +317,7 @@ int32_t client_ask(struct ClientHandler *client_handler, struct ClientUnit *clie
         if (strcmp(domain, "udp") == 0 && strcmp(api, "recvfromsendto") == 0) {
             nwrite = sendto(client_handler->fd, buffer_out, swrite - cwrite, 0, (struct sockaddr *)&server_addr, len);
         } else {
-            nwrite = write_api(client_handler->fd, swrite - cwrite, length, api);
+            nwrite = write_api(client_handler->fd, buffer_out, swrite - cwrite, api);
         }
         if (nwrite == 0) {
             return PROGRAM_ABORT;
