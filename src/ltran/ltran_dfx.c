@@ -1114,8 +1114,10 @@ static void gazelle_print_lstack_stat_proto_core(const struct gazelle_stack_dfx_
                                                  const struct gazelle_stat_lstack_proto *proto)
 {
     printf("\n------ stack tid: %6u ------\n", stat->tid);
-    printf("xmit: %u\n",     proto->xmit);
-    printf("recv: %u\n",    proto->recv);
+    printf("tx_in: %u\n",     proto->tx_in);
+    printf("tx_out: %u\n",    proto->tx_out);
+    printf("rx_in: %u\n",     proto->rx_in);
+    printf("rx_out: %u\n",    proto->rx_out);
     printf("fw: %u\n", proto->fw);
     printf("drop: %u\n",    proto->drop);
     printf("chkerr: %u\n",    proto->chkerr);
@@ -1297,11 +1299,11 @@ static void show_usage(void)
            "  -x, xstats      show lstack xstats \n"
            "  -k, nic-features     show state of protocol offload and other features \n"
            "  -a, aggregatin  [time]   show lstack send/recv aggregation \n"
+           "  -p, protocol    {UDP | TCP | ICMP | IP | ETHARP} show lstack protocol statistics \n"
            "  set: \n"
            "  loglevel        {error | info | debug}  set lstack loglevel \n"
            "  lowpower        {0 | 1}  set lowpower enable \n"
            "  [time]          measure latency time default 1S, maximum 30mins \n\n"
-           "  -p, protocol    {UDP | TCP | ICMP | IP | ETHARP | IP_FRAG} show lstack protocol statistics \n"
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
            "                                     *inject params*\n"
            " |inject_type    |     digit_param_1      |      digit_param_2     |     inject_rule   |\n"
@@ -1512,8 +1514,8 @@ static int32_t parse_dfx_lstack_show_proto_args(int32_t argc, char *argv[], stru
     int32_t ret;
 
     char *param = argv[GAZELLE_OPTIONS2_ARG_IDX];
-    if (strcmp(param, "UDP") != 0 && strcmp(param, "TCP") != 0 && strcmp(param, "IP") &&
-        strcmp(param, "ICMP") && strcmp(param, "ETHARP") != 0) {
+    if ((param == NULL) || (strcmp(param, "UDP") != 0 && strcmp(param, "TCP") != 0 && strcmp(param, "IP") &&
+        strcmp(param, "ICMP") && strcmp(param, "ETHARP") != 0)) {
         return cmd_index;
     }
     ret = strncpy_s(req_msg[cmd_index].data.protocol, MAX_PROTOCOL_LENGTH, argv[GAZELLE_OPTIONS2_ARG_IDX],

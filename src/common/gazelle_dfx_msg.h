@@ -206,6 +206,10 @@ struct gazelle_stat_lstack_proto {
     /* data */
     uint16_t xmit;             /* Transmitted packets. */
     uint16_t recv;             /* Received packets. */
+    uint16_t tx_in;            /* Transmitted in packets. */
+    uint16_t tx_out;           /* Transmitted out packets. */
+    uint16_t rx_in;            /* Received in packets. */
+    uint16_t rx_out;           /* Received out packets. */
     uint16_t fw;               /* Forwarded packets. */
     uint16_t drop;             /* Dropped packets. */
     uint16_t chkerr;           /* Checksum error. */
