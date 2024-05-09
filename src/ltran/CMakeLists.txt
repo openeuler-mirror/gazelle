@@ -54,7 +54,7 @@ if (DPDK_VERSION STREQUAL "19.11")
 else()
     set(DPDK_LINK_FLAGS "-Wl,-lrte_net_bond -Wl,-lrte_net_hinic -Wl,-lrte_net_ixgbe \
     -Wl,-lpcap -Wl,-lrte_net_pcap -Wl,-lrte_net_virtio -Wl,-lrte_pcapng -Wl,-lrte_telemetry")
-    if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64")
+    if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "loongarch64|riscv64")
         set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lrte_net_i40e")
     endif()
 endif()
@@ -82,7 +82,7 @@ target_compile_options(ltran PRIVATE -fno-strict-aliasing -D__ARM_FEATURE_CRC32=
                -Wdeprecated -Wwrite-strings -Wno-implicit-fallthrough -D_FORTIFY_SOURCE=2 -Wno-error=deprecated-declarations)
 
 # gcc coredump in openEuler-20.03-LTS-XX aarch64 when add -march=native 
-if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "sw_64|aarch64|ppc64le" )
+if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "sw_64|aarch64|ppc64le|riscv64" )
     target_compile_options(ltran PRIVATE -march=native -Wcast-align)
 endif()
 
