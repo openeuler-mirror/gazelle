@@ -321,6 +321,9 @@ int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, ui
         ret = gazelle_ring_sp_enqueue(ring, (void **)free_buf, batch);
         if (ret == 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot enqueue to ring, count: %u\n", batch);
+            for (int i = 0; i < batch; i++) {
+                rte_pktmbuf_free(free_buf[i]);
+            }
             return -1;
         }
 

@@ -937,16 +937,17 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
 
         ret = rpc_call_arp(&stack->rpc_queue, mbuf_copy);
         if (ret != 0) {
+            rte_pktmbuf_free(mbuf_copy);
             return;
         }
     }
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
     if (ret != 0) {
         cur_stack->stats.rx_allocmbuf_fail++;
         return;
     }
     copy_mbuf(mbuf_copy, mbuf);
-#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     kni_handle_tx(mbuf_copy);
 #endif
     return;

@@ -424,8 +424,11 @@ forward_to_kni:
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     if (get_ltran_config()->dpdk.kni_switch == GAZELLE_ON) {
         enqueue_rx_packet(get_kni_stack(), m);
-    }
+    } else
 #endif
+    {
+        rte_pktmbuf_free(m);
+    }
     return;
 }
 
