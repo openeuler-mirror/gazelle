@@ -173,6 +173,8 @@ int32_t eth_dev_poll(void)
         } else if (transfer_type == TRANSFER_KERNEL) {
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
             kni_handle_tx(stack->pkts[i]);
+#else
+            rte_pktmbuf_free(stack->pkts[i]);
 #endif
         } else {
             /* transfer to other thread */
