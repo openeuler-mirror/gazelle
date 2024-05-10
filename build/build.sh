@@ -31,3 +31,11 @@ if [ $? -ne 0 ]; then
 fi
 
 cd -
+cd ../examples
+cmake .
+make
+if [ $? -ne 0 ]; then
+    echo "build examples failed"
+    exit 1
+fi
+cd -
