@@ -12,6 +12,7 @@
 
 
 #include "client.h"
+#include "server.h"
 
 static uint16_t g_ready_thread_num_client = 0;
 static pthread_mutex_t client_debug_mutex;      // the client mutex for printf
@@ -224,6 +225,16 @@ void client_info_print_mixed(struct Client *client, struct ThreadUintInfo *threa
         }
     }
     printf("\033[%dA\033[K", pthread_num - not_support_thread);
+}
+
+void loop_info_print()
+{
+    printf(" ");
+    if (strcmp(loopmod.model, "mum") == 0) {
+        sermum_info_print(loopmod.server_mum_info);
+    } else {
+        sermud_info_print(loopmod.server_mud_info);
+    }
 }
 
 // the single thread, client try to connect to server, register to epoll
@@ -645,6 +656,9 @@ int32_t client_create_and_run(struct ProgramParams *params)
     printf("\n all threads is ready: thread_num %d \n \n", g_ready_thread_num_client);
 
     while (true) {
+	if (strcmp(params->as, "loop") == 0) {
+            loop_info_print();
+	}
         if (mixed_mode_flag == true) {
             client_info_print_mixed(client, beginVolume, endVolume);
         } else {

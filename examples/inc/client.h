@@ -104,4 +104,11 @@ void *client_s_create_and_run(void *arg);
 int32_t client_create_and_run(struct ProgramParams *params);
 
 
+/**
+ * @brief loop server info
+ * This function print loop mode server info.
+ */
+void loop_info_print();
+
+
 #endif // __EXAMPLES_CLIENT_H__

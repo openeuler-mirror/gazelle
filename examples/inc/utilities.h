@@ -106,7 +106,7 @@
 #define CLIENT_EPOLL_SIZE_MAX               (10000)             ///< the max wait event of epoll
 #define CLIENT_EPOLL_WAIT_TIMEOUT           (-1)                ///< the timeout value of epoll
 
-#define TERMINAL_REFRESH_MS                 (1000)               ///< the time cut off between of terminal refresh
+#define TERMINAL_REFRESH_MS                 (999)               ///< the time cut off between of terminal refresh
 
 #define SOCKET_UNIX_DOMAIN_FILE             "unix_domain_file"  ///< socket unix domain file
 
@@ -173,6 +173,13 @@ struct ServerIpInfo {
     ip_addr_t groupip;                      ///< server group ip
     ip_addr_t groupip_interface;            ///< server group interface ip
 };
+
+struct LoopInfo {
+    char* model;
+    struct ServerMud *server_mud_info;
+    struct ServerMum *server_mum_info;
+};
+extern struct LoopInfo loopmod;
 /**
  * @brief create the socket and listen
  * Thi function creates the socket and listen.

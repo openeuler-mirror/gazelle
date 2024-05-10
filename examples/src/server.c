@@ -15,6 +15,7 @@
 
 static pthread_mutex_t server_debug_mutex;      // the server mutex for debug
 static uint16_t g_ready_thread_num_server = 0;
+struct LoopInfo loopmod;
 
 // server debug information print
 void server_debug_print(const char *ch_str, const char *act_str, ip_addr_t *ip, uint16_t port, bool debug)
@@ -503,9 +504,15 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     }
     printf(" \n all threads is ready: thread_num %d \n \n", g_ready_thread_num_server);
 
-    while (true) {
-        sermud_info_print(server_mud);
+    if (strcmp(params->as, "server") == 0) {
+        while (true) {
+            sermud_info_print(server_mud);
+        }
+    } else if (strcmp(params->as, "loop") == 0) {
+        loopmod.model = params->model;
+        loopmod.server_mud_info = server_mud;
     }
+
 
     pthread_mutex_destroy(&server_debug_mutex);
 
@@ -873,6 +880,9 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         while (true) {
             sermum_info_print(server_mum);
         }
+    } else if (strcmp(params->as, "loop") == 0) {
+        loopmod.model = params->model;
+	loopmod.server_mum_info = server_mum;
     }
 
     pthread_mutex_destroy(&server_debug_mutex);
