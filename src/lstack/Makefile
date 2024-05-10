@@ -109,7 +109,7 @@ else
                       $(LIB_PATH)/librte_net_virtio.so \
                       $(LIB_PATH)/librte_telemetry.so \
                       $(LIB_PATH)/librte_pcapng.so
-    ifneq ($(ARCH), loongarch64)
+    ifeq ($(filter loongarch64 riscv64, $(ARCH)),)
 	LIBRTE_LIB += $(LIB_PATH)/librte_net_i40e.so
     endif
 endif
