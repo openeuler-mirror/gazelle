@@ -296,6 +296,7 @@ struct bonding {
     int32_t miimon;
     uint16_t primary_port_id;
     uint16_t slaves[RTE_MAX_ETHPORTS];
+    uint16_t slave_count;
 };
 
 struct nic_eth_xstats {

@@ -207,11 +207,12 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
         printf("%s############################\n", nic_stats_border);
         printf("Bonding mode： [%d]\n", xstats->bonding.mode);
         printf("Bonding miimon: [%d]\n", xstats->bonding.miimon);
-        printf("Slaves(%d): [", xstats->port_id);
-        for (int i = 0; i < xstats->port_id - 1; i++) {
+        printf("Port range: 0->%d; Bonding port is %d\n", xstats->port_id, xstats->port_id);
+        printf("Slaves(%d): [", xstats->bonding.slave_count);
+        for (int i = 0; i < xstats->bonding.slave_count - 1; i++) {
             printf("%d ", xstats->bonding.slaves[i]);
         }
-        printf("%d]\n", xstats->bonding.slaves[xstats->port_id - 1]);
+        printf("%d]\n", xstats->bonding.slaves[xstats->bonding.slave_count - 1]);
         printf("Primary: [%d]\n", xstats->bonding.primary_port_id);
         printf("%s############################\n", nic_stats_border);
     }

@@ -905,6 +905,8 @@ void dpdk_nic_bond_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_
         return;
     }
 
+    dfx->data.nic_xstats.bonding.slave_count = count;
+
     for (int i = 0; i < count; i++) {
         dfx->data.nic_xstats.bonding.slaves[i] = slaves[i];
     }
