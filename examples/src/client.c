@@ -14,7 +14,6 @@
 #include "client.h"
 #include "server.h"
 
-static uint16_t g_ready_thread_num_client = 0;
 static pthread_mutex_t client_debug_mutex;      // the client mutex for printf
 struct Client *g_client_begin = NULL;
 
@@ -472,9 +471,6 @@ void *client_s_create_and_run(void *arg)
     if (client_thread_create_epfd_and_reg(client_unit) < 0) {
        exit(PROGRAM_FAULT);
     }
-
-    __sync_fetch_and_add(&g_ready_thread_num_client, 1);
-
     while (true) {
         if (clithd_proc_epevs(client_unit) < 0) {
             exit(PROGRAM_FAULT);
@@ -654,11 +650,6 @@ int32_t client_create_and_run(struct ProgramParams *params)
     }
     memset_s(endVolume, thread_num * sizeof(struct ThreadUintInfo), 0, thread_num * sizeof(struct ThreadUintInfo));
 
-    while (g_ready_thread_num_client < thread_num) {
-        sleep(1);
-    }
-
-    printf("\n all threads is ready: thread_num %d \n \n", g_ready_thread_num_client);
     if (strcmp(params->as, "loop") == 0) {
         client->loop = true;
     }
