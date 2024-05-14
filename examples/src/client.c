@@ -121,6 +121,11 @@ void client_info_print(struct Client *client)
         } else {
             PRINT_CLIENT_DATAFLOW("[connect num]: %d, [send]: %.3f MB/s", curr_connect, bytes_ps / MB);
         }
+        
+        if (client->loop) {
+            printf("\033[2A\033[120C\033[K\n");
+            return;
+        }
         printf("\033[A\033[K");
     }
 }
@@ -654,6 +659,9 @@ int32_t client_create_and_run(struct ProgramParams *params)
     }
 
     printf("\n all threads is ready: thread_num %d \n \n", g_ready_thread_num_client);
+    if (strcmp(params->as, "loop") == 0) {
+        client->loop = true;
+    }
 
     while (true) {
 	if (strcmp(params->as, "loop") == 0) {
