@@ -31,6 +31,7 @@ struct Client
     struct ClientUnit *uints;           ///< the server mum unit
     bool debug;                         ///< if we print the debug information
     uint32_t threadNum;
+    bool loop;                          ///< judge client info print while loop is open
 };
 
 struct Client_domain_ip {
