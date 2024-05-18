@@ -626,10 +626,11 @@ int32_t stack_setup_app_thread(void)
 
     if (stack_thread_init(t_params) == NULL) {
         LSTACK_LOG(INFO, LSTACK, "stack setup failed in app thread\n");
+        free(t_params);
         return -1;
     }
     atomic_fetch_add(&g_stack_group.stack_num, 1);
-
+    free(t_params);
     return 0;
 }
 
