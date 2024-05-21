@@ -1115,16 +1115,16 @@ static void gazelle_print_lstack_stat_proto_core(const struct gazelle_stack_dfx_
                                                  const struct gazelle_stat_lstack_proto *proto)
 {
     printf("\n------ stack tid: %6u ------\n", stat->tid);
-    printf("tx_in: %u\n",     proto->tx_in);
-    printf("tx_out: %u\n",    proto->tx_out);
-    printf("rx_in: %u\n",     proto->rx_in);
-    printf("rx_out: %u\n",    proto->rx_out);
-    printf("fw: %u\n", proto->fw);
-    printf("drop: %u\n",    proto->drop);
-    printf("chkerr: %u\n",    proto->chkerr);
-    printf("lenerr: %u\n",       proto->lenerr);
-    printf("memerr: %u\n",   proto->memerr);
-    printf("rterr: %u\n",       proto->rterr);
+    printf("tx_in: %lu\n",     proto->tx_in);
+    printf("tx_out: %lu\n",    proto->tx_out);
+    printf("rx_in: %lu\n",     proto->rx_in);
+    printf("rx_out: %lu\n",    proto->rx_out);
+    printf("fw: %lu\n", proto->fw);
+    printf("drop: %lu\n",    proto->drop);
+    printf("chkerr: %lu\n",    proto->chkerr);
+    printf("lenerr: %lu\n",       proto->lenerr);
+    printf("memerr: %lu\n",   proto->memerr);
+    printf("rterr: %lu\n",       proto->rterr);
 }
 
 static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_msg_request *req_msg)
