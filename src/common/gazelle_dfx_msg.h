@@ -204,22 +204,22 @@ struct gazelle_stat_lstack_snmp {
 /* same as define in lwip/stats.h - struct stats_proto */
 struct gazelle_stat_lstack_proto {
     /* data */
-    uint16_t xmit;             /* Transmitted packets. */
-    uint16_t recv;             /* Received packets. */
-    uint16_t tx_in;            /* Transmitted in packets. */
-    uint16_t tx_out;           /* Transmitted out packets. */
-    uint16_t rx_in;            /* Received in packets. */
-    uint16_t rx_out;           /* Received out packets. */
-    uint16_t fw;               /* Forwarded packets. */
-    uint16_t drop;             /* Dropped packets. */
-    uint16_t chkerr;           /* Checksum error. */
-    uint16_t lenerr;           /* Invalid length error. */
-    uint16_t memerr;           /* Out of memory error. */
-    uint16_t rterr;            /* Routing error. */
-    uint16_t proterr;          /* Protocol error. */
-    uint16_t opterr;           /* Error in options. */
-    uint16_t err;              /* Misc error. */
-    uint16_t cachehit;
+    uint64_t xmit;             /* Transmitted packets. */
+    uint64_t recv;             /* Received packets. */
+    uint64_t tx_in;            /* Transmitted in packets. */
+    uint64_t tx_out;           /* Transmitted out packets. */
+    uint64_t rx_in;            /* Received in packets. */
+    uint64_t rx_out;           /* Received out packets. */
+    uint64_t fw;               /* Forwarded packets. */
+    uint64_t drop;             /* Dropped packets. */
+    uint64_t chkerr;           /* Checksum error. */
+    uint64_t lenerr;           /* Invalid length error. */
+    uint64_t memerr;           /* Out of memory error. */
+    uint64_t rterr;            /* Routing error. */
+    uint64_t proterr;          /* Protocol error. */
+    uint64_t opterr;           /* Error in options. */
+    uint64_t err;              /* Misc error. */
+    uint64_t cachehit;
 };
 
 
