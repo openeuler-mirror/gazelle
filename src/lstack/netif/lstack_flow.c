@@ -84,6 +84,10 @@ static void add_rule(char* rule_key, struct rte_flow *flow)
     HASH_FIND_STR(g_flow_rules, rule_key, rule);
     if (rule == NULL) {
         rule = (struct flow_rule*)malloc(sizeof(struct flow_rule));
+        if (rule == NULL) {
+            LSTACK_LOG(ERR, LSTACK, "flow rule add failed. \n");
+            return;
+        }
         strcpy_s(rule->rule_key, RULE_KEY_LEN, rule_key);
         HASH_ADD_STR(g_flow_rules, rule_key, rule);
     }
