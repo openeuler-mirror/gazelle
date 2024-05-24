@@ -2,6 +2,8 @@
 
 # 用户态协议栈Gazelle
 
+[简体中文](README.md) | [English](README_en.md)
+
 ## 简介
 
 Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读写网卡报文，共享大页内存传递报文，使用轻量级LwIP协议栈。能够大幅提高应用的网络I/O吞吐能力。专注于数据库网络性能加速，如MySQL、redis等。兼顾高性能与通用性：
