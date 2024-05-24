@@ -301,19 +301,11 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
 static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struct ServerMud *server_mud)
 {
     struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
-    int server_ans_ret;
 
     if (server_handler->fd == server_mud->listener.listen_fd_array[V4_UDP] ||
         server_handler->fd == server_mud->listener.listen_fd_array[UDP_MULTICAST]) {
         uint32_t pktlen = server_mud->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : server_mud->pktlen;
-
-        if (server_handler->fd == server_mud->listener.listen_fd_array[UDP_MULTICAST] &&
-            strcmp(server_mud->as, "loop") == 0) {
-            server_ans_ret = server_ans(server_handler->fd, pktlen, "recvfrom", "udp");
-        } else {
-            server_ans_ret = server_ans(server_handler->fd, pktlen, server_mud->api, "udp");
-        }
-
+        int32_t server_ans_ret = server_ans(server_handler->fd, pktlen, server_mud->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_mud->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close server_ans_ret %d! \n", server_ans_ret);
@@ -490,7 +482,6 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
     server_mud->accept = params->accept;
     server_mud->tcp_keepalive_idle = params->tcp_keepalive_idle;
     server_mud->tcp_keepalive_interval = params->tcp_keepalive_interval;
-    server_mud->as = params->as;
 
     if (pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud) < 0) {
         PRINT_ERROR("server can't create poisx thread %d! ", errno);
@@ -718,7 +709,6 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
 {
     struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
     int32_t fd = server_handler->fd;
-    int32_t server_ans_ret;
     if (fd == (server_unit->listener.listen_fd_array[V4_TCP]) ||
         fd == (server_unit->listener.listen_fd_array[V6_TCP])) {
         int32_t sersum_accept_connects_ret = sersum_accept_connects(curr_epev, server_unit);
@@ -729,14 +719,7 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
     } else if (fd == (server_unit->listener.listen_fd_array[V4_UDP]) ||
                fd == (server_unit->listener.listen_fd_array[UDP_MULTICAST])) {
         uint32_t pktlen = server_unit->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : server_unit->pktlen;
-
-        if (fd == server_unit->listener.listen_fd_array[UDP_MULTICAST] &&
-            strcmp(server_unit->as, "loop") == 0) {
-            server_ans_ret = server_ans(fd, pktlen, "recvfrom", "udp");
-        } else {
-            server_ans_ret = server_ans(fd, pktlen, server_unit->api, "udp");
-        }
-
+        int32_t server_ans_ret = server_ans(fd, pktlen, server_unit->api, "udp");
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close ret %d! \n", server_ans_ret);
@@ -859,7 +842,6 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->accept = params->accept;
         server_unit->tcp_keepalive_idle = params->tcp_keepalive_idle;
         server_unit->tcp_keepalive_interval = params->tcp_keepalive_interval;
-        server_unit->as = params->as;
         server_unit->next = (struct ServerMumUnit *)malloc(sizeof(struct ServerMumUnit));
         if (server_unit->next) {
             memset_s(server_unit->next, sizeof(struct ServerMumUnit), 0, sizeof(struct ServerMumUnit));
