@@ -36,7 +36,6 @@ struct ServerMumUnit
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
-    char* as;                               ///< loop , server or client
     bool debug;                             ///< if we print the debug information
     char* epollcreate;                      ///< epoll_create method
     char* accept;                           ///< accept connections method
@@ -92,7 +91,6 @@ struct ServerMud
     uint32_t pktlen;                        ///< the length of peckage
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
-    char* as;                               ///< loop , server or client
     bool debug;                             ///< if we print the debug information
     char* accept;                           ///< accept connections method
     char* epollcreate;                      ///< epoll_create method
