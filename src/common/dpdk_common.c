@@ -226,7 +226,7 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
     // rx vlan filter
     if (rx_ol_capa & RTE_ETH_RX_OFFLOAD_VLAN_FILTER) {
         rx_ol |= RTE_ETH_RX_OFFLOAD_VLAN_FILTER;
-        COMMON_INFO("RTE_ETH_RX_OFFLOAD_VLAN_STRIP\n");
+        COMMON_INFO("RTE_ETH_RX_OFFLOAD_VLAN_FILTER\n");
     }
 
     // tx ip

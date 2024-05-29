@@ -92,8 +92,6 @@ struct protocol_stack_group {
     uint16_t port_id;
     uint64_t rx_offload;
     uint64_t tx_offload;
-    uint32_t reta_mask;
-    uint16_t nb_queues;
     struct rte_mempool *kni_pktmbuf_pool;
     struct eth_params *eth_params;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];

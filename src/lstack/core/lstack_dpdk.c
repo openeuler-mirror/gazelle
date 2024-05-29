@@ -58,10 +58,14 @@ struct eth_params {
     uint16_t nb_rx_desc;
     uint16_t nb_tx_desc;
 
+    uint32_t reta_mask;
+
     struct rte_eth_conf conf;
     struct rte_eth_rxconf rx_conf;
     struct rte_eth_txconf tx_conf;
 };
+
+static struct eth_params g_eth_params;
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 struct rte_kni;
 static struct rte_bus *g_pci_bus = NULL;
@@ -368,34 +372,6 @@ static int32_t ethdev_port_id(uint8_t *mac)
     return port_id;
 }
 
-static struct eth_params *alloc_eth_params(uint16_t port_id, uint16_t nb_queues)
-{
-    struct eth_params *eth_params = calloc(1, sizeof(struct eth_params));
-    if (eth_params == NULL) {
-        return NULL;
-    }
-
-    eth_params->port_id = port_id;
-    eth_params->nb_queues = nb_queues;
-    eth_params->nb_rx_desc = get_global_cfg_params()->nic.rxqueue_size;
-    eth_params->nb_tx_desc = get_global_cfg_params()->nic.txqueue_size;
-    eth_params->conf.link_speeds = RTE_ETH_LINK_SPEED_AUTONEG;
-    eth_params->conf.txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
-    eth_params->conf.rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
-
-    return eth_params;
-}
-
-uint64_t get_eth_params_rx_ol(void)
-{
-    return get_protocol_stack_group()->rx_offload;
-}
-
-uint64_t get_eth_params_tx_ol(void)
-{
-    return get_protocol_stack_group()->tx_offload;
-}
-
 static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
 {
     int rss_enable = 0;
@@ -421,6 +397,54 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
     }
 
     return rss_enable;
+}
+
+static int eth_params_init(struct eth_params *eth_params, uint16_t port_id, uint16_t nb_queues, int *rss_enable)
+{
+    struct rte_eth_dev_info dev_info;
+    int ret = rte_eth_dev_info_get(port_id, &dev_info);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "get dev info ret=%d\n", ret);
+        return ret;
+    }
+
+    int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
+    if (max_queues < nb_queues) {
+        LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
+        return -EINVAL;
+    }
+
+    memset_s(eth_params, sizeof(struct eth_params), 0, sizeof(struct eth_params));
+
+    eth_params->port_id = port_id;
+    eth_params->nb_queues = nb_queues;
+    eth_params->nb_rx_desc = get_global_cfg_params()->nic.rxqueue_size;
+    eth_params->nb_tx_desc = get_global_cfg_params()->nic.txqueue_size;
+    eth_params->conf.link_speeds = RTE_ETH_LINK_SPEED_AUTONEG;
+    eth_params->conf.txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
+    eth_params->conf.rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
+    /* used for tcp port alloc */
+    eth_params->reta_mask = dev_info.reta_size - 1;
+
+    eth_params_checksum(&eth_params->conf, &dev_info);
+
+    if (!get_global_cfg_params()->tuple_filter) {
+        *rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
+    } else {
+        *rss_enable = 0;
+    }
+
+    return 0;
+}
+
+uint64_t get_eth_params_rx_ol(void)
+{
+    return get_protocol_stack_group()->rx_offload;
+}
+
+uint64_t get_eth_params_tx_ol(void)
+{
+    return get_protocol_stack_group()->tx_offload;
 }
 
 static void rss_setup(const int port_id, const uint16_t nb_queues)
@@ -481,8 +505,10 @@ int32_t dpdk_bond_primary_set(int port_id, int slave_port_id)
     return 0;
 }
 
-int32_t dpdk_ethdev_init(int port_id, bool bond_port)
+int32_t dpdk_ethdev_init(int port_id)
 {
+    int ret;
+    int32_t rss_enable = 0;
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
     if (get_global_cfg_params()->seperate_send_recv) {
         nb_queues = get_global_cfg_params()->num_cpu * 2;
@@ -494,145 +520,55 @@ int32_t dpdk_ethdev_init(int port_id, bool bond_port)
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    if (get_global_cfg_params()->bond_mode < 0) {
-        port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
-        if (port_id < 0) {
-            LSTACK_LOG(ERR, LSTACK, "ethdev_port_id FAIL port_id=%d\n", port_id);
-            return port_id;
-        }
-    }
-
-    struct rte_eth_dev_info dev_info;
-    int32_t ret = rte_eth_dev_info_get(port_id, &dev_info);
+    ret = eth_params_init(&g_eth_params, port_id, nb_queues, &rss_enable);
     if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "get dev info ret=%d\n", ret);
+        LSTACK_LOG(ERR, LSTACK, "eth_params_init failed ret=%d\n", ret);
         return ret;
     }
 
-    int32_t max_queues = LWIP_MIN(dev_info.max_rx_queues, dev_info.max_tx_queues);
-    if (max_queues < nb_queues) {
-        LSTACK_LOG(ERR, LSTACK, "port_id %d max_queues=%d\n", port_id, max_queues);
-        return -EINVAL;
-    }
-
-    if (bond_port) {
-        int32_t slave_port_id[GAZELLE_MAX_BOND_NUM];
-        for (int i = 0; i < GAZELLE_MAX_BOND_NUM; i++) {
-            if (rte_is_zero_ether_addr(&get_global_cfg_params()->bond_slave_mac_addr[i])) {
-                break;
-            }
-            slave_port_id[i] = ethdev_port_id(get_global_cfg_params()->bond_slave_mac_addr[i].addr_bytes);
-            if (slave_port_id[i] < 0) {
-                LSTACK_LOG(ERR, LSTACK, "get slave port id failed port = %d\n", slave_port_id[1]);
-                return slave_port_id[i];
-            }
-            ret = dpdk_ethdev_init(slave_port_id[i], 0);
-            if (ret != 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
-                return -1;
-            }
-            ret = rte_eth_promiscuous_enable(slave_port_id[i]);
-            if (ret != 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk slave enable promiscuous failed ret = %d\n", ret);
-                return -1;
-            }
-
-            ret = rte_eth_allmulticast_enable(slave_port_id[i]);
-            if (ret != 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk slave enable allmulticast failed ret = %d\n", ret);
-                return -1;
-            }
-
-#if RTE_VERSION >= RTE_VERSION_NUM(23, 11, 0, 0)
-            ret = rte_eth_bond_member_add(port_id, slave_port_id[i]);
-#else
-            ret = rte_eth_bond_slave_add(port_id, slave_port_id[i]);
-#endif
-            if (ret != 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk add slave port failed ret = %d\n", ret);
-                return -1;
-            }
-            
-            if (get_global_cfg_params()->bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
-                dpdk_bond_primary_set(port_id, slave_port_id[i]);
-            }
-
-            ret = rte_eth_dev_start(slave_port_id[i]);
-            if (ret != 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk start slave port failed ret = %d\n", ret);
-                return -1;
-            }
-        }
-    }
-
-    struct eth_params *eth_params = alloc_eth_params(port_id, nb_queues);
-    if (eth_params == NULL) {
-        return -ENOMEM;
-    }
-
-    if (bond_port) {
-        struct rte_eth_dev_info slave_dev_info;
-        int slave_id = rte_eth_bond_primary_get(port_id);
-        if (slave_id < 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk get bond primary port failed port = %d\n", slave_id);
-            free(eth_params);
-            return slave_id;
-        }
-        ret = rte_eth_dev_info_get(slave_id, &slave_dev_info);
-        if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk get bond dev info failed ret = %d\n", ret);
-            free(eth_params);
-            return ret;
-        }
-        dev_info.rx_offload_capa = slave_dev_info.rx_offload_capa;
-        dev_info.tx_offload_capa = slave_dev_info.tx_offload_capa;
-        dev_info.reta_size = slave_dev_info.reta_size;
-        dev_info.flow_type_rss_offloads = slave_dev_info.flow_type_rss_offloads;
-    }
-
-    eth_params_checksum(&eth_params->conf, &dev_info);
-    int32_t rss_enable = 0;
-    if (!get_global_cfg_params()->tuple_filter) {
-        rss_enable = eth_params_rss(&eth_params->conf, &dev_info);
-    }
-    stack_group->eth_params = eth_params;
-    stack_group->port_id = eth_params->port_id;
-    stack_group->rx_offload = eth_params->conf.rxmode.offloads;
-    stack_group->tx_offload = eth_params->conf.txmode.offloads;
-    /* used for tcp port alloc */
-    stack_group->reta_mask = dev_info.reta_size - 1;
-    stack_group->nb_queues = nb_queues;
+    stack_group->eth_params = &g_eth_params;
+    stack_group->rx_offload = g_eth_params.conf.rxmode.offloads;
+    stack_group->tx_offload = g_eth_params.conf.txmode.offloads;
+    stack_group->port_id = port_id;
 
     if (get_global_cfg_params()->is_primary) {
-        ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &eth_params->conf);
+        ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &stack_group->eth_params->conf);
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot config eth dev at port %d: %s\n", port_id, rte_strerror(-ret));
-            stack_group->eth_params = NULL;
-            free(eth_params);
             return ret;
         }
 
         ret = dpdk_ethdev_start();
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_start failed ret=%d\n", ret);
-            stack_group->eth_params = NULL;
-            free(eth_params);
             return ret;
         }
 
         if (rss_enable && !get_global_cfg_params()->tuple_filter) {
             rss_setup(port_id, nb_queues);
-            stack_group->reta_mask = dev_info.reta_size - 1;
         }
     }
 
     /* after rte_eth_dev_configure */
     if ((get_global_cfg_params()->nic.vlan_mode != -1) &&
         ((stack_group->rx_offload & RTE_ETH_RX_OFFLOAD_VLAN_FILTER) == RTE_ETH_RX_OFFLOAD_VLAN_FILTER)) {
-        ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->nic.vlan_mode, 1);
-        if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk add vlan filter failed ret = %d\n", ret);
-            return -1;
+        /*
+         * vlan filter can be configured for switch,nic and software.
+         * bond4/6 mode need enable promiscuous mode, it conflicts with nic vlan filter.
+         * therefore, we can't use nic vlan filter in bond4/6 mode.
+         * 1. use software: need disable vlan strip in nic, the corresponding GRO becomes invalid
+         *    GRO does not support vlan pakckets, which affects performance.
+         * 2. use switch: it's a good config
+         */
+        if ((get_global_cfg_params()->bond_mode != BONDING_MODE_8023AD) &&
+            (get_global_cfg_params()->bond_mode != BONDING_MODE_ALB)) {
+            ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->nic.vlan_mode, 1);
+            if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk add vlan filter failed ret = %d\n", ret);
+                return -1;
+            }
+        } else {
+            LSTACK_LOG(ERR, LSTACK, "bond4 and bond6 not support set vlan filter in nic\n");
         }
     }
 
@@ -684,10 +620,6 @@ int32_t dpdk_ethdev_start(void)
         }
     }
 
-    if (get_global_cfg_params()->bond_mode >= 0) {
-        return 0;
-    }
-
     ret = rte_eth_dev_start(stack_group->eth_params->port_id);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot start ethdev: %d\n", (-ret));
@@ -733,77 +665,117 @@ void dpdk_restore_pci(void)
 }
 #endif
 
+static int dpdk_bond_create(uint8_t mode, int *slave_port_id, int count)
+{
+    int port_id = rte_eth_bond_create("net_bonding0", mode, rte_socket_id());
+    struct cfg_params *cfg = get_global_cfg_params();
+    int ret;
+
+    if (port_id < 0) {
+        LSTACK_LOG(ERR, LSTACK, "get bond port id failed ret=%d\n", port_id);
+        return -1;
+    }
+
+    for (int i = 0; i < count; i++) {
+               /* rte_dev_info_get can get correct devinfo after call bond_member_add */
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
+        ret = rte_eth_bond_slave_add(port_id, slave_port_id[i]);
+#else
+        ret = rte_eth_bond_member_add(port_id, slave_port_id[i]);
+#endif
+        if (ret < 0) {
+           LSTACK_LOG(ERR, LSTACK, "bond add slave devices failed, ret=%d\n", ret);
+            return -1;
+        }
+        if (cfg->bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
+            dpdk_bond_primary_set(port_id, slave_port_id[i]);
+        }
+    }
+
+    if (get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) {
+        ret = rte_eth_bond_8023ad_dedicated_queues_enable(port_id);
+        if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk enable 8023 dedicated queues failed ret = %d\n", ret);
+            return -1;
+        }
+    }
+
+    if (dpdk_ethdev_init(port_id) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed for bond port\n");
+           return -1;
+    }
+
+    ret = rte_eth_bond_xmit_policy_set(port_id, BALANCE_XMIT_POLICY_LAYER34);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk set bond xmit policy failed ret = %d\n", ret);
+        return -1;
+    }
+
+    ret = rte_eth_bond_link_monitoring_set(port_id, get_global_cfg_params()->bond_miimon);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk set bond link monitoring failed ret = %d\n", ret);
+        return -1;
+    }
+
+    if ((get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) ||
+        (get_global_cfg_params()->bond_mode == BONDING_MODE_ALB)) {
+        for (int i = 0; i < count; i++) {
+            /* bond port promiscuous only enable primary port */
+            /* we enable all ports */
+            ret = rte_eth_promiscuous_enable(slave_port_id[i]);
+            if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "dpdk slave enable promiscuous failed ret = %d\n", ret);
+                return -1;
+            }
+        }
+    }
+
+    ret = rte_eth_dev_start(port_id);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "dpdk start bond port failed ret = %d\n", ret);
+        return -1;
+    }
+
+    return 0;
+}
+
 int32_t init_dpdk_ethdev(void)
 {
     int32_t ret;
+    int slave_port_id[GAZELLE_MAX_BOND_NUM];
+    int port_id;
+    struct cfg_params *cfg = get_global_cfg_params();
+    int i;
 
-    if (get_global_cfg_params()->bond_mode >= 0) {
-        uint8_t socket_id = rte_socket_id();
-        int bond_port_id = rte_eth_bond_create("net_bonding0", get_global_cfg_params()->bond_mode, socket_id);
-        if (bond_port_id < 0) {
-            LSTACK_LOG(ERR, LSTACK, "get bond port id failed ret=%d\n", bond_port_id);
-            return bond_port_id;
-        }
-
-        ret = dpdk_ethdev_init(bond_port_id, 1);
-        if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed ret = %d\n", ret);
-            return -1;
-        }
-
-        ret = rte_eth_bond_xmit_policy_set(bond_port_id, BALANCE_XMIT_POLICY_LAYER34);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk set bond xmit policy failed ret = %d\n", ret);
-            return -1;
-        }
-
-        if (get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) {
-            ret = rte_eth_bond_8023ad_dedicated_queues_enable(bond_port_id);
+    if (cfg->bond_mode >= 0) {
+        for (i = 0; i < GAZELLE_MAX_BOND_NUM; i++) {
+            if (rte_is_zero_ether_addr(&cfg->bond_slave_mac_addr[i])) {
+                break;
+            }
+            slave_port_id[i] = ethdev_port_id(cfg->bond_slave_mac_addr[i].addr_bytes);
+            ret = dpdk_ethdev_init(slave_port_id[i]);
             if (ret < 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk enable 8023 dedicated queues failed ret = %d\n", ret);
+                LSTACK_LOG(ERR, LSTACK, "slave port(%d) init failed, ret=%d\n", slave_port_id[i], ret);
                 return -1;
             }
-        } else {
-            ret = rte_eth_bond_mode_set(bond_port_id, get_global_cfg_params()->bond_mode);
-            if (ret < 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk enable mode set failed ret = %d\n", ret);
-            }
         }
 
-        ret = rte_eth_bond_link_monitoring_set(bond_port_id, get_global_cfg_params()->bond_miimon);
+        ret = dpdk_bond_create(cfg->bond_mode, slave_port_id, i);
         if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk set bond link monitoring failed ret = %d\n", ret);
+            LSTACK_LOG(ERR, LSTACK, "bond device create failed, ret=%d\n", ret);
             return -1;
         }
-
-        ret = rte_eth_promiscuous_enable(bond_port_id);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk enable promiscuous failed ret = %d\n", ret);
-            return -1;
-        }
-
-        ret = rte_eth_allmulticast_enable(bond_port_id);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk enable allmulticast failed ret = %d\n", ret);
-            return -1;
-        }
-
-        ret = rte_eth_dev_start(bond_port_id);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk start bond port failed ret = %d\n", ret);
-            return -1;
-        }
-
     } else {
-        ret = dpdk_ethdev_init(0, 0);
+        port_id = ethdev_port_id(cfg->mac_addr);
+        ret = dpdk_ethdev_init(port_id);
         if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed\n");
+            LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed, port id=%d\n", port_id);
             return -1;
         }
     }
 
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
-    if (get_global_cfg_params()->kni_switch && get_global_cfg_params()->is_primary) {
+    if (cfg->kni_switch && cfg->is_primary) {
         ret = dpdk_init_lstack_kni();
         if (ret < 0) {
             return -1;
@@ -817,7 +789,13 @@ int32_t init_dpdk_ethdev(void)
 bool port_in_stack_queue(gz_addr_t *src_ip, gz_addr_t *dst_ip, uint16_t src_port, uint16_t dst_port)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    if (stack_group->reta_mask == 0 || stack_group->nb_queues <= 1) {
+
+    /* ltran mode */
+    if (stack_group->eth_params == NULL) {
+        return true;
+    }
+
+    if (stack_group->eth_params->reta_mask == 0 || stack_group->eth_params->nb_queues <= 1) {
         return true;
     }
 
@@ -840,10 +818,10 @@ bool port_in_stack_queue(gz_addr_t *src_ip, gz_addr_t *dst_ip, uint16_t src_port
         hash = rte_softrss((uint32_t *)&tuple, RTE_THASH_V6_L4_LEN, g_default_rss_key);
     }
 
-    uint32_t reta_index = hash & stack_group->reta_mask;
+    uint32_t reta_index = hash & stack_group->eth_params->reta_mask;
 
     struct protocol_stack *stack = get_protocol_stack();
-    return (reta_index % stack_group->nb_queues) == stack->queue_id;
+    return (reta_index % stack_group->eth_params->nb_queues) == stack->queue_id;
 }
 
 static int dpdk_nic_xstats_value_get(uint64_t *values, unsigned int len, uint16_t *ports, unsigned int count)
