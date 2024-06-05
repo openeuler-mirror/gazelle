@@ -616,7 +616,9 @@ int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUni
         }
 
         if (accept_fd < 0) {
-            PRINT_ERROR("accept_fd=%d , errno=%d ", accept_fd, errno);
+            if (errno != EWOULDBLOCK && errno != EAGAIN){
+                PRINT_ERROR("accept_fd=%d , errno=%d ", accept_fd, errno);
+            }
             break;
         }
         ret = set_tcp_keep_alive_info(accept_fd, server_unit->tcp_keepalive_idle, server_unit->tcp_keepalive_interval);
