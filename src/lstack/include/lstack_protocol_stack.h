@@ -25,8 +25,9 @@
 #include "lstack_ethdev.h"
 #include "gazelle_opt.h"
 
-#define SOCK_RECV_RING_SIZE         (128)
+#define SOCK_RECV_RING_SIZE         (get_global_cfg_params()->recv_ring_size)
 #define SOCK_RECV_FREE_THRES        (32)
+#define SOCK_RECV_RING_SIZE_MAX     (2048)
 #define SOCK_SEND_RING_SIZE_MAX     (2048)
 #define SOCK_SEND_REPLENISH_THRES   (16)
 #define WAKEUP_MAX_NUM              (32)

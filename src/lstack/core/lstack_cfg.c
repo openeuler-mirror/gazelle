@@ -68,6 +68,7 @@ static int32_t parse_nic_read_number(void);
 static int32_t parse_tcp_conn_count(void);
 static int32_t parse_mbuf_count_per_conn(void);
 static int32_t parse_send_ring_size(void);
+static int32_t parse_recv_ring_size(void);
 static int32_t parse_num_process(void);
 static int32_t parse_process_numa(void);
 static int32_t parse_process_index(void);
@@ -83,6 +84,7 @@ static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
 static int32_t parse_defaule_nonblock_mode(void);
+static int32_t parse_rpc_msg_max(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -132,6 +134,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "rpc_number", parse_rpc_number },
     { "nic_read_number", parse_nic_read_number },
     { "send_ring_size", parse_send_ring_size },
+    { "recv_ring_size", parse_recv_ring_size },
     { "num_process",  parse_num_process },
     { "process_numa", parse_process_numa },
     { "process_idx", parse_process_index },
@@ -146,6 +149,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "stack_thread_mode", parse_stack_thread_mode },
     { "nic_vlan_mode", parse_nic_vlan_mode },
     { "nonblock_mode", parse_defaule_nonblock_mode },
+    { "rpc_msg_max", parse_rpc_msg_max },
     { NULL,           NULL }
 };
 
@@ -908,6 +912,14 @@ static int32_t parse_send_ring_size(void)
     return ret;
 }
 
+static int32_t parse_recv_ring_size(void)
+{
+    int32_t ret;
+    /* recv ring size default value is 128 */
+    PARSE_ARG(g_config_params.recv_ring_size, "recv_ring_size", 128, 1, SOCK_RECV_RING_SIZE_MAX, ret);
+    return ret;
+}
+
 static int32_t parse_mbuf_count_per_conn(void)
 {
     int32_t ret;
@@ -1356,3 +1368,15 @@ static int32_t parse_defaule_nonblock_mode(void)
     }
     return ret;
 }
+
+static int32_t parse_rpc_msg_max(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.rpc_msg_max, "rpc_msg_max", 4096, 1, 8192, ret);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid rpc msg max value %d ret=%d. only support 1~8192\n",
+            g_config_params.rpc_msg_max, ret);
+    }
+    return ret;
+}
+

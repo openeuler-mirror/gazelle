@@ -13,6 +13,7 @@
 #include <rte_mempool.h>
 
 #include "lstack_log.h"
+#include "lstack_cfg.h"
 #include "lstack_dpdk.h"
 #include "lstack_rpc_proc.h"
 #include "lstack_stack_stat.h"
@@ -71,7 +72,7 @@ static struct rpc_msg *rpc_msg_alloc(rpc_msg_func func)
             exit(-1);
         }
 
-        g_rpc_pool->mempool = create_mempool("rpc_pool", RPC_MSG_MAX, sizeof(struct rpc_msg),
+        g_rpc_pool->mempool = create_mempool("rpc_pool", get_global_cfg_params()->rpc_msg_max, sizeof(struct rpc_msg),
             0, rte_gettid());
         if (g_rpc_pool->mempool == NULL) {
             LSTACK_LOG(INFO, LSTACK, "rpc_pool create failed, errno is %d\n", errno);
