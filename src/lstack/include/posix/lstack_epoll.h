@@ -37,7 +37,7 @@ struct protocol_stack;
 struct wakeup_poll {
     /* stack thread read frequently */
     enum wakeup_type type;
-    pthread_mutex_t wait __rte_cache_aligned;
+    sem_t wait;
     bool in_wait;
     struct list_node wakeup_list[PROTOCOL_STACK_MAX];
     bool have_kernel_event;
@@ -87,7 +87,7 @@ static inline void lstack_block_wakeup(struct wakeup_poll *wakeup)
     if (wakeup && __atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
         __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
         rte_mb();
-        pthread_mutex_unlock(&wakeup->wait);
+        sem_post(&wakeup->wait);
     }
 }
 
