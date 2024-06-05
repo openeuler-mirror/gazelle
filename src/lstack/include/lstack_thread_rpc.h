@@ -26,8 +26,6 @@
 #define MSG_ARG_4                      (4)
 #define RPM_MSG_ARG_SIZE               (5)
 
-#define RPC_MSG_MAX            4096
-#define RPC_MSG_MASK           (RPC_MSG_MAX - 1)
 typedef struct lockless_queue rpc_queue;
 
 struct rpc_stats {

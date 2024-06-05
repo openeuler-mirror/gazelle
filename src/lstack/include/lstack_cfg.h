@@ -110,6 +110,7 @@ struct cfg_params {
     struct secondary_attach_arg sec_attach_arg;
     char unix_socket_filename[NAME_MAX];
     uint16_t send_ring_size;
+    uint16_t recv_ring_size;
     bool tuple_filter;
     int8_t bond_mode;
     int32_t bond_miimon;
@@ -119,6 +120,7 @@ struct cfg_params {
     struct cfg_nic_params nic;
     bool stack_mode_rtc;
     bool nonblock_mode;
+    uint32_t rpc_msg_max;
 };
 
 struct cfg_params *get_global_cfg_params(void);
