@@ -488,7 +488,14 @@ int32_t epoll_lwip_event_nolock(struct wakeup_poll *wakeup, struct epoll_event *
             list_del_node_null(node);
             continue;
         }
-
+        
+        if (event_num >= maxevents) {
+            /* move list head after the current node, and start traversing from this node next time */
+            list_del_node_null(&wakeup->event_list);
+            list_add_node(node, &wakeup->event_list);
+            break;
+        }
+        
         events[event_num].events = sock->events & sock->epoll_events;
         events[event_num].data = sock->ep_data;
         event_num++;
@@ -503,13 +510,6 @@ int32_t epoll_lwip_event_nolock(struct wakeup_poll *wakeup, struct epoll_event *
         if (sock->epoll_events & EPOLLONESHOT) {
             list_del_node_null(node);
             sock->epoll_events = 0;
-        }
-
-        if (event_num >= maxevents) {
-            /* move list head after the current node, and start traversing from this node next time */
-            list_del_node_null(&wakeup->event_list);
-            list_add_node(node, &wakeup->event_list);
-            break;
         }
     }
 
