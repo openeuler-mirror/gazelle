@@ -88,7 +88,7 @@ static void reset_sock_data(struct lwip_sock *sock)
     sock->remain_len = 0;
     sock->already_bind_numa = 0;
 
-    if (sock->recv_lastdata) {
+    if (sock->recv_lastdata && sock->recv_lastdata != (void *)&fin_packet) {
         pbuf_free(sock->recv_lastdata);
     }
     sock->recv_lastdata = NULL;
