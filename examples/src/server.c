@@ -836,6 +836,10 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->protocol_type_mode = program_get_protocol_mode_by_domain_ip(params->domain, params->ip,
                                                                                  params->ipv6, params->groupip);
 
+        // Create multicast sockets only on the first thread
+        if (i != 0) {
+            server_unit->protocol_type_mode = setbitnum_off(server_unit->protocol_type_mode, UDP_MULTICAST);
+        }
         server_unit->api = params->api;
         server_unit->debug = params->debug;
         server_unit->epollcreate = params->epollcreate;
