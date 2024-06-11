@@ -144,7 +144,7 @@ void wakeup_stack_epoll(struct protocol_stack *stack)
         if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
             __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
             rte_mb();
-            pthread_mutex_unlock(&wakeup->wait);
+            sem_post(&wakeup->wait);
             stack->stats.wakeup_events++;
         }
 
@@ -258,12 +258,11 @@ int32_t lstack_do_epoll_create(int32_t fd)
         init_list_node_null(&wakeup->wakeup_list[i]);
     }
 
-    if (pthread_mutex_init(&wakeup->wait, NULL) != 0) {
+    if (sem_init(&wakeup->wait, 0, 0) != 0) {
         posix_api->close_fn(fd);
         free(wakeup);
         GAZELLE_RETURN(EINVAL);
     }
-    pthread_mutex_trylock(&wakeup->wait);
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
@@ -337,7 +336,7 @@ int32_t lstack_epoll_close(int32_t fd)
     list_del_node_null(&wakeup->poll_list);
     pthread_spin_unlock(&stack_group->poll_list_lock);
 
-    pthread_mutex_destroy(&wakeup->wait);
+    sem_destroy(&wakeup->wait);
 
     free(wakeup);
     sock->wakeup = NULL;
@@ -609,9 +608,9 @@ int32_t lstack_block_wait(struct wakeup_poll *wakeup, int32_t timeout)
     if (timeout > 0) {
         struct timespec timespec;
         ms_to_timespec(&timespec, timeout);
-        ret = pthread_mutex_timedlock(&wakeup->wait, &timespec);
+        ret = sem_timedwait(&wakeup->wait, &timespec);
     } else {
-        ret = pthread_mutex_lock(&wakeup->wait);
+        ret = sem_wait(&wakeup->wait);
     }
 
     if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
@@ -714,10 +713,9 @@ int32_t lstack_rtw_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
 
 static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
 {
-    if (pthread_mutex_init(&wakeup->wait, NULL) != 0) {
+    if (sem_init(&wakeup->wait, 0, 0) != 0) {
         GAZELLE_RETURN(EINVAL);
     }
-    pthread_mutex_trylock(&wakeup->wait);
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
 
     for (uint32_t i = 0; i < PROTOCOL_STACK_MAX; i++) {
