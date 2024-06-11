@@ -83,7 +83,8 @@ int32_t rpc_call_bind(rpc_queue *queue, int32_t fd, const struct sockaddr *addr,
 int32_t rpc_call_listen(rpc_queue *queue, int s, int backlog);
 int32_t rpc_call_accept(rpc_queue *queue, int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 int32_t rpc_call_connect(rpc_queue *queue, int fd, const struct sockaddr *addr, socklen_t addrlen);
-int32_t rpc_call_send(rpc_queue *queue, int fd, const void *buf, size_t len, int flags);
+int32_t rpc_call_tcp_send(rpc_queue *queue, int fd, size_t len, int flags);
+int32_t rpc_call_udp_send(rpc_queue *queue, int fd, size_t len, int flags);
 int32_t rpc_call_getpeername(rpc_queue *queue, int fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t rpc_call_getsockname(rpc_queue *queue, int fd, struct sockaddr *addr, socklen_t *addrlen);
 int32_t rpc_call_getsockopt(rpc_queue *queue, int fd, int level, int optname, void *optval, socklen_t *optlen);

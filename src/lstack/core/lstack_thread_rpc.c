@@ -460,13 +460,36 @@ int32_t rpc_call_replenish(rpc_queue *queue, void *sock)
     }
 
     msg->args[MSG_ARG_0].p = sock;
+    msg->sync_flag = 0;
 
-    return rpc_sync_call(queue, msg);
+    rpc_call(queue, msg);
+    return 0;
 }
 
-int32_t rpc_call_send(rpc_queue *queue, int fd, const void *buf, size_t len, int flags)
+int32_t rpc_call_tcp_send(rpc_queue *queue, int fd, size_t len, int flags)
 {
-    struct rpc_msg *msg = rpc_msg_alloc(stack_send);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_tcp_send);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    if (get_protocol_stack_group()->latency_start) {
+        time_stamp_into_rpcmsg(get_socket_by_fd(fd));
+    }
+
+    msg->args[MSG_ARG_0].i = fd;
+    msg->args[MSG_ARG_1].size = len;
+    msg->args[MSG_ARG_2].i = flags;
+    msg->sync_flag = 0;
+
+    rpc_call(queue, msg);
+
+    return 0;
+}
+
+int32_t rpc_call_udp_send(rpc_queue *queue, int fd, size_t len, int flags)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack_udp_send);
     if (msg == NULL) {
         return -1;
     }
