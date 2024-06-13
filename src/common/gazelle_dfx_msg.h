@@ -69,10 +69,11 @@ enum GAZELLE_STAT_MODE {
 };
 
 enum GAZELLE_LATENCY_TYPE {
-    GAZELLE_LATENCY_READ_LWIP,       // t0 -> t1
-    GAZELLE_LATENCY_READ_APP_CALL,   // t1 -> t2
-    GAZELLE_LATENCY_READ_LSTACK,     // t2 -> t3
-    GAZELLE_LATENCY_READ_MAX,        // t0 -> t3
+    GAZELLE_LATENCY_INTO_MBOX,       // t0 -> t1
+    GAZELLE_LATENCY_READ_LWIP,       // t1 -> t2
+    GAZELLE_LATENCY_READ_APP_CALL,   // t2 -> t3
+    GAZELLE_LATENCY_READ_LSTACK,     // t3 -> t4
+    GAZELLE_LATENCY_READ_MAX,        // t0 -> t4
 
     GAZELLE_LATENCY_WRITE_INTO_RING, // t0 -> t1
     GAZELLE_LATENCY_WRITE_LWIP,      // t1 -> t2
@@ -80,6 +81,7 @@ enum GAZELLE_LATENCY_TYPE {
     GAZELLE_LATENCY_WRITE_MAX,       // t0 -> t3
 
     GAZELLE_LATENCY_WRITE_RPC_MSG,   // rpc_call_send
+    GAZELLE_LATENCY_RECVMBOX_READY,  // ready to read from recvmbox
 
     GAZELLE_LATENCY_MAX,
 };

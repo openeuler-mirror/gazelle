@@ -1104,6 +1104,10 @@ void do_lwip_read_recvlist(struct protocol_stack *stack, uint32_t max_num)
             continue;
         }
 
+        if (get_protocol_stack_group()->latency_start) {
+            calculate_sock_latency(&sock->stack->latency, sock, GAZELLE_LATENCY_RECVMBOX_READY);
+        }
+
         ssize_t len = 0;
         if (NETCONN_IS_UDP(sock)) {
             len = lwip_recv(sock->conn->callback_arg.socket, NULL, SSIZE_MAX, 0);
