@@ -39,6 +39,7 @@
 #define LSTACK_CONF_ENV   "LSTACK_CONF_PATH"
 #define NUMA_CPULIST_PATH "/sys/devices/system/node/node%u/cpulist"
 #define DEV_MAC_LEN 17
+#define DEV_PCI_ADDR_LEN 12
 #define CPUS_MAX_NUM 256
 #define BOND_MIIMON_MIN 1
 #define BOND_MIIMON_MAX INT_MAX
@@ -186,6 +187,21 @@ static int32_t str_to_eth_addr(const char *src, unsigned char *dst)
         return -EINVAL;
     }
     return 0;
+}
+
+static int32_t str_to_dev_addr(const char *src, struct dev_addr *dst)
+{
+    int32_t ret = 0;
+    if (strlen(src) ==  DEV_PCI_ADDR_LEN) {
+        /* str to pci addr */
+        ret = rte_pci_addr_parse(src, &dst->addr.pci_addr);
+        dst->addr_type = DEV_ADDR_TYPE_PCI;
+    } else {
+        /* str to mac addr */
+        ret = str_to_eth_addr(src, dst->addr.mac_addr.addr_bytes);
+        dst->addr_type = DEV_ADDR_TYPE_MAC;
+    }
+    return ret;
 }
 
 static int32_t parse_gateway_addr(void)
@@ -1227,16 +1243,6 @@ static int32_t parse_bond_miimon(void)
     return ret;
 }
 
-static bool validate_bond_mac(uint8_t *mac_addr, struct rte_ether_addr *bond_slave_mac, int num_slaves)
-{
-    for (int i = 0; i < num_slaves; i++) {
-        if (memcmp(mac_addr, bond_slave_mac[i].addr_bytes, ETHER_ADDR_LEN) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static int32_t parse_bond_slave_mac(void)
 {
     if (g_config_params.bond_mode == -1) {
@@ -1269,7 +1275,9 @@ static int32_t parse_bond_slave_mac(void)
             free(bond_slave_mac_tmp);
             return -EINVAL;
         }
-        ret = str_to_eth_addr(mac_addr, g_config_params.bond_slave_mac_addr[k].addr_bytes);
+
+        ret = str_to_dev_addr(mac_addr, &g_config_params.bond_slave_addr[k]);
+
         if (ret != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid device name %s ret=%d.\n", mac_addr, ret);
             free(bond_slave_mac_tmp);
@@ -1279,12 +1287,6 @@ static int32_t parse_bond_slave_mac(void)
         k = k + 1;
     }
     free(bond_slave_mac_tmp);
-    if (g_config_params.bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
-        if (!validate_bond_mac(g_config_params.mac_addr, g_config_params.bond_slave_mac_addr, GAZELLE_MAX_BOND_NUM)) {
-            LSTACK_PRE_LOG(LSTACK_ERR, "cfg: devices must be in bond_slave_mac for BONDING_MODE_ACTIVE_BACKUP.\n");
-            return -EINVAL;
-        }
-    }
     return ret;
 }
 
