@@ -372,37 +372,6 @@ static int32_t ethdev_port_id(uint8_t *mac)
     return port_id;
 }
 
-static int32_t pci_to_port_id(struct rte_pci_addr *pci_addr)
-{
-    int32_t port_id;
-    struct rte_eth_dev_info dev_info;
-    const struct rte_pci_device *pci_dev;
-    int32_t nr_eth_dev = rte_eth_dev_count_avail();
-    int ret;
-
-    for (port_id = 0; port_id < nr_eth_dev; port_id++) {
-        ret = rte_eth_dev_info_get(port_id, &dev_info);
-        if (ret != 0) {
-            LSTACK_LOG(INFO, LSTACK, "Can't get dev info, port id:%u", port_id);
-            continue;
-        }
-        pci_dev = RTE_DEV_TO_PCI(dev_info.device);
-        if (rte_pci_addr_cmp(pci_addr, &pci_dev->addr) == 0) {
-            break;
-        }
-        LSTACK_LOG(INFO, LSTACK, "probed NIC pci:%04x:%02x:%02x.%x, not match\n",
-            pci_dev->addr.domain, pci_dev->addr.bus, pci_dev->addr.devid, pci_dev->addr.function);
-    }
-
-    if (port_id >= nr_eth_dev) {
-        LSTACK_LOG(ERR, LSTACK, "match failed: no NIC matches cfg:%04x:%02x:%02x.%x\n",
-            pci_addr->domain, pci_addr->bus, pci_addr->devid, pci_addr->function);
-        return -EINVAL;
-    }
-
-    return port_id;
-}
-
 static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev_info)
 {
     int rss_enable = 0;
@@ -522,25 +491,18 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
     free(reta_conf);
 }
 
-int32_t dpdk_bond_primary_set(int port_id, int *slave_port_id)
+int32_t dpdk_bond_primary_set(int port_id, int slave_port_id)
 {
     int32_t primary_port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
-    if (primary_port_id < 0) {
-        LSTACK_LOG(ERR, LSTACK, "cannot get the port id of the cfg\n");
-        return -1;
-    }
-    for (int i = 0; i < GAZELLE_MAX_BOND_NUM; i++) {
-        if (slave_port_id[i] == primary_port_id) {
-            int32_t ret = rte_eth_bond_primary_set(port_id, primary_port_id);
-            if (ret != 0) {
-                LSTACK_LOG(ERR, LSTACK, "dpdk set bond primary port failed ret = %d\n", ret);
-                return -1;
-            }
-            return ret;
+    if (slave_port_id == primary_port_id) {
+        int32_t ret = rte_eth_bond_primary_set(port_id, primary_port_id);
+        if (ret != 0) {
+            LSTACK_LOG(ERR, LSTACK, "dpdk set bond primary port failed ret = %d\n", ret);
+            return -1;
         }
+        return ret;
     }
-    LSTACK_LOG(ERR, LSTACK, "cfg: devices must be in bond_slave_mac for BONDING_MODE_ACTIVE_BACKUP.\n");
-    return -1;
+    return 0;
 }
 
 int32_t dpdk_ethdev_init(int port_id)
@@ -725,17 +687,12 @@ static int dpdk_bond_create(uint8_t mode, int *slave_port_id, int count)
            LSTACK_LOG(ERR, LSTACK, "bond add slave devices failed, ret=%d\n", ret);
             return -1;
         }
-    }
-
-    if (cfg->bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
-        ret = dpdk_bond_primary_set(port_id, slave_port_id);
-        if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "dpdk set bond primary port failed ret = %d\n", ret);
-            return -1;
+        if (cfg->bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
+            dpdk_bond_primary_set(port_id, slave_port_id[i]);
         }
     }
 
-    if (cfg->bond_mode == BONDING_MODE_8023AD) {
+    if (get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) {
         ret = rte_eth_bond_8023ad_dedicated_queues_enable(port_id);
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk enable 8023 dedicated queues failed ret = %d\n", ret);
@@ -760,7 +717,8 @@ static int dpdk_bond_create(uint8_t mode, int *slave_port_id, int count)
         return -1;
     }
 
-    if ((cfg->bond_mode == BONDING_MODE_8023AD) || (cfg->bond_mode == BONDING_MODE_ALB)) {
+    if ((get_global_cfg_params()->bond_mode == BONDING_MODE_8023AD) ||
+        (get_global_cfg_params()->bond_mode == BONDING_MODE_ALB)) {
         for (int i = 0; i < count; i++) {
             /* bond port promiscuous only enable primary port */
             /* we enable all ports */
@@ -784,20 +742,17 @@ static int dpdk_bond_create(uint8_t mode, int *slave_port_id, int count)
 int32_t init_dpdk_ethdev(void)
 {
     int32_t ret;
-    int slave_port_id[GAZELLE_MAX_BOND_NUM] = {-1};
+    int slave_port_id[GAZELLE_MAX_BOND_NUM];
     int port_id;
     struct cfg_params *cfg = get_global_cfg_params();
     int i;
 
     if (cfg->bond_mode >= 0) {
         for (i = 0; i < GAZELLE_MAX_BOND_NUM; i++) {
-            if (cfg->bond_slave_addr[i].addr_type == DEV_ADDR_TYPE_EMPTY) {
+            if (rte_is_zero_ether_addr(&cfg->bond_slave_mac_addr[i])) {
                 break;
-            } else if (cfg->bond_slave_addr[i].addr_type == DEV_ADDR_TYPE_MAC) {
-                slave_port_id[i] = ethdev_port_id(cfg->bond_slave_addr[i].addr.mac_addr.addr_bytes);
-            } else {
-                slave_port_id[i] = pci_to_port_id(&cfg->bond_slave_addr[i].addr.pci_addr);
             }
+            slave_port_id[i] = ethdev_port_id(cfg->bond_slave_mac_addr[i].addr_bytes);
             ret = dpdk_ethdev_init(slave_port_id[i]);
             if (ret < 0) {
                 LSTACK_LOG(ERR, LSTACK, "slave port(%d) init failed, ret=%d\n", slave_port_id[i], ret);
