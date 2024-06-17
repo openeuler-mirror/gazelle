@@ -16,8 +16,6 @@
 
 #include <lwip/ip_addr.h>
 #include <rte_ether.h>
-#include <rte_pci.h>
-#include <rte_bus_pci.h>
 
 #include "lstack_protocol_stack.h"
 #include "gazelle_opt.h"
@@ -53,18 +51,6 @@
 
 #define LSTACK_LPM_PKTS_IN_DETECT_MIN   5
 #define LSTACK_LPM_PKTS_IN_DETECT_MAX   65535
-
-#define DEV_ADDR_TYPE_EMPTY             0
-#define DEV_ADDR_TYPE_MAC               1
-#define DEV_ADDR_TYPE_PCI               2
-
-struct dev_addr {
-    uint8_t addr_type;      // 0:empty, 1:mac, 2:pci
-    union addr_union {
-        struct rte_ether_addr mac_addr;
-        struct rte_pci_addr pci_addr;
-    } addr;
-};
 
 struct secondary_attach_arg {
     uint8_t socket_num;
@@ -128,7 +114,7 @@ struct cfg_params {
     bool tuple_filter;
     int8_t bond_mode;
     int32_t bond_miimon;
-    struct dev_addr bond_slave_addr[GAZELLE_MAX_BOND_NUM];
+    struct rte_ether_addr bond_slave_mac_addr[GAZELLE_MAX_BOND_NUM];
     bool use_sockmap;
     bool udp_enable;
     struct cfg_nic_params nic;
