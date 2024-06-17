@@ -121,6 +121,7 @@ struct cfg_params {
     bool stack_mode_rtc;
     bool nonblock_mode;
     uint32_t rpc_msg_max;
+    bool send_cache_mode;
 };
 
 struct cfg_params *get_global_cfg_params(void);

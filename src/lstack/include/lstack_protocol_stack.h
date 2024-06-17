@@ -23,6 +23,7 @@
 #include "gazelle_dfx_msg.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_ethdev.h"
+#include "lstack_tx_cache.h"
 #include "gazelle_opt.h"
 
 #define SOCK_RECV_RING_SIZE         (get_global_cfg_params()->recv_ring_size)
@@ -76,6 +77,7 @@ struct protocol_stack {
     uint32_t tx_ring_used;
 
     struct rte_mbuf *pkts[NIC_QUEUE_SIZE_MAX];
+    struct lstack_tx_cache tx_cache;
     struct list_node recv_list;
     struct list_node same_node_recv_list; /* used for same node processes communication */
     struct list_node wakeup_list;

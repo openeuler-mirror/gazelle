@@ -85,6 +85,7 @@ static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
 static int32_t parse_defaule_nonblock_mode(void);
 static int32_t parse_rpc_msg_max(void);
+static int32_t parse_send_cache_mode(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -150,6 +151,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "nic_vlan_mode", parse_nic_vlan_mode },
     { "nonblock_mode", parse_defaule_nonblock_mode },
     { "rpc_msg_max", parse_rpc_msg_max },
+    { "send_cache_mode", parse_send_cache_mode },
     { NULL,           NULL }
 };
 
@@ -1376,6 +1378,17 @@ static int32_t parse_rpc_msg_max(void)
     if (ret != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid rpc msg max value %d ret=%d. only support 1~8192\n",
             g_config_params.rpc_msg_max, ret);
+    }
+    return ret;
+}
+
+static int32_t parse_send_cache_mode(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.send_cache_mode, "send_cache_mode", 0, 0, 1, ret);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid send cache mode value %d. only support 0 or 1\n",
+            g_config_params.send_cache_mode);
     }
     return ret;
 }
