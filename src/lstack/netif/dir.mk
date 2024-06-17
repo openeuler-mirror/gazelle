@@ -8,7 +8,7 @@
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-SRC = lstack_ethdev.c lstack_vdev.c lstack_flow.c
+SRC = lstack_ethdev.c lstack_vdev.c lstack_flow.c lstack_tx_cache.c
 ifeq ($(GAZELLE_FAULT_INJECT_ENABLE), 1)
 	SRC +=  lstack_fault_inject.c
 endif

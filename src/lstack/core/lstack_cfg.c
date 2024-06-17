@@ -32,7 +32,6 @@
 #include "gazelle_reg_msg.h"
 #include "lstack_log.h"
 #include "gazelle_base_func.h"
-#include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
 
 #define DEFAULT_CONF_FILE "/etc/gazelle/lstack.conf"
