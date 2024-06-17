@@ -480,6 +480,7 @@ int stack_polling(uint32_t wakeup_tick)
     do_lwip_read_recvlist(stack, read_connect_number);
     if ((wakeup_tick & 0xf) == 0) {
         wakeup_stack_epoll(stack);
+        stack_send_pkts(stack);
     }
 
     /* run to completion mode currently does not support sockmap */
