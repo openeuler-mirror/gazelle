@@ -72,6 +72,58 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
     return rcvd_pkts;
 }
 
+static inline void vdev_pkts_parse(struct rte_mbuf **pkts, int pkt_num)
+{
+    for (int i = 0; i < pkt_num; i++) {
+        struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
+        u16_t type  = ethh->ether_type;
+        if (type == RTE_BE16(RTE_ETHER_TYPE_VLAN)) {
+            struct rte_vlan_hdr *vlan = (struct rte_vlan_hdr *)(ethh + 1);
+            type = vlan->eth_proto;
+            pkts[i]->l2_len = sizeof(struct rte_ether_hdr) + sizeof(struct rte_vlan_hdr);
+        } else {
+            pkts[i]->l2_len = sizeof(struct rte_ether_hdr);
+        }
+
+        if (type == RTE_BE16(RTE_ETHER_TYPE_IPV4)) {
+            struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(pkts[i], struct rte_ipv4_hdr *,
+                pkts[i]->l2_len);
+            if (unlikely((iph->version_ihl & IPV4_MASK) != IPV4_VERION)) {
+                continue;
+            }
+            pkts[i]->l3_len = sizeof(struct rte_ipv4_hdr);
+            if (iph->next_proto_id == IPPROTO_TCP) {
+                struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(pkts[i], struct rte_tcp_hdr *,
+                    pkts[i]->l2_len + pkts[i]->l3_len);
+                pkts[i]->l4_len = TCP_HDR_LEN(tcp_hdr);
+
+                pkts[i]->packet_type = RTE_PTYPE_L3_IPV4 | RTE_PTYPE_L4_TCP;
+            } else if (iph->next_proto_id == IPPROTO_UDP) {
+                pkts[i]->l4_len = sizeof(struct rte_udp_hdr);
+                pkts[i]->packet_type = RTE_PTYPE_L3_IPV4 | RTE_PTYPE_L4_UDP;
+            }
+
+        } else if (type == RTE_BE16(RTE_ETHER_TYPE_IPV6)) {
+            struct rte_ipv6_hdr *iph6 = rte_pktmbuf_mtod_offset(pkts[i], struct rte_ipv6_hdr *,
+                pkts[i]->l2_len);
+            pkts[i]->l3_len = sizeof(struct rte_ipv6_hdr);
+            if (iph6->proto == IPPROTO_TCP) {
+                struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(pkts[i], struct rte_tcp_hdr *,
+                    pkts[i]->l2_len + pkts[i]->l3_len);
+                pkts[i]->l4_len = TCP_HDR_LEN(tcp_hdr);
+                pkts[i]->packet_type = RTE_PTYPE_L3_IPV6 | RTE_PTYPE_L4_TCP;
+            } else if (iph6->proto == IPPROTO_UDP) {
+                pkts[i]->l4_len = sizeof(struct rte_udp_hdr);
+                pkts[i]->packet_type = RTE_PTYPE_L3_IPV6 | RTE_PTYPE_L4_UDP;
+            }
+        } else if (type == RTE_BE16(RTE_ETHER_TYPE_ARP)) {
+            pkts[i]->packet_type = RTE_PTYPE_L2_ETHER_ARP;
+        } else {
+            continue;
+        }
+    }
+}
+
 static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t max_mbuf)
 {
     struct rte_gro_param gro_param = {
@@ -82,6 +134,7 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
     };
 
     uint32_t pkt_num = rte_eth_rx_burst(stack->port_id, stack->queue_id, pkts, max_mbuf);
+    vdev_pkts_parse(pkts, pkt_num);
     if (pkt_num <= 1) {
         return pkt_num;
     }
@@ -92,37 +145,6 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
         return pkt_num;
     }
 
-    for (uint32_t i = 0; i < pkt_num; i++) {
-        struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(pkts[i], struct rte_ether_hdr *);
-        u16_t type  = ethh->ether_type;
-
-        pkts[i]->l2_len = sizeof(struct rte_ether_hdr);
-
-        if (type == RTE_BE16(RTE_ETHER_TYPE_IPV4)) {
-            struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(pkts[i], struct rte_ipv4_hdr *,
-                sizeof(struct rte_ether_hdr));
-            if (unlikely((iph->version_ihl & IPV4_MASK) != IPV4_VERION)) {
-                continue;
-            }
-            pkts[i]->l3_len = sizeof(struct rte_ipv4_hdr);
-
-            struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(pkts[i], struct rte_tcp_hdr *,
-                sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
-            pkts[i]->l4_len = TCP_HDR_LEN(tcp_hdr);
-
-            pkts[i]->packet_type = RTE_PTYPE_L3_IPV4 | RTE_PTYPE_L4_TCP;
-        } else if (type == RTE_BE16(RTE_ETHER_TYPE_IPV6)) {
-            pkts[i]->l3_len = sizeof(struct rte_ipv6_hdr);
-
-            struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(pkts[i], struct rte_tcp_hdr *,
-                sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv6_hdr));
-            pkts[i]->l4_len = TCP_HDR_LEN(tcp_hdr);
-
-            pkts[i]->packet_type = RTE_PTYPE_L3_IPV6 | RTE_PTYPE_L4_TCP;
-        } else {
-            continue;
-        }
-    }
     pkt_num =  rte_gro_reassemble_burst(pkts, pkt_num, &gro_param);
 
     return pkt_num;
