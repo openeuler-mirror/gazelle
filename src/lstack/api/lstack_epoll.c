@@ -321,7 +321,9 @@ int32_t lstack_epoll_close(int32_t fd)
 
     wakeup->type = WAKEUP_CLOSE;
 
-    stack_broadcast_clean_epoll(wakeup);
+    if (!get_global_cfg_params()->stack_mode_rtc) {
+        stack_broadcast_clean_epoll(wakeup);
+    }
 
     struct list_node *node, *temp;
     pthread_spin_lock(&wakeup->event_list_lock);
