@@ -127,6 +127,7 @@
 | bond_mode | n | Bond mode, currently supports ACTIVE_BACKUP/8023AD/ALB, corresponding values are 1/4/6; when set to -1 or NULL, it means bond is not configured. |
 | bond_slave_mac | "aa:bb:cc:dd:ee:ff;dd:aa:cc:dd:ee:ff" | MAC addresses of the two sub-interfaces used to form a bond. |
 | bond_miimon | n | Link monitoring time in milliseconds, range is 1 to 2^31 - 1, default is 10ms. |
+|flow_bifurcation|0/1|flow bifurcation switch (alternative to KNI scheme), which forwards unsupported packets to the kernel through Gazelle. The default value is 0, which means it is turned off|
 
 ```conf
 lstack.conf example:
