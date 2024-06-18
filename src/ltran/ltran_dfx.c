@@ -899,11 +899,13 @@ static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_st
 
     printf("Statistics of lstack latency          pkts        min(us)     max(us)     average(us)\n");
     printf("Recv:\n");
-    printf("range: t0--->t1\n%s", res[GAZELLE_LATENCY_READ_LWIP].latency_stat_result);
-    printf("range: t1--->t2\n%s", res[GAZELLE_LATENCY_READ_APP_CALL].latency_stat_result);
-    printf("range: t2--->t3\n%s", res[GAZELLE_LATENCY_READ_LSTACK].latency_stat_result);
-    printf("range: t0--->t3\n%s", res[GAZELLE_LATENCY_READ_MAX].latency_stat_result);
-    printf("t0: read from nic  t1: into recv ring  t2: app read start  t3: app read end\n");
+
+    printf("range: t0--->t1\n%s", res[GAZELLE_LATENCY_INTO_MBOX].latency_stat_result);
+    printf("range: t1--->t2\n%s", res[GAZELLE_LATENCY_READ_LWIP].latency_stat_result);
+    printf("range: t2--->t3\n%s", res[GAZELLE_LATENCY_READ_APP_CALL].latency_stat_result);
+    printf("range: t3--->t4\n%s", res[GAZELLE_LATENCY_READ_LSTACK].latency_stat_result);
+    printf("range: t0--->t4\n%s", res[GAZELLE_LATENCY_READ_MAX].latency_stat_result);
+    printf("t0: read from nic  t1: into recvmbox  t2: into recvring t3: app read start  t4: app read end\n");
 
     printf("Send:\n");
     printf("range: t0--->t1\n%s", res[GAZELLE_LATENCY_WRITE_INTO_RING].latency_stat_result);
@@ -912,8 +914,9 @@ static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_st
     printf("range: t0--->t3\n%s", res[GAZELLE_LATENCY_WRITE_MAX].latency_stat_result);
     printf("t0: app send  t1: into send ring  t2: out of send ring  t3: send to nic\n");
 
-    printf("Rpc:\n");
-    printf("rpc_call_send  \n%s", res[GAZELLE_LATENCY_WRITE_RPC_MSG].latency_stat_result);
+    printf("Others:\n");
+    printf("rpc_call_send\n%s", res[GAZELLE_LATENCY_WRITE_RPC_MSG].latency_stat_result);
+    printf("ready to read from recvmbox\n%s", res[GAZELLE_LATENCY_RECVMBOX_READY].latency_stat_result);
 
     free(res);
 }

@@ -58,8 +58,6 @@ struct rpc_msg {
 
     rpc_msg_func func; /* msg handle func hook */
     union rpc_msg_arg args[RPM_MSG_ARG_SIZE]; /* resolve by type */
-
-    uint64_t time_stamp; /* rpc_call_* start time */
 };
 
 static inline void rpc_queue_init(rpc_queue *queue)

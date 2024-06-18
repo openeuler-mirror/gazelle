@@ -15,6 +15,7 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <lwip/api.h>
+#include <lwip/lwipsock.h>
 
 #include "lstack_cfg.h"
 #include "lstack_ethdev.h"
@@ -67,21 +68,46 @@ void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new)
     }
 }
 
-void time_stamp_into_rpcmsg(struct rpc_msg *msg)
+void time_stamp_into_rpcmsg(struct lwip_sock *sock)
 {
-    msg->time_stamp = get_current_time();
+    sock->stamp.rpc_time_stamp = get_current_time();
 }
 
-void calculate_rpcmsg_latency(struct gazelle_stack_latency *stack_latency, struct rpc_msg *msg,
+void time_stamp_into_recvmbox(struct lwip_sock *sock)
+{
+    sock->stamp.mbox_time_stamp = get_current_time();
+}
+
+void time_stamp_record(int fd, struct pbuf *pbuf)
+{
+    struct lwip_sock *sock = get_socket_by_fd(fd);
+
+    if (get_protocol_stack_group()->latency_start && pbuf != NULL) {
+        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_INTO_MBOX, 0);
+        time_stamp_into_recvmbox(sock);
+    }
+}
+
+void calculate_sock_latency(struct gazelle_stack_latency *stack_latency, struct lwip_sock *sock,
     enum GAZELLE_LATENCY_TYPE type)
 {
     uint64_t latency;
+    uint64_t stamp;
     struct stack_latency *latency_stat;
-    if (msg == NULL || msg->time_stamp < stack_latency->start_time || type >= GAZELLE_LATENCY_MAX) {
+
+    if (type == GAZELLE_LATENCY_WRITE_RPC_MSG) {
+        stamp = sock->stamp.rpc_time_stamp;
+    } else if (type == GAZELLE_LATENCY_RECVMBOX_READY) {
+        stamp = sock->stamp.mbox_time_stamp;
+    } else {
         return;
     }
 
-    latency = get_current_time() - msg->time_stamp;
+    if (stamp < stack_latency->start_time) {
+        return;
+    }
+
+    latency = get_current_time() - stamp;
     latency_stat = &stack_latency->latency[type];
 
     latency_stat->latency_total += latency;
