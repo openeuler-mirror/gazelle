@@ -86,6 +86,7 @@ static int32_t parse_nic_vlan_mode(void);
 static int32_t parse_defaule_nonblock_mode(void);
 static int32_t parse_rpc_msg_max(void);
 static int32_t parse_send_cache_mode(void);
+static int32_t parse_flow_bifurcation(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -152,6 +153,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "nonblock_mode", parse_defaule_nonblock_mode },
     { "rpc_msg_max", parse_rpc_msg_max },
     { "send_cache_mode", parse_send_cache_mode },
+    { "flow_bifurcation", parse_flow_bifurcation},
     { NULL,           NULL }
 };
 
@@ -1393,3 +1395,13 @@ static int32_t parse_send_cache_mode(void)
     return ret;
 }
 
+static int32_t parse_flow_bifurcation(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.flow_bifurcation, "flow_bifurcation", 0, 0, 1, ret);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid flow_bifurcation value %d. only support 0 or 1\n",
+                       g_config_params.flow_bifurcation);
+    }
+    return ret;
+}
