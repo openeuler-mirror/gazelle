@@ -122,6 +122,7 @@ struct cfg_params {
     bool nonblock_mode;
     uint32_t rpc_msg_max;
     bool send_cache_mode;
+    bool flow_bifurcation;
 };
 
 struct cfg_params *get_global_cfg_params(void);
