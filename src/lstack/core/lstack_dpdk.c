@@ -49,6 +49,7 @@
 #include "lstack_thread_rpc.h"
 #include "lstack_lwip.h"
 #include "lstack_cfg.h"
+#include "lstack_virtio.h"
 #include "lstack_dpdk.h"
 
 struct eth_params {
@@ -771,7 +772,7 @@ int32_t init_dpdk_ethdev(void)
 {
     int32_t ret;
     int slave_port_id[GAZELLE_MAX_BOND_NUM] = {-1};
-    int port_id;
+    int port_id = 0;
     struct cfg_params *cfg = get_global_cfg_params();
     int i;
 
@@ -813,6 +814,9 @@ int32_t init_dpdk_ethdev(void)
         }
     }
 #endif
+    if (get_global_cfg_params()->flow_bifurcation && virtio_port_create(port_id) != 0) {
+        return -1;
+    }
 
     return 0;
 }

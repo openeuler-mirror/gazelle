@@ -8,6 +8,6 @@
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-SRC = lstack_preload.c lstack_init.c lstack_cfg.c lstack_dpdk.c lstack_control_plane.c lstack_stack_stat.c lstack_lwip.c lstack_protocol_stack.c lstack_thread_rpc.c
+SRC = lstack_preload.c lstack_init.c lstack_cfg.c lstack_dpdk.c lstack_control_plane.c lstack_stack_stat.c lstack_lwip.c lstack_protocol_stack.c lstack_thread_rpc.c lstack_virtio.c lstack_port_map.c
 $(eval $(call register_dir, core, $(SRC)))
 
