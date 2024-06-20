@@ -129,6 +129,8 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 |bond_mode|n|bond模式，目前支持ACTIVE_BACKUP/8023AD/ALB三种模式，对应的取值是1/4/6；当取值为-1或者NULL时，表示未配置bond|
 |bond_slave_mac|"aa:bb:cc:dd:ee:ff;dd:aa:cc:dd:ee:ff"|用于组bond的两个子口的mac地址|
 |bond_miimon|n|链路监控时间，单位为ms，取值范围为1到2^31 - 1，缺省值为10ms|
+||
+|flow_bifurcation|0/1|流量分叉开关(替代kni方案)，通过gazelle将不支持处理的报文转发到内核，缺省值是0，即关闭|
 
 lstack.conf示例：
 ``` conf
