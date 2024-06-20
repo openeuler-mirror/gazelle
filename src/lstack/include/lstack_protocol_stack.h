@@ -77,7 +77,6 @@ struct protocol_stack {
     uint32_t tx_ring_used;
 
     struct rte_mbuf *pkts[NIC_QUEUE_SIZE_MAX];
-    struct lstack_tx_cache tx_cache;
     struct list_node recv_list;
     struct list_node same_node_recv_list; /* used for same node processes communication */
     struct list_node wakeup_list;

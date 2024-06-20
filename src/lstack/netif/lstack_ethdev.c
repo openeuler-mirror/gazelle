@@ -187,19 +187,6 @@ int32_t eth_dev_poll(void)
     return nr_pkts;
 }
 
-static void eth_dev_send_pkt(struct protocol_stack *stack, struct rte_mbuf *mbuf)
-{
-    do {
-        if (STACK_SEND_INDEX(stack->tx_cache.send_end + 1) != STACK_SEND_INDEX(stack->tx_cache.send_start)) {
-            stack->tx_cache.send_pkts[STACK_SEND_INDEX(stack->tx_cache.send_end)] = mbuf;
-            stack->tx_cache.send_end++;
-            return;
-        }
-        stack_send_pkts(stack);
-        stack->stats.send_pkts_fail++;
-    } while (1);
-}
-
 static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
 {
     struct protocol_stack *stack = get_protocol_stack();
@@ -245,16 +232,12 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
         pbuf = pbuf->next;
     }
 
-    if (!get_global_cfg_params()->send_cache_mode) {
-        uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
-        stack->stats.tx += sent_pkts;
-        if (sent_pkts < 1) {
-            stack->stats.tx_drop++;
-            rte_pktmbuf_free(first_mbuf);
-            return ERR_MEM;
-        }
-    } else {
-        eth_dev_send_pkt(stack, first_mbuf);
+    uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
+    stack->stats.tx += sent_pkts;
+    if (sent_pkts < 1) {
+        stack->stats.tx_drop++;
+        rte_pktmbuf_free(first_mbuf);
+        return ERR_MEM;
     }
 
     return ERR_OK;
@@ -295,6 +278,9 @@ int32_t ethdev_init(struct protocol_stack *stack)
     struct cfg_params *cfg = get_global_cfg_params();
 
     vdev_dev_ops_init(&stack->dev_ops);
+    if (cfg->send_cache_mode) {
+        tx_cache_init(stack->queue_id, stack, &stack->dev_ops);
+    }
 
     if (use_ltran()) {
         stack->rx_ring_used = 0;

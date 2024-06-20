@@ -13,16 +13,7 @@
 #ifndef _LSTACK_TX_CACHE_H_
 #define _LSTACK_TX_CACHE_H_
 
-#define STACK_SEND_MAX              (2048)
-#define STACK_SEND_MASK             (STACK_SEND_MAX - 1)
-#define STACK_SEND_INDEX(index)     ((index) & STACK_SEND_MASK)
-
-struct lstack_tx_cache {
-    uint32_t send_start;
-    uint32_t send_end;
-    struct rte_mbuf *send_pkts[STACK_SEND_MAX];
-};
-
-void stack_send_pkts(struct protocol_stack *stack);
+int tx_cache_init(uint16_t queue_id, void *priv, struct lstack_dev_ops *dev_ops);
+int tx_cache_send(uint16_t queue_id);
 
 #endif /* _LSTACK_TX_CACHE_H_ */
