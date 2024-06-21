@@ -101,7 +101,7 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
     void *data = rte_pktmbuf_mtod(mbuf, void *);
     struct pbuf *pbuf = pbuf_alloced_custom(layer, length, type, pbuf_custom, data, MAX_PACKET_SZ);
     if (pbuf) {
-        pbuf->allow_in = 1;
+        pbuf->allow_append = 1;
         pbuf->addr = *IP_ANY_TYPE;
         pbuf->port = 0;
         pthread_spin_init(&pbuf->pbuf_lock, PTHREAD_PROCESS_SHARED);
@@ -227,40 +227,66 @@ struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type typ
     return init_mbuf_to_pbuf(mbuf, layer, length, type);
 }
 
-struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags)
+static inline bool pbuf_allow_append(struct pbuf *pbuf, uint16_t remain_size)
+{
+    pthread_spin_lock(&pbuf->pbuf_lock);
+    if (pbuf->tot_len > remain_size) {
+        pthread_spin_unlock(&pbuf->pbuf_lock);
+        return false;
+    }
+    if (pbuf->allow_append == 1) {
+        __sync_fetch_and_sub(&pbuf->allow_append, 1);
+    }
+
+    pthread_spin_unlock(&pbuf->pbuf_lock);
+    return true;
+}
+
+struct pbuf *do_lwip_udp_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size)
+{
+    int count;
+    /* when remain_size is 0, fill_sendring write one pbuf to sendring */
+    if (remain_size == 0) {
+        count = 1;
+    } else {
+        count = (remain_size + MBUF_MAX_DATA_LEN - 1) / MBUF_MAX_DATA_LEN;
+    }
+
+    struct pbuf *pbufs[count];
+
+    int actual_count = gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbufs, count);
+    if (unlikely(actual_count != count)) {
+        LSTACK_LOG(ERR, LSTACK, "udp get pbuf from sendring error, expected: %d, actual: %d\n",
+                   count, actual_count);
+    }
+
+    if (unlikely(pbufs[0]->tot_len != remain_size)) {
+        LSTACK_LOG(ERR, LSTACK, "udp get pbuf size error, expected: %d, actual: %d\n",
+                   remain_size, pbufs[0]->tot_len);
+    }
+
+    for (int i = 0; get_protocol_stack_group()->latency_start && i < count; i++) {
+        calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_WRITE_LWIP, 0);
+    }
+
+    return pbufs[0];
+}
+
+struct pbuf *do_lwip_tcp_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size)
 {
     struct pbuf *pbuf = NULL;
 
     if (unlikely(sock->send_pre_del)) {
-        pbuf = sock->send_pre_del;
-        pthread_spin_lock(&pbuf->pbuf_lock);
-        if (pbuf->tot_len > remain_size) {
-            pthread_spin_unlock(&pbuf->pbuf_lock);
-            *apiflags &= ~TCP_WRITE_FLAG_MORE;
+        if (pbuf_allow_append(sock->send_pre_del, remain_size)) {
+            return sock->send_pre_del;
+        } else {
             return NULL;
         }
-        if (pbuf->allow_in == 1) {
-            __sync_fetch_and_sub(&pbuf->allow_in, 1);
-        }
-        pthread_spin_unlock(&pbuf->pbuf_lock);
-
-        return pbuf;
     }
 
     gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbuf, 1);
     if (pbuf == NULL) {
         return NULL;
-    }
-
-    /* udp send a pbuf chain, dequeue all pbufs except head pbuf */
-    if (NETCONN_IS_UDP(sock) && remain_size > MBUF_MAX_DATA_LEN) {
-        int size = (remain_size + MBUF_MAX_DATA_LEN - 1) / MBUF_MAX_DATA_LEN - 1;
-        struct pbuf *pbuf_used[size];
-        gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbuf_used, size);
-
-        for (uint32_t i = 0; get_protocol_stack_group()->latency_start && i < size; i++) {
-            calculate_lstack_latency(&sock->stack->latency, pbuf_used[i], GAZELLE_LATENCY_WRITE_LWIP, 0);
-        }
     }
 
     if (get_protocol_stack_group()->latency_start) {
@@ -270,19 +296,11 @@ struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_s
     sock->send_pre_del = pbuf;
 
     if (!gazelle_ring_readover_count(sock->send_ring)) {
-        pthread_spin_lock(&pbuf->pbuf_lock);
-        if (pbuf->tot_len > remain_size) {
-            pthread_spin_unlock(&pbuf->pbuf_lock);
-            *apiflags &= ~TCP_WRITE_FLAG_MORE;
+        if (!pbuf_allow_append(pbuf, remain_size)) {
             return NULL;
         }
-        if (pbuf->allow_in == 1) {
-            __sync_fetch_and_sub(&pbuf->allow_in, 1);
-        }
-        pthread_spin_unlock(&pbuf->pbuf_lock);
     } else {
         if (pbuf->tot_len > remain_size) {
-            *apiflags &= ~TCP_WRITE_FLAG_MORE;
             return NULL;
         }
     }
@@ -388,7 +406,7 @@ static inline struct pbuf *gazelle_ring_readlast(struct rte_ring *r)
     if (pthread_spin_trylock(&last_pbuf->pbuf_lock) != 0) {
         return NULL;
     }
-    if (last_pbuf->allow_in != 1) {
+    if (last_pbuf->allow_append != 1) {
         pthread_spin_unlock(&last_pbuf->pbuf_lock);
         return NULL;
     }
@@ -675,14 +693,31 @@ ssize_t do_lwip_recvmsg_from_stack(int32_t s, const struct msghdr *message, int3
     return buflen;
 }
 
-static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
+static inline void notice_stack_tcp_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
 {
     // 2: call_num >= 2, don't need add new rpc send
     if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) < 2) {
-        while (rpc_call_send(&sock->stack->rpc_queue, fd, NULL, len, flags) < 0) {
+        while (rpc_call_tcp_send(&sock->stack->rpc_queue, fd, len, flags) < 0) {
             usleep(1000); // 1000: wait 1ms to exec again
         }
         __sync_fetch_and_add(&sock->call_num, 1);
+    }
+}
+
+static inline void notice_stack_udp_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
+{
+        __sync_fetch_and_add(&sock->call_num, 1);
+        while (rpc_call_udp_send(&sock->stack->rpc_queue, fd, len, flags) < 0) {
+            usleep(1000); // 1000: wait 1ms to exec again
+        }
+}
+
+static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
+{
+    if (NETCONN_IS_UDP(sock)) {
+        notice_stack_udp_send(sock, fd, len, flags);
+    } else {
+        notice_stack_tcp_send(sock, fd, len, flags);
     }
 }
 

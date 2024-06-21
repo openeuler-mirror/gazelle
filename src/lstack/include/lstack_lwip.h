@@ -33,7 +33,8 @@ int do_lwip_close(int32_t fd);
 void do_lwip_init_sock(int32_t fd);
 void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_sock);
 
-struct pbuf *do_lwip_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size, uint8_t *apiflags);
+struct pbuf *do_lwip_tcp_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size);
+struct pbuf *do_lwip_udp_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size);
 void do_lwip_get_from_sendring_over(struct lwip_sock *sock);
 bool do_lwip_replenish_sendring(struct protocol_stack *stack, struct lwip_sock *sock);
 ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);

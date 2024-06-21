@@ -877,7 +877,7 @@ void stack_recv(struct rpc_msg *msg)
         msg->args[MSG_ARG_3].i);
 }
 
-void stack_send(struct rpc_msg *msg)
+void stack_tcp_send(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
     size_t len = msg->args[MSG_ARG_1].size;
@@ -910,6 +910,39 @@ void stack_send(struct rpc_msg *msg)
     }
 
     __sync_fetch_and_sub(&sock->call_num, 1);
+    return;
+}
+
+void stack_udp_send(struct rpc_msg *msg)
+{
+    int32_t fd = msg->args[MSG_ARG_0].i;
+    size_t len = msg->args[MSG_ARG_1].size;
+    struct protocol_stack *stack = get_protocol_stack();
+    int replenish_again;
+    uint32_t call_num;
+
+    if (get_protocol_stack_group()->latency_start) {
+        calculate_rpcmsg_latency(&stack->latency, msg, GAZELLE_LATENCY_WRITE_RPC_MSG);
+    }
+
+    struct lwip_sock *sock = get_socket(fd);
+    if (sock == NULL) {
+        msg->result = -1;
+        LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
+        return;
+    }
+
+    replenish_again = do_lwip_send(stack, sock->conn->callback_arg.socket, sock, len, 0);
+    call_num = __sync_fetch_and_sub(&sock->call_num, 1);
+    if (replenish_again < 0) {
+        return;
+    }
+
+    if ((call_num == 1) && (replenish_again > 0)) {
+        rpc_call_replenish(&stack->rpc_queue, sock);
+        return;
+    }
+
     return;
 }
 
@@ -1040,6 +1073,10 @@ void stack_replenish_sendring(struct rpc_msg *msg)
     struct lwip_sock *sock = (struct lwip_sock *)msg->args[MSG_ARG_0].p;
 
     msg->result = do_lwip_replenish_sendring(stack, sock);
+    if (msg->result == true) {
+        msg->recall_flag = 1;
+        rpc_call(&stack->rpc_queue, msg);
+    }
 }
 
 void stack_get_conntable(struct rpc_msg *msg)
