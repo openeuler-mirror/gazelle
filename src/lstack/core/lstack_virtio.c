@@ -10,14 +10,22 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <rte_ethdev.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <lwip/posix_api.h>
+#include <linux/ipv6.h>
 #include "lstack_cfg.h"
 #include "lstack_log.h"
 #include "lstack_port_map.h"
 #include "lstack_virtio.h"
+#include "securec.h"
 
 #define VIRTIO_USER_NAME "virtio_user0"
 #define VIRTIO_DPDK_PARA_LEN 256
 #define VIRTIO_TX_RX_RING_SIZE 1024
+
+#define VIRTIO_MASK_BITS(mask) (32 - __builtin_clz(mask))
 
 static struct virtio_instance g_virtio_instance = {0};
 
@@ -28,15 +36,139 @@ struct virtio_instance* virtio_instance_get(void)
 
 static int virtio_set_ipv6_addr(void)
 {
+    struct cfg_params *cfg = get_global_cfg_params();
+    struct ifreq ifr;
+    memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
+
+    int sockfd = posix_api->socket_fn(AF_INET6, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr failed ret =%d errno=%d \n", sockfd, errno);
+        return -1;
+    }
+
+    int ret = strncpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), VIRTIO_USER_NAME, sizeof(VIRTIO_USER_NAME));
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr strncpy failed ret =%d errno=%d \n", ret, errno);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+
+    ret = posix_api->ioctl_fn(sockfd, SIOGIFINDEX, &ifr);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr failed ret =%d errno=%d \n", ret, errno);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+
+    struct in6_ifreq ifr6;
+    memset_s(&ifr6, sizeof(ifr6), 0, sizeof(ifr6));
+    ret = memcpy_s(&ifr6.ifr6_addr, sizeof(ifr6.ifr6_addr), &(cfg->host_addr6), sizeof((cfg->host_addr6.addr)));
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr memcpy_s failed ret =%d errno=%d \n", ret, errno);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+
+    ifr6.ifr6_ifindex = ifr.ifr_ifindex;
+    ifr6.ifr6_prefixlen = VIRTIO_MASK_BITS(cfg->netmask.addr);
+
+    ret = posix_api->ioctl_fn(sockfd, SIOCSIFADDR, &ifr6);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr failed err= %d errno %d \n", ret, errno);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+    posix_api->close_fn(sockfd);
+    return 0;
+}
+
+static int virtio_set_ipv4_addr(void)
+{
+    int ret = 0;
+    int sockfd = posix_api->socket_fn(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr failed ret= %d errno %d \n", sockfd, errno);
+        return -1;
+    }
+
+    struct cfg_params *cfg = get_global_cfg_params();
+    struct ifreq ifr;
+    memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
+
+    ret = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), VIRTIO_USER_NAME);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv4_addr strcpy_s failed ret=%d errno %d \n", ret, errno);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+
+    struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
+    addr->sin_family = AF_INET;
+    addr->sin_addr.s_addr = cfg->host_addr.addr;
+
+    if (posix_api->ioctl_fn(sockfd, SIOCSIFADDR, &ifr) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_cfg_ip failed errno %d \n", errno);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+
+    addr->sin_addr.s_addr = cfg->netmask.addr;
+    if (posix_api->ioctl_fn(sockfd, SIOCSIFNETMASK, &ifr) < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_cfg_ip netmask=%u fail\n", cfg->netmask.addr);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+    posix_api->close_fn(sockfd);
+    return 0;
+}
+
+static int virtio_netif_up(void)
+{
+    int sockfd = posix_api->socket_fn(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_netif_up socket_fn failed ret= %d errno %d \n", sockfd, errno);
+        return -1;
+    }
+
+    struct ifreq ifr;
+    memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
+    int ret = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), VIRTIO_USER_NAME);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_netif_up strcpy_s failed ret=%d errno %d \n", ret, errno);
+        posix_api->close_fn(sockfd);
+        return -1;
+    }
+
+    ifr.ifr_flags |= IFF_UP;
+    if (posix_api->ioctl_fn(sockfd, SIOCSIFFLAGS, &ifr) < 0) {
+        posix_api->close_fn(sockfd);
+        LSTACK_LOG(ERR, LSTACK, " virtio_netif_up ioctl_fn failed errno= %d  \n", errno);
+        return -1;
+    }
+
+    posix_api->close_fn(sockfd);
     return 0;
 }
 
 static int virtio_cfg_ip(void)
 {
-    // set ipv4 adr()
+    struct cfg_params *cfg = get_global_cfg_params();
 
-    // set ipv6 addr
-    virtio_set_ipv6_addr();
+    if (virtio_set_ipv4_addr() < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv4_addr failed \n");
+        return -1;
+    }
+
+    if (!ip6_addr_isany(&cfg->host_addr6) && virtio_set_ipv6_addr() < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr failed \n");
+        return -1;
+    }
+
+    // start virtio_user
+    if (virtio_netif_up() < 0) {
+        LSTACK_LOG(ERR, LSTACK, "virtio_netif_up failed \n");
+        return -1;
+    }
     return 0;
 }
 
