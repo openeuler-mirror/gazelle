@@ -786,7 +786,7 @@ int32_t init_dpdk_ethdev(void)
                 slave_port_id[i] = pci_to_port_id(&cfg->bond_slave_addr[i].addr.pci_addr);
             }
             if (slave_port_id[i] < 0) {
-                LSTACK_LOG(ERR, LSTACK, "cfg->bond_slave_addr[%d] parsing failed, ret=%d\n", i, ret);
+                LSTACK_LOG(ERR, LSTACK, "cfg->bond_slave_addr[%d] parsing failed.\n", i);
                 return -1;
             }
             ret = dpdk_ethdev_init(slave_port_id[i]);
