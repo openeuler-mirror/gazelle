@@ -99,7 +99,7 @@ static int32_t parse_flow_bifurcation(void);
         } \
         int32_t _val = config_setting_get_int(_config_arg); \
         if (_val < (_min_val) || _val > (_max_val)) { \
-            LSTACK_PRE_LOG(LSTACK_ERR, "cfg %s %d invaild, range is [%d, %d].\n", \
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg %s %d invalid, range is [%d, %d].\n", \
                 (_arg_string), _val, (_min_val), (_max_val)); \
             (_ret) = -EINVAL; \
             break; \
@@ -1195,7 +1195,7 @@ static int parse_tuple_filter(void)
         return 0;
     }
     if (g_config_params.use_ltran || g_config_params.listen_shadow) {
-	LSTACK_LOG(ERR, LSTACK, "tuple filter and (ltran or listen_shadow) cannot be enabled at the same time\n");
+        LSTACK_LOG(ERR, LSTACK, "tuple filter and (ltran or listen_shadow) cannot be enabled at the same time\n");
         return -EINVAL;
     }
 
@@ -1355,10 +1355,6 @@ static int32_t parse_nic_vlan_mode(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.nic.vlan_mode, "nic_vlan_mode", -1, -1, 4094, ret);
-    if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid vlan mode value %d ret=%d. only support -1~4094\n", \
-                            g_config_params.nic.vlan_mode, ret);
-    }
     return ret;
 }
 
@@ -1366,10 +1362,6 @@ static int32_t parse_defaule_nonblock_mode(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.nonblock_mode, "nonblock_mode", 1, 0, 1, ret);
-    if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid nonblock mode value %d. only support 0 or 1\n", \
-                            g_config_params.nonblock_mode);
-    }
     return ret;
 }
 
@@ -1377,10 +1369,6 @@ static int32_t parse_rpc_msg_max(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.rpc_msg_max, "rpc_msg_max", 4096, 1, 8192, ret);
-    if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid rpc msg max value %d ret=%d. only support 1~8192\n",
-            g_config_params.rpc_msg_max, ret);
-    }
     return ret;
 }
 
@@ -1388,10 +1376,6 @@ static int32_t parse_send_cache_mode(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.send_cache_mode, "send_cache_mode", 0, 0, 1, ret);
-    if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid send cache mode value %d. only support 0 or 1\n",
-            g_config_params.send_cache_mode);
-    }
     return ret;
 }
 
@@ -1399,9 +1383,5 @@ static int32_t parse_flow_bifurcation(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.flow_bifurcation, "flow_bifurcation", 0, 0, 1, ret);
-    if (ret != 0) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid flow_bifurcation value %d. only support 0 or 1\n",
-                       g_config_params.flow_bifurcation);
-    }
     return ret;
 }
