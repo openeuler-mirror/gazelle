@@ -1,0 +1,38 @@
+#!/usr/bin/env bpftrace
+/* 
+reference: https://github.com/bpftrace/bpftrace/blob/master/man/adoc/bpftrace.adoc
+prepare: yum install bpftrace
+example: ./latency.bt xxx.so func1 func2
+supported functions: bpftrace -l 'uprobe:xxx.so'
+*/
+
+BEGIN
+{
+}
+
+uprobe:$1:$2
+{
+    @t_start[tid] = nsecs;
+}
+
+uretprobe:$1:$3
+/@t_start[tid]/
+{
+    $t_dur = nsecs - @t_start[tid];
+    @t_avg = avg($t_dur);
+
+    //@t_hist = lhist($t_dur, 0, 4000, 100);
+    @t_hist = hist($t_dur);
+
+    delete(@t_start[tid]);
+}
+
+END
+{
+    printf("\n\n%s -> %s \n", str($2), str($3));
+    printf("average time(nsec):");
+    print(@t_avg);
+
+    clear(@t_avg);
+    clear(@t_start);
+}
