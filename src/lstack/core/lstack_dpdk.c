@@ -509,14 +509,14 @@ static void rss_setup(const int port_id, const uint16_t nb_queues)
     free(reta_conf);
 }
 
-int32_t dpdk_bond_primary_set(int port_id, int *slave_port_id)
+int32_t dpdk_bond_primary_set(int port_id, int *slave_port_id, int count)
 {
     int32_t primary_port_id = ethdev_port_id(get_global_cfg_params()->mac_addr);
     if (primary_port_id < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot get the port id of the cfg\n");
         return -1;
     }
-    for (int i = 0; i < GAZELLE_MAX_BOND_NUM; i++) {
+    for (int i = 0; i < count; i++) {
         if (slave_port_id[i] == primary_port_id) {
             int32_t ret = rte_eth_bond_primary_set(port_id, primary_port_id);
             if (ret != 0) {
@@ -715,7 +715,7 @@ static int dpdk_bond_create(uint8_t mode, int *slave_port_id, int count)
     }
 
     if (cfg->bond_mode == BONDING_MODE_ACTIVE_BACKUP) {
-        ret = dpdk_bond_primary_set(port_id, slave_port_id);
+        ret = dpdk_bond_primary_set(port_id, slave_port_id, count);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk set bond primary port failed ret = %d\n", ret);
             return -1;
@@ -771,7 +771,7 @@ static int dpdk_bond_create(uint8_t mode, int *slave_port_id, int count)
 int32_t init_dpdk_ethdev(void)
 {
     int32_t ret;
-    int slave_port_id[GAZELLE_MAX_BOND_NUM] = {-1};
+    int slave_port_id[GAZELLE_MAX_BOND_NUM];
     int port_id = 0;
     struct cfg_params *cfg = get_global_cfg_params();
     int i;
@@ -784,6 +784,10 @@ int32_t init_dpdk_ethdev(void)
                 slave_port_id[i] = ethdev_port_id(cfg->bond_slave_addr[i].addr.mac_addr.addr_bytes);
             } else {
                 slave_port_id[i] = pci_to_port_id(&cfg->bond_slave_addr[i].addr.pci_addr);
+            }
+            if (slave_port_id[i] < 0) {
+                LSTACK_LOG(ERR, LSTACK, "cfg->bond_slave_addr[%d] parsing failed, ret=%d\n", i, ret);
+                return -1;
             }
             ret = dpdk_ethdev_init(slave_port_id[i]);
             if (ret < 0) {
@@ -799,6 +803,9 @@ int32_t init_dpdk_ethdev(void)
         }
     } else {
         port_id = ethdev_port_id(cfg->mac_addr);
+        if (port_id < 0) {
+            return -1;
+        }
         ret = dpdk_ethdev_init(port_id);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed, port id=%d\n", port_id);
