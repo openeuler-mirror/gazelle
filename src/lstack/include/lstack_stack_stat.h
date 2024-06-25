@@ -26,8 +26,6 @@ struct lwip_sock;
 
 void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
     enum GAZELLE_LATENCY_TYPE type, uint64_t time_record);
-void calculate_rpcmsg_latency(struct gazelle_stack_latency *stack_latency, struct rpc_msg *msg,
-    enum GAZELLE_LATENCY_TYPE type);
 void calculate_sock_latency(struct gazelle_stack_latency *stack_latency, struct lwip_sock *sock,
     enum GAZELLE_LATENCY_TYPE type);
 void stack_stat_init(void);
