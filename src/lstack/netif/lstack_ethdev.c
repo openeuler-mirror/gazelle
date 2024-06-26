@@ -130,6 +130,25 @@ void kni_handle_tx(struct rte_mbuf *mbuf)
 }
 #endif
 
+#define IS_ARP_PKT(ptype) ((ptype & RTE_PTYPE_L2_ETHER_ARP) == RTE_PTYPE_L2_ETHER_ARP)
+#define IS_IPV4_TCP_PKT(ptype) (RTE_ETH_IS_IPV4_HDR(ptype) && \
+        ((ptype & RTE_PTYPE_L4_TCP) == RTE_PTYPE_L4_TCP) && \
+        ((ptype & RTE_PTYPE_L4_FRAG) != RTE_PTYPE_L4_FRAG) && \
+        (RTE_ETH_IS_TUNNEL_PKT(ptype) == 0))
+
+#define IS_IPV6_TCP_PKT(ptype) (RTE_ETH_IS_IPV6_HDR(ptype) && \
+        ((ptype & RTE_PTYPE_L4_TCP) == RTE_PTYPE_L4_TCP) && \
+        ((ptype & RTE_PTYPE_L4_FRAG) != RTE_PTYPE_L4_FRAG) && \
+        (RTE_ETH_IS_TUNNEL_PKT(ptype) == 0))
+
+#define IS_IPV4_UDP_PKT(ptype) (RTE_ETH_IS_IPV4_HDR(ptype) && \
+        ((ptype & RTE_PTYPE_L4_UDP) == RTE_PTYPE_L4_UDP) && \
+        (RTE_ETH_IS_TUNNEL_PKT(ptype) == 0))
+
+#define IS_IPV6_UDP_PKT(ptype) (RTE_ETH_IS_IPV6_HDR(ptype) && \
+        ((ptype & RTE_PTYPE_L4_UDP) == RTE_PTYPE_L4_UDP) && \
+        (RTE_ETH_IS_TUNNEL_PKT(ptype) == 0))
+
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;
@@ -151,14 +170,7 @@ int32_t eth_dev_poll(void)
         int transfer_type = TRANSFER_CURRENT_THREAD;
         /* copy arp into other stack */
         if (!use_ltran()) {
-            struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(stack->pkts[i], struct rte_ether_hdr *);
-            u16_t type;
-            type = ethh->ether_type;
-            if (type == PP_HTONS(ETHTYPE_VLAN)) {
-                struct eth_vlan_hdr *vlan = (struct eth_vlan_hdr *)(((char *)ethh) + SIZEOF_ETH_HDR);
-                type = vlan->tpid;
-            }
-            if (unlikely(RTE_BE16(RTE_ETHER_TYPE_ARP) == type)) {
+            if (unlikely(IS_ARP_PKT(stack->pkts[i]->packet_type))) {
                 stack_broadcast_arp(stack->pkts[i], stack);
                 /* copy arp into other process */
                 transfer_arp_to_other_process(stack->pkts[i]);
