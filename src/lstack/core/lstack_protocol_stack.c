@@ -921,15 +921,15 @@ void stack_udp_send(struct rpc_msg *msg)
     int replenish_again;
     uint32_t call_num;
 
-    if (get_protocol_stack_group()->latency_start) {
-        calculate_rpcmsg_latency(&stack->latency, msg, GAZELLE_LATENCY_WRITE_RPC_MSG);
-    }
-
     struct lwip_sock *sock = get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
         return;
+    }
+
+    if (get_protocol_stack_group()->latency_start) {
+        calculate_sock_latency(&stack->latency, sock, GAZELLE_LATENCY_WRITE_RPC_MSG);
     }
 
     replenish_again = do_lwip_send(stack, sock->conn->callback_arg.socket, sock, len, 0);

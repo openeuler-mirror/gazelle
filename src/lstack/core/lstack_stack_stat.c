@@ -82,7 +82,7 @@ void time_stamp_record(int fd, struct pbuf *pbuf)
 {
     struct lwip_sock *sock = get_socket_by_fd(fd);
 
-    if (get_protocol_stack_group()->latency_start && pbuf != NULL) {
+    if (get_protocol_stack_group()->latency_start && sock && pbuf) {
         calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_INTO_MBOX, 0);
         time_stamp_into_recvmbox(sock);
     }
