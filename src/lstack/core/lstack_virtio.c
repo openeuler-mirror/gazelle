@@ -331,3 +331,12 @@ int virtio_port_create(int lstack_net_port)
     }
     return 0;
 }
+
+bool virtio_distribute_pkg_to_kernel(uint16_t dst_port)
+{
+    if (dst_port == VIRTIO_PORT_INVALID) {
+        return false;
+    }
+
+    return (port_map_get(dst_port) == 0);
+}
