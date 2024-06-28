@@ -115,6 +115,8 @@ static inline void vdev_pkts_parse(struct rte_mbuf **pkts, int pkt_num)
             } else if (iph6->proto == IPPROTO_UDP) {
                 pkts[i]->l4_len = sizeof(struct rte_udp_hdr);
                 pkts[i]->packet_type = RTE_PTYPE_L3_IPV6 | RTE_PTYPE_L4_UDP;
+            } else if (iph6->proto == IPPROTO_ICMPV6) {
+                pkts[i]->packet_type = RTE_PTYPE_L3_IPV6 | RTE_PTYPE_L4_ICMP;
             }
         } else if (type == RTE_BE16(RTE_ETHER_TYPE_ARP)) {
             pkts[i]->packet_type = RTE_PTYPE_L2_ETHER_ARP;

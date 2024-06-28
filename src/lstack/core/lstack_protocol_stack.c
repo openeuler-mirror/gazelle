@@ -34,6 +34,7 @@
 #include "lstack_control_plane.h"
 #include "posix/lstack_epoll.h"
 #include "lstack_stack_stat.h"
+#include "lstack_virtio.h"
 #include "lstack_protocol_stack.h"
 
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
@@ -509,6 +510,9 @@ int stack_polling(uint32_t wakeup_tick)
         }
     }
 #endif
+    if (get_global_cfg_params()->flow_bifurcation) {
+        virtio_tap_process_rx(stack->port_id, stack->queue_id);
+    }
     return force_quit;
 }
 
@@ -979,14 +983,25 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
         }
     }
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
-    ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
-    if (ret != 0) {
-        cur_stack->stats.rx_allocmbuf_fail++;
-        return;
+    if (get_global_cfg_params()->kni_switch) {
+        ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
+        if (ret != 0) {
+            cur_stack->stats.rx_allocmbuf_fail++;
+            return;
+        }
+        copy_mbuf(mbuf_copy, mbuf);
+        kni_handle_tx(mbuf_copy);
     }
-    copy_mbuf(mbuf_copy, mbuf);
-    kni_handle_tx(mbuf_copy);
 #endif
+    if (get_global_cfg_params()->flow_bifurcation) {
+        ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
+        if (ret != 0) {
+            cur_stack->stats.rx_allocmbuf_fail++;
+            return;
+        }
+        copy_mbuf(mbuf_copy, mbuf);
+        virtio_tap_process_tx(stack->queue_id, mbuf_copy);
+    }
     return;
 }
 

@@ -35,6 +35,7 @@
 #include "lstack_thread_rpc.h"
 #include "lstack_flow.h"
 #include "lstack_tx_cache.h"
+#include "lstack_virtio.h"
 #include "lstack_ethdev.h"
 
 /* FRAME_MTU + 14byte header */
@@ -149,6 +150,25 @@ void kni_handle_tx(struct rte_mbuf *mbuf)
         ((ptype & RTE_PTYPE_L4_UDP) == RTE_PTYPE_L4_UDP) && \
         (RTE_ETH_IS_TUNNEL_PKT(ptype) == 0))
 
+#define IS_ICMPV6_PKT(ptype) (RTE_ETH_IS_IPV6_HDR(ptype) && \
+        ((ptype & RTE_PTYPE_L4_ICMP) == RTE_PTYPE_L4_ICMP) && \
+        (RTE_ETH_IS_TUNNEL_PKT(ptype) == 0))
+
+static uint16_t eth_dev_get_dst_port(struct rte_mbuf *pkt)
+{
+    uint16_t dst_port = VIRTIO_PORT_INVALID;
+    uint32_t packet_type = pkt->packet_type;
+
+    void *l4_hdr = rte_pktmbuf_mtod_offset(pkt, void *, pkt->l2_len + pkt->l3_len);
+
+    if (IS_IPV4_TCP_PKT(packet_type) || IS_IPV6_TCP_PKT(packet_type)) {
+        dst_port = rte_be_to_cpu_16(((struct rte_tcp_hdr *)l4_hdr)->dst_port);
+    } else if (IS_IPV4_UDP_PKT(packet_type) || IS_IPV6_UDP_PKT(packet_type)) {
+        dst_port = rte_be_to_cpu_16(((struct rte_udp_hdr *)l4_hdr)->dst_port);
+    }
+    return dst_port;
+}
+
 int32_t eth_dev_poll(void)
 {
     uint32_t nr_pkts;
@@ -170,7 +190,8 @@ int32_t eth_dev_poll(void)
         int transfer_type = TRANSFER_CURRENT_THREAD;
         /* copy arp into other stack */
         if (!use_ltran()) {
-            if (unlikely(IS_ARP_PKT(stack->pkts[i]->packet_type))) {
+            if (unlikely(IS_ARP_PKT(stack->pkts[i]->packet_type)) ||
+                unlikely(IS_ICMPV6_PKT(stack->pkts[i]->packet_type))) {
                 stack_broadcast_arp(stack->pkts[i], stack);
                 /* copy arp into other process */
                 transfer_arp_to_other_process(stack->pkts[i]);
@@ -178,17 +199,27 @@ int32_t eth_dev_poll(void)
                 if (get_global_cfg_params()->tuple_filter && stack->queue_id == 0) {
                     transfer_type = distribute_pakages(stack->pkts[i]);
                 }
+                if (get_global_cfg_params()->flow_bifurcation) {
+                    uint16_t dst_port = eth_dev_get_dst_port(stack->pkts[i]);
+                    if (virtio_distribute_pkg_to_kernel(dst_port)) {
+                        transfer_type = TRANSFER_KERNEL;
+                    }
+                }
             }
         }
 
         if (likely(transfer_type == TRANSFER_CURRENT_THREAD)) {
             eth_dev_recv(stack->pkts[i], stack);
         } else if (transfer_type == TRANSFER_KERNEL) {
+            if (get_global_cfg_params()->flow_bifurcation) {
+                virtio_tap_process_tx(stack->queue_id, stack->pkts[i]);
+            } else {
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
-            kni_handle_tx(stack->pkts[i]);
+                kni_handle_tx(stack->pkts[i]);
 #else
-            rte_pktmbuf_free(stack->pkts[i]);
+                rte_pktmbuf_free(stack->pkts[i]);
 #endif
+            }
         } else {
             /* transfer to other thread */
         }

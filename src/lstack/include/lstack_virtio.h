@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 
+#define VIRTIO_PORT_INVALID 0xffff
 #define VIRTIO_MAX_QUEUE_NUM 8
 
 // RTE_ETHER_ADDR_PRT_FMT RTE_ETHER_ADDR_BYTES are defined in dpdk 21.11
@@ -48,4 +49,5 @@ void virtio_tap_process_tx(uint16_t queue_id, struct rte_mbuf *mbuf_copy);
 int virtio_port_create(int lstack_net_port);
 
 struct virtio_instance* virtio_instance_get(void);
+bool virtio_distribute_pkg_to_kernel(uint16_t dst_port);
 #endif
