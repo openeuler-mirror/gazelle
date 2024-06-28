@@ -255,17 +255,16 @@ struct pbuf *do_lwip_udp_get_from_sendring(struct lwip_sock *sock, uint16_t rema
     struct pbuf *pbufs[count];
 
     int actual_count = gazelle_ring_sc_dequeue(sock->send_ring, (void **)&pbufs, count);
-    if (unlikely(actual_count != count)) {
+    /* it's impossible to enter this branch theoretically */
+    if (unlikely((actual_count != count) ||
+                 ((actual_count != 0) && pbufs[0]->tot_len != remain_size))) {
         LSTACK_LOG(ERR, LSTACK, "udp get pbuf from sendring error, expected: %d, actual: %d\n",
                    count, actual_count);
+         LSTACK_LOG(ERR, LSTACK, "udp get pbuf size error, expected: %d, actual: %d\n",
+                   remain_size, actual_count == 0 ? 0 : pbufs[0]->tot_len);
     }
 
-    if (unlikely(pbufs[0]->tot_len != remain_size)) {
-        LSTACK_LOG(ERR, LSTACK, "udp get pbuf size error, expected: %d, actual: %d\n",
-                   remain_size, pbufs[0]->tot_len);
-    }
-
-    for (int i = 0; get_protocol_stack_group()->latency_start && i < count; i++) {
+    for (int i = 0; get_protocol_stack_group()->latency_start && i < actual_count; i++) {
         calculate_lstack_latency(&sock->stack->latency, pbufs[i], GAZELLE_LATENCY_WRITE_LWIP, 0);
     }
 
