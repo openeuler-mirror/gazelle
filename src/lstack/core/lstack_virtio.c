@@ -298,9 +298,11 @@ int virtio_port_create(int lstack_net_port)
         return retval;
     }
 
+    uint16_t actual_queue_num = (g_virtio_instance.rx_queue_num < g_virtio_instance.tx_queue_num) ?
+                g_virtio_instance.rx_queue_num : g_virtio_instance.tx_queue_num;
     retval = snprintf(portargs, sizeof(portargs),
                       "path=/dev/vhost-net,queues=%u,queue_size=%u,iface=%s,mac=" RTE_ETHER_ADDR_PRT_FMT,
-                      VIRTIO_MAX_QUEUE_NUM, VIRTIO_TX_RX_RING_SIZE, VIRTIO_USER_NAME, RTE_ETHER_ADDR_BYTES(&addr));
+                      actual_queue_num, VIRTIO_TX_RX_RING_SIZE, VIRTIO_USER_NAME, RTE_ETHER_ADDR_BYTES(&addr));
     if (retval < 0) {
         LSTACK_LOG(ERR, LSTACK, "virtio portargs snprintf failed ret=%d \n", retval);
         return retval;
