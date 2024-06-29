@@ -14,7 +14,7 @@
 
 #include <stdint.h>
 
-void port_map_set(uint32_t modBit, int setVal);
-int port_map_get(int bit_index);
+void port_map_mod(uint16_t port, uint16_t flag);
+uint16_t port_map_get(uint16_t port);
 
 #endif
