@@ -128,6 +128,7 @@ static void gazelle_print_ltran_start_latency(void *buf, const struct gazelle_st
 static void gazelle_print_lstack_stat_total(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_stat_rate(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_lstack_stat_virtio(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_stat_lpm(void *buf, const struct gazelle_stat_msg_request *req_msg);
@@ -163,6 +164,7 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LSTACK_LOG_LEVEL_SET, 0,                                      gazelle_print_ltran_wait},
     {GAZELLE_STAT_LSTACK_SHOW_RATE,    sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_stat_rate},
     {GAZELLE_STAT_LSTACK_SHOW_SNMP,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_snmp},
+    {GAZELLE_STAT_LSTACK_SHOW_VIRTIO,  sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_virtio},
     {GAZELLE_STAT_LSTACK_SHOW_CONN,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_conn},
     {GAZELLE_STAT_LSTACK_SHOW_LATENCY, sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_latency},
     {GAZELLE_STAT_LSTACK_LOW_POWER_MDF, sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_lpm},
@@ -1169,6 +1171,24 @@ static void gazelle_print_lstack_stat_proto(void *buf, const struct gazelle_stat
     } while (true);
 }
 
+static void gazelle_print_lstack_stat_virtio(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
+    struct gazelle_stat_lstack_virtio *virtio = &stat->data.virtio;
+    printf("\nStatistics of lstack virtio:\n");
+
+    printf("\nlstack_port_id =%u virtio_port_id =%u rx_queue_num =%u tx_queue_num =%u \n",
+           virtio->lstack_port_id, virtio->virtio_port_id, virtio->rx_queue_num,
+           virtio->tx_queue_num);
+
+    printf("\n%-8s %-8s  %-8s  %-8s  %-8s\n", "queue_id", "rx_pkg", "rx_drop", "tx_pkg", "tx_drop");
+    for (int i = 0; i < virtio->rx_queue_num; i++) {
+        printf("%-8d  %-8lu  %-8lu  %-8lu  %-8lu\n", i,
+               virtio->rx_pkg[i], virtio->rx_drop[i], virtio->tx_pkg[i], virtio->tx_drop[i]);
+    }
+    printf("\n");
+}
+
 static void gazelle_keepalive_string(char* str, int buff_len, struct gazelle_stat_lstack_conn_info *conn_info)
 {
     if (conn_info->keepalive == 0) {
@@ -1298,6 +1318,7 @@ static void show_usage(void)
            "                  show lstack all statistics \n"
            "  -r, rate        show lstack statistics per second \n"
            "  -s, snmp        show lstack snmp \n"
+           "  -v, virtio      show rx_pkg/rx_drop/tx_pkg/tx_drop num of virtio \n"
            "  -c, connect     show lstack connect \n"
            "  -l, latency     [time]   show lstack latency \n"
            "  -x, xstats      show lstack xstats \n"
@@ -1553,6 +1574,8 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_MODE_MAX;
     } else if (strcmp(param, "snmp") == 0 || strcmp(param, "-s") == 0) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_SNMP;
+    } else if (strcmp(param, "virtio") == 0 || strcmp(param, "-v") == 0) {
+        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_VIRTIO;
     } else if (strcmp(param, "connect") == 0 || strcmp(param, "-c") == 0) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_CONN;
     } else if (strcmp(param, "xstats") == 0 || strcmp(param, "-x") == 0) {

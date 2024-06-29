@@ -30,7 +30,7 @@
                                         ((mac_addrs)->addr_bytes[4]), \
                                         ((mac_addrs)->addr_bytes[5])
 #endif
-
+// When modifying virtio_instance, gazelle_stat_lstack_virtio also needs to be modified together.
 struct virtio_instance {
     uint16_t lstack_port_id;
     uint16_t virtio_port_id;

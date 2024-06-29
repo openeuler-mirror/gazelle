@@ -53,6 +53,7 @@ enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LSTACK_LOG_LEVEL_SET,
     GAZELLE_STAT_LSTACK_SHOW_RATE,
     GAZELLE_STAT_LSTACK_SHOW_SNMP,
+    GAZELLE_STAT_LSTACK_SHOW_VIRTIO,
     GAZELLE_STAT_LSTACK_SHOW_CONN,
     GAZELLE_STAT_LSTACK_SHOW_LATENCY,
     GAZELLE_STAT_LSTACK_LOW_POWER_MDF,
@@ -135,6 +136,20 @@ struct gazelle_stat_pkts {
     struct gazelle_stack_stat stack_stat;
     struct gazelle_wakeup_stat wakeup_stat;
     struct gazelle_stack_aggregate_stats aggregate_stats;
+};
+
+// same with lstack_virtio.h struct virtio_instance
+struct gazelle_stat_lstack_virtio {
+#define VIRTIO_MAX_QUEUE_NUM 8
+    uint16_t lstack_port_id;
+    uint16_t virtio_port_id;
+    uint16_t rx_queue_num;
+    uint16_t tx_queue_num;
+
+    uint64_t rx_pkg[VIRTIO_MAX_QUEUE_NUM];
+    uint64_t rx_drop[VIRTIO_MAX_QUEUE_NUM];
+    uint64_t tx_pkg[VIRTIO_MAX_QUEUE_NUM];
+    uint64_t tx_drop[VIRTIO_MAX_QUEUE_NUM];
 };
 
 /* same as define in lwip/stats.h - struct stats_mib2 */
@@ -328,6 +343,7 @@ struct gazelle_stack_dfx_data {
         struct gazelle_stack_latency latency;
         struct gazelle_stat_lstack_conn conn;
         struct gazelle_stat_lstack_snmp snmp;
+        struct gazelle_stat_lstack_virtio virtio;
         struct nic_eth_xstats nic_xstats;
         struct nic_eth_features nic_features;
         struct gazelle_stat_lstack_proto  proto_data;
