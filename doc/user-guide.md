@@ -104,7 +104,7 @@ GAZELLE_BIND_PROCNAME=test LD_PRELOAD=/usr/lib64/liblstack.so ./test
 
 |选项|参数格式|说明|
 |:---|:---|:---|
-|dpdk_args|--socket-mem（必需）<br>--huge-dir（必需）<br>--proc-type（必需）<br>--legacy-mem<br>--map-perfect<br>-d<br>等|dpdk初始化参数，参考dpdk说明<br>对于没有链接到liblstack.so的PMD，必须使用 -d 加载，比如librte_net_mlx5.so。<br>|
+|dpdk_args|--socket-mem（必需）<br>--huge-dir（必需）<br>--proc-type（必需）<br>--legacy-mem<br>--map-perfect<br>-d<br>--iova-mode<br>等|dpdk初始化参数，参考dpdk说明<br>对于没有链接到liblstack.so的PMD，必须使用 -d 加载，比如librte_net_mlx5.so。<br>当使用非root用户启动，且dpdk版本>23.11，需要指定iova模式为va，即 --iova-mode va|
 |use_ltran| 0/1 | 是否使用ltran |
 |listen_shadow| 0/1 | 是否使用影子fd监听，单个listen线程多个协议栈线程时使用 |
 |num_cpus|"0,2,4 ..."|lstack线程绑定的cpu编号，编号的数量为lstack线程个数(小于等于网卡多队列数量)。可按NUMA选择cpu|

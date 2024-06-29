@@ -102,7 +102,7 @@
  
  | Option | Parameter Format | Description |
 |:---|:---|:---|
-| dpdk_args | --socket-mem (mandatory)<br>--huge-dir (mandatory)<br>--proc-type (mandatory)<br>--legacy-mem<br>--map-perfect<br>-d<br>etc. | DPDK initialization parameters, refer to DPDK documentation. <br>For PMDs not linked to liblstack.so, use -d to load them, such as libnet_mlx5.so. |
+| dpdk_args | --socket-mem (mandatory)<br>--huge-dir (mandatory)<br>--proc-type (mandatory)<br>--legacy-mem<br>--map-perfect<br>-d<br>--iova-modeetc. | DPDK initialization parameters, refer to DPDK documentation. <br>For PMDs not linked to liblstack.so, use -d to load them, such as libnet_mlx5.so.<br>if execute gazelle as a non-root user, we need to specify iova-mode to va,as --iova-mode va |
 | use_ltran | 0/1 | Whether to use ltran. |
 | listen_shadow | 0/1 | Whether to use shadow FD listening. Used when there are multiple protocol stack threads for a single listen thread. |
 | num_cpus | "0,2,4 ..." | CPU numbers to which lstack threads are bound. The number of IDs corresponds to the number of lstack threads (which is less than or equal to the number of queues per NIC). CPUs can be selected according to NUMA. |
