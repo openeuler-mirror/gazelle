@@ -29,6 +29,7 @@
 #include "posix/lstack_epoll.h"
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
+#include "lstack_virtio.h"
 
 #define US_PER_SEC  1000000
 
@@ -339,6 +340,13 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
         case GAZELLE_STAT_LSTACK_SHOW_SNMP:
             ret = memcpy_s(&dfx->data.snmp, sizeof(dfx->data.snmp), &stack->lwip_stats->mib2,
                 sizeof(stack->lwip_stats->mib2));
+            if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+            }
+            break;
+        case GAZELLE_STAT_LSTACK_SHOW_VIRTIO:
+            ret = memcpy_s(&dfx->data.virtio, sizeof(dfx->data.virtio), virtio_instance_get(),
+                           sizeof(*(virtio_instance_get())));
             if (ret != EOK) {
                 LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
             }
