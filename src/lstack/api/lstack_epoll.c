@@ -837,13 +837,14 @@ static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfd
                 continue;
             }
         }
-        wakeup->last_fds[i].fd = fd;
-        wakeup->last_fds[i].events = fds[i].events;
-        poll_change = 1;
 
         if (sock == NULL || sock->conn == NULL || CONN_TYPE_HAS_HOST(sock->conn)) {
             update_kernel_poll(wakeup, i, fds + i);
         }
+
+        wakeup->last_fds[i].fd = fd;
+        wakeup->last_fds[i].events = fds[i].events;
+        poll_change = 1;
 
         while (sock && sock->conn) {
             sock->epoll_events = fds[i].events | POLLERR;
