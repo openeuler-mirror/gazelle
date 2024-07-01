@@ -35,6 +35,8 @@
 #include "lstack_lwip.h"
 #include "lstack_flow.h"
 #include "lstack_vdev.h"
+#include "lstack_port_map.h"
+#include "lstack_virtio.h"
 
 /* INUSE_TX_PKTS_WATERMARK < VDEV_RX_QUEUE_SZ;
  * USE_RX_PKTS_WATERMARK < FREE_RX_QUEUE_SZ.
@@ -195,6 +197,19 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
 {
     if (qtuple == NULL) {
         return -1;
+    }
+
+    uint16_t local_port = ntohs(qtuple->src_port);
+    if (get_global_cfg_params()->flow_bifurcation && get_global_cfg_params()->is_primary) {
+        if (type == REG_RING_TCP_LISTEN_CLOSE || type == REG_RING_UDP_BIND_CLOSE) { // add enum type in reg_sock.h
+            port_map_mod(local_port, 0);
+        } else if (type == REG_RING_TCP_LISTEN || type == REG_RING_UDP_BIND) {
+            port_map_mod(local_port, 1);
+        } else if (type == REG_RING_TCP_CONNECT_CLOSE) {
+            port_map_mod(local_port, 0);
+        } else if (type == REG_RING_TCP_CONNECT) {
+            port_map_mod(local_port, 1);
+        }
     }
 
     if (!use_ltran() && get_global_cfg_params()->tuple_filter) {

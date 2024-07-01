@@ -15,29 +15,28 @@
 #include "lstack_port_map.h"
 
 #define PORT_MAP_UNIX_TCP_PORT_MAX 65535
-#define PORT_MAP_EIGHT_BIT 8
 
-static uint8_t g_rule_port[(PORT_MAP_UNIX_TCP_PORT_MAX + 1) / PORT_MAP_EIGHT_BIT]; // 8k byte
+static uint32_t g_rule_port[PORT_MAP_UNIX_TCP_PORT_MAX] = {0};
 static pthread_mutex_t g_rule_map_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void port_map_set(uint32_t modBit, int setVal)
+void port_map_mod(uint16_t port, uint16_t flag)
 {
     pthread_mutex_lock(&g_rule_map_mutex);
-    g_rule_port[modBit / PORT_MAP_EIGHT_BIT] &= ~(1 << (modBit % PORT_MAP_EIGHT_BIT));
-    g_rule_port[modBit / PORT_MAP_EIGHT_BIT] |= (setVal << (modBit % PORT_MAP_EIGHT_BIT));
+    if (flag == 0) {
+        g_rule_port[port]--;
+    } else {
+        g_rule_port[port]++;
+    }
     pthread_mutex_unlock(&g_rule_map_mutex);
 }
 
-int port_map_get(int bit_index)
+uint16_t port_map_get(uint16_t port)
 {
-    int bit_val = 0;
-    int byte_index = bit_index / PORT_MAP_EIGHT_BIT;
-    int bit_offset = bit_index % PORT_MAP_EIGHT_BIT;
-    uint8_t mask = 1 << bit_offset;
+    uint16_t val = 0;
     pthread_mutex_lock(&g_rule_map_mutex);
-    if ((g_rule_port[byte_index] & mask) != 0) {
-        bit_val = 1;
+    if (g_rule_port[port] > 0) {
+        val = 1;
     }
     pthread_mutex_unlock(&g_rule_map_mutex);
-    return bit_val;
+    return val;
 }
