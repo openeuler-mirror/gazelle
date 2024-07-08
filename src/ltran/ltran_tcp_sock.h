@@ -17,7 +17,7 @@
 #include <pthread.h>
 #include <stdint.h>
 
-#include "gazelle_opt.h"
+#include "common/gazelle_opt.h"
 
 struct gazelle_stack;
 struct gazelle_tcp_sock {

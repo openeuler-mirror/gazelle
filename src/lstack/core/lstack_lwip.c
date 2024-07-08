@@ -27,7 +27,7 @@
 #include <rte_errno.h>
 #include <rte_malloc.h>
 
-#include "gazelle_base_func.h"
+#include "common/gazelle_base_func.h"
 #include "lstack_ethdev.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_log.h"
@@ -35,7 +35,7 @@
 #include "lstack_stack_stat.h"
 #include "posix/lstack_epoll.h"
 #include "lstack_thread_rpc.h"
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
 

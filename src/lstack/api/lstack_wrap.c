@@ -10,7 +10,6 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <netdb.h>
 #include <ifaddrs.h>
@@ -31,7 +30,7 @@
 #include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
-#include "gazelle_base_func.h"
+#include "common/gazelle_base_func.h"
 #include "lstack_preload.h"
 
 #include "lstack_rtc_api.h"

@@ -14,7 +14,7 @@
 #define __GAZELLE_LWIP_H__
 #include <stdbool.h>
 
-#include "gazelle_dfx_msg.h"
+#include "common/gazelle_dfx_msg.h"
 
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
 #define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)))

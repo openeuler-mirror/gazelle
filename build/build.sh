@@ -12,8 +12,10 @@
 export CURRENT_PATH=$(dirname $(readlink -f ${BASH_SOURCE[0]}))
 cd $CURRENT_PATH
 
+cpu_num=8
+
 make -C ../src/lstack clean
-make -C ../src/lstack
+make -C ../src/lstack -j${cpu_num}
 if [ $? -ne 0 ]; then
     echo "build lstack failed"
     exit 1
@@ -24,7 +26,7 @@ rm -f CMakeCache.txt
 rm -f ltran gazellectl
 rm -rf CMakeFiles
 cmake .
-make
+make -j${cpu_num}
 if [ $? -ne 0 ]; then
     echo "build ltran failed"
     exit 1
@@ -33,7 +35,7 @@ fi
 cd -
 cd ../examples
 cmake .
-make
+make -j${cpu_num}
 if [ $? -ne 0 ]; then
     echo "build examples failed"
     exit 1

@@ -24,7 +24,7 @@
 
 #include <securec.h>
 
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "lstack_cfg.h"
 #include "lstack_vdev.h"
 #include "lstack_stack_stat.h"

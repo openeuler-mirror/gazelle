@@ -20,11 +20,11 @@
 #include <lwip/list.h>
 #include <lwip/netif.h>
 
-#include "gazelle_dfx_msg.h"
+#include "common/gazelle_opt.h"
+#include "common/gazelle_dfx_msg.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_ethdev.h"
 #include "lstack_tx_cache.h"
-#include "gazelle_opt.h"
 
 #define SOCK_RECV_RING_SIZE         (get_global_cfg_params()->recv_ring_size)
 #define SOCK_RECV_FREE_THRES        (32)

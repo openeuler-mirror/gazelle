@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include <lwip/reg_sock.h>
 
-#include "gazelle_opt.h"
+#include "common/gazelle_opt.h"
 
 struct gazelle_tcp_conn {
     uint32_t tid;

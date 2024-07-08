@@ -7,40 +7,28 @@
 # IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
 # PURPOSE.
 # See the Mulan PSL v2 for more details.
-LSTACK_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-ROOT_DIR := $(dir $(abspath $(LSTACK_DIR)))
+ROOT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-LWIP_INCLUDE_FILE ?= /usr/include/lwip
+include $(ROOT_DIR)/Printlog.mk
+
 LIB_PATH ?= /usr/lib64
+LWIP_INCLUDE_DIR ?= /usr/include/lwip
 
 DPDK_VERSION := $(shell rpm -q --queryformat '%{VERSION}' dpdk)
 ifeq ($(DPDK_VERSION),21.11)
-    DPDK_INCLUDE_FILE := /usr/local/include
+    DPDK_INCLUDE_DIR := /usr/local/include
 else
-    DPDK_INCLUDE_FILE := /usr/include/dpdk
+    DPDK_INCLUDE_DIR := /usr/include/dpdk
 endif
 
 AR = ar
 ARFLAGS = crDP
 CC ?= gcc
-OPTIMIZATION = -O2 -g
 RM = rm -f
-LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
 ARCH := $(shell uname -m)
 
-ifneq ($(CC),clang)
-	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wno-deprecated-declarations -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -fPIC -D_FORTIFY_SOURCE=2
-else
-	SEC_FLAGS = -fstack-protector-strong -Werror -Wall -Wno-deprecated-declarations -fPIC
-endif
-$(info $(CC):$(SEC_FLAGS))
-
-INC = -I$(LSTACK_DIR)/include   \
-      -I$(LSTACK_DIR)/../common \
-      -I$(LWIP_INCLUDE_FILE)    \
-      -I$(DPDK_INCLUDE_FILE)
-
-CFLAGS += $(OPTIMIZATION) -fno-strict-aliasing $(INC) -Wno-error=unused-function
+CFLAGS = -O2 -g
+LDFLAGS = -shared -ldl -lm -lpthread -lrt -lnuma -lconfig -lboundscheck
 
 ifeq ($(GAZELLE_COVERAGE_ENABLE), 1)
 	LDFLAGS += -fprofile-arcs -ftest-coverage
@@ -48,7 +36,6 @@ ifeq ($(GAZELLE_COVERAGE_ENABLE), 1)
 endif
 
 ifeq ($(GAZELLE_FAULT_INJECT_ENABLE), 1)
-	LDFLAGS += -DGAZELLE_FAULT_INJECT_ENABLE
 	CFLAGS += -DGAZELLE_FAULT_INJECT_ENABLE
 endif
 
@@ -56,19 +43,21 @@ ifeq ($(shell $(CC) -dumpmachine | cut -d"-" -f1), x86_64)
 	CFLAGS += -mssse3
 endif
 
+SEC_FLAGS = -Wall -Werror -fstack-protector-strong -Wno-deprecated-declarations -fPIC
+ifneq ($(CC),clang)
+	SEC_FLAGS += -Wl,-z,relro, -Wl,-z,now -Wl,-z,noexecstack -Wtrampolines -D_FORTIFY_SOURCE=2
+endif
+
+INC = -I$(ROOT_DIR)/include \
+      -I$(ROOT_DIR)/../     \
+      -I$(LWIP_INCLUDE_DIR) \
+      -I$(DPDK_INCLUDE_DIR)
+
+CFLAGS += -fno-strict-aliasing -Wno-error=unused-function
+CFLAGS += -D__USE_GNU=1 -D_GNU_SOURCE=1
 CFLAGS += $(SEC_FLAGS)
+CFLAGS += $(INC)
 
-SRCS =
-DIRS = core netif api ../common
-
-define register_dir
-SRCS += $(patsubst %, $(1)/%, $(2))
-endef
-
-include $(patsubst %, %/dir.mk, $(DIRS))
-
-# Linking object and library
-OBJS = $(subst .c,.o,$(SRCS))
 
 LWIP_LIB = $(LIB_PATH)/liblwip.a
 LIBRTE_LIB = $(LIB_PATH)/librte_pci.so \
@@ -98,9 +87,9 @@ ifeq ($(DPDK_VERSION), 19.11)
                   $(LIB_PATH)/librte_pmd_hinic.so \
                   $(LIB_PATH)/librte_pmd_ixgbe.so \
                   $(LIB_PATH)/librte_pmd_virtio.so
-    ifneq ($(ARCH), loongarch64)
-	LIBRTE_LIB += $(LIB_PATH)/librte_pmd_i40e.so
-    endif
+	ifneq ($(ARCH), loongarch64)
+		LIBRTE_LIB += $(LIB_PATH)/librte_pmd_i40e.so
+	endif
 else
 	LIBRTE_LIB += $(LIB_PATH)/librte_net_pcap.so \
                       $(LIB_PATH)/librte_net_bond.so \
@@ -109,31 +98,38 @@ else
                       $(LIB_PATH)/librte_net_virtio.so \
                       $(LIB_PATH)/librte_telemetry.so \
                       $(LIB_PATH)/librte_pcapng.so
-    ifeq ($(filter loongarch64 riscv64, $(ARCH)),)
-	LIBRTE_LIB += $(LIB_PATH)/librte_net_i40e.so
-    endif
+	ifeq ($(filter loongarch64 riscv64, $(ARCH)),)
+		LIBRTE_LIB += $(LIB_PATH)/librte_net_i40e.so
+	endif
 endif
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
+$(info $(CC):$(DEP_LIBS))
+
+SRCS = $(wildcard  ./api/*.c  ./core/*.c  ./netif/*.c  ../common/*.c)
+# Linking object and library
+OBJS = $(subst .c,.o,$(SRCS))
+
 LDFLAGS += -Wl,--whole-archive $(DEP_LIBS) $(OBJS) -Wl,--no-whole-archive
+
+$(info [CFLAGS] $(CFLAGS))
+$(info [LDFLAGS] $(LDFLAGS))
 
 # Target
 LSTACK_SHARED_LIB = liblstack.so
 LSTACK_STATIC_LIB = liblstack.a
 
-.PHONY: all
+.PHONY: all clean
 all: $(LSTACK_SHARED_LIB)
 
-depend: .depend
-
-.depend: $(SRCS)
-	rm -f ./.depend
-	$(foreach SRC,$(SRCS),$(CC) $(CFLAGS) -MM -MT $(SRC:.c=.o) $(SRC)  >> .depend;)
-
--include .depend
-
 $(LSTACK_SHARED_LIB): $(OBJS)
-	$(CC) $(LDFLAGS) -Wl,--whole-archive -Wl,--no-whole-archive -o $@
+	$(call printlog, BUILD, $@)
+	$(QUIET) $(CC) $(LDFLAGS) -o $@
+
+%.o: %.c
+	$(call printlog, BUILD, $@)
+	$(QUIET) $(CC) $(CFLAGS) -c $(filter %.c,$^) -o $@
 
 clean:
-	$(RM) $(LSTACK_SHARED_LIB) $(OBJS) .depend
+	$(call printlog, CLEAN, $(LSTACK_SHARED_LIB))
+	$(QUIET) $(RM) $(LSTACK_SHARED_LIB) $(OBJS)
