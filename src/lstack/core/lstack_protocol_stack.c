@@ -16,9 +16,9 @@
 #include <lwip/sockets.h>
 #include <lwip/tcpip.h>
 #include <lwip/tcp.h>
-#include <lwip/memp_def.h>
-#include <lwipsock.h>
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_memp.h>
+#include <lwipgz_sock.h>
+#include <lwip/lwipgz_posix_api.h>
 #include <securec.h>
 #include <numa.h>
 

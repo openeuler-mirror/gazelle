@@ -17,7 +17,7 @@
 #include <rte_malloc.h>
 #include <rte_errno.h>
 #include <rte_cycles.h>
-#include <lwip/hlist.h>
+#include <lwip/lwipgz_hlist.h>
 
 #include "ltran_param.h"
 #include "ltran_log.h"

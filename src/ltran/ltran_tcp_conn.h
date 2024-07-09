@@ -13,10 +13,10 @@
 #ifndef __GAZELLE_TCP_CONN_H__
 #define __GAZELLE_TCP_CONN_H__
 
-#include <lwip/hlist.h>
+#include <lwip/lwipgz_hlist.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <lwip/reg_sock.h>
+#include <lwip/lwipgz_flow.h>
 
 #include "common/gazelle_opt.h"
 

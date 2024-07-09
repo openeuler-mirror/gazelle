@@ -14,8 +14,8 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <lwip/posix_api.h>
-#include <lwip/lwipsock.h>
+#include <lwip/lwipgz_posix_api.h>
+#include <lwip/lwipgz_sock.h>
 #include "posix/lstack_epoll.h"
 #include "lstack_log.h"
 #include "lstack_cfg.h"

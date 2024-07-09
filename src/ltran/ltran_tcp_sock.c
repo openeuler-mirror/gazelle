@@ -12,7 +12,7 @@
 
 #include <stdlib.h>
 
-#include <lwip/hlist.h>
+#include <lwip/lwipgz_hlist.h>
 
 #include "ltran_tcp_conn.h"
 #include "ltran_instance.h"

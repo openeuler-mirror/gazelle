@@ -32,10 +32,10 @@
 #endif
 #include <rte_pdump.h>
 #include <rte_thash.h>
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_posix_api.h>
 #include <lwipopts.h>
 #include <lwip/pbuf.h>
-#include <lwip/reg_sock.h>
+#include <lwip/lwipgz_flow.h>
 #include <lwip/priv/tcp_priv.h>
 
 #include <rte_eth_bond_8023ad.h>

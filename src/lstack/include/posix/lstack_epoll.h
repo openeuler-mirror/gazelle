@@ -18,7 +18,7 @@
 #include <semaphore.h>
 #include <pthread.h>
 
-#include <lwip/list.h>
+#include <lwip/lwipgz_list.h>
 
 #include "common/gazelle_dfx_msg.h"
 #include "common/gazelle_opt.h"

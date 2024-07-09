@@ -13,7 +13,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <net/if.h>
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_posix_api.h>
 #include <linux/ipv6.h>
 #include "lstack_cfg.h"
 #include "lstack_log.h"

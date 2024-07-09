@@ -15,11 +15,11 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <lwip/api.h>
-#include <lwip/lwipsock.h>
+#include <lwip/lwipgz_sock.h>
+#include <lwip/lwipgz_posix_api.h>
 
 #include "lstack_cfg.h"
 #include "lstack_ethdev.h"
-#include "posix_api.h"
 #include "lstack_control_plane.h"
 #include "lstack_log.h"
 #include "common/dpdk_common.h"

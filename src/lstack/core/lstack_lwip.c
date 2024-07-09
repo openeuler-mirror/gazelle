@@ -15,11 +15,11 @@
 #include <lwip/sockets.h>
 #include <lwip/tcp.h>
 #include <lwip/udp.h>
-#include <lwipsock.h>
+#include <lwipgz_sock.h>
 #include <arch/sys_arch.h>
 #include <lwip/pbuf.h>
 #include <lwip/priv/tcp_priv.h>
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_posix_api.h>
 #include <lwip/api.h>
 #include <lwip/tcp.h>
 #include <lwip/prot/etharp.h>

@@ -15,8 +15,8 @@
 #include <sys/socket.h>
 #include <execinfo.h>
 #include <unistd.h>
-#include <lwip/lwipsock.h>
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_sock.h>
+#include <lwip/lwipgz_posix_api.h>
 
 #include "common/gazelle_base_func.h"
 #include "lstack_cfg.h"

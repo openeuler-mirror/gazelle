@@ -17,7 +17,7 @@
 #include <sys/epoll.h>
 #include <stdbool.h>
 
-#include <lwip/list.h>
+#include <lwip/lwipgz_list.h>
 #include <lwip/netif.h>
 
 #include "common/gazelle_opt.h"

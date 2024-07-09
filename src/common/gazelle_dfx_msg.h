@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <stdint.h>
 
-#include <lwip/reg_sock.h>
+#include <lwip/lwipgz_flow.h>
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
 #include "gazelle_fault_inject_common.h"
