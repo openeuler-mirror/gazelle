@@ -104,7 +104,6 @@ else
 endif
 
 DEP_LIBS = $(LWIP_LIB) $(LIBRTE_LIB)
-$(info $(CC):$(DEP_LIBS))
 
 SRCS = $(wildcard  ./api/*.c  ./core/*.c  ./netif/*.c  ../common/*.c)
 # Linking object and library
