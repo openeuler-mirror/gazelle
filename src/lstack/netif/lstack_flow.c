@@ -22,7 +22,7 @@
 #include <lwip/tcp.h>
 #include <lwip/prot/tcp.h>
 
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_cfg.h"

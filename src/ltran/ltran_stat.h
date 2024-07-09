@@ -17,7 +17,7 @@
 
 #include <rte_common.h>
 
-#include "gazelle_opt.h"
+#include "common/gazelle_opt.h"
 
 /*
  * When doing reads from the NIC or the client queues,

@@ -28,7 +28,7 @@
 #include <rte_ring.h>
 #include <securec.h>
 
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "ltran_instance.h"
 #include "ltran_tcp_conn.h"
 #include "ltran_tcp_sock.h"

@@ -20,7 +20,7 @@
 #include <rte_eal.h>
 #include <rte_version.h>
 
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "ltran_log.h"
 #include "ltran_param.h"
 #include "ltran_stat.h"

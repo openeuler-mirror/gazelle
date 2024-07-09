@@ -15,7 +15,7 @@
 #include "lwip/sockets.h"
 #include "lstack_ethdev.h"
 #include "lstack_log.h"
-#include "gazelle_opt.h"
+#include "common/gazelle_opt.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_tx_cache.h"
 

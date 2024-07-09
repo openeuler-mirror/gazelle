@@ -14,8 +14,8 @@
 #define _GAZELLE_DPDK_H_
 
 #include <lwip/reg_sock.h>
-#include "gazelle_opt.h"
-#include "gazelle_dfx_msg.h"
+#include "common/gazelle_opt.h"
+#include "common/gazelle_dfx_msg.h"
 
 #define RXTX_CACHE_SZ        (VDEV_RX_QUEUE_SZ)
 

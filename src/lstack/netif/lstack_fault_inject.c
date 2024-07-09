@@ -20,6 +20,9 @@
 #include "lstack_log.h"
 #include "lstack_vdev.h"
 
+#ifdef GAZELLE_FAULT_INJECT_ENABLE
+#include "lstack_fault_inject.h"
+
 #define INJECT_MODULO 1000  /* used in modulus operator */
 #define INJECT_US_TO_MS 1000  /* transefer time unit us to ms */
 
@@ -371,3 +374,4 @@ int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_fault_inject_data
     return inject_set_cmd(sockfd, inject);
 }
 
+#endif /* GAZELLE_FAULT_INJECT_ENABLE */

@@ -15,6 +15,8 @@
 
 #include <stdbool.h>
 
+#include "common/gazelle_dfx_msg.h"
+
 int32_t handle_fault_inject_cmd(int32_t sockfd, struct gazelle_fault_inject_data inject, enum GAZELLE_STAT_MODE stat_mode);
 
 #endif /* __GAZELLE_INJECT_H__ */

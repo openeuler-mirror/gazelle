@@ -21,12 +21,12 @@
 #include "ltran_tcp_conn.h"
 #include "ltran_instance.h"
 #include "ltran_log.h"
-#include "gazelle_dfx_msg.h"
+#include "common/gazelle_dfx_msg.h"
 #include "ltran_timer.h"
 #include "ltran_ethdev.h"
 #include "ltran_base.h"
 #include "ltran_stack.h"
-#include "dpdk_common.h"
+#include "common/dpdk_common.h"
 #include "ltran_forward.h"
 
 /* undefine lwip_ntohs in lwip/def.h */

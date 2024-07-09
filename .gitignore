@@ -1,0 +1,17 @@
+.vscode
+
+**/*.so
+**/*.a
+**/*.o
+
+**/CMakeCache.txt
+**/CMakeFiles
+examples/Makefile
+examples/cmake_install.cmake
+examples/example
+src/ltran/Makefile
+src/ltran/cmake_install.cmake
+src/ltran/ltran.map
+src/ltran/gazellectl
+src/ltran/ltran
+
