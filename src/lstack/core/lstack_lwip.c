@@ -79,6 +79,7 @@ static void reset_sock_data(struct lwip_sock *sock)
         sock->send_pre_del = NULL;
     }
 
+    sock->type = 0;
     sock->stack = NULL;
     sock->wakeup = NULL;
     sock->listen_next = NULL;
@@ -1167,7 +1168,7 @@ void do_lwip_connected_callback(struct netconn *conn)
 
     int32_t fd = conn->callback_arg.socket;
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL || sock->conn == NULL) {
+    if (POSIX_IS_CLOSED(sock)) {
         return;
     }
 
@@ -1208,7 +1209,7 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
         conn->fd = netconn->callback_arg.socket;
         conn->recv_cnt = (netconn->recvmbox == NULL) ? 0 : rte_ring_count(netconn->recvmbox->ring);
         struct lwip_sock *sock = lwip_get_socket(netconn->callback_arg.socket);
-        if (sock != NULL && sock->conn != NULL) {
+        if (!POSIX_IS_CLOSED(sock)) {
             conn->recv_ring_cnt = (sock->recv_ring == NULL) ? 0 : gazelle_ring_readable_count(sock->recv_ring);
             conn->recv_ring_cnt += (sock->recv_lastdata) ? 1 : 0;
             conn->send_ring_cnt = (sock->send_ring == NULL) ? 0 : gazelle_ring_readover_count(sock->send_ring);

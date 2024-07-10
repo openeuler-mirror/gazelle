@@ -11,9 +11,9 @@
 */
 #ifndef __LSTACK_PRELOAD_H__
 #define __LSTACK_PRELOAD_H__
-#include <stdbool.h>
 
 enum posix_type select_posix_path(void);
-enum posix_type select_fd_posix_path(int32_t fd, struct lwip_sock **socket);
+enum posix_type select_sock_posix_path(struct lwip_sock *sock);
 int preload_info_init(void);
-#endif
+
+#endif /* __LSTACK_PRELOAD_H__ */

@@ -19,6 +19,7 @@
 #include <uthash.h>
 
 #include <lwip/lwipgz_posix_api.h>
+#include <lwip/sys.h>
 #include <lwip/tcp.h>
 #include <lwip/prot/tcp.h>
 

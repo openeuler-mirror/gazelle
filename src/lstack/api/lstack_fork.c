@@ -20,8 +20,9 @@ pid_t lstack_fork(void)
     pid_t pid;
 
     pid = posix_api->fork_fn();
+    /* child not support lwip */
     if (pid == 0) {
-        posix_api_fork();
+        posix_api->use_kernel = 1;
     }
     return pid;
 }

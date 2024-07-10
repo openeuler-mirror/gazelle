@@ -164,7 +164,7 @@ static uint32_t update_events(struct lwip_sock *sock)
 
     if ((sock->epoll_events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
         /* lwip_netconn_do_connected set LIBOS FLAGS when connected */
-        if (sock->conn && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
+        if (!POSIX_IS_CLOSED(sock) && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
             event |= EPOLLOUT;
         }
     }
@@ -190,7 +190,7 @@ static void rtc_raise_pending_events(struct wakeup_poll *wakeup, struct lwip_soc
 
     if (sock->sendevent) {
         /* lwip_netconn_do_connected set LIBOS FLAGS when connected */
-        if (sock->conn && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
+        if (!POSIX_IS_CLOSED(sock) && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
             event |= EPOLLOUT;
         }
     }
@@ -219,7 +219,7 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
     pthread_spin_lock(&wakeup->event_list_lock);
     if (NETCONN_IS_OUTIDLE(sock)) {
         /* lwip_netconn_do_connected set LIBOS FLAGS when connected */
-        if (sock->conn && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
+        if (!POSIX_IS_CLOSED(sock) && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
             event |= EPOLLOUT;
         }
     }
@@ -398,7 +398,7 @@ int32_t lstack_rtc_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_
 
     struct wakeup_poll *wakeup = epoll_sock->wakeup;
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL || sock->conn == NULL) {
+    if (POSIX_IS_CLOSED(sock)) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -438,7 +438,7 @@ int32_t lstack_rtw_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_
 
     struct wakeup_poll *wakeup = epoll_sock->wakeup;
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL || sock->conn == NULL) {
+    if (POSIX_IS_CLOSED(sock)) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -536,7 +536,7 @@ static int32_t poll_lwip_event(struct pollfd *fds, nfds_t nfds)
         /* sock->listen_next pointerto next stack listen */
         int32_t fd = fds[i].fd;
         struct lwip_sock *sock = lwip_get_socket(fd);
-        while (sock && sock->conn) {
+        while (!POSIX_IS_CLOSED(sock)) {
             uint32_t events = update_events(sock);
             if (events) {
                 fds[i].revents = events;
@@ -838,7 +838,7 @@ static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfd
             }
         }
 
-        if (sock == NULL || sock->conn == NULL || POSIX_HAS_TYPE(sock, POSIX_KERNEL)) {
+        if (POSIX_IS_CLOSED(sock) || POSIX_HAS_TYPE(sock, POSIX_KERNEL)) {
             update_kernel_poll(wakeup, i, fds + i);
         }
 
@@ -846,7 +846,7 @@ static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfd
         wakeup->last_fds[i].events = fds[i].events;
         poll_change = 1;
 
-        while (sock && sock->conn) {
+        while (!POSIX_IS_CLOSED(sock)) {
             sock->epoll_events = fds[i].events | POLLERR;
             sock->wakeup = wakeup;
             stack_count[sock->stack->stack_idx]++;
