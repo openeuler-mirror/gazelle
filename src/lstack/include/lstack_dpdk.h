@@ -13,7 +13,7 @@
 #ifndef _GAZELLE_DPDK_H_
 #define _GAZELLE_DPDK_H_
 
-#include <lwip/reg_sock.h>
+#include <lwip/lwipgz_flow.h>
 #include "common/gazelle_opt.h"
 #include "common/gazelle_dfx_msg.h"
 

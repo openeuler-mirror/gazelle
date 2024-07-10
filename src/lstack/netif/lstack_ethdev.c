@@ -19,7 +19,7 @@
 
 #include <lwip/etharp.h>
 #include <lwip/ethip6.h>
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_posix_api.h>
 #include <netif/ethernet.h>
 
 #include <securec.h>

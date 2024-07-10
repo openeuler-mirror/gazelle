@@ -10,7 +10,7 @@
 * See the Mulan PSL v2 for more details.
 */
 #include <lwip/sockets.h>
-#include <lwip/lwipsock.h>
+#include <lwip/lwipgz_sock.h>
 #include <rte_mempool.h>
 
 #include "lstack_log.h"

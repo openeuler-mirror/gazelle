@@ -14,7 +14,7 @@
 #include <rte_gro.h>
 #include <rte_net.h>
 
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_posix_api.h>
 
 #include "lstack_cfg.h"
 #include "lstack_log.h"

@@ -22,8 +22,8 @@
 #include <net/if.h>
 #include <securec.h>
 
-#include <lwip/posix_api.h>
-#include <lwip/lwipsock.h>
+#include <lwip/lwipgz_posix_api.h>
+#include <lwip/lwipgz_sock.h>
 #include <lwip/tcp.h>
 
 #include "posix/lstack_unistd.h"

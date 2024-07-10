@@ -15,7 +15,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <lwip/lwipsock.h>
+#include <lwip/lwipgz_sock.h>
 
 #include "lstack_thread_rpc.h"
 #include "posix/lstack_epoll.h"

@@ -15,8 +15,8 @@
 #include <pthread.h>
 #include <securec.h>
 
-#include <lwip/posix_api.h>
-#include <lwip/lwipsock.h>
+#include <lwip/lwipgz_posix_api.h>
+#include <lwip/lwipgz_sock.h>
 #include <lwip/lwipopts.h>
 
 #include "lstack_log.h"

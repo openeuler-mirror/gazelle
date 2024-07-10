@@ -14,7 +14,7 @@
 #include <lwip/memp.h>
 #include <lwip/lwipopts.h>
 #include <lwip/sys.h>
-#include <lwip/reg_sock.h>
+#include <lwip/lwipgz_flow.h>
 #include <rte_ring.h>
 #include <rte_malloc.h>
 #include <rte_ethdev.h>
@@ -201,7 +201,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
 
     uint16_t local_port = ntohs(qtuple->src_port);
     if (get_global_cfg_params()->flow_bifurcation && get_global_cfg_params()->is_primary) {
-        if (type == REG_RING_TCP_LISTEN_CLOSE || type == REG_RING_UDP_BIND_CLOSE) { // add enum type in reg_sock.h
+        if (type == REG_RING_TCP_LISTEN_CLOSE || type == REG_RING_UDP_BIND_CLOSE) { // add enum type in lwipgz_flow.h
             port_map_mod(local_port, 0);
         } else if (type == REG_RING_TCP_LISTEN || type == REG_RING_UDP_BIND) {
             port_map_mod(local_port, 1);

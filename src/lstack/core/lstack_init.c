@@ -28,11 +28,11 @@
 
 #include <lwip/def.h>
 #include <lwip/init.h>
-#include <lwip/lwipsock.h>
+#include <lwip/lwipgz_sock.h>
 #include <lwip/tcpip.h>
-#include <lwip/memp_def.h>
+#include <lwip/lwipgz_memp.h>
 #include <lwip/lwipopts.h>
-#include <lwip/posix_api.h>
+#include <lwip/lwipgz_posix_api.h>
 
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
