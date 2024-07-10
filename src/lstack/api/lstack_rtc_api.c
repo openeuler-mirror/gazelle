@@ -68,12 +68,7 @@ int rtc_close(int s)
         return lstack_epoll_close(s);
     }
 
-    lwip_close(s);
-    if (sock != NULL) {
-        list_del_node_null(&sock->event_list);
-    }
-
-    return posix_api->close_fn(s);
+    return lwip_close(s);
 }
 
 int rtc_shutdown(int fd, int how)

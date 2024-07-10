@@ -175,6 +175,8 @@ static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *add
 
     int32_t fd = g_wrap_api->accept_fn(s, addr, addrlen);
     if (fd >= 0) {
+        struct lwip_sock *sock = get_socket(fd);
+        SET_CONN_TYPE_LIBOS(sock->conn);
         return fd;
     }
 
@@ -193,6 +195,8 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
 
     int32_t fd = g_wrap_api->accept4_fn(s, addr, addrlen, flags);
     if (fd >= 0) {
+        struct lwip_sock *sock = get_socket(fd);
+        SET_CONN_TYPE_LIBOS(sock->conn);
         return fd;
     }
 
@@ -452,10 +456,11 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
     }
 
     ret = g_wrap_api->socket_fn(domain, type, protocol);
-    /* if udp_enable = 1 in lstack.conf, udp protocol must be in user path currently */
-    if ((ret >= 0) && (type & SOCK_DGRAM)) {
+    if (ret >= 0) {
         struct lwip_sock *sock = get_socket(ret);
-        if (sock != NULL && sock->conn != NULL) {
+        SET_CONN_TYPE_LIBOS_OR_HOST(sock->conn);
+        /* if udp_enable = 1 in lstack.conf, udp protocol must be in user path currently */
+        if (type & SOCK_DGRAM) {
             SET_CONN_TYPE_LIBOS(sock->conn);
         }
     }
