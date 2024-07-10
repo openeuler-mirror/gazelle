@@ -47,7 +47,7 @@ int rtw_accept4(int s, struct sockaddr *addr, socklen_t *addrlen, int flags)
 
 int rtw_bind(int s, const struct sockaddr *name, socklen_t namelen)
 {
-    struct lwip_sock *sock = get_socket_by_fd(s);
+    struct lwip_sock *sock = lwip_get_socket(s);
 
     if (NETCONN_IS_UDP(sock) && get_global_cfg_params()->listen_shadow) {
         return stack_broadcast_bind(s, name, namelen);
@@ -137,7 +137,7 @@ ssize_t rtw_write(int s, const void *mem, size_t size)
 
 ssize_t rtw_writev(int s, const struct iovec *iov, int iovcnt)
 {
-    struct lwip_sock *sock = get_socket_by_fd(s);
+    struct lwip_sock *sock = lwip_get_socket(s);
     struct msghdr msg;
 
     msg.msg_name = NULL;
@@ -167,14 +167,14 @@ ssize_t rtw_recvmsg(int s, const struct msghdr *message, int flags)
 
 ssize_t rtw_sendmsg(int s, const struct msghdr *message, int flags)
 {
-    struct lwip_sock *sock = get_socket_by_fd(s);
+    struct lwip_sock *sock = lwip_get_socket(s);
     return do_lwip_sendmsg_to_stack(sock, s, message, flags);
 }
 
 static ssize_t rtw_udp_recvfrom(int sockfd, void *buf, size_t len, int flags,
                                 struct sockaddr *addr, socklen_t *addrlen)
 {
-    struct lwip_sock *sock = get_socket_by_fd(sockfd);
+    struct lwip_sock *sock = lwip_get_socket(sockfd);
     int ret;
 
     while (1) {
@@ -210,7 +210,7 @@ static inline ssize_t rtw_tcp_recvfrom(int sockfd, void *buf, size_t len, int fl
 ssize_t rtw_recvfrom(int sockfd, void *buf, size_t len, int flags,
                      struct sockaddr *addr, socklen_t *addrlen)
 {
-    struct lwip_sock *sock = get_socket_by_fd(sockfd);
+    struct lwip_sock *sock = lwip_get_socket(sockfd);
     if (NETCONN_IS_UDP(sock)) {
         return rtw_udp_recvfrom(sockfd, buf, len, flags, addr, addrlen);
     } else {
@@ -241,7 +241,7 @@ int rtw_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
 
 int rtw_close(int s)
 {
-    struct lwip_sock *sock = get_socket(s);
+    struct lwip_sock *sock = lwip_get_socket(s);
     if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
         return lstack_epoll_close(s);
     }
@@ -250,7 +250,7 @@ int rtw_close(int s)
 
 int rtw_shutdown(int fd, int how)
 {
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock && sock->wakeup && sock->wakeup->epollfd == fd) {
         GAZELLE_RETURN(ENOTSOCK);
     }

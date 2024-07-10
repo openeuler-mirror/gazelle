@@ -125,7 +125,7 @@ void wrap_api_set_dummy(void)
 
 static inline int32_t do_epoll_create1(int32_t flags)
 {
-    if (select_posix_path() == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL) {
         return posix_api->epoll_create1_fn(flags);
     }
 
@@ -134,7 +134,7 @@ static inline int32_t do_epoll_create1(int32_t flags)
 
 static inline int32_t do_epoll_create(int32_t size)
 {
-    if (select_posix_path() == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL) {
         return posix_api->epoll_create_fn(size);
     }
 
@@ -143,7 +143,7 @@ static inline int32_t do_epoll_create(int32_t size)
 
 static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
 {
-    if (select_posix_path() == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
@@ -152,7 +152,7 @@ static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct 
 
 static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
 {
-    if (select_posix_path() == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL) {
         return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
     }
 
@@ -169,14 +169,14 @@ static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, in
 
 static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
 {
-    if (select_fd_posix_path(s, NULL) == PATH_KERNEL) {
+    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
         return posix_api->accept_fn(s, addr, addrlen);
     }
 
     int32_t fd = g_wrap_api->accept_fn(s, addr, addrlen);
     if (fd >= 0) {
-        struct lwip_sock *sock = get_socket(fd);
-        SET_CONN_TYPE_LIBOS(sock->conn);
+        struct lwip_sock *sock = lwip_get_socket(fd);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
         return fd;
     }
 
@@ -189,14 +189,14 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_fd_posix_path(s, NULL) == PATH_KERNEL) {
+    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
         return posix_api->accept4_fn(s, addr, addrlen, flags);
     }
 
     int32_t fd = g_wrap_api->accept4_fn(s, addr, addrlen, flags);
     if (fd >= 0) {
-        struct lwip_sock *sock = get_socket(fd);
-        SET_CONN_TYPE_LIBOS(sock->conn);
+        struct lwip_sock *sock = lwip_get_socket(fd);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
         return fd;
     }
 
@@ -210,13 +210,13 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
     }
 
     struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(s, &sock) == PATH_KERNEL) {
+    if (select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
         return posix_api->bind_fn(s, name, namelen);
     }
 
     /* select user path when udp enable and ip addr is multicast */
     if (IN_MULTICAST(ntohl(((struct sockaddr_in *)name)->sin_addr.s_addr))) {
-        SET_CONN_TYPE_LIBOS(sock->conn);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
         return g_wrap_api->bind_fn(s, name, namelen);
     }
 
@@ -233,7 +233,7 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
     if (match_host_addr(&sock_addr)) {
         /* maybe kni addr */
         if (posix_api->bind_fn(s, name, namelen) != 0) {
-            SET_CONN_TYPE_LIBOS(sock->conn);
+            POSIX_SET_TYPE(sock, POSIX_LWIP);
         } else {
             /* reuse the port allocated by kernel when port == 0 */
             if (((struct sockaddr_in *)name)->sin_port == 0) {
@@ -248,7 +248,7 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         }
         return g_wrap_api->bind_fn(s, name, namelen);
     } else {
-        SET_CONN_TYPE_HOST(sock->conn);
+        POSIX_SET_TYPE(sock, POSIX_KERNEL);
         return posix_api->bind_fn(s, name, namelen);
     }
 }
@@ -303,11 +303,11 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
     }
 
     struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(s, &sock) == PATH_KERNEL) {
+    if (select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
         return posix_api->connect_fn(s, name, namelen);
     }
 
-    sock = get_socket(s);
+    sock = lwip_get_socket(s);
     if (sock == NULL) {
         return posix_api->connect_fn(s, name, namelen);
     }
@@ -323,10 +323,10 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         "listen_rx_ring_%d", remote_port);
     if (is_local && rte_ring_lookup(listen_ring_name) == NULL) {
         ret = posix_api->connect_fn(s, name, namelen);
-        SET_CONN_TYPE_HOST(sock->conn);
+        POSIX_SET_TYPE(sock, POSIX_KERNEL);
     } else {
         ret = g_wrap_api->connect_fn(s, name, namelen);
-        SET_CONN_TYPE_LIBOS(sock->conn);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
     }
 
     return ret;
@@ -334,7 +334,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
 
 static inline int32_t do_listen(int32_t s, int32_t backlog)
 {
-    if (select_fd_posix_path(s, NULL) == PATH_KERNEL) {
+    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
         return posix_api->listen_fn(s, backlog);
     }
 
@@ -352,7 +352,7 @@ static inline int32_t do_getpeername(int32_t s, struct sockaddr *name, socklen_t
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_fd_posix_path(s, NULL) == PATH_LWIP) {
+    if (select_fd_posix_path(s, NULL) == POSIX_LWIP) {
         return g_wrap_api->getpeername_fn(s, name, namelen);
     }
 
@@ -365,7 +365,7 @@ static inline int32_t do_getsockname(int32_t s, struct sockaddr *name, socklen_t
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_fd_posix_path(s, NULL) == PATH_LWIP) {
+    if (select_fd_posix_path(s, NULL) == POSIX_LWIP) {
         return g_wrap_api->getsockname_fn(s, name, namelen);
     }
 
@@ -422,7 +422,7 @@ static bool unsupport_optname(int32_t level, int32_t optname)
 
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
-    if (select_fd_posix_path(s, NULL) == PATH_LWIP && !unsupport_optname(level, optname)) {
+    if (select_fd_posix_path(s, NULL) == POSIX_LWIP && !unsupport_optname(level, optname)) {
         return g_wrap_api->getsockopt_fn(s, level, optname, optval, optlen);
     }
 
@@ -431,7 +431,7 @@ static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, v
 
 static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, const void *optval, socklen_t optlen)
 {
-    if (select_fd_posix_path(s, NULL) == PATH_KERNEL || unsupport_optname(level, optname)) {
+    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL || unsupport_optname(level, optname)) {
         return posix_api->setsockopt_fn(s, level, optname, optval, optlen);
     }
 
@@ -445,7 +445,7 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 {
     int32_t ret;
     /* process not init completed or not hajacking thread */
-    if (select_posix_path() == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL) {
         return posix_api->socket_fn(domain, type, protocol);
     }
 
@@ -457,11 +457,11 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 
     ret = g_wrap_api->socket_fn(domain, type, protocol);
     if (ret >= 0) {
-        struct lwip_sock *sock = get_socket(ret);
-        SET_CONN_TYPE_LIBOS_OR_HOST(sock->conn);
+        struct lwip_sock *sock = lwip_get_socket(ret);
+        POSIX_SET_TYPE(sock, POSIX_LWIP | POSIX_KERNEL);
         /* if udp_enable = 1 in lstack.conf, udp protocol must be in user path currently */
         if (type & SOCK_DGRAM) {
-            SET_CONN_TYPE_LIBOS(sock->conn);
+            POSIX_SET_TYPE(sock, POSIX_LWIP);
         }
     }
 
@@ -478,8 +478,8 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
         return 0;
     }
 
-    if (select_posix_path() == PATH_KERNEL || // maybe fd is created by open before posix_api_init called
-        select_fd_posix_path(sockfd, NULL) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL || // maybe fd is created by open before posix_api_init called
+        select_fd_posix_path(sockfd, NULL) == POSIX_KERNEL) {
         return posix_api->recv_fn(sockfd, buf, len, flags);
     }
 
@@ -496,8 +496,8 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
         return 0;
     }
 
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(s, NULL) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
         return posix_api->read_fn(s, mem, len);
     }
 
@@ -506,8 +506,8 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 
 static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 {
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(s, NULL) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
         return posix_api->readv_fn(s, iov, iovcnt);
     }
 
@@ -516,8 +516,8 @@ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
 {
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(sockfd, NULL) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(sockfd, NULL) == POSIX_KERNEL) {
         return posix_api->send_fn(sockfd, buf, len, flags);
     }
 
@@ -526,8 +526,8 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
 
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 {
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(s, NULL) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
         return posix_api->write_fn(s, mem, size);
     }
 
@@ -537,8 +537,8 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
 {
     struct lwip_sock *sock;
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(s, &sock) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
         return posix_api->writev_fn(s, iov, iovcnt);
     }
 
@@ -551,8 +551,8 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(s, NULL) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
         return posix_api->recv_msg(s, message, flags);
     }
 
@@ -566,8 +566,8 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
     }
 
     struct lwip_sock *sock;
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(s, &sock) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
         return posix_api->send_msg(s, message, flags);
     }
 
@@ -586,7 +586,7 @@ static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t
     }
 
     struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(sockfd, &sock) == PATH_LWIP) {
+    if (select_fd_posix_path(sockfd, &sock) == POSIX_LWIP) {
         return g_wrap_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
     }
 
@@ -597,7 +597,7 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
                                 const struct sockaddr *addr, socklen_t addrlen)
 {
     struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(sockfd, &sock) != PATH_LWIP) {
+    if (select_fd_posix_path(sockfd, &sock) != POSIX_LWIP) {
         return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
     }
 
@@ -607,8 +607,8 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
 static inline int32_t do_close(int32_t s)
 {
     struct lwip_sock *sock = NULL;
-    if (select_posix_path() == PATH_KERNEL ||
-        select_fd_posix_path(s, &sock) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL ||
+        select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
         /* we called lwip_socket, even if kernel fd */
         if (posix_api != NULL && !posix_api->ues_posix &&
             /* contain posix_api->close_fn if success */
@@ -624,7 +624,7 @@ static inline int32_t do_close(int32_t s)
 static int32_t do_shutdown(int fd, int how)
 {
     struct lwip_sock *sock = NULL;
-    if (select_posix_path() == PATH_KERNEL || select_fd_posix_path(fd, &sock) == PATH_KERNEL) {
+    if (select_posix_path() == POSIX_KERNEL || select_fd_posix_path(fd, &sock) == POSIX_KERNEL) {
         if (posix_api != NULL && !posix_api->ues_posix && g_wrap_api->shutdown_fn(fd, how) == 0) {
             return 0;
         } else {
@@ -637,7 +637,7 @@ static int32_t do_shutdown(int fd, int how)
 
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
-    if ((select_posix_path() == PATH_KERNEL) || fds == NULL || nfds == 0) {
+    if ((select_posix_path() == POSIX_KERNEL) || fds == NULL || nfds == 0) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 
@@ -676,7 +676,7 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
 
 static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
 {
-    if ((select_posix_path() == PATH_KERNEL) || !(readfds || writefds || exceptfds) || nfds == 0) {
+    if ((select_posix_path() == POSIX_KERNEL) || !(readfds || writefds || exceptfds) || nfds == 0) {
         return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
     }
     
@@ -691,8 +691,8 @@ static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set
         val = va_arg(ap, typeof(val)); \
         va_end(ap); \
         struct lwip_sock *sock = NULL; \
-        if (select_posix_path() == PATH_KERNEL || \
-            select_fd_posix_path(_fd, &sock) == PATH_KERNEL) \
+        if (select_posix_path() == POSIX_KERNEL || \
+            select_fd_posix_path(_fd, &sock) == POSIX_KERNEL) \
             return _fcntl_fn(_fd, _cmd, val); \
         int32_t ret1 = _fcntl_fn(_fd, _cmd, val); \
         if (ret1 == -1) { \

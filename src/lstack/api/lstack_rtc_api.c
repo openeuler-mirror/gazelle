@@ -50,8 +50,8 @@ int rtc_socket(int domain, int type, int protocol)
     
     /* need call stack thread init function */
     ret = lwip_socket(domain, type, protocol);
-    struct lwip_sock *sock = get_socket(ret);
-    if (sock != NULL) {
+    if (ret >= 0) {
+        struct lwip_sock *sock = lwip_get_socket(ret);
         sock->stack = get_protocol_stack();
         sock->epoll_events = 0;
         sock->events = 0;
@@ -63,7 +63,7 @@ int rtc_socket(int domain, int type, int protocol)
 
 int rtc_close(int s)
 {
-    struct lwip_sock *sock = get_socket(s);
+    struct lwip_sock *sock = lwip_get_socket(s);
     if (sock != NULL && sock->wakeup != NULL && sock->wakeup->epollfd == s) {
         return lstack_epoll_close(s);
     }
