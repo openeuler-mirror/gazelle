@@ -51,7 +51,7 @@ struct gazelle_tcp_sock_htable *gazelle_tcp_sock_htable_create(uint32_t max_tcp_
     }
 
     for (i = 0; i < GAZELLE_MAX_TCP_SOCK_HTABLE_SIZE; i++) {
-        INIT_HLIST_HEAD(&tcp_sock_htable->array[i].chain);
+        hlist_init_head(&tcp_sock_htable->array[i].chain);
         tcp_sock_htable->array[i].chain_size = 0;
     }
     tcp_sock_htable->cur_tcp_sock_num = 0;
@@ -77,7 +77,7 @@ void gazelle_tcp_sock_htable_destroy(void)
         while (node != NULL) {
             tcp_sock = hlist_entry(node, typeof(*tcp_sock), tcp_sock_node);
             node = node->next;
-            hlist_del_init(&tcp_sock->tcp_sock_node);
+            hlist_del_node(&tcp_sock->tcp_sock_node);
             free(tcp_sock);
         }
     }
@@ -186,7 +186,7 @@ void gazelle_sock_del_by_ipporttid(struct gazelle_tcp_sock_htable *tcp_sock_htab
         return;
     }
 
-    hlist_del_init(&tcp_sock->tcp_sock_node);
+    hlist_del_node(&tcp_sock->tcp_sock_node);
     free(tcp_sock);
     tcp_sock_htable->cur_tcp_sock_num--;
     tcp_sock_hbucket->chain_size--;

@@ -43,7 +43,7 @@ struct gazelle_stack_htable *gazelle_stack_htable_create(uint32_t max_stack_num)
     }
 
     for (i = 0; i < GAZELLE_MAX_STACK_HTABLE_SIZE; i++) {
-        INIT_HLIST_HEAD(&stack_htable->array[i].chain);
+        hlist_init_head(&stack_htable->array[i].chain);
         stack_htable->array[i].chain_size = 0;
     }
     stack_htable->cur_stack_num = 0;
@@ -68,7 +68,7 @@ void gazelle_stack_htable_destroy(void)
         while (node != NULL) {
             stack = hlist_entry(node, typeof(*stack), stack_node);
             node = node->next;
-            hlist_del_init(&stack->stack_node);
+            hlist_del_node(&stack->stack_node);
             free(stack);
         }
     }
@@ -181,7 +181,7 @@ void gazelle_stack_del_by_tid(struct gazelle_stack_htable *stack_htable, uint32_
         }
     }
 
-    hlist_del_init(&stack->stack_node);
+    hlist_del_node(&stack->stack_node);
     stack_htable->cur_stack_num--;
     stack_hbucket->chain_size--;
 
