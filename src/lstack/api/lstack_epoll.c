@@ -650,7 +650,9 @@ int32_t lstack_rtc_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
             }
         }
         if (tmptimeout > 0) {
-            tmptimeout = update_timeout(tmptimeout, poll_ts);
+            if (tmptimeout <= sys_now() - poll_ts) {
+                tmptimeout = 0;
+            }
         }
 
         loop_flag = false;

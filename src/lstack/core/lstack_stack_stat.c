@@ -31,25 +31,6 @@
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"
 
-#define US_PER_SEC  1000000
-
-static uint64_t g_cycles_per_us;
-
-void stack_stat_init(void)
-{
-    uint64_t freq = rte_get_tsc_hz();
-    g_cycles_per_us = (freq + US_PER_SEC - 1) / US_PER_SEC;
-}
-
-uint64_t get_current_time(void)
-{
-    if (g_cycles_per_us == 0) {
-        return 0;
-    }
-
-    return (rte_rdtsc() / g_cycles_per_us);
-}
-
 void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new)
 {
     if (!get_protocol_stack_group()->latency_start) {
@@ -71,12 +52,12 @@ void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new)
 
 void time_stamp_into_rpcmsg(struct lwip_sock *sock)
 {
-    sock->stamp.rpc_time_stamp = get_current_time();
+    sock->stamp.rpc_time_stamp = sys_now_us();
 }
 
 void time_stamp_into_recvmbox(struct lwip_sock *sock)
 {
-    sock->stamp.mbox_time_stamp = get_current_time();
+    sock->stamp.mbox_time_stamp = sys_now_us();
 }
 
 void time_stamp_record(int fd, struct pbuf *pbuf)
@@ -108,7 +89,7 @@ void calculate_sock_latency(struct gazelle_stack_latency *stack_latency, struct 
         return;
     }
 
-    latency = get_current_time() - stamp;
+    latency = sys_now_us() - stamp;
     latency_stat = &stack_latency->latency[type];
 
     latency_stat->latency_total += latency;
@@ -147,7 +128,7 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
     }
 
     if (time_record == 0) {
-        lt->stamp_seg[type] = get_current_time() - lt->stamp;
+        lt->stamp_seg[type] = sys_now_us() - lt->stamp;
     } else {
         lt->stamp_seg[type] = time_record > (lt->stamp_seg[type - 1] + lt->stamp) ?
             (time_record - lt->stamp) : lt->stamp_seg[type - 1];
@@ -212,7 +193,7 @@ static void set_latency_start_flag(bool start)
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "memset_s faile\n");
         }
-        stack->latency.start_time = get_current_time();
+        stack->latency.start_time = sys_now_us();
 
         for (uint32_t j = 0; j < GAZELLE_LATENCY_MAX; j++) {
             stack->latency.latency[j].latency_min = ~((uint64_t)0);

@@ -21,6 +21,7 @@
 #include <lwip/ethip6.h>
 #include <lwip/lwipgz_posix_api.h>
 #include <netif/ethernet.h>
+#include <arch/sys_arch.h>
 
 #include <securec.h>
 
@@ -181,7 +182,7 @@ int32_t eth_dev_poll(void)
     }
 
     if (!use_ltran() && get_protocol_stack_group()->latency_start) {
-        uint64_t time_stamp = get_current_time();
+        uint64_t time_stamp = sys_now_us();
         time_stamp_into_mbuf(nr_pkts, stack->pkts, time_stamp);
     }
 

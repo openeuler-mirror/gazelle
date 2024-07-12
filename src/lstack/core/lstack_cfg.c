@@ -25,7 +25,6 @@
 
 #include <rte_eth_bond.h>
 #include <lwip/lwipgz_sock.h>
-#include <lwip/lwipgz_posix_api.h>
 #include <lwip/inet.h>
 
 #include "common/gazelle_reg_msg.h"
