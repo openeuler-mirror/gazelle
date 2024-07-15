@@ -319,10 +319,14 @@ static err_t eth_dev_init(struct netif *netif)
 int32_t ethdev_init(struct protocol_stack *stack)
 {
     struct cfg_params *cfg = get_global_cfg_params();
-
+    int ret = 0;
+    
     vdev_dev_ops_init(&stack->dev_ops);
     if (cfg->send_cache_mode) {
-        tx_cache_init(stack->queue_id, stack, &stack->dev_ops);
+        ret = tx_cache_init(stack->queue_id, stack, &stack->dev_ops);
+        if (ret < 0) {
+            return ret;
+        }
     }
 
     if (use_ltran()) {

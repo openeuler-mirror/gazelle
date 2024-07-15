@@ -740,6 +740,7 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
     wakeup->events = calloc(POLL_KERNEL_EVENTS, sizeof(struct epoll_event));
     if (wakeup->events == NULL) {
         free(wakeup->last_fds);
+        wakeup->last_fds = NULL;
         GAZELLE_RETURN(EINVAL);
     }
 
@@ -760,7 +761,7 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
     return 0;
 }
 
-static void resize_kernel_poll(struct wakeup_poll *wakeup, nfds_t nfds)
+static int resize_kernel_poll(struct wakeup_poll *wakeup, nfds_t nfds)
 {
     if (wakeup->last_fds) {
         free(wakeup->last_fds);
@@ -768,6 +769,7 @@ static void resize_kernel_poll(struct wakeup_poll *wakeup, nfds_t nfds)
     wakeup->last_fds = calloc(nfds, sizeof(struct pollfd));
     if (wakeup->last_fds == NULL) {
         LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
+        return -1;
     }
 
     if (wakeup->events) {
@@ -776,9 +778,12 @@ static void resize_kernel_poll(struct wakeup_poll *wakeup, nfds_t nfds)
     wakeup->events = calloc(nfds, sizeof(struct epoll_event));
     if (wakeup->events == NULL) {
         LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
+        free(wakeup->last_fds);
+        return -1;
     }
 
     wakeup->last_max_nfds = nfds;
+    return 0;
 }
 
 static void poll_bind_statck(struct wakeup_poll *wakeup, int32_t *stack_count)
@@ -811,14 +816,18 @@ static void update_kernel_poll(struct wakeup_poll *wakeup, uint32_t index, struc
     }
 }
 
-static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfds)
+static int poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfds)
 {
     int32_t stack_count[PROTOCOL_STACK_MAX] = {0};
     int32_t poll_change = 0;
+    int ret = 0;
 
     /* poll fds num more, recalloc fds size */
     if (nfds > wakeup->last_max_nfds) {
-        resize_kernel_poll(wakeup, nfds);
+        ret = resize_kernel_poll(wakeup, nfds);
+        if (ret < 0) {
+            return -1;
+        }
         poll_change = 1;
     }
 
@@ -855,13 +864,14 @@ static void poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfd
     }
 
     if (poll_change == 0) {
-        return;
+        return 0;
     }
     wakeup->last_nfds = nfds;
 
     if (get_global_cfg_params()->app_bind_numa) {
         poll_bind_statck(wakeup, stack_count);
     }
+    return 0;
 }
 
 int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
@@ -880,7 +890,10 @@ int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
         }
     }
 
-    poll_init(wakeup, fds, nfds);
+    if (poll_init(wakeup, fds, nfds) < 0) {
+        free(wakeup);
+        GAZELLE_RETURN(EINVAL);
+    }
 
     int32_t kernel_num = 0;
     int32_t lwip_num = 0;

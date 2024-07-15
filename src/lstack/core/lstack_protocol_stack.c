@@ -1000,7 +1000,7 @@ void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack
             return;
         }
         copy_mbuf(mbuf_copy, mbuf);
-        virtio_tap_process_tx(stack->queue_id, mbuf_copy);
+        virtio_tap_process_tx(cur_stack->queue_id, mbuf_copy);
     }
     return;
 }

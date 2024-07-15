@@ -333,7 +333,7 @@ static ssize_t do_app_write(struct lwip_sock *sock, struct pbuf *pbufs[], void *
     }
 
     /* reduce the branch in loop */
-    uint16_t copy_len = len - send_len;
+    size_t copy_len = len - send_len;
     rte_memcpy((char *)pbufs[i]->payload, (char *)buf + send_len, copy_len);
     pbufs[i]->tot_len = pbufs[i]->len = copy_len;
     send_len += copy_len;
@@ -1358,12 +1358,13 @@ void netif_poll(struct netif *netif)
 /* processes on same node handshake packet use this function */
 err_t netif_loop_output(struct netif *netif, struct pbuf *p)
 {
-    if (p != NULL) {
-        const struct ip_hdr *iphdr;
-        iphdr = (const struct ip_hdr *)p->payload;
-        if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
-            return udp_netif_loop_output(netif, p);
-        }
+    if (!p) {
+        return ERR_ARG;
+    }
+    const struct ip_hdr *iphdr;
+    iphdr = (const struct ip_hdr *)p->payload;
+    if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
+        return udp_netif_loop_output(netif, p);
     }
 
     struct tcp_pcb *pcb = p->pcb;
