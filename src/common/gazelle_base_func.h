@@ -36,7 +36,8 @@ int32_t filename_check(const char* args);
 
 void gazelle_exit(void);
 
-#undef container_of
-#define container_of(ptr, type, field) ((type *)(void*)(((char *)(ptr)) - offsetof(type, field)))
+/* Do not check if the type of ptr and type->member are the same */
+#define container_of_uncheck_ptr(ptr, type, member) \
+    ((type *)(void*)(((char *)(ptr)) - offsetof(type, member)))
 
 #endif /* ifndef __GAZELLE_BASE_FUNC_H__ */
