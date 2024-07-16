@@ -113,8 +113,16 @@ void gazelle_exit(void)
     /* 1: wait until app thread call send functio complete */
     sleep(1);
     stack_group_exit();
+}
 
+void dpdk_exit(void)
+{
     if (!use_ltran()) {
+        int ret = rte_pdump_uninit();
+        if (ret < 0) {
+            LSTACK_LOG(ERR, LSTACK, "rte_pdump_uninit failed\n");
+        }
+
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
         dpdk_kni_release();
 #endif
@@ -126,13 +134,7 @@ __attribute__((destructor)) void gazelle_network_exit(void)
     if (posix_api != NULL && !posix_api->ues_posix) {
         lwip_exit();
         gazelle_exit();
-    }
-
-    if (!use_ltran()) {
-        int32_t ret = rte_pdump_uninit();
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "rte_pdump_uninit failed\n");
-        }
+        dpdk_exit();
     }
 }
 
