@@ -38,6 +38,7 @@
 #define GAZELLE_OPTIONS_ARG_IDX  3
 #define GAZELLE_OPTIONS1_ARG_IDX 4
 #define GAZELLE_OPTIONS2_ARG_IDX 5
+#define GAZELLE_OPTIONS3_ARG_IDX 6
 #define GAZELLE_OPT_LPM_ARG_IDX1 5
 
 #define GAZELLE_PARAM_MINNUM     2
@@ -138,6 +139,13 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
 static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_stat_proto(void *buf, const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_total_stat_memory(void *buf,  const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_lstack_stat_memory(void *buf, const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_socket_stat_memory(uint32_t idx, struct gazelle_socket_mem_info *socket_info);
+static void gazelle_print_lstack_mem_general(
+    struct gazelle_stack_dfx_data *buf,
+    const struct gazelle_stat_msg_request *req_msg
+);
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
 static void gazelle_print_fault_inject_set_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
@@ -172,6 +180,7 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LSTACK_SHOW_AGGREGATE, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_aggregate},
     {GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_nic_features},
     {GAZELLE_STAT_LSTACK_SHOW_PROTOCOL,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_proto},
+    {GAZELLE_STAT_LSTACK_SHOW_MEMORY_USAGE, sizeof(struct gazelle_stack_dfx_data), gazelle_print_total_stat_memory}
     
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
     {GAZELLE_STAT_FAULT_INJECT_SET, sizeof(struct gazelle_stack_dfx_data), gazelle_print_fault_inject_set_status},
@@ -180,6 +189,8 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
 };
 
 static int32_t g_wait_reply = 1;
+static int32_t g_repeat_time = 0;
+static int32_t g_repeat_interval = 1;
 
 static double rate_convert_type(uint64_t bytes, char **type)
 {
@@ -1197,6 +1208,108 @@ static void gazelle_print_lstack_stat_proto(void *buf, const struct gazelle_stat
     } while (true);
 }
 
+static void  gazelle_print_socket_stat_memory(uint32_t idx, struct gazelle_socket_mem_info *socket_info)
+{
+    struct gazelle_socket_mem_info *si = socket_info;
+    /* "No.","fd","info","rpc_mempool","send_ring","recv_ring","recvmbox","acceptmbox" */
+    printf("%-8d%-6d%-15s%-12.6lf%-12.6lf%-12.6lf%-12.6lf\n", idx, si->fd, "total_mem(M)",
+        si->send_ring_info.total_mem, si->recv_ring_info.total_mem,
+        si->recvmbox_info.total_mem, si->acceptmbox_info.total_mem);
+    printf("%14s%-15s%-12.6lf%-12.6lf%-12.6lf%-12.6lf\n", "", "avail_mem(M)",
+        si->send_ring_info.avail_mem, si->recv_ring_info.avail_mem,
+        si->recvmbox_info.avail_mem, si->acceptmbox_info.avail_mem);
+    printf("%14s%-15s%-12d%-12d%-12d%-12d\n", "", "total_size",
+        si->send_ring_info.total_size, si->recv_ring_info.total_size,
+        si->recvmbox_info.total_size, si->acceptmbox_info.total_size);
+    printf("%14s%-15s%-12d%-12d%-12d%-12d\n", "", "avail_size",
+        si->send_ring_info.avail_size, si->recv_ring_info.avail_size,
+        si->recvmbox_info.avail_size, si->acceptmbox_info.avail_size);
+}
+
+static void gazelle_print_lstack_stat_memory(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
+    struct gazelle_stat_lstack_memory* mem_usage = NULL;
+    double rxtxpool_percent = 0;
+    double rpcpool_percent = 0;
+    double sndring_total = 0;
+    time_t rawtime;
+    struct tm *timeinfo;
+    char timestamp[80];
+    struct gazelle_socket_mem_info *socket;
+
+    mem_usage = &stat->data.mem_usage;
+    if (mem_usage->rxtx_mempool.total_mem != 0) {
+        rxtxpool_percent = PERCENTAGE(mem_usage->rxtx_mempool.avail_mem / mem_usage->rxtx_mempool.total_mem);
+    }
+    if (mem_usage->rpc_mempool.total_mem != 0) {
+        rpcpool_percent = PERCENTAGE(mem_usage->rpc_mempool.avail_mem / mem_usage->rpc_mempool.total_mem);
+    }
+    if (time(&rawtime)) {
+        timeinfo = localtime(&rawtime);
+        if (strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo) <= 0) {
+            strcpy(timestamp, "strftime error");
+        }
+    } else {
+        strcpy(timestamp, "time error");
+    }
+    printf("------ stack tid: %6u ------ time = %s\n", stat->tid, timestamp);
+    printf("rxtx_mempool(M): %.6lf\n", mem_usage->rxtx_mempool.total_mem);
+    printf("avail mem: %.6lf(%.3lf%%)\n", mem_usage->rxtx_mempool.avail_mem, rxtxpool_percent);
+    printf("\nrpc_mempool(M): %.6lf\n", mem_usage->rpc_mempool.total_mem);
+    printf("avail mem: %.6lf(%.3lf%%)\n", mem_usage->rpc_mempool.avail_mem, rpcpool_percent);
+    printf("\nnic rx_queue(M): %.6lf\n", mem_usage->rx_queue_mem);
+    printf("nic tx_queue(M): %.6lf\n\n", mem_usage->tx_queue_mem);
+
+    printf("%-8s%-6s%-15s%-12s%-12s%-12s%-12s\n",
+        "No.", "fd", "info", "send_ring", "recv_ring", "recvmbox", "acceptmbox");
+    for (int i = 0; i < mem_usage->sock_num; i++) {
+        socket = &mem_usage->sockets[i];
+        gazelle_print_socket_stat_memory(i, socket);
+        sndring_total += socket->send_ring_info.total_mem;
+    }
+    printf("\ntotal send ring mem(M): %.6lf\n", sndring_total);
+    printf("\n");
+}
+
+static void gazelle_print_lstack_mem_general(
+    struct gazelle_stack_dfx_data *buf,
+    const struct gazelle_stat_msg_request *req_msg
+)
+{
+    struct gazelle_general_lstack_memory general_mem_info = buf->general_mem_info;
+    printf("size(M) total: %.6lf\n", general_mem_info.total_mem);
+    printf("alloc: %.6lf(%.3lf%%)\n", general_mem_info.alloc_mem,
+        PERCENTAGE(general_mem_info.alloc_mem / general_mem_info.total_mem));
+    printf("free: %.6lf\n", general_mem_info.free_mem);
+    printf("\n");
+
+    printf("fixed alloc mem(M): %.6lf\n", general_mem_info.fixed_mem);
+    printf("\n");
+}
+
+static void gazelle_print_total_stat_memory(void *buf,  const struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t general_mem_info_show = 1;
+    (void)req_msg;
+    do {
+        if (general_mem_info_show == 0) {
+            int32_t ret = read_specied_len(g_unix_fd, (char *)buf, sizeof(struct gazelle_stack_dfx_data));
+            if (ret != GAZELLE_OK) {
+                break;
+            }
+        }
+        if (general_mem_info_show != 0) {
+            gazelle_print_lstack_mem_general((struct gazelle_stack_dfx_data *)buf, req_msg);
+            general_mem_info_show = 0;
+        }
+        gazelle_print_lstack_stat_memory(buf, req_msg);
+        if (((struct gazelle_stat_lstack_total *)buf)->eof) {
+            break;
+        }
+    } while (true);
+}
+
 static void gazelle_print_lstack_stat_virtio(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
     struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
@@ -1351,6 +1464,7 @@ static void show_usage(void)
            "  -k, nic-features     show state of protocol offload and other features \n"
            "  -a, aggregatin  [time]   show lstack send/recv aggregation \n"
            "  -p, protocol    {UDP | TCP | IP | ETHARP | ICMP | IGMP} show lstack protocol statistics \n"
+           "  -m, memory      [time] [interval]  show lstack memory usage \n"
            "  set: \n"
            "  loglevel        {error | info | debug}  set lstack loglevel \n"
            "  lowpower        {0 | 1}  set lowpower enable \n"
@@ -1559,6 +1673,29 @@ static int parse_delay_arg(int32_t argc, char *argv[], long int delay)
     return 0;
 }
 
+static int parse_repeat_arg(int32_t argc, char *argv[])
+{
+    int32_t time = 0;
+    int32_t interval = 1;
+    char *end = NULL;
+    
+    if (argc > GAZELLE_OPTIONS3_ARG_IDX) {
+        time = strtol(argv[GAZELLE_OPTIONS2_ARG_IDX], NULL, GAZELLE_DECIMAL);
+        if (time > GAZELLE_MAX_LATENCY_TIME) {
+            printf("Exceeds the maximum(30mins) repeat time, will be set to maximum(30mins)\n");
+            time = GAZELLE_MAX_LATENCY_TIME;
+        }
+        interval = strtol(argv[GAZELLE_OPTIONS3_ARG_IDX], &end, GAZELLE_DECIMAL);
+        if (interval <= 0 || (end == NULL) || (*end != '\0')) {
+            return -1;
+        }
+    }
+    g_repeat_time = time;
+    g_repeat_interval = interval;
+    return 0;
+}
+
+
 static int32_t parse_dfx_lstack_show_proto_args(int32_t argc, char *argv[], struct gazelle_stat_msg_request *req_msg)
 {
     int32_t cmd_index = 0;
@@ -1628,6 +1765,11 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES;
     } else if (strcmp(param, "protocol") == 0 || strcmp(param, "-p") == 0) {
 	    cmd_index = parse_dfx_lstack_show_proto_args(argc, argv, req_msg);
+    } else if (strcmp(param, "-m") == 0 || strcmp(param, "memory")) {
+        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_MEMORY_USAGE;
+        if (parse_repeat_arg(argc, argv) != 0) {
+            return 0;
+        }
     }
     return cmd_index;
 }
@@ -2014,6 +2156,7 @@ int32_t dfx_loop(struct gazelle_stat_msg_request *req_msg, int32_t req_msg_num)
 {
     int32_t ret;
     int32_t msg_index = 0;
+    int32_t interval = 0;
     struct gazelle_dfx_list *dfx = NULL;
     char recv_buf[GAZELLE_CMD_RESP_BUFFER_SIZE + 1] = {0};
 
@@ -2041,7 +2184,13 @@ int32_t dfx_loop(struct gazelle_stat_msg_request *req_msg, int32_t req_msg_num)
             g_unix_fd = -1;
         }
 
+        interval++;
+        if (interval < g_repeat_interval && g_repeat_time != 0) {
+            sleep(g_repeat_time);
+            continue;
+        }
         msg_index++;
+        interval = 0;
         if (msg_index >= req_msg_num) {
             break;
         }

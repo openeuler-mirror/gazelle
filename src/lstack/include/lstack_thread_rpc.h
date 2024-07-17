@@ -25,6 +25,8 @@
 #define MSG_ARG_4                      (4)
 #define RPM_MSG_ARG_SIZE               (5)
 
+#define GAZELLE_MEMPOOL_MAX_NAME       26
+
 typedef struct lockless_queue rpc_queue;
 
 struct rpc_stats {
@@ -47,6 +49,15 @@ union rpc_msg_arg {
 struct rpc_msg_pool {
     struct rte_mempool *mempool;
 };
+
+struct rpc_mempool_info {
+    char name[GAZELLE_MEMPOOL_MAX_NAME];
+    uint32_t size;
+    uint32_t obj_total;
+    uint32_t obj_size;
+    uint32_t remain_size;
+};
+
 struct rpc_msg {
     pthread_spinlock_t lock; /* msg handler unlock notice sender msg process done */
     int8_t sync_flag : 1;
@@ -66,6 +77,7 @@ static inline void rpc_queue_init(rpc_queue *queue)
 }
 
 struct rpc_stats *rpc_stats_get(void);
+struct rte_mempool *rpc_pool_get(void);
 int32_t rpc_msgcnt(rpc_queue *queue);
 int rpc_poll_msg(rpc_queue *queue, uint32_t max_num);
 void rpc_call_clean_epoll(rpc_queue *queue, void *wakeup);
@@ -94,6 +106,7 @@ int32_t rpc_call_ioctl(rpc_queue *queue, int fd, long cmd, void *argp);
 int32_t rpc_call_replenish(rpc_queue *queue, void *sock);
 int32_t rpc_call_mbufpoolsize(rpc_queue *queue);
 int32_t rpc_call_stack_exit(rpc_queue *queue);
+int32_t rpc_call_lstack_mem(rpc_queue* queue, void* memory);
 
 static inline __attribute__((always_inline)) void rpc_call(rpc_queue *queue, struct rpc_msg *msg)
 {

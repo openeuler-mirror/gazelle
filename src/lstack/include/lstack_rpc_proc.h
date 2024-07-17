@@ -38,6 +38,8 @@ void stack_create_shadow_fd(struct rpc_msg *msg);
 void stack_replenish_sendring(struct rpc_msg *msg);
 void stack_get_conntable(struct rpc_msg *msg);
 void stack_get_connnum(struct rpc_msg *msg);
+void stack_get_mem_info(struct gazelle_stat_lstack_memory *memory);
+void stack_get_total_mem(struct rpc_msg *msg);
 void stack_recvlist_count(struct rpc_msg *msg);
 void stack_exit_by_rpc(struct rpc_msg *msg);
 
