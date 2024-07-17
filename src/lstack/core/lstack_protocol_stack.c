@@ -424,11 +424,6 @@ static struct protocol_stack *stack_thread_init(void *arg)
     }
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
-    if (hugepage_init() != 0) {
-        LSTACK_LOG(ERR, LSTACK, "hugepage init failed\n");
-        goto END;
-    }
-
     tcpip_init(NULL, NULL);
 
     if (use_ltran()) {
@@ -714,12 +709,9 @@ void stack_arp(struct rpc_msg *msg)
 
 void stack_socket(struct rpc_msg *msg)
 {
-    msg->result = do_lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
+    msg->result = lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
     if (msg->result < 0) {
-        msg->result = do_lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
-        if (msg->result < 0) {
-            LSTACK_LOG(ERR, LSTACK, "tid %ld, %ld socket failed\n", get_stack_tid(), msg->result);
-        }
+        LSTACK_LOG(ERR, LSTACK, "tid %ld, %ld socket failed\n", get_stack_tid(), msg->result);
     }
 }
 
@@ -735,7 +727,7 @@ void stack_close(struct rpc_msg *msg)
         return;
     }
     
-    msg->result = do_lwip_close(fd);
+    msg->result = lwip_close(fd);
     if (msg->result != 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
@@ -803,7 +795,7 @@ void stack_accept(struct rpc_msg *msg)
 
     struct lwip_sock *sock = get_socket(accept_fd);
     if (sock == NULL || sock->stack == NULL) {
-        do_lwip_close(accept_fd);
+        lwip_close(accept_fd);
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
     }
@@ -1046,12 +1038,8 @@ void stack_create_shadow_fd(struct rpc_msg *msg)
     }
 
     int domain = addr->sa_family;
-    if (NETCONN_IS_UDP(sock)) {
-        clone_fd = do_lwip_socket(domain, SOCK_DGRAM, 0);
-    } else {
-        clone_fd = do_lwip_socket(domain, SOCK_STREAM, 0);
-    }
-
+    int type = NETCONN_IS_UDP(sock) ? SOCK_DGRAM : SOCK_STREAM;
+    clone_fd = lwip_socket(domain, type, 0);
     if (clone_fd < 0) {
         LSTACK_LOG(ERR, LSTACK, "clone socket failed clone_fd=%d errno=%d\n", clone_fd, errno);
         msg->result = clone_fd;
@@ -1370,7 +1358,7 @@ static void stack_all_fds_close(void)
     for (int i = 3; i < GAZELLE_MAX_CLIENTS + GAZELLE_RESERVED_CLIENTS; i++) {
         struct lwip_sock *sock = get_socket(i);
         if (sock && sock->stack == get_protocol_stack()) {
-            do_lwip_close(i);
+            lwip_close(i);
         }
     }
 }

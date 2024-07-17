@@ -313,9 +313,6 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
-    /* lwip initialization */
-    lwip_sock_init();
-
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     if (get_global_cfg_params()->kni_switch) {
         set_kni_ip_mac();

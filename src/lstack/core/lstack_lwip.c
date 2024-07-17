@@ -144,12 +144,12 @@ static bool replenish_send_idlembuf(struct protocol_stack *stack, struct lwip_so
     return false;
 }
 
-void do_lwip_init_sock(int32_t fd)
+int do_lwip_init_sock(int32_t fd)
 {
     struct protocol_stack *stack = get_protocol_stack();
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = get_socket_by_fd(fd);
     if (sock == NULL) {
-        return;
+        return -1;
     }
 
     reset_sock_data(sock);
@@ -157,7 +157,7 @@ void do_lwip_init_sock(int32_t fd)
     sock->recv_ring = gazelle_ring_create_fast("sock_recv", SOCK_RECV_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ);
     if (sock->recv_ring == NULL) {
         LSTACK_LOG(ERR, LSTACK, "sock_recv create failed. errno: %d.\n", rte_errno);
-        return;
+        return -1;
     }
 
     sock->send_ring = gazelle_ring_create_fast("sock_send",
@@ -166,7 +166,7 @@ void do_lwip_init_sock(int32_t fd)
     if (sock->send_ring == NULL) {
         gazelle_ring_free_fast(sock->recv_ring);
         LSTACK_LOG(ERR, LSTACK, "sock_send create failed. errno: %d.\n", rte_errno);
-        return;
+        return -1;
     }
     (void)replenish_send_idlembuf(stack, sock);
 
@@ -174,6 +174,7 @@ void do_lwip_init_sock(int32_t fd)
 
     init_list_node_null(&sock->recv_list);
     init_list_node_null(&sock->event_list);
+    return 0;
 }
 
 void do_lwip_clean_sock(int fd)
@@ -1237,32 +1238,6 @@ void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_soc
     }
 }
 
-int do_lwip_close(int fd)
-{
-    int ret = lwip_close(fd);
-    do_lwip_clean_sock(fd);
-    posix_api->close_fn(fd);
-    return ret;
-}
-
-int do_lwip_socket(int domain, int type, int protocol)
-{
-    int32_t fd = lwip_socket(domain, type, 0);
-    if (fd < 0) {
-        return fd;
-    }
-
-    do_lwip_init_sock(fd);
-
-    struct lwip_sock *sock = get_socket(fd);
-    if (sock == NULL || sock->stack == NULL) {
-        do_lwip_close(fd);
-        return -1;
-    }
-
-    return fd;
-}
-
 uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn,
                                uint32_t max_num)
 {
@@ -1582,4 +1557,12 @@ err_t find_same_node_ring(struct tcp_pcb *npcb)
             npcb->remote_port, npcb->remote_port);
     }
     return 0;
+}
+
+unsigned same_node_ring_count(struct lwip_sock *sock)
+{
+  const unsigned long long cur_begin = __atomic_load_n(&sock->same_node_rx_ring->sndbegin, __ATOMIC_RELAXED);
+  const unsigned long long cur_end = __atomic_load_n(&sock->same_node_rx_ring->sndend, __ATOMIC_RELAXED);
+
+  return cur_end - cur_begin;
 }
