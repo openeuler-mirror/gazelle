@@ -208,6 +208,7 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
 {
     uint32_t event = 0;
 
+    pthread_spin_lock(&wakeup->event_list_lock);
     if (NETCONN_IS_DATAIN(sock) || NETCONN_IS_ACCEPTIN(sock)) {
         event |= EPOLLIN;
     }
@@ -216,7 +217,6 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
         event |= EPOLLERR | EPOLLIN;
     }
 
-    pthread_spin_lock(&wakeup->event_list_lock);
     if (NETCONN_IS_OUTIDLE(sock)) {
         /* lwip_netconn_do_connected set LIBOS FLAGS when connected */
         if (!POSIX_IS_CLOSED(sock) && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
