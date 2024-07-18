@@ -229,6 +229,7 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
         if (wakeup->type == WAKEUP_EPOLL && (sock->events & sock->epoll_events) &&
             list_node_null(&sock->event_list)) {
             list_add_node(&sock->event_list, &wakeup->event_list);
+	    sem_post(&wakeup->wait);
         }
     }
     pthread_spin_unlock(&wakeup->event_list_lock);
