@@ -40,7 +40,7 @@ struct gazelle_tcp_conn_htable *gazelle_tcp_conn_htable_create(uint32_t max_conn
     }
 
     for (i = 0; i < GAZELLE_MAX_CONN_HTABLE_SIZE; i++) {
-        INIT_HLIST_HEAD(&conn_htable->array[i].chain);
+        hlist_init_head(&conn_htable->array[i].chain);
         conn_htable->array[i].chain_size = 0;
     }
     conn_htable->cur_conn_num = 0;
@@ -65,7 +65,7 @@ void gazelle_tcp_conn_htable_destroy(void)
         while (node != NULL) {
             conn = hlist_entry(node, typeof(*conn), conn_node);
             node = node->next;
-            hlist_del_init(&conn->conn_node);
+            hlist_del_node(&conn->conn_node);
             rte_free(conn);
         }
     }
@@ -175,7 +175,7 @@ void gazelle_conn_del_by_quintuple(struct gazelle_tcp_conn_htable *conn_htable, 
         return;
     }
 
-    hlist_del_init(&conn->conn_node);
+    hlist_del_node(&conn->conn_node);
     rte_free(conn);
     conn_htable->cur_conn_num--;
     conn_hbucket->chain_size--;
