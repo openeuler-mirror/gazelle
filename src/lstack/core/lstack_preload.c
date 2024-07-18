@@ -30,7 +30,7 @@
 
 #define EXCLUDE_THRD_CNT            1
 const static char *g_exclude_thread[EXCLUDE_THRD_CNT] = {"eal-intr-thread"};
-static PER_THREAD enum KERNEL_LWIP_PATH g_preload_thrdpath = PATH_UNKNOW;
+static PER_THREAD enum posix_type g_preload_thrdpath = POSIX_ALL;
 
 struct lstack_preload {
     int32_t preload_switch;
@@ -79,27 +79,27 @@ static void preload_get_thrdname(void)
     LSTACK_PRE_LOG(LSTACK_INFO, "thread name=%s ok\n", g_preload_info.env_thrdname);
 }
 
-enum KERNEL_LWIP_PATH select_fd_posix_path(int32_t fd, struct lwip_sock **socket)
+enum posix_type select_fd_posix_path(int32_t fd, struct lwip_sock **socket)
 {
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
 
     /* AF_UNIX case */
-    if (!sock || !sock->conn || CONN_TYPE_IS_HOST(sock->conn)) {
-        return PATH_KERNEL;
+    if (!sock || !sock->conn || POSIX_IS_TYPE(sock, POSIX_KERNEL)) {
+        return POSIX_KERNEL;
     }
 
     if (socket) {
         *socket = sock;
     }
 
-    if (likely(CONN_TYPE_IS_LIBOS(sock->conn))) {
-        return PATH_LWIP;
+    if (likely(POSIX_IS_TYPE(sock, POSIX_LWIP))) {
+        return POSIX_LWIP;
     }
 
-    return PATH_UNKNOW;
+    return POSIX_ALL;
 }
 
-enum KERNEL_LWIP_PATH select_posix_path(void)
+enum posix_type select_posix_path(void)
 {
     if (unlikely(posix_api == NULL)) {
         /*
@@ -109,14 +109,14 @@ enum KERNEL_LWIP_PATH select_posix_path(void)
         if (posix_api_init() != 0) {
             LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
         }
-        return PATH_KERNEL;
+        return POSIX_KERNEL;
     }
 
     if (unlikely(posix_api->ues_posix)) {
-        return PATH_KERNEL;
+        return POSIX_KERNEL;
     }
 
-    if (g_preload_thrdpath != PATH_UNKNOW) {
+    if (g_preload_thrdpath != POSIX_ALL) {
         return g_preload_thrdpath;
     }
 
@@ -126,31 +126,31 @@ enum KERNEL_LWIP_PATH select_posix_path(void)
 
     char thread_name[PATH_MAX] = {0};
     if (pthread_getname_np(pthread_self(), thread_name, PATH_MAX) != 0) {
-        g_preload_thrdpath = PATH_KERNEL;
-        return PATH_KERNEL;
+        g_preload_thrdpath = POSIX_KERNEL;
+        return POSIX_KERNEL;
     }
 
     /* exclude dpdk thread */
     for (int i = 0; i < EXCLUDE_THRD_CNT; i++) {
         if (strstr(thread_name, g_exclude_thread[i]) != NULL) {
-            g_preload_thrdpath = PATH_KERNEL;
-            return PATH_KERNEL;
+            g_preload_thrdpath = POSIX_KERNEL;
+            return POSIX_KERNEL;
         }
     }
 
     /* not set GAZELLE_THREAD_NAME, select all thread */
     if (g_preload_info.env_thrdname[0] == '\0') {
-        g_preload_thrdpath = PATH_LWIP;
-        return PATH_LWIP;
+        g_preload_thrdpath = POSIX_LWIP;
+        return POSIX_LWIP;
     }
 
     if (strstr(thread_name, g_preload_info.env_thrdname) == NULL) {
-        g_preload_thrdpath = PATH_KERNEL;
-        return PATH_KERNEL;
+        g_preload_thrdpath = POSIX_KERNEL;
+        return POSIX_KERNEL;
     }
 
-    g_preload_thrdpath = PATH_LWIP;
-    return PATH_LWIP;
+    g_preload_thrdpath = POSIX_LWIP;
+    return POSIX_LWIP;
 }
 
 int preload_info_init(void)

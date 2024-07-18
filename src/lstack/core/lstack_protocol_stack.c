@@ -126,8 +126,8 @@ struct protocol_stack *get_protocol_stack(void)
 
 struct protocol_stack *get_protocol_stack_by_fd(int32_t fd)
 {
-    struct lwip_sock *sock = get_socket(fd);
-    if (sock == NULL) {
+    struct lwip_sock *sock = lwip_get_socket(fd);
+    if (sock == NULL || sock->conn == NULL) {
         return NULL;
     }
 
@@ -719,7 +719,7 @@ void stack_close(struct rpc_msg *msg)
 {
     int32_t fd = msg->args[MSG_ARG_0].i;
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
@@ -738,7 +738,7 @@ void stack_shutdown(struct rpc_msg *msg)
     int fd = msg->args[MSG_ARG_0].i;
     int how = msg->args[MSG_ARG_1].i;
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
 
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
@@ -767,7 +767,7 @@ void stack_listen(struct rpc_msg *msg)
     int32_t fd = msg->args[MSG_ARG_0].i;
     int32_t backlog = msg->args[MSG_ARG_1].i;
 
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
         return;
@@ -793,7 +793,7 @@ void stack_accept(struct rpc_msg *msg)
         return;
     }
 
-    struct lwip_sock *sock = get_socket(accept_fd);
+    struct lwip_sock *sock = lwip_get_socket(accept_fd);
     if (sock == NULL || sock->stack == NULL) {
         lwip_close(accept_fd);
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
@@ -880,7 +880,7 @@ void stack_tcp_send(struct rpc_msg *msg)
     struct protocol_stack *stack = get_protocol_stack();
     int replenish_again;
 
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
@@ -917,7 +917,7 @@ void stack_udp_send(struct rpc_msg *msg)
     int replenish_again;
     uint32_t call_num;
 
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
@@ -1030,7 +1030,7 @@ void stack_create_shadow_fd(struct rpc_msg *msg)
     socklen_t addr_len = msg->args[MSG_ARG_2].socklen;
 
     int32_t clone_fd = 0;
-    struct lwip_sock *sock = get_socket_by_fd(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL) {
         LSTACK_LOG(ERR, LSTACK, "get sock null fd=%d\n", fd);
         msg->result = -1;
@@ -1046,7 +1046,7 @@ void stack_create_shadow_fd(struct rpc_msg *msg)
         return;
     }
 
-    struct lwip_sock *clone_sock = get_socket_by_fd(clone_fd);
+    struct lwip_sock *clone_sock = lwip_get_socket(clone_fd);
     if (clone_sock == NULL) {
         LSTACK_LOG(ERR, LSTACK, "get sock null fd=%d clone_fd=%d\n", fd, clone_fd);
         msg->result = -1;
@@ -1114,7 +1114,7 @@ void stack_recvlist_count(struct rpc_msg *msg)
 int32_t stack_broadcast_close(int32_t fd)
 {
     int32_t ret = 0;
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
@@ -1139,7 +1139,7 @@ int32_t stack_broadcast_close(int32_t fd)
 int stack_broadcast_shutdown(int fd, int how)
 {
     int32_t ret = 0;
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
@@ -1186,7 +1186,7 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
     socklen_t addr_len = sizeof(addr);
     int32_t ret, clone_fd;
 
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL || cur_stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, %d get sock null or stack null\n", get_stack_tid(), fd);
         GAZELLE_RETURN(EBADF);
@@ -1216,9 +1216,9 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
         }
 
         if (min_conn_stk_idx == i) {
-            get_socket_by_fd(clone_fd)->conn->is_master_fd = 1;
+            lwip_get_socket(clone_fd)->conn->is_master_fd = 1;
         } else {
-            get_socket_by_fd(clone_fd)->conn->is_master_fd = 0;
+            lwip_get_socket(clone_fd)->conn->is_master_fd = 0;
         }
 
         ret = rpc_call_listen(&stack->rpc_queue, clone_fd, backlog);
@@ -1232,7 +1232,7 @@ int32_t stack_broadcast_listen(int32_t fd, int32_t backlog)
 
 static struct lwip_sock *get_min_accept_sock(int32_t fd)
 {
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     struct lwip_sock *min_sock = NULL;
 
     while (sock) {
@@ -1282,7 +1282,7 @@ int32_t stack_broadcast_bind(int32_t fd, const struct sockaddr *name, socklen_t 
     struct protocol_stack *stack = NULL;
     int32_t ret, clone_fd;
 
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL || cur_stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, %d get sock null or stack null\n", get_stack_tid(), fd);
         GAZELLE_RETURN(EBADF);
@@ -1313,7 +1313,7 @@ int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *ad
 {
     int32_t ret = -1;
     struct lwip_sock *min_sock = NULL;
-    struct lwip_sock *sock = get_socket(fd);
+    struct lwip_sock *sock = lwip_get_socket(fd);
     struct protocol_stack *stack = NULL;
     if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
@@ -1356,8 +1356,8 @@ int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *add
 static void stack_all_fds_close(void)
 {
     for (int i = 3; i < GAZELLE_MAX_CLIENTS + GAZELLE_RESERVED_CLIENTS; i++) {
-        struct lwip_sock *sock = get_socket(i);
-        if (sock && sock->stack == get_protocol_stack()) {
+        struct lwip_sock *sock = lwip_get_socket(i);
+        if (sock && sock->conn && sock->stack == get_protocol_stack()) {
             lwip_close(i);
         }
     }

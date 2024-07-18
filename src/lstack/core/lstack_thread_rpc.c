@@ -474,7 +474,7 @@ int32_t rpc_call_tcp_send(rpc_queue *queue, int fd, size_t len, int flags)
     }
 
     if (get_protocol_stack_group()->latency_start) {
-        time_stamp_into_rpcmsg(get_socket_by_fd(fd));
+        time_stamp_into_rpcmsg(lwip_get_socket(fd));
     }
 
     msg->args[MSG_ARG_0].i = fd;
@@ -495,7 +495,7 @@ int32_t rpc_call_udp_send(rpc_queue *queue, int fd, size_t len, int flags)
     }
 
     if (get_protocol_stack_group()->latency_start) {
-        time_stamp_into_rpcmsg(get_socket_by_fd(fd));
+        time_stamp_into_rpcmsg(lwip_get_socket(fd));
     }
 
     msg->args[MSG_ARG_0].i = fd;
