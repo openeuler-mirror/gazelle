@@ -79,17 +79,22 @@ static void preload_get_thrdname(void)
     LSTACK_PRE_LOG(LSTACK_INFO, "thread name=%s ok\n", g_preload_info.env_thrdname);
 }
 
-enum posix_type select_fd_posix_path(int32_t fd, struct lwip_sock **socket)
+enum posix_type select_sock_posix_path(struct lwip_sock *sock)
 {
-    struct lwip_sock *sock = lwip_get_socket(fd);
-
-    /* AF_UNIX case */
-    if (!sock || !sock->conn || POSIX_IS_TYPE(sock, POSIX_KERNEL)) {
+    if (unlikely(posix_api == NULL)) {
+        /*
+        * read/write/readv/writev may not be sockfd,
+        * posix api maybe not init.
+        */
+        if (posix_api_init() != 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "posix_api_init failed\n");
+        }
         return POSIX_KERNEL;
     }
 
-    if (socket) {
-        *socket = sock;
+    /* CLOSED means not sockfd, such as file fd or unix fd */
+    if (POSIX_IS_CLOSED(sock) || POSIX_IS_TYPE(sock, POSIX_KERNEL)) {
+        return POSIX_KERNEL;
     }
 
     if (likely(POSIX_IS_TYPE(sock, POSIX_LWIP))) {
@@ -112,11 +117,11 @@ enum posix_type select_posix_path(void)
         return POSIX_KERNEL;
     }
 
-    if (unlikely(posix_api->ues_posix)) {
+    if (unlikely(posix_api->use_kernel)) {
         return POSIX_KERNEL;
     }
 
-    if (g_preload_thrdpath != POSIX_ALL) {
+    if (likely(g_preload_thrdpath != POSIX_ALL)) {
         return g_preload_thrdpath;
     }
 

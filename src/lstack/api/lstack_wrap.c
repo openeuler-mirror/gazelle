@@ -37,12 +37,8 @@
 #include "lstack_rtw_api.h"
 #include "lstack_dummy_api.h"
 
-#ifndef SOCK_TYPE_MASK
-#define SOCK_TYPE_MASK 0xf
-#endif
-
-posix_api_t g_wrap_api_value;
-posix_api_t *g_wrap_api;
+static posix_api_t g_wrap_api_value;
+static posix_api_t *g_wrap_api;
 
 void wrap_api_init(void)
 {
@@ -68,10 +64,10 @@ void wrap_api_init(void)
         g_wrap_api->writev_fn        = lwip_writev;
         g_wrap_api->recv_fn          = lwip_recv;
         g_wrap_api->send_fn          = lwip_send;
-        g_wrap_api->recv_msg         = lwip_recvmsg;
-        g_wrap_api->send_msg         = lwip_sendmsg;
-        g_wrap_api->recv_from        = lwip_recvfrom;
-        g_wrap_api->send_to          = lwip_sendto;
+        g_wrap_api->recvmsg_fn       = lwip_recvmsg;
+        g_wrap_api->sendmsg_fn       = lwip_sendmsg;
+        g_wrap_api->recvfrom_fn      = lwip_recvfrom;
+        g_wrap_api->sendto_fn        = lwip_sendto;
         g_wrap_api->epoll_wait_fn    = rtc_epoll_wait;
         g_wrap_api->poll_fn          = rtc_poll;
         g_wrap_api->close_fn         = rtc_close;
@@ -97,10 +93,10 @@ void wrap_api_init(void)
         g_wrap_api->writev_fn        = rtw_writev;
         g_wrap_api->recv_fn          = rtw_recv;
         g_wrap_api->send_fn          = rtw_send;
-        g_wrap_api->recv_msg         = rtw_recvmsg;
-        g_wrap_api->send_msg         = rtw_sendmsg;
-        g_wrap_api->recv_from        = rtw_recvfrom;
-        g_wrap_api->send_to          = rtw_sendto;
+        g_wrap_api->recvmsg_fn       = rtw_recvmsg;
+        g_wrap_api->sendmsg_fn       = rtw_sendmsg;
+        g_wrap_api->recvfrom_fn      = rtw_recvfrom;
+        g_wrap_api->sendto_fn        = rtw_sendto;
         g_wrap_api->epoll_wait_fn    = rtw_epoll_wait;
         g_wrap_api->poll_fn          = rtw_poll;
         g_wrap_api->close_fn         = rtw_close;
@@ -118,8 +114,8 @@ void wrap_api_set_dummy(void)
     g_wrap_api->send_fn    = dummy_send;
     g_wrap_api->write_fn   = dummy_write;
     g_wrap_api->writev_fn  = dummy_writev;
-    g_wrap_api->send_msg   = dummy_sendmsg;
-    g_wrap_api->send_to    = dummy_sendto;
+    g_wrap_api->sendmsg_fn   = dummy_sendmsg;
+    g_wrap_api->sendto_fn    = dummy_sendto;
     rte_wmb();
 }
 
@@ -169,7 +165,7 @@ static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, in
 
 static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
 {
-    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_KERNEL) {
         return posix_api->accept_fn(s, addr, addrlen);
     }
 
@@ -189,7 +185,7 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_KERNEL) {
         return posix_api->accept4_fn(s, addr, addrlen, flags);
     }
 
@@ -209,8 +205,8 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         GAZELLE_RETURN(EINVAL);
     }
 
-    struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (select_sock_posix_path(sock) == POSIX_KERNEL) {
         return posix_api->bind_fn(s, name, namelen);
     }
 
@@ -230,30 +226,31 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
             ((struct sockaddr_in6 *)name)->sin6_addr.s6_addr, IPV6_ADDR_LEN);
     }
 
-    if (match_host_addr(&sock_addr)) {
-        /* maybe kni addr */
-        if (posix_api->bind_fn(s, name, namelen) != 0) {
-            POSIX_SET_TYPE(sock, POSIX_LWIP);
-        } else {
-            /* reuse the port allocated by kernel when port == 0 */
-            if (((struct sockaddr_in *)name)->sin_port == 0) {
-                struct sockaddr_in kerneladdr;
-                socklen_t len = sizeof(kerneladdr);
-                if (posix_api->getsockname_fn(s, (struct sockaddr *)&kerneladdr, &len) < 0) {
-                    LSTACK_LOG(ERR, LSTACK, "kernel getsockname failed, fd=%d, errno=%d\n", s, errno);
-                    return -1;
-                }
-                ((struct sockaddr_in *)name)->sin_port = kerneladdr.sin_port;
-            }
-        }
-        return g_wrap_api->bind_fn(s, name, namelen);
-    } else {
+    if (!match_host_addr(&sock_addr)) {
         POSIX_SET_TYPE(sock, POSIX_KERNEL);
         return posix_api->bind_fn(s, name, namelen);
     }
+
+    /* maybe kni addr */
+    if (posix_api->bind_fn(s, name, namelen) == 0) {
+        /* reuse the port allocated by kernel when port == 0 */
+        if (((struct sockaddr_in *)name)->sin_port == 0) {
+            struct sockaddr_in kerneladdr;
+            socklen_t len = sizeof(kerneladdr);
+            if (posix_api->getsockname_fn(s, (struct sockaddr *)&kerneladdr, &len) < 0) {
+                LSTACK_LOG(ERR, LSTACK, "kernel getsockname failed, fd=%d, errno=%d\n", s, errno);
+                return -1;
+            }
+            ((struct sockaddr_in *)name)->sin_port = kerneladdr.sin_port;
+        }
+        /* not sure POSIX_LWIP or POSIX_KERNEL */
+    } else {
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
+    }
+    return g_wrap_api->bind_fn(s, name, namelen);
 }
 
-bool is_dst_ip_localhost(const struct sockaddr *addr)
+static bool is_dst_ip_localhost(const struct sockaddr *addr)
 {
     struct ifaddrs *ifap;
     struct ifaddrs *ifa;
@@ -302,13 +299,8 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         GAZELLE_RETURN(EINVAL);
     }
 
-    struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
-        return posix_api->connect_fn(s, name, namelen);
-    }
-
-    sock = lwip_get_socket(s);
-    if (sock == NULL) {
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (select_sock_posix_path(sock) == POSIX_KERNEL) {
         return posix_api->connect_fn(s, name, namelen);
     }
 
@@ -334,7 +326,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
 
 static inline int32_t do_listen(int32_t s, int32_t backlog)
 {
-    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_KERNEL) {
         return posix_api->listen_fn(s, backlog);
     }
 
@@ -352,7 +344,7 @@ static inline int32_t do_getpeername(int32_t s, struct sockaddr *name, socklen_t
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_fd_posix_path(s, NULL) == POSIX_LWIP) {
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
         return g_wrap_api->getpeername_fn(s, name, namelen);
     }
 
@@ -365,7 +357,7 @@ static inline int32_t do_getsockname(int32_t s, struct sockaddr *name, socklen_t
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_fd_posix_path(s, NULL) == POSIX_LWIP) {
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
         return g_wrap_api->getsockname_fn(s, name, namelen);
     }
 
@@ -422,7 +414,7 @@ static bool unsupport_optname(int32_t level, int32_t optname)
 
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
-    if (select_fd_posix_path(s, NULL) == POSIX_LWIP && !unsupport_optname(level, optname)) {
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP && !unsupport_optname(level, optname)) {
         return g_wrap_api->getsockopt_fn(s, level, optname, optval, optlen);
     }
 
@@ -431,7 +423,7 @@ static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, v
 
 static inline int32_t do_setsockopt(int32_t s, int32_t level, int32_t optname, const void *optval, socklen_t optlen)
 {
-    if (select_fd_posix_path(s, NULL) == POSIX_KERNEL || unsupport_optname(level, optname)) {
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_KERNEL || unsupport_optname(level, optname)) {
         return posix_api->setsockopt_fn(s, level, optname, optval, optlen);
     }
 
@@ -473,17 +465,14 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
     if (buf == NULL) {
         GAZELLE_RETURN(EINVAL);
     }
-
     if (len == 0) {
         return 0;
     }
 
-    if (select_posix_path() == POSIX_KERNEL || // maybe fd is created by open before posix_api_init called
-        select_fd_posix_path(sockfd, NULL) == POSIX_KERNEL) {
-        return posix_api->recv_fn(sockfd, buf, len, flags);
+    if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
+        return g_wrap_api->recv_fn(sockfd, buf, len, flags);
     }
-
-    return g_wrap_api->recv_fn(sockfd, buf, len, flags);
+    return posix_api->recv_fn(sockfd, buf, len, flags);
 }
 
 static inline ssize_t do_read(int32_t s, void *mem, size_t len)
@@ -491,58 +480,46 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
     if (mem == NULL) {
         GAZELLE_RETURN(EINVAL);
     }
-
     if (len == 0) {
         return 0;
     }
 
-    if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
-        return posix_api->read_fn(s, mem, len);
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
+        return g_wrap_api->read_fn(s, mem, len);
     }
-
-    return g_wrap_api->read_fn(s, mem, len);
+    return posix_api->read_fn(s, mem, len);
 }
 
 static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 {
-    if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
-        return posix_api->readv_fn(s, iov, iovcnt);
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
+        return g_wrap_api->readv_fn(s, iov, iovcnt);
     }
-
-    return g_wrap_api->readv_fn(s, iov, iovcnt);
+    return posix_api->readv_fn(s, iov, iovcnt);
 }
 
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
 {
-    if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(sockfd, NULL) == POSIX_KERNEL) {
-        return posix_api->send_fn(sockfd, buf, len, flags);
+    if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
+        return g_wrap_api->send_fn(sockfd, buf, len, flags);
     }
-
-    return g_wrap_api->send_fn(sockfd, buf, len, flags);
+    return posix_api->send_fn(sockfd, buf, len, flags);
 }
 
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 {
-    if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
-        return posix_api->write_fn(s, mem, size);
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
+        return g_wrap_api->write_fn(s, mem, size);
     }
-
-    return g_wrap_api->write_fn(s, mem, size);
+    return posix_api->write_fn(s, mem, size);
 }
 
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
 {
-    struct lwip_sock *sock;
-    if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
-        return posix_api->writev_fn(s, iov, iovcnt);
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
+        return g_wrap_api->writev_fn(s, iov, iovcnt);
     }
-
-    return g_wrap_api->writev_fn(s, iov, iovcnt);
+    return posix_api->writev_fn(s, iov, iovcnt);
 }
 
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)
@@ -551,12 +528,10 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
         GAZELLE_RETURN(EINVAL);
     }
 
-    if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(s, NULL) == POSIX_KERNEL) {
-        return posix_api->recv_msg(s, message, flags);
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
+        return g_wrap_api->recvmsg_fn(s, message, flags);
     }
-
-    return g_wrap_api->recv_msg(s, message, flags);
+    return posix_api->recvmsg_fn(s, message, flags);
 }
 
 static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
@@ -565,13 +540,10 @@ static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_
         GAZELLE_RETURN(EINVAL);
     }
 
-    struct lwip_sock *sock;
-    if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
-        return posix_api->send_msg(s, message, flags);
+    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
+        return g_wrap_api->sendmsg_fn(s, message, flags);
     }
-
-    return g_wrap_api->send_msg(s, message, flags);
+    return posix_api->sendmsg_fn(s, message, flags);
 }
 
 static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t flags,
@@ -580,58 +552,48 @@ static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t
     if (buf == NULL) {
         GAZELLE_RETURN(EINVAL);
     }
-
     if (len == 0) {
         return 0;
     }
 
-    struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(sockfd, &sock) == POSIX_LWIP) {
-        return g_wrap_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
+    if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
+        return g_wrap_api->recvfrom_fn(sockfd, buf, len, flags, addr, addrlen);
     }
-
-    return posix_api->recv_from(sockfd, buf, len, flags, addr, addrlen);
+    return posix_api->recvfrom_fn(sockfd, buf, len, flags, addr, addrlen);
 }
 
 static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int32_t flags,
                                 const struct sockaddr *addr, socklen_t addrlen)
 {
-    struct lwip_sock *sock = NULL;
-    if (select_fd_posix_path(sockfd, &sock) != POSIX_LWIP) {
-        return posix_api->send_to(sockfd, buf, len, flags, addr, addrlen);
+    if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
+        return g_wrap_api->sendto_fn(sockfd, buf, len, flags, addr, addrlen);
     }
-
-    return g_wrap_api->send_to(sockfd, buf, len, flags, addr, addrlen);
+    return posix_api->sendto_fn(sockfd, buf, len, flags, addr, addrlen);
 }
 
-static inline int32_t do_close(int32_t s)
+static inline int32_t do_close(int fd)
 {
-    struct lwip_sock *sock = NULL;
+    /* Can not use select_sock_posix_path() !
+     * When fd created by lwip_stocket() set as POSIX_KERNEL,
+     * lwip_close() is still required.
+     */
     if (select_posix_path() == POSIX_KERNEL ||
-        select_fd_posix_path(s, &sock) == POSIX_KERNEL) {
-        /* we called lwip_socket, even if kernel fd */
-        if (posix_api != NULL && !posix_api->ues_posix &&
-            /* contain posix_api->close_fn if success */
-            g_wrap_api->close_fn(s) == 0) {
-            return 0;
-        } else {
-            return posix_api->close_fn(s);
-        }
+        POSIX_IS_CLOSED(lwip_get_socket(fd))) {
+        return posix_api->close_fn(fd);
     }
-    return g_wrap_api->close_fn(s);
+    return g_wrap_api->close_fn(fd);
 }
 
 static int32_t do_shutdown(int fd, int how)
 {
-    struct lwip_sock *sock = NULL;
-    if (select_posix_path() == POSIX_KERNEL || select_fd_posix_path(fd, &sock) == POSIX_KERNEL) {
-        if (posix_api != NULL && !posix_api->ues_posix && g_wrap_api->shutdown_fn(fd, how) == 0) {
-            return 0;
-        } else {
-            return posix_api->shutdown_fn(fd, how);
-        }
+    /* Can not use select_sock_posix_path() !
+     * When fd created by lwip_stocket() set as POSIX_KERNEL,
+     * lwip_close() is still required.
+     */
+    if (select_posix_path() == POSIX_KERNEL ||
+        POSIX_IS_CLOSED(lwip_get_socket(fd))) {
+        return posix_api->shutdown_fn(fd, how);
     }
-
     return g_wrap_api->shutdown_fn(fd, how);
 }
 
@@ -660,15 +622,13 @@ static int32_t do_ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *
     return ready;
 }
 
-typedef int32_t (*sigaction_fn)(int32_t signum, const struct sigaction *act, struct sigaction *oldact);
 static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct sigaction *oldact)
 {
-    if (posix_api == NULL) {
-        sigaction_fn sf = (sigaction_fn)dlsym(RTLD_NEXT, "sigaction");
-        if (sf == NULL) {
-            return -1;
+    if (unlikely(posix_api == NULL)) {
+        if (posix_api_init() != 0) {
+            GAZELLE_RETURN(EAGAIN);
         }
-        return sf(signum, act, oldact);
+        return posix_api->sigaction_fn(signum, act, oldact);
     }
 
     return lstack_sigaction(signum, act, oldact);
@@ -676,10 +636,14 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
 
 static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
 {
-    if ((select_posix_path() == POSIX_KERNEL) || !(readfds || writefds || exceptfds) || nfds == 0) {
+    if (nfds <= 0 || !(readfds || writefds || exceptfds)) {
+        GAZELLE_RETURN(EINVAL);
+    }
+
+    if (select_posix_path() == POSIX_KERNEL) {
         return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
     }
-    
+
     return g_wrap_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
 }
 
@@ -690,9 +654,9 @@ static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set
         va_start(ap, _cmd); \
         val = va_arg(ap, typeof(val)); \
         va_end(ap); \
-        struct lwip_sock *sock = NULL; \
+        struct lwip_sock *sock = lwip_get_socket(_fd); \
         if (select_posix_path() == POSIX_KERNEL || \
-            select_fd_posix_path(_fd, &sock) == POSIX_KERNEL) \
+            select_sock_posix_path(sock) == POSIX_KERNEL) \
             return _fcntl_fn(_fd, _cmd, val); \
         int32_t ret1 = _fcntl_fn(_fd, _cmd, val); \
         if (ret1 == -1) { \

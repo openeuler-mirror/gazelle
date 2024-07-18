@@ -127,7 +127,7 @@ struct protocol_stack *get_protocol_stack(void)
 struct protocol_stack *get_protocol_stack_by_fd(int32_t fd)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL || sock->conn == NULL) {
+    if (POSIX_IS_CLOSED(sock)) {
         return NULL;
     }
 
@@ -1126,7 +1126,7 @@ int32_t stack_broadcast_close(int32_t fd)
             ret = -1;
         }
 
-        if (sock == NULL || sock->conn == NULL) {
+        if (POSIX_IS_CLOSED(sock)) {
             break;
         }
         fd = sock->conn->callback_arg.socket;
@@ -1151,7 +1151,7 @@ int stack_broadcast_shutdown(int fd, int how)
             ret = -1;
         }
 
-        if (sock == NULL || sock->conn == NULL) {
+        if (POSIX_IS_CLOSED(sock)) {
             break;
         }
         fd = sock->conn->callback_arg.socket;
@@ -1357,7 +1357,7 @@ static void stack_all_fds_close(void)
 {
     for (int i = 3; i < GAZELLE_MAX_CLIENTS + GAZELLE_RESERVED_CLIENTS; i++) {
         struct lwip_sock *sock = lwip_get_socket(i);
-        if (sock && sock->conn && sock->stack == get_protocol_stack()) {
+        if (!POSIX_IS_CLOSED(sock) && sock->stack == get_protocol_stack()) {
             lwip_close(i);
         }
     }

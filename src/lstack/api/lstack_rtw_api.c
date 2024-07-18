@@ -186,7 +186,7 @@ static ssize_t rtw_udp_recvfrom(int sockfd, void *buf, size_t len, int flags,
             return -1;
         }
         sock = sock->listen_next;
-        if (sock != NULL && sock->conn != NULL) {
+        if (!POSIX_IS_CLOSED(sock)) {
             sockfd = sock->conn->callback_arg.socket;
         } else {
             if (sock == NULL) {
