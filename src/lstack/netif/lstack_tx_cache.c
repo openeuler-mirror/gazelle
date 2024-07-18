@@ -45,6 +45,7 @@ int tx_cache_init(uint16_t queue_id, void *priv, struct lstack_dev_ops *dev_ops)
     struct tx_cache *tx_cache = calloc(1, sizeof(struct tx_cache));
     if (tx_cache == NULL) {
         LSTACK_LOG(ERR, LSTACK, "queue(%d) tx cache init failed\n", queue_id);
+        return -1;
     }
 
     tx_cache->queue_id = queue_id;
