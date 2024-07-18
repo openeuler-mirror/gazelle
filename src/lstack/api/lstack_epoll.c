@@ -49,8 +49,8 @@ static void change_epollfd_kernel_thread(struct wakeup_poll *wakeup, struct prot
 
 static inline void add_wakeup_to_stack_wakeuplist(struct wakeup_poll *wakeup, struct protocol_stack *stack)
 {
-    if (list_is_null(&wakeup->wakeup_list[stack->stack_idx])) {
-        list_add_node(&stack->wakeup_list, &wakeup->wakeup_list[stack->stack_idx]);
+    if (list_node_null(&wakeup->wakeup_list[stack->stack_idx])) {
+        list_add_node(&wakeup->wakeup_list[stack->stack_idx], &stack->wakeup_list);
     }
 }
 
@@ -73,8 +73,8 @@ void add_sock_event_nolock(struct lwip_sock *sock, uint32_t event)
     }
 
     sock->events |= (event == EPOLLERR) ? (EPOLLIN | EPOLLERR) : (event & sock->epoll_events);
-    if (list_is_null(&sock->event_list)) {
-        list_add_node(&wakeup->event_list, &sock->event_list);
+    if (list_node_null(&sock->event_list)) {
+        list_add_node(&sock->event_list, &wakeup->event_list);
     }
     return;
 }
@@ -111,7 +111,7 @@ void del_sock_event_nolock(struct lwip_sock *sock, uint32_t event)
     }
 
     if (sock->events == 0) {
-        list_del_node_null(&sock->event_list);
+        list_del_node(&sock->event_list);
     }
     return;
 }
@@ -127,7 +127,7 @@ void wakeup_stack_epoll(struct protocol_stack *stack)
 {
     struct list_node *node, *temp;
 
-    list_for_each_safe(node, temp, &stack->wakeup_list) {
+    list_for_each_node(node, temp, &stack->wakeup_list) {
         /* When temp is NULL, find the tail node in the wekeup_list and connect it to the back of the node */
         if (unlikely(temp == NULL)) {
             struct list_node *nod = &stack->wakeup_list;
@@ -139,7 +139,7 @@ void wakeup_stack_epoll(struct protocol_stack *stack)
             temp = nod;
         }
 
-        struct wakeup_poll *wakeup = container_of((node - stack->stack_idx), struct wakeup_poll, wakeup_list);
+        struct wakeup_poll *wakeup = container_of_uncheck_ptr((node - stack->stack_idx), struct wakeup_poll, wakeup_list);
 
         if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
             __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
@@ -148,7 +148,7 @@ void wakeup_stack_epoll(struct protocol_stack *stack)
             stack->stats.wakeup_events++;
         }
 
-        list_del_node_null(&wakeup->wakeup_list[stack->stack_idx]);
+        list_del_node(&wakeup->wakeup_list[stack->stack_idx]);
     }
 }
 
@@ -198,8 +198,8 @@ static void rtc_raise_pending_events(struct wakeup_poll *wakeup, struct lwip_soc
     if (event) {
         sock->events = event;
         if (wakeup->type == WAKEUP_EPOLL && (sock->events & sock->epoll_events) &&
-            list_is_null(&sock->event_list)) {
-            list_add_node(&wakeup->event_list, &sock->event_list);
+            list_node_null(&sock->event_list)) {
+            list_add_node(&sock->event_list, &wakeup->event_list);
         }
     }
 }
@@ -227,8 +227,8 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
     if (event) {
         sock->events = event;
         if (wakeup->type == WAKEUP_EPOLL && (sock->events & sock->epoll_events) &&
-            list_is_null(&sock->event_list)) {
-            list_add_node(&wakeup->event_list, &sock->event_list);
+            list_node_null(&sock->event_list)) {
+            list_add_node(&sock->event_list, &wakeup->event_list);
         }
     }
     pthread_spin_unlock(&wakeup->event_list_lock);
@@ -255,7 +255,7 @@ int32_t lstack_do_epoll_create(int32_t fd)
     }
 
     for (uint32_t i = 0; i < PROTOCOL_STACK_MAX; i++) {
-        init_list_node_null(&wakeup->wakeup_list[i]);
+        list_init_node(&wakeup->wakeup_list[i]);
     }
 
     if (sem_init(&wakeup->wait, 0, 0) != 0) {
@@ -266,12 +266,12 @@ int32_t lstack_do_epoll_create(int32_t fd)
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    init_list_node_null(&wakeup->poll_list);
+    list_init_node(&wakeup->poll_list);
     pthread_spin_lock(&stack_group->poll_list_lock);
-    list_add_node(&stack_group->poll_list, &wakeup->poll_list);
+    list_add_node(&wakeup->poll_list, &stack_group->poll_list);
     pthread_spin_unlock(&stack_group->poll_list_lock);
 
-    init_list_node(&wakeup->event_list);
+    list_init_head(&wakeup->event_list);
     pthread_spin_init(&wakeup->event_list_lock, PTHREAD_PROCESS_PRIVATE);
 
     wakeup->type = WAKEUP_EPOLL;
@@ -327,15 +327,15 @@ int32_t lstack_epoll_close(int32_t fd)
 
     struct list_node *node, *temp;
     pthread_spin_lock(&wakeup->event_list_lock);
-    list_for_each_safe(node, temp, &wakeup->event_list) {
-        struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
-        list_del_node_null(&sock->event_list);
+    list_for_each_node(node, temp, &wakeup->event_list) {
+        struct lwip_sock *sock = list_entry(node, struct lwip_sock, event_list);
+        list_del_node(&sock->event_list);
     }
     pthread_spin_unlock(&wakeup->event_list_lock);
     pthread_spin_destroy(&wakeup->event_list_lock);
 
     pthread_spin_lock(&stack_group->poll_list_lock);
-    list_del_node_null(&wakeup->poll_list);
+    list_del_node(&wakeup->poll_list);
     pthread_spin_unlock(&stack_group->poll_list_lock);
 
     sem_destroy(&wakeup->wait);
@@ -413,7 +413,7 @@ int32_t lstack_rtc_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_
             break;
         case EPOLL_CTL_DEL:
             sock->epoll_events = 0;
-            list_del_node_null(&sock->event_list);
+            list_del_node(&sock->event_list);
             break;
         default:
             GAZELLE_RETURN(EINVAL);
@@ -464,7 +464,7 @@ int32_t lstack_rtw_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_
                 sock->epoll_events = 0;
                 wakeup->stack_fd_cnt[sock->stack->stack_idx]--;
                 pthread_spin_lock(&wakeup->event_list_lock);
-                list_del_node_null(&sock->event_list);
+                list_del_node(&sock->event_list);
                 pthread_spin_unlock(&wakeup->event_list_lock);
                 break;
             default:
@@ -482,18 +482,18 @@ int32_t epoll_lwip_event_nolock(struct wakeup_poll *wakeup, struct epoll_event *
     int32_t event_num = 0;
     struct list_node *node, *temp;
 
-    list_for_each_safe(node, temp, &wakeup->event_list) {
-        struct lwip_sock *sock = container_of(node, struct lwip_sock, event_list);
+    list_for_each_node(node, temp, &wakeup->event_list) {
+        struct lwip_sock *sock = list_entry(node, struct lwip_sock, event_list);
 
         if ((sock->epoll_events & sock->events) == 0) {
-            list_del_node_null(node);
+            list_del_node(node);
             continue;
         }
         
         if (event_num >= maxevents) {
             /* move list head after the current node, and start traversing from this node next time */
-            list_del_node_null(&wakeup->event_list);
-            list_add_node(node, &wakeup->event_list);
+            list_del_node(&wakeup->event_list);
+            list_add_node(&wakeup->event_list, node);
             break;
         }
         
@@ -502,14 +502,14 @@ int32_t epoll_lwip_event_nolock(struct wakeup_poll *wakeup, struct epoll_event *
         event_num++;
 
         if (sock->epoll_events & EPOLLET) {
-            list_del_node_null(node);
+            list_del_node(node);
             sock->events = 0;
         }
 
         /* EPOLLONESHOT: generate event after epoll_ctl add/mod event again
            epoll_event set 0 avoid generating event util epoll_ctl reset epoll_event */
         if (sock->epoll_events & EPOLLONESHOT) {
-            list_del_node_null(node);
+            list_del_node(node);
             sock->epoll_events = 0;
         }
     }
@@ -654,7 +654,7 @@ int32_t lstack_rtc_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t 
         }
 
         loop_flag = false;
-        if (!kernel_num && list_is_empty(&wakeup->event_list) && tmptimeout != 0) {
+        if (!kernel_num && list_head_empty(&wakeup->event_list) && tmptimeout != 0) {
             loop_flag = true;
         }
     } while (loop_flag);
@@ -721,7 +721,7 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
     __atomic_store_n(&wakeup->in_wait, false, __ATOMIC_RELEASE);
 
     for (uint32_t i = 0; i < PROTOCOL_STACK_MAX; i++) {
-        init_list_node_null(&wakeup->wakeup_list[i]);
+        list_init_node(&wakeup->wakeup_list[i]);
     }
 
     wakeup->epollfd = posix_api->epoll_create_fn(POLL_KERNEL_EVENTS);
@@ -745,9 +745,9 @@ static int32_t init_poll_wakeup_data(struct wakeup_poll *wakeup)
     }
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    init_list_node_null(&wakeup->poll_list);
+    list_init_node(&wakeup->poll_list);
     pthread_spin_lock(&stack_group->poll_list_lock);
-    list_add_node(&stack_group->poll_list, &wakeup->poll_list);
+    list_add_node(&wakeup->poll_list, &stack_group->poll_list);
     pthread_spin_unlock(&stack_group->poll_list_lock);
 
     int32_t stack_count[PROTOCOL_STACK_MAX] = {0};

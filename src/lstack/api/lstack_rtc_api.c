@@ -56,7 +56,7 @@ int rtc_socket(int domain, int type, int protocol)
         sock->epoll_events = 0;
         sock->events = 0;
         sock->wakeup = NULL;
-        init_list_node_null(&sock->event_list);
+        list_init_node(&sock->event_list);
     }
     return ret;
 }

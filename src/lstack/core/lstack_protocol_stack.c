@@ -328,9 +328,9 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
     stack->stack_idx = t_params->idx;
     stack->lwip_stats = &lwip_stats;
 
-    init_list_node(&stack->recv_list);
-    init_list_node(&stack->same_node_recv_list);
-    init_list_node(&stack->wakeup_list);
+    list_init_head(&stack->recv_list);
+    list_init_head(&stack->same_node_recv_list);
+    list_init_head(&stack->wakeup_list);
 
     sys_calibrate_tsc();
     stack_stat_init();
@@ -588,7 +588,7 @@ int32_t stack_group_init(void)
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     stack_group->stack_num = 0;
 
-    init_list_node(&stack_group->poll_list);
+    list_init_head(&stack_group->poll_list);
     pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
     pthread_spin_init(&stack_group->socket_lock, PTHREAD_PROCESS_PRIVATE);
     if (sem_init(&stack_group->sem_stack_setup, 0, 0) < 0) {
@@ -1013,7 +1013,7 @@ void stack_clean_epoll(struct rpc_msg *msg)
     struct protocol_stack *stack = get_protocol_stack();
     struct wakeup_poll *wakeup = (struct wakeup_poll *)msg->args[MSG_ARG_0].p;
 
-    list_del_node_null(&wakeup->wakeup_list[stack->stack_idx]);
+    list_del_node(&wakeup->wakeup_list[stack->stack_idx]);
 }
 
 void stack_mempool_size(struct rpc_msg *msg)
@@ -1103,7 +1103,7 @@ void stack_recvlist_count(struct rpc_msg *msg)
     struct list_node *node;
     struct list_node *temp;
 
-    list_for_each_safe(node, temp, list) {
+    list_for_each_node(node, temp, list) {
         count++;
     }
 
@@ -1258,7 +1258,7 @@ static void inline del_accept_in_event(struct lwip_sock *sock)
     if (!NETCONN_IS_ACCEPTIN(sock)) {
         sock->events &= ~EPOLLIN;
         if (sock->events == 0) {
-            list_del_node_null(&sock->event_list);
+            list_del_node(&sock->event_list);
         }
     }
 

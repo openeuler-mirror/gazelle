@@ -230,8 +230,8 @@ static void get_wakeup_stat(struct protocol_stack_group *stack_group, struct pro
 
     pthread_spin_lock(&stack_group->poll_list_lock);
 
-    list_for_each_safe(node, temp, &stack_group->poll_list) {
-        struct wakeup_poll *wakeup = container_of(node, struct wakeup_poll, poll_list);
+    list_for_each_node(node, temp, &stack_group->poll_list) {
+        struct wakeup_poll *wakeup = list_entry(node, struct wakeup_poll, poll_list);
 
         if (wakeup->bind_stack == stack) {
             stat->kernel_events += wakeup->stat.kernel_events;

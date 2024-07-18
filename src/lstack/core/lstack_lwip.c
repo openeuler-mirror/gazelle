@@ -173,8 +173,8 @@ int do_lwip_init_sock(int32_t fd)
 
     sock->stack = stack;
 
-    init_list_node_null(&sock->recv_list);
-    init_list_node_null(&sock->event_list);
+    list_init_node(&sock->recv_list);
+    list_init_node(&sock->event_list);
     return 0;
 }
 
@@ -187,7 +187,7 @@ void do_lwip_clean_sock(int fd)
 
     if (sock->wakeup && sock->wakeup->type == WAKEUP_EPOLL) {
         pthread_spin_lock(&sock->wakeup->event_list_lock);
-        list_del_node_null(&sock->event_list);
+        list_del_node(&sock->event_list);
         pthread_spin_unlock(&sock->wakeup->event_list_lock);
     }
 
@@ -195,7 +195,7 @@ void do_lwip_clean_sock(int fd)
 
     reset_sock_data(sock);
 
-    list_del_node_null(&sock->recv_list);
+    list_del_node(&sock->recv_list);
 }
 
 void do_lwip_free_pbuf(struct pbuf *pbuf)
@@ -1098,8 +1098,8 @@ void do_lwip_add_recvlist(int32_t fd)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
 
-    if (sock && sock->stack && list_is_null(&sock->recv_list)) {
-        list_add_node(&sock->stack->recv_list, &sock->recv_list);
+    if (sock && sock->stack && list_node_null(&sock->recv_list)) {
+        list_add_node(&sock->recv_list, &sock->stack->recv_list);
     }
 }
 
@@ -1109,8 +1109,8 @@ void read_same_node_recv_list(struct protocol_stack *stack)
     struct list_node *node, *temp;
     struct lwip_sock *sock;
 
-    list_for_each_safe(node, temp, list) {
-        sock = container_of(node, struct lwip_sock, recv_list);
+    list_for_each_node(node, temp, list) {
+        sock = list_entry(node, struct lwip_sock, recv_list);
 
         if (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)) {
             add_sock_event(sock, EPOLLIN);
@@ -1125,18 +1125,18 @@ void do_lwip_read_recvlist(struct protocol_stack *stack, uint32_t max_num)
     struct lwip_sock *sock;
     uint32_t read_num = 0;
 
-    list_for_each_safe(node, temp, list) {
-        sock = container_of(node, struct lwip_sock, recv_list);
+    list_for_each_node(node, temp, list) {
+        sock = list_entry(node, struct lwip_sock, recv_list);
 
         if (++read_num > max_num) {
             /* list head move to next send */
             list_del_node(&stack->recv_list);
-            list_add_node(&sock->recv_list, &stack->recv_list);
+            list_add_node(&stack->recv_list, &sock->recv_list);
             break;
         }
 
         if (sock->conn == NULL || sock->conn->recvmbox == NULL || rte_ring_count(sock->conn->recvmbox->ring) == 0) {
-            list_del_node_null(&sock->recv_list);
+            list_del_node(&sock->recv_list);
             continue;
         }
 
@@ -1215,7 +1215,7 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
             conn->send_ring_cnt = (sock->send_ring == NULL) ? 0 : gazelle_ring_readover_count(sock->send_ring);
             conn->events = sock->events;
             conn->epoll_events = sock->epoll_events;
-            conn->eventlist = !list_is_null(&sock->event_list);
+            conn->eventlist = !list_node_null(&sock->event_list);
         }
     }
 }
@@ -1426,7 +1426,7 @@ err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
 
     /* rcvlink init in alloc_socket() */
     /* remove from g_rcv_process_list in free_socket */
-    list_add_node(&nsock->stack->same_node_recv_list, &nsock->recv_list);
+    list_add_node(&nsock->recv_list, &nsock->stack->same_node_recv_list);
     return 0;
 }
 
