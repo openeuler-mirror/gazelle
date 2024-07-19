@@ -13,11 +13,11 @@
 #ifndef __GAZELLE_TIMER_H__
 #define __GAZELLE_TIMER_H__
 
+uint64_t gazelle_now_us(void);
+
 struct gazelle_tcp_conn_htable;
 struct gazelle_tcp_sock_htable;
 
-unsigned long get_current_time(void);
-void calibrate_time(void);
 void gazelle_detect_conn_logout(struct gazelle_tcp_conn_htable *conn_htable);
 void gazelle_detect_sock_logout(struct gazelle_tcp_sock_htable *tcp_sock_htable);
 void gazelle_delete_aging_conn(struct gazelle_tcp_conn_htable *conn_htable);

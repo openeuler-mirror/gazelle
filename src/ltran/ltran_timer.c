@@ -26,20 +26,14 @@
 #include "ltran_instance.h"
 #include "ltran_timer.h"
 
-static uint64_t g_cycles_per_us = 0;
-
-uint64_t get_current_time(void)
+uint64_t gazelle_now_us(void)
 {
-    if (g_cycles_per_us == 0) {
-        return 0;
+    static uint64_t g_cycles_per_us = 0;
+    if (unlikely(g_cycles_per_us == 0)) {
+        g_cycles_per_us = (rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S;
     }
 
     return (rte_rdtsc() / g_cycles_per_us);
-}
-
-void calibrate_time(void)
-{
-    g_cycles_per_us = (rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S;
 }
 
 void gazelle_detect_sock_logout(struct gazelle_tcp_sock_htable *tcp_sock_htable)

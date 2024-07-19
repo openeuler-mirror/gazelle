@@ -10,13 +10,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <stdint.h>
 #include <stdlib.h>
-
-uint64_t get_current_time(void)
-{
-    return 0;
-}
 
 int rte_pdump_init(void)
 {

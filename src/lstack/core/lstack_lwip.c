@@ -12,20 +12,21 @@
 
 #include <sys/types.h>
 #include <stdatomic.h>
+#include <securec.h>
+
+#include <rte_errno.h>
+#include <rte_malloc.h>
+
 #include <lwip/sockets.h>
 #include <lwip/tcp.h>
 #include <lwip/udp.h>
 #include <lwipgz_sock.h>
-#include <arch/sys_arch.h>
 #include <lwip/pbuf.h>
 #include <lwip/priv/tcp_priv.h>
 #include <lwip/lwipgz_posix_api.h>
 #include <lwip/api.h>
 #include <lwip/tcp.h>
 #include <lwip/prot/etharp.h>
-#include <securec.h>
-#include <rte_errno.h>
-#include <rte_malloc.h>
 
 #include "common/gazelle_base_func.h"
 #include "lstack_ethdev.h"
@@ -355,7 +356,7 @@ static inline ssize_t app_buff_write(struct lwip_sock *sock, void *buf, size_t l
     (void)gazelle_ring_read(sock->send_ring, (void **)pbufs, write_num);
 
     if (get_protocol_stack_group()->latency_start) {
-        uint64_t time_stamp = get_current_time();
+        uint64_t time_stamp = sys_now_us();
         time_stamp_into_pbuf(write_num, pbufs, time_stamp);
     }
 
@@ -912,7 +913,7 @@ static bool recv_break_for_err(struct lwip_sock *sock)
 static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf **pbuf)
 {
     int32_t expect = 1; // only get one pbuf
-    uint64_t time_stamp = get_current_time();
+    uint64_t time_stamp = sys_now_us();
 
     if (sock->recv_lastdata != NULL) {
         *pbuf = sock->recv_lastdata;
@@ -1250,20 +1251,20 @@ uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn,
     }
 
     for (pcb = tcp_active_pcbs; pcb != NULL && conn_num < max_num; pcb = pcb->next) {
-        conn[conn_num].state = ACTIVE_LIST;
+        conn[conn_num].state = GAZELLE_ACTIVE_LIST;
         copy_pcb_to_conn(conn + conn_num, pcb);
         conn_num++;
     }
 
     for (pcb = tcp_tw_pcbs; pcb != NULL && conn_num < max_num; pcb = pcb->next) {
-        conn[conn_num].state = TIME_WAIT_LIST;
+        conn[conn_num].state = GAZELLE_TIME_WAIT_LIST;
         copy_pcb_to_conn(conn + conn_num, pcb);
         conn_num++;
     }
 
     for (struct tcp_pcb_listen *pcbl = tcp_listen_pcbs.listen_pcbs; pcbl != NULL && conn_num < max_num;
         pcbl = pcbl->next) {
-        conn[conn_num].state = LISTEN_LIST;
+        conn[conn_num].state = GAZELLE_LISTEN_LIST;
         conn[conn_num].lip = *((gz_addr_t *)&pcbl->local_ip);
         conn[conn_num].l_port = pcbl->local_port;
         conn[conn_num].tcp_sub_state = pcbl->state;

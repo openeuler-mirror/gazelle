@@ -75,7 +75,7 @@ void set_start_latency_flag(int32_t flag)
     }
 
     g_start_latency = flag;
-    g_start_time_stamp = get_current_time();
+    g_start_time_stamp = gazelle_now_us();
 }
 
 int32_t get_start_latency_flag(void)

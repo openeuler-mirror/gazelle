@@ -24,7 +24,6 @@
 #include <rte_mempool.h>
 #include <rte_memory.h>
 #include <rte_prefetch.h>
-#include <rte_cycles.h>
 #include <rte_ring.h>
 #include <securec.h>
 
@@ -70,7 +69,7 @@ static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rt
         return;
     }
 
-    latency = get_current_time() - lt->stamp;
+    latency = gazelle_now_us() - lt->stamp;
 
     stack->stack_stats.latency_total += latency;
     stack->stack_stats.latency_pkts++;
@@ -595,7 +594,7 @@ static __rte_always_inline void upstream_forward_loop(uint32_t port_id, uint32_t
     struct rte_mbuf *buf[GAZELLE_PACKET_READ_SIZE] __rte_cache_aligned;
     for (loop_cnt = 0; loop_cnt < UPSTREAM_LOOP_TIMES; loop_cnt++) {
         if (get_start_latency_flag() == GAZELLE_ON) {
-            time_stamp = get_current_time();
+            time_stamp = gazelle_now_us();
         }
 
         rx_count = rte_eth_rx_burst(port_id, queue_id, buf, GAZELLE_PACKET_READ_SIZE);
@@ -657,9 +656,8 @@ void upstream_forward(const uint16_t *port)
     uint32_t queue_num = get_ltran_config()->bond.rx_queue_num;
     uint32_t port_id = get_bond_port()[g_port_index];
     unsigned long now_time;
-    unsigned long last_time = get_current_time();
+    unsigned long last_time = gazelle_now_us();
     unsigned long aging_conn_last_time = last_time;
-    calibrate_time();
 
     while (get_ltran_stop_flag() != GAZELLE_TRUE) {
         for (queue_id = 0; queue_id < queue_num; queue_id++) {
@@ -673,7 +671,7 @@ void upstream_forward(const uint16_t *port)
         }
 #endif
 
-        now_time = get_current_time();
+        now_time = gazelle_now_us();
         if (now_time - aging_conn_last_time > GAZELLE_CONN_INTERVAL) {
             gazelle_delete_aging_conn(gazelle_get_tcp_conn_htable());
             aging_conn_last_time = now_time;

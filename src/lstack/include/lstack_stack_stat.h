@@ -31,7 +31,6 @@ void calculate_sock_latency(struct gazelle_stack_latency *stack_latency, struct 
 void stack_stat_init(void);
 int handle_stack_cmd(int fd, struct gazelle_stat_msg_request *msg);
 int handle_dpdk_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode);
-uint64_t get_current_time(void);
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info);
 void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 void lstack_calculate_aggregate(int type, uint32_t len);
