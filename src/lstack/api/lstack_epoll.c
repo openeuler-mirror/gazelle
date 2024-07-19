@@ -439,7 +439,7 @@ int32_t lstack_rtw_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_
 
     struct wakeup_poll *wakeup = epoll_sock->wakeup;
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (POSIX_IS_CLOSED(sock)) {
+    if (POSIX_IS_CLOSED(sock) || POSIX_IS_TYPE(sock, POSIX_KERNEL)) {
         return posix_api->epoll_ctl_fn(epfd, op, fd, event);
     }
 
