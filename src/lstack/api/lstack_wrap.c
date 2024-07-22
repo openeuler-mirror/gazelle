@@ -636,8 +636,9 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
 
 static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
 {
+    /* while input args are invalid, param timeout will steal be executed in kernel */
     if (nfds <= 0 || !(readfds || writefds || exceptfds)) {
-        GAZELLE_RETURN(EINVAL);
+        return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
     }
 
     if (select_posix_path() == POSIX_KERNEL) {
