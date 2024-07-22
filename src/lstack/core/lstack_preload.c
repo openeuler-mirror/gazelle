@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <securec.h>
+#include <stdbool.h>
 
 #include <lwip/lwipgz_posix_api.h>
 #include <lwip/lwipgz_sock.h>
