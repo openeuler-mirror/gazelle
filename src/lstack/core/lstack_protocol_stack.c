@@ -421,6 +421,11 @@ static struct protocol_stack *stack_thread_init(void *arg)
     RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
 
     lwip_init();
+    /* Using errno to return lwip_init() result. */
+    if (errno != 0) {
+        LSTACK_LOG(ERR, LSTACK, "lwip_init failed, errno %d\n", errno);
+        goto END;
+    }
 
     if (use_ltran()) {
         if (client_reg_thrd_ring() != 0) {
