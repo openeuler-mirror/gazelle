@@ -317,8 +317,16 @@ static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t name
         ret = posix_api->connect_fn(s, name, namelen);
         POSIX_SET_TYPE(sock, POSIX_KERNEL);
     } else {
+	/* When the socket is POSIX_LWIP_OR_KERNEL, connect to lwip first and then connect to kernel. */
         ret = g_wrap_api->connect_fn(s, name, namelen);
-        POSIX_SET_TYPE(sock, POSIX_LWIP);
+        if (ret == 0) {
+            POSIX_SET_TYPE(sock, POSIX_LWIP);
+	} else {
+	    ret = posix_api->connect_fn(s, name, namelen);
+            if (ret == 0) {
+		POSIX_SET_TYPE(sock, POSIX_KERNEL);
+	    }
+	}
     }
 
     return ret;
