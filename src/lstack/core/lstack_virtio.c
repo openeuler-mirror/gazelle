@@ -205,6 +205,7 @@ static int virtio_port_init(uint16_t port)
     int retval;
     uint16_t rx_queue_num = g_virtio_instance.rx_queue_num;
     uint16_t tx_queue_num = g_virtio_instance.tx_queue_num;
+    int mbuf_total_num = get_global_cfg_params()->num_cpu * get_global_cfg_params()->num_process;
 
     LSTACK_LOG(INFO, LSTACK, "virtio_port_init port= %u rx_queue_num=%u tx_queue_num=%u \n",
                port, rx_queue_num, tx_queue_num);
@@ -226,7 +227,8 @@ static int virtio_port_init(uint16_t port)
     }
 
     for (uint16_t q = 0; q < tx_queue_num; q++) {
-        retval = rte_eth_tx_queue_setup(port, q, VIRTIO_TX_RX_RING_SIZE, rte_eth_dev_socket_id(port), NULL);
+        retval = rte_eth_tx_queue_setup(port, q % mbuf_total_num, VIRTIO_TX_RX_RING_SIZE,
+                                        rte_eth_dev_socket_id(port), NULL);
         if (retval < 0) {
             LSTACK_LOG(ERR, LSTACK, "rte_eth_tx_queue_setup failed (queue %u) retval=%d \n", q, retval);
             return retval;

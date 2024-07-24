@@ -1177,11 +1177,11 @@ static void gazelle_print_lstack_stat_virtio(void *buf, const struct gazelle_sta
     struct gazelle_stat_lstack_virtio *virtio = &stat->data.virtio;
     printf("\nStatistics of lstack virtio:\n");
 
-    printf("\nlstack_port_id =%u virtio_port_id =%u rx_queue_num =%u tx_queue_num =%u \n",
+    printf("\nlstack_port_id: %u virtio_port_id: %u rx_queue_num: %u tx_queue_num: %u \n",
            virtio->lstack_port_id, virtio->virtio_port_id, virtio->rx_queue_num,
            virtio->tx_queue_num);
 
-    printf("\n%-8s %-8s  %-8s  %-8s  %-8s\n", "queue_id", "rx_pkg", "rx_drop", "tx_pkg", "tx_drop");
+    printf("\n%-8s  %-8s  %-8s  %-8s  %-8s\n", "queue_id", "rx_pkg", "rx_drop", "tx_pkg", "tx_drop");
     for (int i = 0; i < virtio->rx_queue_num; i++) {
         printf("%-8d  %-8lu  %-8lu  %-8lu  %-8lu\n", i,
                virtio->rx_pkg[i], virtio->rx_drop[i], virtio->tx_pkg[i], virtio->tx_drop[i]);
