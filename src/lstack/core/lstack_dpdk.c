@@ -798,6 +798,7 @@ int32_t init_dpdk_ethdev(void)
             LSTACK_LOG(ERR, LSTACK, "bond device create failed, ret=%d\n", ret);
             return -1;
         }
+        port_id = rte_eth_bond_primary_get(get_protocol_stack_group()->port_id);
     } else {
         port_id = ethdev_port_id(cfg->mac_addr);
         if (port_id < 0) {
@@ -818,8 +819,14 @@ int32_t init_dpdk_ethdev(void)
         }
     }
 #endif
-    if (get_global_cfg_params()->flow_bifurcation && virtio_port_create(port_id) != 0) {
-        return -1;
+    if (cfg->flow_bifurcation) {
+        if (cfg->kni_switch) {
+            LSTACK_LOG(ERR, LSTACK, "flow_bifurcation and kni_switch cannot both be enabled, please check them\n");
+            return -1;
+        }
+        if (virtio_port_create(port_id) != 0) {
+            return -1;
+        }
     }
 
     return 0;
