@@ -413,6 +413,10 @@ int handle_stack_cmd(int fd, struct gazelle_stat_msg_request *msg)
             (stat_mode == GAZELLE_STAT_LTRAN_START_LATENCY || stat_mode == GAZELLE_STAT_LTRAN_STOP_LATENCY)) {
             continue;
         }
+        
+        if (i > 0 && stat_mode == GAZELLE_STAT_LSTACK_SHOW_VIRTIO) {
+            break;
+        }
 
         dfx.tid = stack->tid;
         dfx.stack_id = i;
