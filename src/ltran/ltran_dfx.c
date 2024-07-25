@@ -204,22 +204,19 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
     struct nic_eth_xstats *xstats = &stat->data.nic_xstats;
     static const char *nic_stats_border = "########################";
 
+    printf("###### NIC extended statistics for port %-2d #########\n", xstats->port_id);
     if (xstats->bonding.mode >= 0) {
         printf("############# NIC bonding mode display #############\n");
         printf("%s############################\n", nic_stats_border);
-        printf("Bonding mode： [%d]\n", xstats->bonding.mode);
+        printf("Bonding mode: [%d]\n", xstats->bonding.mode);
         printf("Bonding miimon: [%d]\n", xstats->bonding.miimon);
-        printf("Port range: 0->%d; Bonding port is %d\n", xstats->port_id, xstats->port_id);
         printf("Slaves(%d): [", xstats->bonding.slave_count);
         for (int i = 0; i < xstats->bonding.slave_count - 1; i++) {
             printf("%d ", xstats->bonding.slaves[i]);
         }
         printf("%d]\n", xstats->bonding.slaves[xstats->bonding.slave_count - 1]);
         printf("Primary: [%d]\n", xstats->bonding.primary_port_id);
-        printf("%s############################\n", nic_stats_border);
     }
-
-    printf("###### NIC extended statistics for port %-2d #########\n", xstats->port_id);
     printf("%s############################\n", nic_stats_border);
     if (xstats->len <= 0 || xstats->len > RTE_ETH_XSTATS_MAX_LEN) {
         printf("xstats item(%d) num error!\n", xstats->len);
