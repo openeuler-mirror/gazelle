@@ -227,7 +227,7 @@ static int virtio_port_init(uint16_t port)
     }
 
     for (uint16_t q = 0; q < tx_queue_num; q++) {
-        retval = rte_eth_tx_queue_setup(port, q % mbuf_total_num, VIRTIO_TX_RX_RING_SIZE,
+        retval = rte_eth_tx_queue_setup(port, q, VIRTIO_TX_RX_RING_SIZE,
                                         rte_eth_dev_socket_id(port), NULL);
         if (retval < 0) {
             LSTACK_LOG(ERR, LSTACK, "rte_eth_tx_queue_setup failed (queue %u) retval=%d \n", q, retval);
@@ -236,7 +236,7 @@ static int virtio_port_init(uint16_t port)
     }
 
     for (uint16_t q = 0; q < rx_queue_num; q++) {
-        struct rte_mempool *rxtx_mbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[q];
+        struct rte_mempool *rxtx_mbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[q % mbuf_total_num];
         retval = rte_eth_rx_queue_setup(port, q, VIRTIO_TX_RX_RING_SIZE, rte_eth_dev_socket_id(port),
                                         NULL, rxtx_mbuf_pool);
         if (retval < 0) {
