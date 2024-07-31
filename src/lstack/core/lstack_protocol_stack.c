@@ -916,7 +916,6 @@ void stack_udp_send(struct rpc_msg *msg)
     size_t len = msg->args[MSG_ARG_1].size;
     struct protocol_stack *stack = get_protocol_stack();
     int replenish_again;
-    uint32_t call_num;
 
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL) {
@@ -930,16 +929,12 @@ void stack_udp_send(struct rpc_msg *msg)
     }
 
     replenish_again = do_lwip_send(stack, sock->conn->callback_arg.socket, sock, len, 0);
-    call_num = __sync_fetch_and_sub(&sock->call_num, 1);
-    if (replenish_again < 0) {
-        return;
-    }
-
-    if ((call_num == 1) && (replenish_again > 0)) {
+    if ((replenish_again > 0) && (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 1)) {
         rpc_call_replenish(&stack->rpc_queue, sock);
         return;
     }
-
+    
+    __sync_fetch_and_sub(&sock->call_num, 1);
     return;
 }
 
