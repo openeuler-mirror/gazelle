@@ -87,6 +87,7 @@ static inline void vdev_pkts_parse(struct rte_mbuf **pkts, int pkt_num)
             pkts[i]->l2_len = sizeof(struct rte_ether_hdr);
         }
 
+        pkts[i]->packet_type = 0;
         if (type == RTE_BE16(RTE_ETHER_TYPE_IPV4)) {
             struct rte_ipv4_hdr *iph = rte_pktmbuf_mtod_offset(pkts[i], struct rte_ipv4_hdr *,
                 pkts[i]->l2_len);
