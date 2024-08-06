@@ -179,6 +179,20 @@ void virtio_tap_process_rx(uint16_t port, uint32_t queue_id)
     uint32_t pkg_num;
 
     pkg_num = rte_eth_rx_burst(g_virtio_instance.virtio_port_id, queue_id, pkts_burst, VIRTIO_TX_RX_RING_SIZE);
+    /*
+     * For VLAN, the tap device defaults to tx-vlan-ofload as enabled and will not be modified by default,
+     * so the judgment is skipped.
+     * For checksum, tap devices are turned off by default, and it is assumed that they will not be modified,
+     * so no action will be taken.
+     * For TSO, tap devices do not support it, so no action will be taken.
+     */
+    if (get_global_cfg_params()->nic.vlan_mode != -1) {
+        for (int i = 0; i< pkg_num; i++) {
+            pkts_burst[i]->ol_flags |= RTE_MBUF_F_TX_VLAN;
+            pkts_burst[i]->vlan_tci = (u16_t)get_global_cfg_params()->nic.vlan_mode;
+        }
+    }
+
     if (pkg_num > 0) {
         g_virtio_instance.rx_pkg[queue_id] += pkg_num;
         uint16_t nb_rx = rte_eth_tx_burst(lstack_net_port, queue_id, pkts_burst, pkg_num);
