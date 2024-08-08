@@ -199,6 +199,46 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
     return posix_api->accept4_fn(s, addr, addrlen, flags);
 }
 
+static int kernel_bind_process(int32_t s, const struct sockaddr *name, socklen_t namelen)
+{
+    struct lwip_sock *sock = NULL;
+    int times = 10;
+    int ret = 0;
+
+    if (get_global_cfg_params()->kni_switch == 0 && get_global_cfg_params()->flow_bifurcation == 0) {
+        return 0;
+    }
+    ret = posix_api->bind_fn(s, name, namelen);
+    /* maybe kni addr, ipv6 addr maybe is tentative,need to wait a few seconds */
+    if (name->sa_family == AF_INET6 && ret < 0 && errno == EADDRNOTAVAIL) {
+        LSTACK_LOG(WARNING, LSTACK, "virtio_user addr is tentative, please wait... \n");
+        while (ret != 0 && times-- > 0) {
+            sleep(1);
+            ret = posix_api->bind_fn(s, name, namelen);
+        }
+    }
+
+    if (ret == 0) {
+        /* reuse the port allocated by kernel when port == 0 */
+        if (((struct sockaddr_in *)name)->sin_port == 0) {
+            struct sockaddr_in kerneladdr;
+            socklen_t len = sizeof(kerneladdr);
+            if (posix_api->getsockname_fn(s, (struct sockaddr *)&kerneladdr, &len) < 0) {
+                LSTACK_LOG(ERR, LSTACK, "kernel getsockname failed, fd=%d, errno=%d\n", s, errno);
+                return -1;
+            }
+            ((struct sockaddr_in *)name)->sin_port = kerneladdr.sin_port;
+        }
+        /* not sure POSIX_LWIP or POSIX_KERNEL */
+    } else {
+        sock = lwip_get_socket(s);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
+        LSTACK_LOG(ERR, LSTACK, "kernel bind failed ret %d errno %d sa_family %u times %u\n",
+                   ret, errno, name->sa_family, times);
+    }
+    return 0;
+}
+
 static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen)
 {
     if (name == NULL) {
@@ -231,21 +271,8 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         return posix_api->bind_fn(s, name, namelen);
     }
 
-    /* maybe kni addr */
-    if (posix_api->bind_fn(s, name, namelen) == 0) {
-        /* reuse the port allocated by kernel when port == 0 */
-        if (((struct sockaddr_in *)name)->sin_port == 0) {
-            struct sockaddr_in kerneladdr;
-            socklen_t len = sizeof(kerneladdr);
-            if (posix_api->getsockname_fn(s, (struct sockaddr *)&kerneladdr, &len) < 0) {
-                LSTACK_LOG(ERR, LSTACK, "kernel getsockname failed, fd=%d, errno=%d\n", s, errno);
-                return -1;
-            }
-            ((struct sockaddr_in *)name)->sin_port = kerneladdr.sin_port;
-        }
-        /* not sure POSIX_LWIP or POSIX_KERNEL */
-    } else {
-        POSIX_SET_TYPE(sock, POSIX_LWIP);
+    if (kernel_bind_process(s, name, namelen) < 0) {
+        return -1;
     }
     return g_wrap_api->bind_fn(s, name, namelen);
 }
