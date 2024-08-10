@@ -147,6 +147,13 @@ static int virtio_netif_up(void)
     }
 
     posix_api->close_fn(sockfd);
+    /*
+    * For virtio_user IPv6 addresses, the kernel will check if they are valid,
+    * so wait a few seconds for the address status to change from scope global tentative to scope global.
+    * 3:systerm check ipv6 addr
+    */
+    sleep(3);
+
     return 0;
 }
 
