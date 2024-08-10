@@ -204,8 +204,9 @@ static int kernel_bind_process(int32_t s, const struct sockaddr *name, socklen_t
     struct lwip_sock *sock = NULL;
     int times = 10;
     int ret = 0;
-
-    if (get_global_cfg_params()->kni_switch == 0 && get_global_cfg_params()->flow_bifurcation == 0) {
+    /* lstack not sense if ltran enable kni, so only checks use_ltran. */
+    if (!get_global_cfg_params()->use_ltran && !get_global_cfg_params()->kni_switch &&
+        !get_global_cfg_params()->flow_bifurcation) {
         return 0;
     }
     ret = posix_api->bind_fn(s, name, namelen);
