@@ -201,12 +201,13 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
 
 static int kernel_bind_process(int32_t s, const struct sockaddr *name, socklen_t namelen)
 {
-    struct lwip_sock *sock = NULL;
+    struct lwip_sock *sock = lwip_get_socket(s);
     int times = 10;
     int ret = 0;
     /* lstack not sense if ltran enable kni, so only checks use_ltran. */
     if (!get_global_cfg_params()->use_ltran && !get_global_cfg_params()->kni_switch &&
         !get_global_cfg_params()->flow_bifurcation) {
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
         return 0;
     }
     ret = posix_api->bind_fn(s, name, namelen);
@@ -232,7 +233,6 @@ static int kernel_bind_process(int32_t s, const struct sockaddr *name, socklen_t
         }
         /* not sure POSIX_LWIP or POSIX_KERNEL */
     } else {
-        sock = lwip_get_socket(s);
         POSIX_SET_TYPE(sock, POSIX_LWIP);
         LSTACK_LOG(ERR, LSTACK, "kernel bind failed ret %d errno %d sa_family %u times %u\n",
                    ret, errno, name->sa_family, times);
@@ -266,7 +266,8 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
         memcpy_s(sock_addr.u_addr.ip6.addr, IPV6_ADDR_LEN,
             ((struct sockaddr_in6 *)name)->sin6_addr.s6_addr, IPV6_ADDR_LEN);
     }
-
+    
+    /* TODO: if addr == 127.0.0.1, try kernel and lwip */
     if (!match_host_addr(&sock_addr)) {
         POSIX_SET_TYPE(sock, POSIX_KERNEL);
         return posix_api->bind_fn(s, name, namelen);
