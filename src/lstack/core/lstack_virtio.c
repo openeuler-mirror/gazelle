@@ -13,6 +13,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <net/if.h>
+#include <ifaddrs.h>
 #include <lwip/lwipgz_posix_api.h>
 #include <linux/ipv6.h>
 #include "lstack_cfg.h"
@@ -21,14 +22,14 @@
 #include "lstack_virtio.h"
 #include "securec.h"
 
-#define VIRTIO_USER_NAME "virtio_user0"
+#define VIRTIO_USER_NAME "virtio_user"
 #define VIRTIO_DPDK_PARA_LEN 256
 #define VIRTIO_TX_RX_RING_SIZE 1024
 
 #define VIRTIO_MASK_BITS(mask) (32 - __builtin_clz(mask))
 
 static struct virtio_instance g_virtio_instance = {0};
-
+static char g_virtio_user_name[IFNAMSIZ] = {0};
 struct virtio_instance* virtio_instance_get(void)
 {
     return &g_virtio_instance;
@@ -46,7 +47,7 @@ static int virtio_set_ipv6_addr(void)
         return -1;
     }
 
-    int ret = strncpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), VIRTIO_USER_NAME, sizeof(VIRTIO_USER_NAME));
+    int ret = strncpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), g_virtio_user_name, strlen(g_virtio_user_name));
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv6_addr strncpy failed ret =%d errno=%d \n", ret, errno);
         posix_api->close_fn(sockfd);
@@ -95,7 +96,7 @@ static int virtio_set_ipv4_addr(void)
     struct ifreq ifr;
     memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
 
-    ret = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), VIRTIO_USER_NAME);
+    ret = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), g_virtio_user_name);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "virtio_set_ipv4_addr strcpy_s failed ret=%d errno %d \n", ret, errno);
         posix_api->close_fn(sockfd);
@@ -132,7 +133,7 @@ static int virtio_netif_up(void)
 
     struct ifreq ifr;
     memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
-    int ret = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), VIRTIO_USER_NAME);
+    int ret = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), g_virtio_user_name);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "virtio_netif_up strcpy_s failed ret=%d errno %d \n", ret, errno);
         posix_api->close_fn(sockfd);
@@ -291,15 +292,47 @@ static int32_t virtio_port_start(uint16_t virtio_port)
                g_virtio_instance.rx_queue_num, g_virtio_instance.tx_queue_num);
     return 0;
 }
+
+static int virtio_get_netif_num(void)
+{
+    int netif_num = 0;
+    struct ifaddrs *ifaddr, *ifa;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        LSTACK_LOG(ERR, LSTACK, "getifaddrs failed \n");
+        return -1;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (strncmp(ifa->ifa_name, VIRTIO_USER_NAME, sizeof(VIRTIO_USER_NAME) - 1) == 0) {
+            netif_num++;
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    return netif_num;
+}
+
 int virtio_port_create(int lstack_net_port)
 {
     char portargs[VIRTIO_DPDK_PARA_LEN] = {0};
 
     struct rte_ether_addr addr;
     uint16_t virtio_port_id = 0xffff; // invalid val
-
     struct rte_eth_dev_info dev_info;
-    int ret = rte_eth_dev_info_get(lstack_net_port, &dev_info);
+
+    int ret = virtio_get_netif_num();
+    if (ret < 0) {
+        return -1;
+    }
+
+    ret = sprintf_s(g_virtio_user_name, sizeof(g_virtio_user_name), VIRTIO_USER_NAME "%d", ret);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "sprintf_s failed ret=%d \n", ret);
+        return -1;
+    }
+
+    ret = rte_eth_dev_info_get(lstack_net_port, &dev_info);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "get dev info ret=%d\n", ret);
         return ret;
@@ -325,22 +358,22 @@ int virtio_port_create(int lstack_net_port)
                 g_virtio_instance.rx_queue_num : g_virtio_instance.tx_queue_num;
     retval = snprintf(portargs, sizeof(portargs),
                       "path=/dev/vhost-net,queues=%u,queue_size=%u,iface=%s,mac=" RTE_ETHER_ADDR_PRT_FMT,
-                      actual_queue_num, VIRTIO_TX_RX_RING_SIZE, VIRTIO_USER_NAME, RTE_ETHER_ADDR_BYTES(&addr));
+                      actual_queue_num, VIRTIO_TX_RX_RING_SIZE, g_virtio_user_name, RTE_ETHER_ADDR_BYTES(&addr));
     if (retval < 0) {
         LSTACK_LOG(ERR, LSTACK, "virtio portargs snprintf failed ret=%d \n", retval);
         return retval;
     }
     LSTACK_LOG(INFO, LSTACK, "virtio portargs=%s \n", portargs);
 
-    retval = rte_eal_hotplug_add("vdev", VIRTIO_USER_NAME, portargs);
+    retval = rte_eal_hotplug_add("vdev", g_virtio_user_name, portargs);
     if (retval < 0) {
         LSTACK_LOG(ERR, LSTACK, "rte_eal_hotplug_add failed retval=%d : %s\n", retval, strerror(-retval));
         return retval;
     }
 
-    retval = rte_eth_dev_get_port_by_name(VIRTIO_USER_NAME, &virtio_port_id);
+    retval = rte_eth_dev_get_port_by_name(g_virtio_user_name, &virtio_port_id);
     if (retval != 0) {
-        rte_eal_hotplug_remove("vdev", VIRTIO_USER_NAME);
+        rte_eal_hotplug_remove("vdev", g_virtio_user_name);
         LSTACK_LOG(ERR, LSTACK, "virtio_user0 not found\n");
         return -1;
     }
@@ -351,7 +384,7 @@ int virtio_port_create(int lstack_net_port)
     retval = virtio_port_start(virtio_port_id);
     if (retval != 0) {
         LSTACK_LOG(ERR, LSTACK, "virtio_port_start failed ret=%d\n", retval);
-        rte_eal_hotplug_remove("vdev", VIRTIO_USER_NAME);
+        rte_eal_hotplug_remove("vdev", g_virtio_user_name);
         return retval;
     }
     return 0;
