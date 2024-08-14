@@ -882,7 +882,7 @@ void stack_tcp_send(struct rpc_msg *msg)
     int replenish_again;
 
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL) {
+    if (POSIX_IS_CLOSED(sock)) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
         return;
@@ -918,7 +918,7 @@ void stack_udp_send(struct rpc_msg *msg)
     int replenish_again;
 
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL) {
+    if (POSIX_IS_CLOSED(sock)) {
         msg->result = -1;
         LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
         return;
