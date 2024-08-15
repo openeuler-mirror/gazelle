@@ -40,8 +40,8 @@ dpdk-devbind -b vfio-pci enp3s0/设备pci
 dpdk-devbind -b igb_uio enp3s0/设备pci
 ```
 ### 硬件虚拟化—vf网卡
-vf直通网络模式的docker容器中，gazelle支持mlx系列网卡使用，暂不支持hinic系列网卡。容器场景mlx网卡vf直通搭建方法如下：
-
+vf直通网络模式的docker容器中，gazelle支持mlx和hinic系列网卡使用，其他网卡暂未验证。
+#### 容器场景mlx网卡vf直通搭建方法：
 ```
 #方法一
 ① 下载docker-sriov-plugin插件
@@ -53,7 +53,7 @@ echo 2 > /sys/class/net/enp129s0f0np0/device/sriov_numvfs
 ③ 加载插件镜像
 docker load -i sriov-plugin.tar；
 ④ 运行插件
-docker run -v /run/docker/plugins:/run/docker/plugins -v /etc/docker:/etc/docker -v /var/run:/var/run --net=host --privileged，执行完成后并不会退出，将作为控制台输出日志信息；
+docker run -v /run/docker/plugins:/run/docker/plugins -v /etc/docker:/etc/docker -v /var/run:/var/run --net=host --privileged IMAGE ID，IMAGE ID是插件镜像的，执行完成后并不会退出，将作为控制台输出日志信息；
 ⑤ 创建sriov模式的docker网络
 docker network create -d sriov --subnet=194.168.1.0/24 -o netdevice=enp7s0f0np0 mysriov
 ⑥ 创建vf直通docker容器
@@ -70,6 +70,27 @@ pid=$(docker inspect -f '{{.State.Pid}}' openeuler-docker) #这里是容器的�
 mkdir -p /var/run/netns
 ln -s /proc/${pid}/ns/net /var/run/netns/${pid}
 ip link set enp129s0f0v0 netns ${pid} #这里enp129s0f0v0是vf网卡的名字
+```
+
+#### 容器场景hinic网卡vf直通搭建方法：
+```
+① 创建vf
+echo 4 > /sys/class/net/enp5s0/device/sriov_numvfs
+② 设置vf固定mac地址
+ip link set enp5s0 vf 0 mac 18:3d:5e:bf:6c:22
+ip link set enp5s0 vf 1 mac 18:3d:5e:bf:6c:33
+可以通过ip link show查看是否设置成功
+③ 创建bridge网络模式的容器
+docker run ... --net=bridge ...
+④ 将vf网卡挂到docker命名空间
+pid=$(docker inspect -f '{{.State.Pid}}' openeuler-docker) #这里是容器的名字
+mkdir -p /var/run/netns
+ln -s /proc/${pid}/ns/net /var/run/netns/${pid}
+ip link set enp5s0v0 netns ${pid} #这里enp5s0v0是vf网卡的名字
+
+说明：
+① gazelle配置文件lstack.conf中，mac配置为第②步手动设置的mac地址，忽略ip a查询到的enp5s0v0显示的mac地址；
+② 非容器场景使用gazelle时，如果使用hinic vf网卡，同样必须手动设置mac地址。
 ```
 
 ## 虚拟网卡
@@ -117,7 +138,10 @@ LSTACK: ethdev_port_id:369 No NIC is matched
 EAL: Error - exiting with code: 1
   Cause: gazelle_network_init:306 init_dpdk_ethdev failed
 ```
-解决方法：<br>①先ip a查看网卡设备的mac地址，写入lstack.conf中device；<br>②执行dpdk-devbind -b vfio-pci/igb_uio 网卡设备；<br>③dpdk-devbind -s查看Network devices using DPDK-compatible driver列表是否绑定成功。
+解决方法：<br>
+① 先ip a查看网卡设备的mac地址，写入lstack.conf中device；<br>
+② 执行dpdk-devbind -b vfio-pci/igb_uio 网卡设备；<br>
+③ dpdk-devbind -s查看Network devices using DPDK-compatible driver列表是否绑定成功。
 
 ### 2. 物理机/虚拟机/容器场景，网卡设备和gazelle绑定的cpu不在同一个numa上<br>
 ```
@@ -136,9 +160,11 @@ EAL: Error - exiting with code: 1
   Cause: gazelle_network_init:306 init_dpdk_ethdev failed
 ```
 解决方法：<br>
-①给网卡所在的节点分配大页内存
-`echo 1024 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages`
-①或者把gazelle使用的cpu改到和网卡同一个numa上，需要修改lstack.conf中num_cpus和dpdk_args(大页内存分配)
+① 给网卡所在的节点分配大页内存
+```
+echo 1024 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages
+```
+②或者把gazelle使用的cpu改到和网卡同一个numa上，需要修改lstack.conf中num_cpus和dpdk_args(大页内存分配)
 
 ### 3. 容器场景，gazelle使用的cpu不在容器启动使用的cpu范围内<br>
 ```
@@ -149,7 +175,7 @@ EAL: Error - exiting with code: 1
   Cause: create_control_thread:164 dpdk_eal_init failed ret=-1 errno=2
 ```
 解决方法：<br>
-①修改lstack.conf中num_cpus为容器使用的cpu。
+① 修改lstack.conf中num_cpus为容器使用的cpu。
 
 ### 4. 容器+vf直通网络模式场景，hinic网卡，nic mac与lstack.conf中mac不一致<br>
 ```
@@ -161,7 +187,7 @@ EAL: Error - exiting with code: 1
   Cause: gazelle_network_init:306 init_dpdk_ethdev failed
 ```
 解决方法：<br>
-①暂不支持hinic网卡容器vf直通。
+① 在创建vf网卡后，需要给vf网卡配置固定mac，可参考上文容器场景hinic网卡vf直通搭建方法。
 
 ### 5. 容器内没有vfio驱动，或者设备目录未共享，dpdk绑定网卡设备失败
 ```
