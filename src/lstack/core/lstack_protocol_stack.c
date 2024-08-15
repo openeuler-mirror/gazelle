@@ -548,29 +548,31 @@ static void* gazelle_stack_thread(void *arg)
 
 int32_t stack_group_init_mempool(void)
 {
-    struct cfg_params *global_cfg_parmas = get_global_cfg_params();
-    uint32_t total_mbufs = get_global_cfg_params()->mbuf_count_per_conn * get_global_cfg_params()->tcp_conn_count;
+    struct cfg_params *cfg_params = get_global_cfg_params();
+    uint32_t total_mbufs = 0;
+    uint32_t total_conn_mbufs = cfg_params->mbuf_count_per_conn * cfg_params->tcp_conn_count;
+    uint32_t total_nic_mbufs = cfg_params->nic.rxqueue_size + cfg_params->nic.txqueue_size;
     struct rte_mempool *rxtx_mbuf = NULL;
     uint32_t cpu_id = 0;
     unsigned numa_id = 0;
     int queue_id = 0;
 
     LSTACK_LOG(INFO, LSTACK,
-        "config::num_cpu=%d num_process=%d \n", global_cfg_parmas->num_cpu, global_cfg_parmas->num_process);
+        "config::num_cpu=%d num_process=%d \n", cfg_params->num_cpu, cfg_params->num_process);
     
-    for (int cpu_idx = 0; cpu_idx < get_global_cfg_params()->num_queue; cpu_idx++) {
-        cpu_id = global_cfg_parmas->cpus[cpu_idx];
+    for (int cpu_idx = 0; cpu_idx < cfg_params->num_queue; cpu_idx++) {
+        cpu_id = cfg_params->cpus[cpu_idx];
         numa_id = numa_node_of_cpu(cpu_id);
         
-        for (int process_idx = 0; process_idx < global_cfg_parmas->num_process; process_idx++) {
-            queue_id = cpu_idx * global_cfg_parmas->num_process + process_idx;
+        for (int process_idx = 0; process_idx < cfg_params->num_process; process_idx++) {
+            queue_id = cpu_idx * cfg_params->num_process + process_idx;
             if (queue_id >= PROTOCOL_STACK_MAX) {
                 LSTACK_LOG(ERR, LSTACK, "index is over\n");
                 return -1;
             }
             
-            rxtx_mbuf = create_pktmbuf_mempool(
-                "rxtx_mbuf", total_mbufs / get_global_cfg_params()->num_queue, RXTX_CACHE_SZ, queue_id, numa_id);
+            total_mbufs = (total_conn_mbufs / cfg_params->num_queue) + total_nic_mbufs + MBUFPOOL_RESERVE_NUM;
+            rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf", total_mbufs, RXTX_CACHE_SZ, queue_id, numa_id);
             if (rxtx_mbuf == NULL) {
                 LSTACK_LOG(ERR, LSTACK, "cpuid=%u, numid=%d , rxtx_mbuf idx= %d create_pktmbuf_mempool fail\n",
                     cpu_id, numa_id, queue_id);
