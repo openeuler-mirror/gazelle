@@ -15,6 +15,7 @@
 #include <net/if.h>
 #include <ifaddrs.h>
 #include <lwip/lwipgz_posix_api.h>
+#include <lwip/dpdk_version.h>
 #include <linux/ipv6.h>
 #include "lstack_cfg.h"
 #include "lstack_log.h"
