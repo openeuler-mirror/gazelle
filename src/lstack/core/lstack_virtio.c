@@ -26,6 +26,9 @@
 #define VIRTIO_DPDK_PARA_LEN 256
 #define VIRTIO_TX_RX_RING_SIZE 1024
 
+#define VIRTIO_NETIF_CHECK_MAX_TIMES 10
+#define VIRTIO_NETIF_CMD_OUTPUT 4096
+
 #define VIRTIO_MASK_BITS(mask) (32 - __builtin_clz(mask))
 
 static struct virtio_instance g_virtio_instance = {0};
@@ -123,6 +126,27 @@ static int virtio_set_ipv4_addr(void)
     return 0;
 }
 
+static int virtio_ipv6_is_tentative(void)
+{
+    FILE *fp;
+    char output[VIRTIO_NETIF_CMD_OUTPUT] = {0};
+    int not_ready = 0;
+    /* ipv6 tentative state means not ready */
+    const char *cmd = "ip a |grep tentative";
+
+    fp = popen(cmd, "r");
+    if (fp == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "%s execution failed \n", cmd);
+        return -1;
+    }
+
+    if (fgets(output, sizeof(output), fp) != NULL) {
+        not_ready = 1;
+    }
+    pclose(fp);
+    return not_ready;
+}
+
 static int virtio_netif_up(void)
 {
     int sockfd = posix_api->socket_fn(AF_INET, SOCK_DGRAM, 0);
@@ -151,9 +175,16 @@ static int virtio_netif_up(void)
     /*
     * For virtio_user IPv6 addresses, the kernel will check if they are valid,
     * so wait a few seconds for the address status to change from scope global tentative to scope global.
-    * 3:systerm check ipv6 addr
     */
-    sleep(3);
+    for (int i = 0; i < VIRTIO_NETIF_CHECK_MAX_TIMES; i++) {
+        ret = virtio_ipv6_is_tentative();
+        if (ret == 0) {
+            break;
+        } else if (ret < 0) {
+            return -1;
+        }
+        sleep(1);
+    }
 
     return 0;
 }
