@@ -80,12 +80,12 @@ else()
 endif()
 
 if (DPDK_VERSION  GREATER_EQUAL 23.11)
-    set(DPDK_LINK_FLAGS ${DPDK_LINK_FLAGS} -lrte_log -larchive -Wl,-lrte_eal)
+    set(DPDK_LINK_FLAGS ${DPDK_LINK_FLAGS} -lrte_log -Wl,-lrte_eal)
 else()
     set(DPDK_LINK_FLAGS ${DPDK_LINK_FLAGS} -lrte_kni -Wl,-Bstatic -Wl,-lrte_eal -Wl,-Bdynamic)
-    if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "ppc64le")
-        set(DPDK_LINK_FLAGS ${DPDK_LINK_FLAGS} -Wl,-larchive)
-    endif()
+endif()
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "ppc64le")
+    set(DPDK_LINK_FLAGS ${DPDK_LINK_FLAGS} -Wl,-larchive)
 endif()
 
 # compile info
