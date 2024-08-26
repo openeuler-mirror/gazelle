@@ -63,10 +63,16 @@ for commitid in ${COMMIT_ID};do
 		git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
 		git pull https://gitee.com/src-openeuler/gazelle.git $TARGET_BRANCH
 	fi
-	patchnum=$(ls ./*.patch | wc -l)
-	let patchnum+=1
-	let Patchnum=9000+$patchnum
-	patchnum=$(printf "%04d\n" $patchnum)
+
+        #get patchnum from spec file.
+        patchnum=$(grep -o "Patch[0-9]\+" *.spec | tail -n 1 | awk -Fh '{print $2}')
+        if [ -z $patchnum ];then
+            #there is no patch in spec file. get patch by conunt patches in dir. 
+	    patchnum=$(ls ./*.patch | wc -l)
+	    let Patchnum=9000+$patchnum
+	    patchnum=$(printf "%04d\n" $patchnum)
+        fi
+        let patchnum+=1
 	new_patchname=$(echo $patchname | sed -e "s/^0001-/${patchnum}-/g")
 
 	echo $new_patchname
@@ -82,7 +88,7 @@ for commitid in ${COMMIT_ID};do
 
 	#add changelog in spec file
 	changelog_line=$(grep -n '^%changelog' gazelle.spec | cut -f1 -d':')
-	changelog_data=$(date | awk '{print $1,$2,$3,$6}')
+	changelog_data=$(date +"%a %b %d %Y")
 	changelog_version=$(grep '^Version' gazelle.spec | awk '{print $2}')
 
 	if [ -z "$done_once" ];then
