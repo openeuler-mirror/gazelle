@@ -917,7 +917,7 @@ static int32_t parse_use_ltran(void)
 static int32_t parse_tcp_conn_count(void)
 {
     int32_t ret;
-    PARSE_ARG(g_config_params.tcp_conn_count, "tcp_conn_count", TCP_CONN_COUNT, 1, TCP_CONN_COUNT, ret);
+    PARSE_ARG(g_config_params.tcp_conn_count, "tcp_conn_count", TCP_CONN_COUNT, 1, GAZELLE_MAX_CLIENTS, ret);
     return ret;
 }
 
