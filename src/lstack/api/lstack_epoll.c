@@ -782,6 +782,7 @@ static int resize_kernel_poll(struct wakeup_poll *wakeup, nfds_t nfds)
     if (wakeup->events == NULL) {
         LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
         free(wakeup->last_fds);
+        wakeup->last_fds = NULL;
         return -1;
     }
 
