@@ -19,15 +19,9 @@
 #include <stdatomic.h>
 #include <pthread.h>
 
-#include <lwip/lwipgz_sock.h>
 #include <lwip/sockets.h>
-#include <lwip/lwipgz_event.h>
-#include <lwip/api.h>
-#include <lwip/tcp.h>
-#include <lwip/timeouts.h>
 #include <lwip/lwipgz_posix_api.h>
 
-#include "lstack_ethdev.h"
 #include "lstack_stack_stat.h"
 #include "lstack_cfg.h"
 #include "lstack_log.h"
@@ -304,6 +298,17 @@ int32_t lstack_epoll_create(int32_t flags)
 {
     int32_t fd = posix_api->epoll_create_fn(flags);
     return lstack_do_epoll_create(fd);
+}
+
+static void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    struct protocol_stack *stack = NULL;
+
+    for (int32_t i = 0; i < stack_group->stack_num; i++) {
+        stack = stack_group->stacks[i];
+        rpc_call_clean_epoll(&stack->rpc_queue, wakeup);
+    }
 }
 
 int32_t lstack_epoll_close(int32_t fd)

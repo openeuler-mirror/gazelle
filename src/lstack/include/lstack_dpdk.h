@@ -13,7 +13,10 @@
 #ifndef _GAZELLE_DPDK_H_
 #define _GAZELLE_DPDK_H_
 
-#include <lwip/lwipgz_flow.h>
+#include <rte_ring.h>
+#include <rte_mbuf.h>
+#include <rte_mempool.h>
+
 #include "common/gazelle_opt.h"
 #include "common/gazelle_dfx_msg.h"
 
@@ -32,32 +35,34 @@
  */
 #define MBUF_MAX_NUM         0xfffffff
 
+struct protocol_stack;
+
+int32_t dpdk_eal_init(void);
+void lstack_log_level_init(void);
+
+int dpdk_ethdev_init(int port_id);
+int dpdk_ethdev_start(void);
+int init_dpdk_ethdev(void);
+
 int thread_affinity_default(void);
 int thread_affinity_init(int cpu_id);
 
-struct protocol_stack;
-struct rte_mempool;
-struct rte_ring;
-struct rte_mbuf;
+int32_t create_shared_ring(struct protocol_stack *stack);
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
-int32_t dpdk_eal_init(void);
 int32_t pktmbuf_pool_init(struct protocol_stack *stack);
 struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t size,
                                    uint32_t flags, int32_t idx);
-int32_t create_shared_ring(struct protocol_stack *stack);
-void lstack_log_level_init(void);
-int dpdk_ethdev_init(int port_id);
-int dpdk_ethdev_start(void);
+struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
+                                           uint32_t mbuf_cache_size, uint16_t queue_id, unsigned numa_id);
+int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num, bool reserve);
+
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 void dpdk_skip_nic_init(void);
 void dpdk_restore_pci(void);
 #endif
 int32_t dpdk_init_lstack_kni(void);
-bool port_in_stack_queue(gz_addr_t *src_ip, gz_addr_t *dst_ip, uint16_t src_port, uint16_t dst_port);
-struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
-                                           uint32_t mbuf_cache_size, uint16_t queue_id, unsigned numa_id);
 
 void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
-int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num, bool reserve);
 void dpdk_nic_features_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
+
 #endif /* GAZELLE_DPDK_H */

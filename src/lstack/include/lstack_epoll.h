@@ -19,13 +19,10 @@
 #include <pthread.h>
 
 #include <lwip/lwipgz_list.h>
+#include <lwip/lwipgz_sock.h>
 
 #include "common/gazelle_dfx_msg.h"
 #include "common/gazelle_opt.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 enum wakeup_type {
     WAKEUP_EPOLL = 0,
@@ -61,9 +58,6 @@ struct wakeup_poll {
     pthread_spinlock_t event_list_lock;
 };
 
-struct netconn;
-struct lwip_sock;
-
 void add_sock_event(struct lwip_sock *sock, uint32_t event);
 void add_sock_event_nolock(struct lwip_sock *sock, uint32_t event);
 void del_sock_event(struct lwip_sock *sock, uint32_t event);
@@ -90,9 +84,5 @@ static inline void lstack_block_wakeup(struct wakeup_poll *wakeup)
         sem_post(&wakeup->wait);
     }
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _GAZELLE_EPOLL_H_ */

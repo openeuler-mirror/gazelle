@@ -14,7 +14,6 @@
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <net/if.h>
 
 #include <lwip/lwipgz_posix_api.h>
 #include <lwip/lwipgz_sock.h>
