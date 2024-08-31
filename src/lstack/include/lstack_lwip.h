@@ -29,15 +29,23 @@ unsigned same_node_ring_count(struct lwip_sock *sock);
 #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 #define NETCONN_IS_UDP(sock)        (NETCONNTYPE_GROUP(netconn_type((sock)->conn)) == NETCONN_UDP)
 
-void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_sock);
-
+/* lwip api */
 struct pbuf *do_lwip_tcp_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size);
 struct pbuf *do_lwip_udp_get_from_sendring(struct lwip_sock *sock, uint16_t remain_size);
 void do_lwip_get_from_sendring_over(struct lwip_sock *sock);
-bool do_lwip_replenish_sendring(struct protocol_stack *stack, struct lwip_sock *sock);
 ssize_t do_lwip_read_from_lwip(struct lwip_sock *sock, int32_t flags, uint8_t apiflags);
 
-/* app write/read ring */
+/* lwip api */
+void do_lwip_free_pbuf(struct pbuf *pbuf);
+struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type);
+
+/* lwip api */
+void do_lwip_add_recvlist(int32_t fd);
+/* stack api */
+void do_lwip_read_recvlist(struct protocol_stack *stack, uint32_t max_num);
+
+
+/* app api */
 ssize_t do_lwip_sendmsg_to_stack(struct lwip_sock *sock, int32_t s,
                                  const struct msghdr *message, int32_t flags);
 ssize_t do_lwip_recvmsg_from_stack(int32_t s, const struct msghdr *message, int32_t flags);
@@ -47,16 +55,13 @@ ssize_t do_lwip_send_to_stack(int32_t fd, const void *buf, size_t len, int32_t f
 ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags,
                                 struct sockaddr *addr, socklen_t *addrlen);
 
-void do_lwip_read_recvlist(struct protocol_stack *stack, uint32_t max_num);
-void do_lwip_add_recvlist(int32_t fd);
-int do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
-                 size_t len, int32_t flags);
+/* stack api */
+bool do_lwip_replenish_sendring(struct protocol_stack *stack, struct lwip_sock *sock);
+
+void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_sock);
 
 uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn, uint32_t max_num);
 uint32_t do_lwip_get_connnum(void);
-
-void do_lwip_free_pbuf(struct pbuf *pbuf);
-struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type);
 
 void read_same_node_recv_list(struct protocol_stack *stack);
 

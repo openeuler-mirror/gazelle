@@ -88,7 +88,7 @@ struct protocol_stack *get_protocol_stack(void)
     return g_stack_p;
 }
 
-struct protocol_stack *get_protocol_stack_by_fd(int32_t fd)
+struct protocol_stack *get_protocol_stack_by_fd(int fd)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (POSIX_IS_CLOSED(sock)) {
@@ -468,7 +468,7 @@ END:
     return NULL;
 }
 
-int stack_polling(uint32_t wakeup_tick)
+int stack_polling(unsigned wakeup_tick)
 {
     int force_quit;
     struct cfg_params *cfg = get_global_cfg_params();
@@ -536,12 +536,11 @@ int stack_polling(uint32_t wakeup_tick)
 static void* gazelle_stack_thread(void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
-
     uint16_t queue_id = t_params->queue_id;
-    uint32_t wakeup_tick = 0;
+    struct protocol_stack *stack;
+    unsigned wakeup_tick = 0;
 
-    struct protocol_stack *stack = stack_thread_init(arg);
-
+    stack = stack_thread_init(arg);
     free(arg);
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
@@ -607,7 +606,7 @@ static int stack_group_init_mempool(void)
     return 0;
 }
 
-int32_t stack_group_init(void)
+int stack_group_init(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     stack_group->stack_num = 0;
@@ -632,7 +631,7 @@ int32_t stack_group_init(void)
     return 0;
 }
 
-int32_t stack_setup_app_thread(void)
+int stack_setup_app_thread(void)
 {
     static PER_THREAD int first_flags = 1;
     static _Atomic uint32_t queue_id = 0;
@@ -660,21 +659,21 @@ int32_t stack_setup_app_thread(void)
     return 0;
 }
 
-int32_t stack_setup_thread(void)
+int stack_setup_thread(void)
 {
-    int32_t ret;
+    int ret, i;
     char name[PATH_MAX];
     int queue_num = get_global_cfg_params()->num_queue;
     struct thread_params *t_params[PROTOCOL_STACK_MAX] = {NULL};
     int process_index = get_global_cfg_params()->process_idx;
 
-    for (uint32_t i = 0; i < queue_num; ++i) {
+    for (i = 0; i < queue_num; ++i) {
         t_params[i] = malloc(sizeof(struct thread_params));
         if (t_params[i] == NULL) {
             goto OUT1;
         }
     }
-    for (uint32_t i = 0; i < queue_num; i++) {
+    for (i = 0; i < queue_num; i++) {
         if (get_global_cfg_params()->seperate_send_recv) {
             if (i % 2 == 0) {
                 ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_RECV_THREAD_NAME, process_index, i / 2);
@@ -714,7 +713,7 @@ int32_t stack_setup_thread(void)
     return 0;
 
 OUT1:
-    for (int32_t i = 0; i < queue_num; ++i) {
+    for (i = 0; i < queue_num; ++i) {
         if (t_params[i] != NULL) {
             free(t_params[i]);
         }

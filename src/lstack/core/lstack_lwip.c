@@ -588,23 +588,6 @@ bool do_lwip_replenish_sendring(struct protocol_stack *stack, struct lwip_sock *
     return replenish_again;
 }
 
-int do_lwip_send(struct protocol_stack *stack, int32_t fd, struct lwip_sock *sock,
-                 size_t len, int32_t flags)
-{
-    ssize_t ret;
-    /* send all send_ring, so len set lwip send max. */
-    if (NETCONN_IS_UDP(sock)) {
-        ret = lwip_send(fd, sock, len, flags);
-    } else {
-        ret = lwip_send(fd, sock, UINT16_MAX, flags);
-    }
-    if (ret < 0 && (errno == ENOTCONN || errno == ECONNRESET || errno == ECONNABORTED)) {
-        return -1;
-    }
-
-    return do_lwip_replenish_sendring(stack, sock);
-}
-
 static inline void free_recv_ring_readover(struct rte_ring *ring)
 {
     void *pbufs[SOCK_RECV_RING_SIZE];
@@ -753,10 +736,10 @@ static inline void notice_stack_tcp_send(struct lwip_sock *sock, int32_t fd, int
 
 static inline void notice_stack_udp_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
 {
-        __sync_fetch_and_add(&sock->call_num, 1);
-        while (rpc_call_udp_send(&sock->stack->rpc_queue, fd, len, flags) < 0) {
-            usleep(1000); // 1000: wait 1ms to exec again
-        }
+    __sync_fetch_and_add(&sock->call_num, 1);
+    while (rpc_call_udp_send(&sock->stack->rpc_queue, fd, len, flags) < 0) {
+        usleep(1000); // 1000: wait 1ms to exec again
+    }
 }
 
 static inline void notice_stack_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags)
@@ -875,7 +858,7 @@ ssize_t do_lwip_send_to_stack(int32_t fd, const void *buf, size_t len, int32_t f
         // send = 0 : tcp peer close connection ?
         if (send <= 0) {
             return send;
-         }
+        }
     }
 
     notice_stack_send(sock, fd, send, flags);

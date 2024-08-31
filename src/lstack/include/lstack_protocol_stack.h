@@ -31,11 +31,8 @@
 #include "lstack_tx_cache.h"
 
 #define SOCK_RECV_RING_SIZE         (get_global_cfg_params()->recv_ring_size)
-#define SOCK_RECV_FREE_THRES        (32)
 #define SOCK_RECV_RING_SIZE_MAX     (2048)
 #define SOCK_SEND_RING_SIZE_MAX     (2048)
-#define SOCK_SEND_REPLENISH_THRES   (16)
-#define WAKEUP_MAX_NUM              (32)
 
 #define MBUFPOOL_RESERVE_NUM (get_global_cfg_params()->nic.rxqueue_size + 1024)
 
@@ -113,7 +110,7 @@ struct protocol_stack_group {
 long get_stack_tid(void);
 
 struct protocol_stack *get_protocol_stack(void);
-struct protocol_stack *get_protocol_stack_by_fd(int32_t fd);
+struct protocol_stack *get_protocol_stack_by_fd(int fd);
 struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
@@ -121,13 +118,13 @@ int get_min_conn_stack(struct protocol_stack_group *stack_group);
 void bind_to_stack_numa(struct protocol_stack *stack);
 void thread_bind_stack(struct protocol_stack *stack);
 
-int32_t stack_group_init(void);
+int stack_group_init(void);
 void stack_group_exit(void);
 void stack_exit(void);
 
-int32_t stack_setup_thread(void);
-int32_t stack_setup_app_thread(void);
+int stack_setup_thread(void);
+int stack_setup_app_thread(void);
 
-int stack_polling(uint32_t wakeup_tick);
+int stack_polling(unsigned wakeup_tick);
 
 #endif
