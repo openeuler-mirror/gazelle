@@ -14,7 +14,7 @@
 #define _LSTACK_WRAP_H_
 
 void wrap_api_init(void);
-void wrap_api_set_dummy(void);
+void wrap_api_exit(void);
 
 #endif
 

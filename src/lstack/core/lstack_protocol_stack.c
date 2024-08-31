@@ -31,7 +31,7 @@
 #include "lstack_lwip.h"
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
-#include "posix/lstack_epoll.h"
+#include "lstack_epoll.h"
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"
 #include "lstack_protocol_stack.h"
