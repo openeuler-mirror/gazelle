@@ -571,7 +571,7 @@ static int stack_group_init_mempool(void)
     struct cfg_params *cfg_params = get_global_cfg_params();
     uint32_t total_mbufs = 0;
     uint32_t total_conn_mbufs = cfg_params->mbuf_count_per_conn * cfg_params->tcp_conn_count;
-    uint32_t total_nic_mbufs = cfg_params->nic.rxqueue_size + cfg_params->nic.txqueue_size;
+    uint32_t total_nic_mbufs = cfg_params->rxqueue_size + cfg_params->txqueue_size;
     struct rte_mempool *rxtx_mbuf = NULL;
     uint32_t cpu_id = 0;
     unsigned numa_id = 0;

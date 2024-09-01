@@ -1300,9 +1300,9 @@ static int32_t parse_use_sockmap(void)
 static int32_t parse_nic_rxqueue_size(void)
 {
     int32_t ret;
-    PARSE_ARG(g_config_params.nic.rxqueue_size, "nic_rxqueue_size", 4096,
+    PARSE_ARG(g_config_params.rxqueue_size, "nic_rxqueue_size", 4096,
               NIC_QUEUE_SIZE_MIN, NIC_QUEUE_SIZE_MAX, ret);
-    if (!rte_is_power_of_2(g_config_params.nic.rxqueue_size)) {
+    if (!rte_is_power_of_2(g_config_params.rxqueue_size)) {
         LSTACK_LOG(ERR, LSTACK, "nic queue size only support power of two\n");
         return -1;
     }
@@ -1312,9 +1312,9 @@ static int32_t parse_nic_rxqueue_size(void)
 static int32_t parse_nic_txqueue_size(void)
 {
     int32_t ret;
-    PARSE_ARG(g_config_params.nic.txqueue_size, "nic_txqueue_size", 2048,
+    PARSE_ARG(g_config_params.txqueue_size, "nic_txqueue_size", 2048,
               NIC_QUEUE_SIZE_MIN, NIC_QUEUE_SIZE_MAX, ret);
-    if (!rte_is_power_of_2(g_config_params.nic.txqueue_size)) {
+    if (!rte_is_power_of_2(g_config_params.txqueue_size)) {
         LSTACK_LOG(ERR, LSTACK, "nic queue size only support power of two\n");
         return -1;
     }
@@ -1352,7 +1352,7 @@ static int32_t parse_stack_thread_mode(void)
 static int32_t parse_nic_vlan_mode(void)
 {
     int32_t ret;
-    PARSE_ARG(g_config_params.nic.vlan_mode, "nic_vlan_mode", -1, -1, 4094, ret);
+    PARSE_ARG(g_config_params.vlan_mode, "nic_vlan_mode", -1, -1, 4094, ret);
     return ret;
 }
 

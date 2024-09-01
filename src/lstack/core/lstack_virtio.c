@@ -226,10 +226,10 @@ void virtio_tap_process_rx(uint16_t port, uint32_t queue_id)
      * so no action will be taken.
      * For TSO, tap devices do not support it, so no action will be taken.
      */
-    if (get_global_cfg_params()->nic.vlan_mode != -1) {
+    if (get_global_cfg_params()->vlan_mode != -1) {
         for (int i = 0; i< pkg_num; i++) {
             pkts_burst[i]->ol_flags |= RTE_MBUF_F_TX_VLAN;
-            pkts_burst[i]->vlan_tci = (u16_t)get_global_cfg_params()->nic.vlan_mode;
+            pkts_burst[i]->vlan_tci = (u16_t)get_global_cfg_params()->vlan_mode;
         }
     }
 
