@@ -13,11 +13,9 @@ netperf-2.7.0版本：https://gitee.com/src-openeuler/netperf
 ### 测试范围
 TCP_STREAM，测试tcp吞吐量  
 TCP_RR，测试tcp时延  
-注：目前TCP双端gazelle+物理机场景仅支持包长<1436（MTU）  
 
 UDP_STREAM，测试udp吞吐量  
 UDP_RR，测试udp时延  
-注：目前UDP相关测试仅支持包长<1436（MTU）  
 
 ## 使用说明
 ### 环境配置
