@@ -65,14 +65,14 @@ for commitid in ${COMMIT_ID};do
 	fi
 
         #get patchnum from spec file.
-        patchnum=$(grep -o "Patch[0-9]\+" *.spec | tail -n 1 | awk -Fh '{print $2}')
+        patchnum=$(grep -o "Patch[0-9]\+" *.spec | tail -n 1 | awk -Fh '{print $2}' | awk '{print $1 - 9000}')
         if [ -z $patchnum ];then
             #there is no patch in spec file. get patch by conunt patches in dir. 
 	    patchnum=$(ls ./*.patch | wc -l)
-	    let Patchnum=9000+$patchnum
-	    patchnum=$(printf "%04d\n" $patchnum)
         fi
         let patchnum+=1
+        let Patchnum=9000+$patchnum
+        patchnum=$(printf "%04d\n" $patchnum)
 	new_patchname=$(echo $patchname | sed -e "s/^0001-/${patchnum}-/g")
 
 	echo $new_patchname
