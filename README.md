@@ -34,7 +34,7 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 |[Gazelle开发者指南](doc/programmer-guide.md)| 1. 技术原理<br>2. 架构设计| 待定 |
 |[实践系列-Gazelle加速mysql 20%](doc/%E5%AE%9E%E8%B7%B5%E7%B3%BB%E5%88%97-Gazelle%E5%8A%A0%E9%80%9Fmysql.md)|1. 详细测试步骤<br>2. 性能效果|已发布|
 |[实践系列-Gazelle加速ceph client 20%](https://www.hikunpeng.com/document/detail/zh/kunpengcpfs/basicAccelFeatures/storageAccel/kunpengcpfs_hpcd_0002.html)|1. 详细测试步骤<br>2. 性能效果|已发布|
-|实践系列-Gazelle加速redis |1. 详细测试步骤<br>2. 性能效果| 待定 |
+|[实践系列-Gazelle加速redis](doc/redis.md) |1. 详细测试步骤<br>2. 性能效果| 待定 |
 |实践系列-Gazelle加速openGauss |1. 详细测试步骤<br>2. 性能效果| 待定 |
 |[实践系列-Gazelle支持netperf性能测试](doc/netperf.md)| 1.版本说明 <br>2. 详细测试步骤| 待定 |
 
