@@ -309,8 +309,8 @@ static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struc
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_mud->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close server_ans_ret %d! \n", server_ans_ret);
+                return PROGRAM_FAULT;
             }
-            return PROGRAM_FAULT;
         }
         server_mud->workers->recv_bytes += pktlen;
     } else {
@@ -725,13 +725,13 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close ret %d! \n", server_ans_ret);
+                return PROGRAM_ABORT;
             }
-            return PROGRAM_FAULT;
         }
         server_unit->recv_bytes += pktlen;
     } else {
         if (sersum_process_tcp_accept_event(server_unit, curr_epev) != PROGRAM_OK) {
-            return PROGRAM_FAULT;
+            return PROGRAM_ABORT;
         }
     }
     return PROGRAM_OK;
@@ -758,7 +758,7 @@ int32_t sersum_proc_epevs(struct ServerMumUnit *server_unit)
 
         if (curr_epev->events == EPOLLIN) {
             if (sersum_process_epollin_event(server_unit, curr_epev) != PROGRAM_OK) {
-                return PROGRAM_FAULT;
+                return PROGRAM_ABORT;
             }
         }
     }
