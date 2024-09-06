@@ -559,18 +559,18 @@ int32_t stack_group_init_mempool(void)
 
     LSTACK_LOG(INFO, LSTACK,
         "config::num_cpu=%d num_process=%d \n", cfg_params->num_cpu, cfg_params->num_process);
-    
+
     for (int cpu_idx = 0; cpu_idx < cfg_params->num_queue; cpu_idx++) {
         cpu_id = cfg_params->cpus[cpu_idx];
         numa_id = numa_node_of_cpu(cpu_id);
-        
+
         for (int process_idx = 0; process_idx < cfg_params->num_process; process_idx++) {
             queue_id = cpu_idx * cfg_params->num_process + process_idx;
             if (queue_id >= PROTOCOL_STACK_MAX) {
                 LSTACK_LOG(ERR, LSTACK, "index is over\n");
                 return -1;
             }
-            
+
             total_mbufs = (total_conn_mbufs / cfg_params->num_queue) + total_nic_mbufs + MBUFPOOL_RESERVE_NUM;
             rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf", total_mbufs, RXTX_CACHE_SZ, queue_id, numa_id);
             if (rxtx_mbuf == NULL) {
@@ -578,7 +578,7 @@ int32_t stack_group_init_mempool(void)
                     cpu_id, numa_id, queue_id);
                 return -1;
             }
-            
+
             get_protocol_stack_group()->total_rxtx_pktmbuf_pool[queue_id] = rxtx_mbuf;
         }
     }
@@ -723,13 +723,13 @@ void stack_close(struct rpc_msg *msg)
     int32_t fd = msg->args[MSG_ARG_0].i;
     struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     struct lwip_sock *sock = lwip_get_socket(fd);
-    
+
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
         rpc_call(&stack->rpc_queue, msg); /* until stack_send recall finish */
         return;
     }
-    
+
     msg->result = lwip_close(fd);
     if (msg->result != 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
@@ -750,7 +750,7 @@ void stack_shutdown(struct rpc_msg *msg)
     }
 
     msg->result = lwip_shutdown(fd, how);
-    if (msg->result != 0) {
+    if (msg->result != 0 && errno != ENOTCONN) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), fd, msg->result);
     }
 
@@ -935,7 +935,7 @@ void stack_udp_send(struct rpc_msg *msg)
         rpc_call_replenish(&stack->rpc_queue, sock);
         return;
     }
-    
+
     __sync_fetch_and_sub(&sock->call_num, 1);
     return;
 }
