@@ -34,7 +34,7 @@ Click on the titles for more details. Contributions and feedback are welcome.
 |[Gazelle Developer Guide](doc/programmer-guide_en.md)| 1. Technical principles<br>2. Architecture design| To be determined |
 |[Practice Series - Gazelle Accelerating MySQL by 20%](doc/Practice_Series_Gazelle_Accelerates_MySQL.md)|1. Detailed testing steps<br>2. Performance results|Published|
 |[Practice Series - Gazelle Accelerating Ceph Client by 20%](https://www.hikunpeng.com/document/detail/zh/kunpengcpfs/basicAccelFeatures/storageAccel/kunpengcpfs_hpcd_0002.html)|1. Detailed testing steps<br>2. Performance results|Published|
-|Practice Series - Gazelle Accelerating Redis |1. Detailed testing steps<br>2. Performance results| To be determined |
+|[Practice Series - Gazelle Accelerating Redis](doc/redis_en.md) |1. Detailed testing steps<br>2. Performance results| Published |
 |Practice Series - Gazelle Accelerating openGauss |1. Detailed testing steps<br>2. Performance results| To be determined |
 |[Practice Series - Gazelle Supporting Netperf Performance Testing](doc/netperf_en.md)| 1. Version description <br>2. Detailed testing steps| To be determined |
 
