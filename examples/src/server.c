@@ -69,7 +69,7 @@ void sermud_info_print(struct ServerMud *server_mud)
         struct timeval end;
         gettimeofday(&end, NULL);
         uint64_t end_time = (uint64_t)end.tv_sec * 1000 + (uint64_t)end.tv_usec / 1000;
-        
+
         double bytes_sub = end_recv_bytes > begin_recv_bytes ? (double)(end_recv_bytes - begin_recv_bytes) : 0;
         double time_sub = end_time > begin_time ? (double)(end_time - begin_time) / 1000 : 0;
 
@@ -93,7 +93,7 @@ int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
     } else {
         worker_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
     }
-    
+
     if (worker_unit->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", worker_unit->epfd);
        return PROGRAM_FAULT;
@@ -118,7 +118,7 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
     } else {
         server_mud->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
     }
-    
+
     if (server_mud->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", server_mud->epfd);
        return PROGRAM_FAULT;
@@ -236,13 +236,14 @@ static int32_t server_handler_close(int32_t epfd, struct ServerHandler *server_h
 {
     int32_t fd = server_handler->fd;
     struct epoll_event ep_ev;
-    if (server_handler) {
-        free(server_handler);
-    }
 
     if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ep_ev) < 0) {
         PRINT_ERROR("server can't delete socket '%d' to control epoll %d! ", fd, errno);
         return PROGRAM_FAULT;
+    }
+
+    if (server_handler) {
+        free(server_handler);
     }
 
     if (close(fd) < 0) {
@@ -335,7 +336,7 @@ int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
 
     for (int32_t i = 0; i < epoll_nfds; ++i) {
         struct epoll_event *curr_epev = server_mud->epevs + i;
-    
+
         if (curr_epev->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
             PRINT_ERROR("server epoll wait error %d! ", curr_epev->events);
             server_handler_close(server_mud->epfd, (struct ServerHandler *)curr_epev->data.ptr);
@@ -540,7 +541,7 @@ void sermum_info_print(struct ServerMum *server_mum)
         struct timeval end;
         gettimeofday(&end, NULL);
         uint64_t end_time = (uint64_t)end.tv_sec * 1000 + (uint64_t)end.tv_usec / 1000;
-        
+
         double bytes_sub = end_recv_bytes > begin_recv_bytes ? (double)(end_recv_bytes - begin_recv_bytes) : 0;
         double time_sub = end_time > begin_time ? (double)(end_time - begin_time) / 1000 : 0;
 
@@ -564,7 +565,7 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
     } else {
         server_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
     }
-    
+
     if (server_unit->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", server_unit->epfd);
        return PROGRAM_FAULT;
@@ -784,7 +785,7 @@ void *sersum_create_and_run(void *arg)
             exit(PROGRAM_FAULT);
         }
     }
-    
+
     close(server_unit->listener.fd);
     close(server_unit->epfd);
 
