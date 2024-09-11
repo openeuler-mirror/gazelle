@@ -154,6 +154,15 @@ int do_lwip_init_sock(int32_t fd)
         return -1;
     }
 
+    if (get_global_cfg_params()->stack_mode_rtc) {
+        sock->stack = stack;
+        sock->epoll_events = 0;
+        sock->events = 0;
+        sock->wakeup = NULL;
+        list_init_node(&sock->event_list);
+        return 0;
+    }
+
     reset_sock_data(sock);
 
     sock->recv_ring = gazelle_ring_create_fast("sock_recv", SOCK_RECV_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ);
