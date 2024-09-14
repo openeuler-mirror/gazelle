@@ -424,8 +424,6 @@ static bool unsupport_socket_optname(int32_t optname)
 {
     if ((optname == SO_BROADCAST) ||
         (optname == SO_PROTOCOL) ||
-        (optname == SO_SNDTIMEO) ||
-        (optname == SO_SNDBUF) ||
         (optname == SO_RCVBUF) ||
         (optname == SO_DONTROUTE)) {
         return true;
