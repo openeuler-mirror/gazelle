@@ -39,6 +39,7 @@
 #include "lstack_thread_rpc.h"
 #include "common/dpdk_common.h"
 #include "lstack_cfg.h"
+#include "lstack_sk_sleep.h"
 #include "lstack_lwip.h"
 
 static const uint8_t fin_packet = 0;
@@ -81,9 +82,15 @@ static void reset_sock_data(struct lwip_sock *sock)
         sock->send_pre_del = NULL;
     }
 
+    if (sock->sk_sleep) {
+        sk_sleep_uninit(sock->sk_sleep);
+        sock->sk_sleep = NULL;
+    }
+
     sock->type = 0;
     sock->stack = NULL;
     sock->wakeup = NULL;
+    sock->sk_sleep = NULL;
     sock->listen_next = NULL;
     sock->epoll_events = 0;
     sock->events = 0;
@@ -156,6 +163,8 @@ int do_lwip_init_sock(int32_t fd)
     }
 
     reset_sock_data(sock);
+
+    sock->sk_sleep = sk_sleep_init();
 
     sock->recv_ring = gazelle_ring_create_fast("sock_recv", SOCK_RECV_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ);
     if (sock->recv_ring == NULL) {
@@ -1727,4 +1736,43 @@ unsigned same_node_ring_count(struct lwip_sock *sock)
   const unsigned long long cur_end = __atomic_load_n(&sock->same_node_rx_ring->sndend, __ATOMIC_RELAXED);
 
   return cur_end - cur_begin;
+}
+
+int lwip_have_event(struct lwip_sock *sock, int events)
+{
+    int revents = 0;
+    if ((events & EPOLLIN) && (NETCONN_IS_DATAIN(sock) || NETCONN_IS_ACCEPTIN(sock))) {
+        revents |= EPOLLIN;
+    }
+
+    if ((events & EPOLLOUT) && NETCONN_IS_OUTIDLE(sock)) {
+        if (!POSIX_IS_CLOSED(sock) && POSIX_IS_TYPE(sock, POSIX_LWIP)) {
+            revents |= EPOLLOUT;
+        }
+    }
+
+    if (sock->errevent > 0) {
+        revents |= EPOLLERR | EPOLLIN;
+    }
+
+    return revents;
+}
+
+int ioctl_add_node(struct lwip_sock *sock, struct sk_sleep_node *node)
+{
+    int revents;
+    sk_sleep_add_node(sock->sk_sleep, node);
+    revents = lwip_have_event(sock, node->events);
+    if (revents) {
+        node->revents = revents;
+        sk_sleep_wakeup_node(sock->sk_sleep, node);
+    }
+
+    return 0;
+}
+
+int ioctl_del_node(struct lwip_sock *sock, struct sk_sleep_node *node)
+{
+    sk_sleep_remove_node(sock->sk_sleep, node);
+    return 0;
 }

@@ -18,67 +18,73 @@
 #include "utilities.h"
 
 
-#define PARAM_DEFAULT_AS            ("server")              ///< default type
-#define PARAM_DEFAULT_IP            ("127.0.0.1")           ///< default IP
-#define PARAM_DEFAULT_IP_V6         ("0.0.0.0.0.0.0.0")           ///< default IP
-#define PARAM_DEFAULT_ADDR_FAMILY   (AF_INET)               ///< default address family
-#define PARAM_DEFAULT_PORT          (5050)                  ///< default port
-#define PARAM_DEFAULT_SPORT         (0)                     ///< default sport
-#define PARAM_DEFAULT_MODEL         ("mum")                 ///< default model type
-#define PARAM_DEFAULT_CONNECT_NUM   (1)                     ///< default connection number
-#define PARAM_DEFAULT_THREAD_NUM    (1)                     ///< default thread number
-#define PARAM_DEFAULT_DOMAIN        ("tcp")                 ///< default communication domain
-#define PARAM_DEFAULT_API           ("readwrite")           ///< default API type
-#define PARAM_DEFAULT_PKTLEN        (1024)                  ///< default packet length of message
-#define PARAM_DEFAULT_VERIFY        (false)                 ///< default flag of message verifying
-#define PARAM_DEFAULT_DEBUG         (false)                 ///< default flag of debug
-#define PARAM_DEFAULT_RINGPMD       (false)                 ///< default flag of ring PMD of dpdk
-#define PARAM_DEFAULT_EPOLLCREATE   ("ec")                  ///< default method of epoll_create
-#define PARAM_DEFAULT_ACCEPT        ("ac")                  ///< default method of accept method
-#define PARAM_DEFAULT_GROUPIP       ("0.0.0.0")             ///< default group IP>
-#define PARAM_DEFAULT_KEEPALIVEIDLE (0)                     ///< default TCP_KEEPALIVE_IDLE_TIME>
+#define PARAM_DEFAULT_AS                    ("server")              ///< default type
+#define PARAM_DEFAULT_IP                    ("127.0.0.1")           ///< default IP
+#define PARAM_DEFAULT_IP_V6                 ("0.0.0.0.0.0.0.0")           ///< default IP
+#define PARAM_DEFAULT_ADDR_FAMILY           (AF_INET)               ///< default address family
+#define PARAM_DEFAULT_PORT                  (5050)                  ///< default port
+#define PARAM_DEFAULT_SPORT                 (0)                     ///< default sport
+#define PARAM_DEFAULT_MODEL                 ("mum")                 ///< default model type
+#define PARAM_DEFAULT_CONNECT_NUM           (1)                     ///< default connection number
+#define PARAM_DEFAULT_THREAD_NUM            (1)                     ///< default thread number
+#define PARAM_DEFAULT_DOMAIN                ("tcp")                 ///< default communication domain
+#define PARAM_DEFAULT_API                   ("readwrite")           ///< default API type
+#define PARAM_DEFAULT_PKTLEN                (1024)                  ///< default packet length of message
+#define PARAM_DEFAULT_VERIFY                (false)                 ///< default flag of message verifying
+#define PARAM_DEFAULT_DEBUG                 (false)                 ///< default flag of debug
+#define PARAM_DEFAULT_RINGPMD               (false)                 ///< default flag of ring PMD of dpdk
+#define PARAM_DEFAULT_POLL                  (false)                 ///< default flag of polling
+#define PARAM_DEFAULT_EPOLLCREATE           ("ec")                  ///< default method of epoll_create
+#define PARAM_DEFAULT_EPOLL_IO_MULTIPLEX    (false)                 ///< default method of epoll_io_multiplex
+#define PARAM_DEFAULT_ACCEPT                ("ac")                  ///< default method of accept method
+#define PARAM_DEFAULT_GROUPIP               ("0.0.0.0")             ///< default group IP>
+#define PARAM_DEFAULT_KEEPALIVEIDLE         (0)                     ///< default TCP_KEEPALIVE_IDLE_TIME>
 
 #define TCP_KEEPALIVE_IDLE_MAX (3600)                       // time: second
 
 
 enum {
-#define PARAM_NAME_AS               ("as")                  ///< name of parameter type
+#define PARAM_NAME_AS                   ("as")                  ///< name of parameter type
     PARAM_NUM_AS = 'a',
-#define PARAM_NAME_IP               ("ip")                  ///< name of parameter IP
+#define PARAM_NAME_IP                   ("ip")                  ///< name of parameter IP
     PARAM_NUM_IP = 'i',
-#define PARAM_NAME_PORT             ("port")                ///< name of parameter port
+#define PARAM_NAME_PORT                 ("port")                ///< name of parameter port
     PARAM_NUM_PORT = 'p',
-#define PARAM_NAME_SPORT            ("sport")               ///< name of parameter sport
+#define PARAM_NAME_SPORT                ("sport")               ///< name of parameter sport
     PARAM_NUM_SPORT = 's',
-#define PARAM_NAME_MODEL            ("model")               ///< name of parameter model type
+#define PARAM_NAME_MODEL                ("model")               ///< name of parameter model type
     PARAM_NUM_MODEL = 'm',
-#define PARAM_NAME_CONNECT_NUM      ("connectnum")          ///< name of parameter connection number
+#define PARAM_NAME_CONNECT_NUM          ("connectnum")          ///< name of parameter connection number
     PARAM_NUM_CONNECT_NUM = 'c',
-#define PARAM_NAME_THREAD_NUM       ("threadnum")           ///< name of parameter thread number
+#define PARAM_NAME_THREAD_NUM           ("threadnum")           ///< name of parameter thread number
     PARAM_NUM_THREAD_NUM = 't',
-#define PARAM_NAME_DOMAIN           ("domain")              ///< name of parameter domain
+#define PARAM_NAME_DOMAIN               ("domain")              ///< name of parameter domain
     PARAM_NUM_DOMAIN = 'D',
-#define PARAM_NAME_API              ("api")                 ///< name of parameter API type
+#define PARAM_NAME_API                  ("api")                 ///< name of parameter API type
     PARAM_NUM_API = 'A',
-#define PARAM_NAME_PKTLEN           ("pktlen")              ///< name of parameter packet length of message
+#define PARAM_NAME_PKTLEN               ("pktlen")              ///< name of parameter packet length of message
     PARAM_NUM_PKTLEN = 'P',
-#define PARAM_NAME_VERIFY           ("verify")              ///< name of parameter flag of message verifying
+#define PARAM_NAME_VERIFY               ("verify")              ///< name of parameter flag of message verifying
     PARAM_NUM_VERIFY = 'v',
-#define PARAM_NAME_RINGPMD          ("ringpmd")             ///< name of parameter flag of ring PMD of dpdk
+#define PARAM_NAME_RINGPMD              ("ringpmd")             ///< name of parameter flag of ring PMD of dpdk
     PARAM_NUM_RINGPMD = 'r',
-#define PARAM_NAME_DEBUG            ("debug")               ///< name of parameter flag of debug
+#define PARAM_NAME_DEBUG                ("debug")               ///< name of parameter flag of debug
     PARAM_NUM_DEBUG = 'd',
-#define PARAM_NAME_HELP             ("help")                ///< name of parameter help
+#define PARAM_NAME_HELP                 ("help")                ///< name of parameter help
     PARAM_NUM_HELP = 'h',
-#define PARAM_NAME_EPOLLCREATE      ("epollcreate")         ///< name of parameter epollcreate
+#define PARAM_NAME_POLL                 ("poll")                ///< name of parameter poll
+    PARAM_NUM_POLL = 'l',
+#define PARAM_NAME_EPOLLCREATE          ("epollcreate")         ///< name of parameter epollcreate
     PARAM_NUM_EPOLLCREATE = 'E',
-#define PARAM_NAME_ACCEPT           ("accept")              ///< name of parameter accept
+#define PARAM_NAME_EPOLL_IO_MULTIPLEX   ("epoll_io_multiplex")  ///< name of parameter epoll_io_multiplex
+    PARAM_NUM_EPOLL_IO_MULTIPLEX = 'e',
+#define PARAM_NAME_ACCEPT               ("accept")              ///< name of parameter accept
     PARAM_NUM_ACCEPT = 'C',
-#define PARAM_NAME_GROUPIP          ("groupip")             ///< name of parameter group ip
+#define PARAM_NAME_GROUPIP              ("groupip")             ///< name of parameter group ip
     PARAM_NUM_GROUPIP = 'g',
-#define PARAM_NAME_KEEPALIVE        ("keep_alive")          ///< name of parameter keep_alive
+#define PARAM_NAME_KEEPALIVE            ("keep_alive")          ///< name of parameter keep_alive
     PARAM_NUM_KEEPALIVE = 'k',
-#define PARAM_NAME_INJECT           ("inject")              ///< name of parameter fault inject
+#define PARAM_NAME_INJECT               ("inject")              ///< name of parameter fault inject
     PARAM_NUM_INJECT = 'I',
 };
 
@@ -127,7 +133,9 @@ struct ProgramParams {
     uint32_t            pktlen;             ///< the packet length
     bool                verify;             ///< if we verify the message or not
     bool                debug;              ///< if we print the debug information or not
+    bool                poll;               ///< if we use poll
     char*               epollcreate;        ///< epoll_create method
+    bool                epoll_io_multiplex; ///< epoll_io_multiplex method
     char*               accept;             ///< accept connections method
     bool                ringpmd;            ///< if we use ring PMD or not
     char*               groupip;            ///< group IP address>

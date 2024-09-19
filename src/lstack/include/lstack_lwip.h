@@ -15,6 +15,7 @@
 #include <stdbool.h>
 
 #include "common/gazelle_dfx_msg.h"
+#include "lstack_sk_sleep.h"
 
 struct lwip_sock;
 unsigned same_node_ring_count(struct lwip_sock *sock);
@@ -63,5 +64,8 @@ int32_t do_lwip_free_pbuf_header(int32_t s, struct pbuf *pbuf, uint16_t length);
 
 void read_same_node_recv_list(struct protocol_stack *stack);
 void get_socks_mem_info(struct gazelle_stat_lstack_memory *memory);
+int ioctl_del_node(struct lwip_sock *sock, struct sk_sleep_node *node);
+int ioctl_add_node(struct lwip_sock *sock, struct sk_sleep_node *node);
+int lwip_have_event(struct lwip_sock *sock, int events);
 
 #endif

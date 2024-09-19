@@ -31,6 +31,8 @@ const char prog_short_opts[] = \
     "v"         // verify
     "r"         // ringpmd
     "d"         // debug
+    "l"         // poll
+    "e"         // epoll_io_multiplex
     "h"         // help
     "E:"         // epollcreate
     "C:"         // accept
@@ -55,8 +57,10 @@ const struct ProgramOption prog_long_opts[] = \
     {PARAM_NAME_VERIFY, NO_ARGUMENT, NULL, PARAM_NUM_VERIFY},
     {PARAM_NAME_RINGPMD, NO_ARGUMENT, NULL, PARAM_NUM_RINGPMD},
     {PARAM_NAME_DEBUG, NO_ARGUMENT, NULL, PARAM_NUM_DEBUG},
+    {PARAM_NAME_POLL, NO_ARGUMENT, NULL, PARAM_NUM_POLL},
     {PARAM_NAME_HELP, NO_ARGUMENT, NULL, PARAM_NUM_HELP},
     {PARAM_NAME_EPOLLCREATE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_EPOLLCREATE},
+    {PARAM_NAME_EPOLL_IO_MULTIPLEX, NO_ARGUMENT, NULL, PARAM_NUM_EPOLL_IO_MULTIPLEX},
     {PARAM_NAME_ACCEPT, REQUIRED_ARGUMETN, NULL, PARAM_NUM_ACCEPT},
     {PARAM_NAME_GROUPIP, REQUIRED_ARGUMETN, NULL, PARAM_NUM_GROUPIP},
     {PARAM_NAME_KEEPALIVE, REQUIRED_ARGUMETN, NULL, PARAM_NUM_KEEPALIVE},
@@ -576,7 +580,9 @@ void program_params_init(struct ProgramParams *params)
     params->verify = PARAM_DEFAULT_VERIFY;
     params->ringpmd = PARAM_DEFAULT_RINGPMD;
     params->debug = PARAM_DEFAULT_DEBUG;
+    params->poll = PARAM_DEFAULT_POLL;
     params->epollcreate = PARAM_DEFAULT_EPOLLCREATE;
+    params->epoll_io_multiplex = PARAM_DEFAULT_EPOLL_IO_MULTIPLEX;
     params->accept = PARAM_DEFAULT_ACCEPT;
     params->groupip = PARAM_DEFAULT_GROUPIP;
     params->groupip_interface = PARAM_DEFAULT_GROUPIP;
@@ -615,8 +621,10 @@ void program_params_help(void)
     printf("-v, --verify: set to verifying the message packet. \n");
     printf("-r, --ringpmd: set to use ringpmd. \n");
     printf("-d, --debug: set to print the debug information. \n");
+    printf("-l, --poll: set to use poll but must be in mud mode. \n");
     printf("-h, --help: see helps. \n");
     printf("-E, --epollcreate [ec | ec1]: epoll_create method. \n");
+    printf("-e, --epoll_io_multiplex: if true, enable separate epoll-based I/O multiplexing for read and write.\n");
     printf("-C, --accept [ac | ac4]: accept method. \n");
     printf("-k, --keep_alive [keep_alive_idle:keep_alive_interval]: set tcp-alive info in range of %d-%d. \n",
            PARAM_DEFAULT_KEEPALIVEIDLE, TCP_KEEPALIVE_IDLE_MAX);
@@ -685,8 +693,14 @@ int32_t program_params_parse(struct ProgramParams *params, uint32_t argc, char *
             case (PARAM_NUM_DEBUG):
                 params->debug = true;
                 break;
+            case (PARAM_NUM_POLL):
+                params->poll = true;
+                break;
             case (PARAM_NUM_EPOLLCREATE):
                 program_param_parse_epollcreate(params);
+                break;
+            case (PARAM_NUM_EPOLL_IO_MULTIPLEX):
+                params->epoll_io_multiplex = true;
                 break;
             case (PARAM_NUM_ACCEPT):
                 program_param_parse_accept(params);
@@ -765,6 +779,13 @@ void program_params_print(struct ProgramParams *params)
 
     if (strcmp(params->as, "server") == 0) {
         printf("--> [model]:                    %s \n", params->model);
+        if (params->poll == true && (strcmp(params->model, "mud") == 0)) {
+            printf("--> [poll]:                     %s \n", (params->poll == true) ? "on" : "off");
+        } else {
+            params->poll = false;
+            printf("--> [poll]:                     %s \n", (params->poll == true) ? "on" : "off");
+        }
+        printf("--> [epoll io multiplex]:       %s \n", (params->epoll_io_multiplex == true) ? "on" : "off");
     }
     if ((strcmp(params->as, "server") == 0 && strcmp(params->model, "mum") == 0) || strcmp(params->as, "client") == 0) {
         printf("--> [thread number]:            %u \n", params->thread_num);
