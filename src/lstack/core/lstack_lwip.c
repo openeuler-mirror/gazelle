@@ -497,6 +497,7 @@ static ssize_t do_lwip_udp_fill_sendring(struct lwip_sock *sock, const void *buf
     }
 
     if (write_avail < write_num) {
+        LSTACK_LOG(WARNING, LSTACK, "sock send_ring is already exhausted.\n");
         sem_timedwait_nsecs(&sock->snd_ring_sem);
         GAZELLE_RETURN(ENOMEM);
     }
