@@ -60,6 +60,7 @@ enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LSTACK_SHOW_XSTATS,
     GAZELLE_STAT_LSTACK_SHOW_AGGREGATE,
     GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES,
+    GAZELLE_STAT_LSTACK_SHOW_INTR,
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
     GAZELLE_STAT_FAULT_INJECT_SET,
@@ -344,6 +345,14 @@ struct nic_eth_features {
     uint64_t tx_offload;
 };
 
+struct interrupt_stats {
+    uint64_t virtio_user_event_cnt;
+    uint64_t nic_event_cnt;
+    uint64_t remote_event_cnt;
+    uint64_t local_event_cnt;
+    uint64_t timeout_event_cnt;
+};
+
 struct gazelle_stack_dfx_data {
     /* indicates whether the current message is the last */
     uint32_t eof;
@@ -361,6 +370,7 @@ struct gazelle_stack_dfx_data {
         struct nic_eth_xstats nic_xstats;
         struct nic_eth_features nic_features;
         struct gazelle_stat_lstack_proto  proto_data;
+        struct interrupt_stats intr_stats;
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
         struct gazelle_fault_inject_data inject;
