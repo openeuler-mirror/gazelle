@@ -300,6 +300,13 @@ struct tcp_pcb {
   tcpwnd_size_t rcv_wnd;   /* receiver window available */
   tcpwnd_size_t rcv_ann_wnd; /* receiver window to announce */
   u32_t rcv_ann_right_edge; /* announced right edge of window */
+#if GAZELLE_TCP_PINGPONG_MODE
+#define TIME_BEFORE(t, compare_to) ((((u32_t)((t)-(compare_to))) > 0x7fffffff) ? 1 : 0)
+#define TCP_ATO_MS   200
+  u32_t lrcvtime;
+#define TCP_PINGPONG_THRESH  3
+  u8_t pingpong;
+#endif
 
 #if LWIP_TCP_SACK_OUT
   /* SACK ranges to include in ACK packets (entry is invalid if left==right) */

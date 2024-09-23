@@ -1702,8 +1702,13 @@ tcp_fasttmr_start:
     if (pcb->last_timer != tcp_timer_ctr) {
       struct tcp_pcb *next;
       pcb->last_timer = tcp_timer_ctr;
+#if !GAZELLE_TCP_PINGPONG_MODE
       /* send delayed ACKs */
       if (pcb->flags & TF_ACK_DELAY) {
+#else
+      if (!tcp_in_pingpong(pcb) || TIME_BEFORE(pcb->lrcvtime + TCP_ATO_M, sys_now())) {
+        tcp_exit_pingpong(pcb);
+#endif
         LWIP_DEBUGF(TCP_DEBUG, ("tcp_fasttmr: delayed ACK\n"));
         MIB2_STATS_INC(mib2.tcpdelayackcnt);
         tcp_ack_now(pcb);
@@ -2155,6 +2160,10 @@ tcp_alloc(u8_t prio)
     pcb->client_tx_ring = NULL;
     pcb->free_ring = 0;
 #endif
+#if GAZELLE_TCP_PINGPONG_MODE
+    pcb->lrcvtime = 0;
+    pcb->pingpong = 0;
+#endif
     pcb_tci_init(pcb);
   }
   return pcb;
@@ -2318,7 +2327,6 @@ tcp_accept(struct tcp_pcb *pcb, tcp_accept_fn accept)
   }
 }
 #endif /* LWIP_CALLBACK_API */
-
 
 /**
  * @ingroup tcp_raw

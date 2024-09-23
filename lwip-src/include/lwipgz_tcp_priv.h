@@ -207,6 +207,23 @@ static inline void vdev_unreg_done(const struct tcp_pcb *pcb)
     vdev_reg_done(REG_RING_TCP_CONNECT_CLOSE, pcb);
   }
 }
+
+#if GAZELLE_TCP_PINGPONG_MODE
+static inline bool tcp_in_pingpong(const struct tcp_pcb *pcb)
+{
+  return (pcb->pingpong >= TCP_PINGPONG_THRESH);
+}
+static inline void tcp_enter_pingpong(struct tcp_pcb *pcb)
+{
+  if (pcb->pingpong < TCP_PINGPONG_THRESH) {
+    pcb->pingpong++;
+  }
+}
+static inline void tcp_exit_pingpong(struct tcp_pcb *pcb)
+{
+  pcb->pingpong = 0;
+}
+#endif /* GAZELLE_TCP_PINGPONG_MODE */
 #endif /* GAZELLE_ENABLE */
 
 #endif /* __GAZELLE_TCP_PRIV_H__ */
