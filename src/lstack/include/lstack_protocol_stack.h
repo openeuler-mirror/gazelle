@@ -34,7 +34,7 @@
 #define SOCK_RECV_RING_SIZE_MAX     (2048)
 #define SOCK_SEND_RING_SIZE_MAX     (2048)
 
-#define MBUFPOOL_RESERVE_NUM (get_global_cfg_params()->rxqueue_size + 1024)
+#define MBUFPOOL_RESERVE_NUM (2 * get_global_cfg_params()->rxqueue_size + 1024)
 
 struct protocol_stack {
     uint32_t tid;

@@ -109,18 +109,43 @@ static struct pbuf *init_mbuf_to_pbuf(struct rte_mbuf *mbuf, pbuf_layer layer, u
     return pbuf;
 }
 
+static uint32_t update_replenish_mbuf_cnt(struct protocol_stack *stack, struct lwip_sock *sock)
+{
+    const uint32_t min_alloc_mbuf_num = 4;
+    struct rte_ring *ring = sock->send_ring;
+
+    uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+    if (replenish_cnt <= min_alloc_mbuf_num) {
+        return replenish_cnt;
+    }
+
+    uint32_t resu = replenish_cnt;
+    uint32_t tcp_conn_count = get_global_cfg_params()->tcp_conn_count;
+    uint16_t send_ring_size = get_global_cfg_params()->send_ring_size;
+    uint16_t proportion = stack->conn_num / tcp_conn_count;
+    uint32_t replenish_mbuf_cnt_cal = (send_ring_size >> proportion);
+
+    if (replenish_mbuf_cnt_cal <= min_alloc_mbuf_num) {
+        resu = min_alloc_mbuf_num;
+    } else if (replenish_mbuf_cnt_cal < replenish_cnt) {
+        resu = replenish_mbuf_cnt_cal;
+    } else {
+        resu = replenish_cnt + 1;
+    }
+
+    return resu - 1;
+}
+
 /* true: need replenish again */
 static bool replenish_send_idlembuf(struct protocol_stack *stack, struct lwip_sock *sock)
 {
     void *pbuf[SOCK_SEND_RING_SIZE_MAX];
-
     struct rte_ring *ring = sock->send_ring;
 
-    uint32_t replenish_cnt = gazelle_ring_free_count(ring);
+    uint32_t replenish_cnt = update_replenish_mbuf_cnt(stack, sock);
     if (replenish_cnt == 0) {
         return false;
     }
-
     if (dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, (struct rte_mbuf **)pbuf, replenish_cnt, true) != 0) {
         stack->stats.tx_allocmbuf_fail++;
         return true;
