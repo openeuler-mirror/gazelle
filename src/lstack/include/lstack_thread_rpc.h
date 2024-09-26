@@ -32,8 +32,6 @@ struct rpc_stats {
     uint64_t call_alloc_fail;
 };
 
-struct rpc_msg;
-typedef void (*rpc_msg_func)(struct rpc_msg *msg);
 union rpc_msg_arg {
     int i;
     unsigned int u;
@@ -41,22 +39,25 @@ union rpc_msg_arg {
     unsigned long ul;
     void *p;
     const void *cp;
-    socklen_t socklen;
     size_t size;
 };
-struct rpc_msg_pool {
-    struct rte_mempool *mempool;
-};
+
+struct rpc_msg;
+typedef void (*rpc_func_t)(struct rpc_msg *msg);
 struct rpc_msg {
-    pthread_spinlock_t lock; /* msg handler unlock notice sender msg process done */
     int8_t sync_flag : 1;
     int8_t recall_flag : 1;
-    int64_t result; /* func return val */
-    lockless_queue_node queue_node;
-    struct rpc_msg_pool *rpcpool;
 
-    rpc_msg_func func; /* msg handle func hook */
+    long result; /* func return val */
+    rpc_func_t func; /* msg handle func hook */
     union rpc_msg_arg args[RPM_MSG_ARG_SIZE]; /* resolve by type */
+
+    struct rpc_msg_pool {
+        struct rte_mempool *mempool;
+    } *rpcpool;
+
+    pthread_spinlock_t lock; /* msg handler unlock notice sender msg process done */
+    lockless_queue_node queue_node;
 };
 
 static inline void rpc_queue_init(rpc_queue *queue)
@@ -92,7 +93,7 @@ int rpc_call_udp_send(rpc_queue *queue, int fd, size_t len, int flags);
 int rpc_call_replenish(rpc_queue *queue, void *sock);
 int rpc_call_recvlistcnt(rpc_queue *queue);
 
-void rpc_call_clean_epoll(rpc_queue *queue, void *wakeup);
+int rpc_call_clean_epoll(rpc_queue *queue, void *wakeup);
 int rpc_call_arp(rpc_queue *queue, void *mbuf);
 
 int rpc_call_conntable(rpc_queue *queue, void *conn_table, unsigned max_conn);

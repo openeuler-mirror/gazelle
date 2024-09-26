@@ -45,20 +45,20 @@ static struct rpc_msg *get_rpc_msg(struct rpc_msg_pool *rpc_pool)
     return msg;
 }
 
-static void rpc_msg_init(struct rpc_msg *msg, rpc_msg_func func, struct rpc_msg_pool *pool)
+__rte_always_inline
+static void rpc_msg_init(struct rpc_msg *msg, rpc_func_t func, struct rpc_msg_pool *pool)
 {
     msg->func       = func;
     msg->rpcpool    = pool;
-    msg->sync_flag  = 1;
     msg->recall_flag = 0;
     pthread_spin_init(&msg->lock, PTHREAD_PROCESS_PRIVATE);
 }
 
-static struct rpc_msg *rpc_msg_alloc(rpc_msg_func func)
+static struct rpc_msg *rpc_msg_alloc(rpc_func_t func)
 {
-    struct rpc_msg *msg = NULL;
+    struct rpc_msg *msg;
 
-    if (g_rpc_pool == NULL) {
+    if (unlikely(g_rpc_pool == NULL)) {
         g_rpc_pool = calloc(1, sizeof(struct rpc_msg_pool));
         if (g_rpc_pool == NULL) {
             LSTACK_LOG(INFO, LSTACK, "g_rpc_pool calloc failed\n");
@@ -66,8 +66,8 @@ static struct rpc_msg *rpc_msg_alloc(rpc_msg_func func)
             exit(-1);
         }
 
-        g_rpc_pool->mempool = create_mempool("rpc_pool", get_global_cfg_params()->rpc_msg_max, sizeof(struct rpc_msg),
-            0, rte_gettid());
+        g_rpc_pool->mempool =
+            create_mempool("rpc_pool", get_global_cfg_params()->rpc_msg_max, sizeof(struct rpc_msg), 0, rte_gettid());
         if (g_rpc_pool->mempool == NULL) {
             LSTACK_LOG(INFO, LSTACK, "rpc_pool create failed, errno is %d\n", errno);
             g_rpc_stats.call_alloc_fail++;
@@ -76,12 +76,12 @@ static struct rpc_msg *rpc_msg_alloc(rpc_msg_func func)
     }
 
     msg = get_rpc_msg(g_rpc_pool);
-    if (msg == NULL) {
+    if (unlikely(msg == NULL)) {
         g_rpc_stats.call_alloc_fail++;
         return NULL;
     }
-    rpc_msg_init(msg, func, g_rpc_pool);
 
+    rpc_msg_init(msg, func, g_rpc_pool);
     return msg;
 }
 
@@ -97,8 +97,9 @@ static void rpc_msg_free(struct rpc_msg *msg)
 }
 
 __rte_always_inline
-static void rpc_call(rpc_queue *queue, struct rpc_msg *msg)
+static void rpc_async_call(rpc_queue *queue, struct rpc_msg *msg)
 {
+    msg->sync_flag = 0;
     lockless_queue_mpsc_push(queue, &msg->queue_node);
 }
 
@@ -108,7 +109,9 @@ static int rpc_sync_call(rpc_queue *queue, struct rpc_msg *msg)
     int ret;
 
     pthread_spin_trylock(&msg->lock);
-    rpc_call(queue, msg);
+
+    msg->sync_flag = 1;
+    lockless_queue_mpsc_push(queue, &msg->queue_node);
 
     // waiting stack unlock
     pthread_spin_lock(&msg->lock);
@@ -123,7 +126,7 @@ int rpc_msgcnt(rpc_queue *queue)
     return lockless_queue_count(queue);
 }
 
-static struct rpc_msg *rpc_msg_alloc_except(rpc_msg_func func)
+static struct rpc_msg *rpc_msg_alloc_except(rpc_func_t func)
 {
     struct rpc_msg *msg = calloc(1, sizeof(struct rpc_msg));
     if (msg == NULL) {
@@ -146,14 +149,14 @@ int rpc_call_stack_exit(rpc_queue *queue)
         return -1;
     }
 
-    rpc_call(queue, msg);
+    rpc_async_call(queue, msg);
     return 0;
 }
 
 int rpc_poll_msg(rpc_queue *queue, int max_num)
 {
     int force_quit = 0;
-    struct rpc_msg *msg = NULL;
+    struct rpc_msg *msg;
 
     while (max_num--) {
         lockless_queue_node *node = lockless_queue_mpsc_pop(queue);
@@ -163,24 +166,24 @@ int rpc_poll_msg(rpc_queue *queue, int max_num)
 
         msg = container_of(node, struct rpc_msg, queue_node);
 
-        if (msg->func) {
+        if (likely(msg->func)) {
             msg->func(msg);
         } else {
             g_rpc_stats.call_null++;
         }
 
-        if (msg->func == stack_exit_by_rpc) {
+        if (unlikely(msg->func == stack_exit_by_rpc)) {
             force_quit = 1;
         }
-
-        if (!msg->recall_flag) {
-            if (msg->sync_flag) {
-                pthread_spin_unlock(&msg->lock);
-            } else {
-                rpc_msg_free(msg);
-            }
-        } else {
+        if (msg->recall_flag) {
             msg->recall_flag = 0;
+            continue;
+        }
+
+        if (msg->sync_flag) {
+            pthread_spin_unlock(&msg->lock);
+        } else {
+            rpc_msg_free(msg);
         }
     }
 
@@ -204,7 +207,7 @@ static void callback_close(struct rpc_msg *msg)
 
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
-        rpc_call(&stack->rpc_queue, msg); /* until stack_send recall finish */
+        rpc_async_call(&stack->rpc_queue, msg); /* until stack_send recall finish */
         return;
     }
 
@@ -223,7 +226,7 @@ static void callback_shutdown(struct rpc_msg *msg)
 
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
-        rpc_call(&stack->rpc_queue, msg);
+        rpc_async_call(&stack->rpc_queue, msg);
         return;
     }
 
@@ -237,7 +240,7 @@ static void callback_shutdown(struct rpc_msg *msg)
 
 static void callback_bind(struct rpc_msg *msg)
 {
-    msg->result = lwip_bind(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].socklen);
+    msg->result = lwip_bind(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].u);
     if (msg->result != 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
     }
@@ -265,7 +268,7 @@ static void callback_create_shadow_fd(struct rpc_msg *msg)
 {
     int fd = msg->args[MSG_ARG_0].i;
     struct sockaddr *addr = msg->args[MSG_ARG_1].p;
-    socklen_t addr_len = msg->args[MSG_ARG_2].socklen;
+    socklen_t addr_len = msg->args[MSG_ARG_2].u;
 
     int clone_fd = 0;
     struct lwip_sock *sock = lwip_get_socket(fd);
@@ -337,7 +340,7 @@ static void callback_accept(struct rpc_msg *msg)
 
 static void callback_connect(struct rpc_msg *msg)
 {
-    msg->result = lwip_connect(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].socklen);
+    msg->result = lwip_connect(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].u);
     if (msg->result < 0) {
         msg->result = -errno;
     }
@@ -391,7 +394,7 @@ int rpc_call_bind(rpc_queue *queue, int fd, const struct sockaddr *addr, socklen
 
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].cp = addr;
-    msg->args[MSG_ARG_2].socklen = addrlen;
+    msg->args[MSG_ARG_2].u = addrlen;
 
     return rpc_sync_call(queue, msg);
 }
@@ -418,7 +421,7 @@ int rpc_call_shadow_fd(rpc_queue *queue, int fd, const struct sockaddr *addr, so
 
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].cp = addr;
-    msg->args[MSG_ARG_2].socklen = addrlen;
+    msg->args[MSG_ARG_2].u = addrlen;
 
     return rpc_sync_call(queue, msg);
 }
@@ -447,7 +450,7 @@ int rpc_call_connect(rpc_queue *queue, int fd, const struct sockaddr *addr, sock
 
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].cp = addr;
-    msg->args[MSG_ARG_2].socklen = addrlen;
+    msg->args[MSG_ARG_2].u = addrlen;
 
     int ret = rpc_sync_call(queue, msg);
     if (ret < 0) {
@@ -486,7 +489,7 @@ static void callback_getsockopt(struct rpc_msg *msg)
 static void callback_setsockopt(struct rpc_msg *msg)
 {
     msg->result = lwip_setsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
-        msg->args[MSG_ARG_3].cp, msg->args[MSG_ARG_4].socklen);
+        msg->args[MSG_ARG_3].cp, msg->args[MSG_ARG_4].u);
     if (msg->result != 0) {
         LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d, level %d, optname %d, fail %ld\n", get_stack_tid(),
                    msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i, msg->result);
@@ -548,7 +551,7 @@ int rpc_call_setsockopt(rpc_queue *queue, int fd, int level, int optname, const 
     msg->args[MSG_ARG_1].i = level;
     msg->args[MSG_ARG_2].i = optname;
     msg->args[MSG_ARG_3].cp = optval;
-    msg->args[MSG_ARG_4].socklen = optlen;
+    msg->args[MSG_ARG_4].u = optlen;
 
     return rpc_sync_call(queue, msg);
 }
@@ -556,13 +559,13 @@ int rpc_call_setsockopt(rpc_queue *queue, int fd, int level, int optname, const 
 static void callback_tcp_send(struct rpc_msg *msg)
 {
     int fd = msg->args[MSG_ARG_0].i;
-    size_t len = msg->args[MSG_ARG_1].size;
+    size_t len = UINT16_MAX; /* ignore msg->args[MSG_ARG_1].size; */
     struct protocol_stack *stack = get_protocol_stack();
-    int replenish_again;
+    int ret;
+    msg->result = -1;
 
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (POSIX_IS_CLOSED(sock)) {
-        msg->result = -1;
+    if (unlikely(POSIX_IS_CLOSED(sock))) {
         return;
     }
 
@@ -570,16 +573,18 @@ static void callback_tcp_send(struct rpc_msg *msg)
         calculate_sock_latency(&stack->latency, sock, GAZELLE_LATENCY_WRITE_RPC_MSG);
     }
 
-    replenish_again = do_lwip_send(stack, sock->conn->callback_arg.socket, sock, len, 0);
-    if (replenish_again < 0) {
+    ret = lwip_send(fd, sock, len, 0);
+    if (unlikely(ret < 0) && (errno == ENOTCONN || errno == ECONNRESET || errno == ECONNABORTED)) {
         __sync_fetch_and_sub(&sock->call_num, 1);
         return;
     }
+    msg->result = 0;
 
-    if (NETCONN_IS_DATAOUT(sock) || replenish_again > 0) {
+    ret = do_lwip_replenish_sendring(stack, sock);
+    if (ret > 0 || NETCONN_IS_DATAOUT(sock)) {
         if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 1) {
             msg->recall_flag = 1;
-            rpc_call(&stack->rpc_queue, msg);
+            rpc_async_call(&stack->rpc_queue, msg);
             return;
         }
     }
@@ -593,11 +598,11 @@ static void callback_udp_send(struct rpc_msg *msg)
     int fd = msg->args[MSG_ARG_0].i;
     size_t len = msg->args[MSG_ARG_1].size;
     struct protocol_stack *stack = get_protocol_stack();
-    int replenish_again;
+    int ret;
+    msg->result = -1;
 
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (POSIX_IS_CLOSED(sock)) {
-        msg->result = -1;
+    if (unlikely(POSIX_IS_CLOSED(sock))) {
         return;
     }
 
@@ -605,8 +610,15 @@ static void callback_udp_send(struct rpc_msg *msg)
         calculate_sock_latency(&stack->latency, sock, GAZELLE_LATENCY_WRITE_RPC_MSG);
     }
 
-    replenish_again = do_lwip_send(stack, sock->conn->callback_arg.socket, sock, len, 0);
-    if ((replenish_again > 0) && (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 1)) {
+    ret = lwip_send(fd, sock, len, 0);
+    if (unlikely(ret < 0) && (errno == ENOTCONN || errno == ECONNRESET || errno == ECONNABORTED)) {
+        __sync_fetch_and_sub(&sock->call_num, 1);
+        return;
+    }
+    msg->result = 0;
+
+    ret = do_lwip_replenish_sendring(stack, sock);
+    if (ret > 0 && (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 1)) {
         rpc_call_replenish(&stack->rpc_queue, sock);
         return;
     }
@@ -629,9 +641,8 @@ int rpc_call_udp_send(rpc_queue *queue, int fd, size_t len, int flags)
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].size = len;
     msg->args[MSG_ARG_2].i = flags;
-    msg->sync_flag = 0;
 
-    rpc_call(queue, msg);
+    rpc_async_call(queue, msg);
     return 0;
 }
 
@@ -649,9 +660,8 @@ int rpc_call_tcp_send(rpc_queue *queue, int fd, size_t len, int flags)
     msg->args[MSG_ARG_0].i = fd;
     msg->args[MSG_ARG_1].size = len;
     msg->args[MSG_ARG_2].i = flags;
-    msg->sync_flag = 0;
 
-    rpc_call(queue, msg);
+    rpc_async_call(queue, msg);
     return 0;
 }
 
@@ -663,7 +673,7 @@ static void callback_replenish_sendring(struct rpc_msg *msg)
     msg->result = do_lwip_replenish_sendring(stack, sock);
     if (msg->result == true) {
         msg->recall_flag = 1;
-        rpc_call(&stack->rpc_queue, msg);
+        rpc_async_call(&stack->rpc_queue, msg);
     }
 }
 
@@ -675,9 +685,8 @@ int rpc_call_replenish(rpc_queue *queue, void *sock)
     }
 
     msg->args[MSG_ARG_0].p = sock;
-    msg->sync_flag = 0;
 
-    rpc_call(queue, msg);
+    rpc_async_call(queue, msg);
     return 0;
 }
 
@@ -713,16 +722,17 @@ static void callback_clean_epoll(struct rpc_msg *msg)
     list_del_node(&wakeup->wakeup_list[stack->stack_idx]);
 }
 
-void rpc_call_clean_epoll(rpc_queue *queue, void *wakeup)
+int rpc_call_clean_epoll(rpc_queue *queue, void *wakeup)
 {
     struct rpc_msg *msg = rpc_msg_alloc(callback_clean_epoll);
     if (msg == NULL) {
-        return;
+        return -1;
     }
 
     msg->args[MSG_ARG_0].p = wakeup;
 
     rpc_sync_call(queue, msg);
+    return 0;
 }
 
 static void callback_arp(struct rpc_msg *msg)
@@ -740,11 +750,9 @@ int rpc_call_arp(rpc_queue *queue, void *mbuf)
         return -1;
     }
 
-    msg->sync_flag = 0;
     msg->args[MSG_ARG_0].p = mbuf;
 
-    rpc_call(queue, msg);
-
+    rpc_async_call(queue, msg);
     return 0;
 }
 
