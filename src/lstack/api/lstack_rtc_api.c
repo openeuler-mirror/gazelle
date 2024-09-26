@@ -42,11 +42,6 @@ static int rtc_close(int s)
     return lwip_close(s);
 }
 
-static int rtc_shutdown(int fd, int how)
-{
-    return lwip_shutdown(fd, how);
-}
-
 static int rtc_epoll_create(int flags)
 {
     if (stack_setup_app_thread() < 0) {
@@ -90,7 +85,7 @@ static int rtc_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *excep
 void rtc_api_init(posix_api_t *api)
 {
     api->close_fn         = rtc_close;
-    api->shutdown_fn      = rtc_shutdown;
+    api->shutdown_fn      = lwip_shutdown;
     api->socket_fn        = rtc_socket;
     api->accept_fn        = lwip_accept;
     api->accept4_fn       = lwip_accept4;

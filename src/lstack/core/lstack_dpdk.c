@@ -43,7 +43,6 @@
 #include "lstack_log.h"
 #include "common/dpdk_common.h"
 #include "lstack_protocol_stack.h"
-#include "lstack_thread_rpc.h"
 #include "lstack_lwip.h"
 #include "lstack_cfg.h"
 #include "lstack_virtio.h"
@@ -765,9 +764,9 @@ static int dpdk_bond_create(uint8_t mode, int *slave_port_id, int count)
     return 0;
 }
 
-int32_t init_dpdk_ethdev(void)
+int init_dpdk_ethdev(void)
 {
-    int32_t ret;
+    int ret;
     int slave_port_id[GAZELLE_MAX_BOND_NUM];
     int port_id = 0;
     struct cfg_params *cfg = get_global_cfg_params();

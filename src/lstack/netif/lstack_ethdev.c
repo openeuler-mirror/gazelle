@@ -43,6 +43,62 @@
 #define MBUF_MAX_LEN                            1514
 #define PACKET_READ_SIZE                        32
 
+/* any protocol stack thread receives arp packet and sync it to other threads,
+ * so that it can have the arp table */
+static void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    struct rte_mbuf *mbuf_copy = NULL;
+    struct protocol_stack *stack = NULL;
+    int32_t ret;
+
+    for (int32_t i = 0; i < stack_group->stack_num; i++) {
+        stack = stack_group->stacks[i];
+        if (cur_stack == stack) {
+            continue;
+        }
+
+        /* stack maybe not init in app thread yet */
+        if (stack == NULL || !(netif_is_up(&stack->netif))) {
+            continue;
+        }
+
+        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
+        if (ret != 0) {
+            stack->stats.rx_allocmbuf_fail++;
+            return;
+        }
+        copy_mbuf(mbuf_copy, mbuf);
+
+        ret = rpc_call_arp(&stack->rpc_queue, mbuf_copy);
+        if (ret != 0) {
+            rte_pktmbuf_free(mbuf_copy);
+            return;
+        }
+    }
+#if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
+    if (get_global_cfg_params()->kni_switch) {
+        ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
+        if (ret != 0) {
+            cur_stack->stats.rx_allocmbuf_fail++;
+            return;
+        }
+        copy_mbuf(mbuf_copy, mbuf);
+        kni_handle_tx(mbuf_copy);
+    }
+#endif
+    if (get_global_cfg_params()->flow_bifurcation) {
+        ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
+        if (ret != 0) {
+            cur_stack->stats.rx_allocmbuf_fail++;
+            return;
+        }
+        copy_mbuf(mbuf_copy, mbuf);
+        virtio_tap_process_tx(cur_stack->queue_id, mbuf_copy);
+    }
+    return;
+}
+
 void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
 {
     int32_t ret;

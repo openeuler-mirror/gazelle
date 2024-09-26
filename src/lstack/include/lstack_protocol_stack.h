@@ -17,6 +17,10 @@
 #include <sys/epoll.h>
 #include <stdbool.h>
 
+#include <rte_ring.h>
+#include <rte_mbuf.h>
+#include <rte_mempool.h>
+
 #include <lwip/lwipgz_list.h>
 #include <lwip/netif.h>
 
@@ -34,10 +38,6 @@
 #define WAKEUP_MAX_NUM              (32)
 
 #define MBUFPOOL_RESERVE_NUM (get_global_cfg_params()->nic.rxqueue_size + 1024)
-
-struct rte_mempool;
-struct rte_ring;
-struct rte_mbuf;
 
 struct protocol_stack {
     uint32_t tid;
@@ -111,50 +111,23 @@ struct protocol_stack_group {
 };
 
 long get_stack_tid(void);
+
 struct protocol_stack *get_protocol_stack(void);
 struct protocol_stack *get_protocol_stack_by_fd(int32_t fd);
 struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
+int get_min_conn_stack(struct protocol_stack_group *stack_group);
+void bind_to_stack_numa(struct protocol_stack *stack);
+void thread_bind_stack(struct protocol_stack *stack);
+
 int32_t stack_group_init(void);
 void stack_group_exit(void);
+void stack_exit(void);
+
 int32_t stack_setup_thread(void);
 int32_t stack_setup_app_thread(void);
 
-void bind_to_stack_numa(struct protocol_stack *stack);
-int32_t init_dpdk_ethdev(void);
-
-void wait_sem_value(sem_t *sem, int32_t wait_value);
-
-/* any protocol stack thread receives arp packet and sync it to other threads so that it can have the arp table */
-void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cur_stack);
-
-/* when fd is listenfd, listenfd of all protocol stack thread will be closed */
-int32_t stack_broadcast_close(int32_t fd);
-
-int stack_broadcast_shutdown(int fd, int how);
-
-/* listen sync to all protocol stack thread, so that any protocol stack thread can build connect */
-int32_t stack_broadcast_listen(int32_t fd, int backlog);
-int32_t stack_single_listen(int32_t fd, int32_t backlog);
-
-/* bind sync to all protocol stack thread, only for udp protocol */
-int32_t stack_broadcast_bind(int32_t fd, const struct sockaddr *name, socklen_t namelen);
-int32_t stack_single_bind(int32_t fd, const struct sockaddr *name, socklen_t namelen);
-
-/* ergodic the protocol stack thread to find the connection, because all threads are listening */
-int32_t stack_broadcast_accept(int32_t fd, struct sockaddr *addr, socklen_t *addrlen);
-int32_t stack_broadcast_accept4(int32_t fd, struct sockaddr *addr, socklen_t *addrlen, int32_t flags);
-
-struct wakeup_poll;
-void stack_broadcast_clean_epoll(struct wakeup_poll *wakeup);
-
-void stack_send_pkts(struct protocol_stack *stack);
-
-struct thread_params {
-    uint16_t queue_id;
-    uint16_t idx;
-};
-
 int stack_polling(uint32_t wakeup_tick);
+
 #endif

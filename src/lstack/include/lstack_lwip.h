@@ -15,8 +15,12 @@
 #include <stdbool.h>
 
 #include "common/gazelle_dfx_msg.h"
+#include "common/dpdk_common.h"
 
 struct lwip_sock;
+struct rpc_msg;
+struct protocol_stack;
+
 unsigned same_node_ring_count(struct lwip_sock *sock);
 
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
@@ -24,11 +28,6 @@ unsigned same_node_ring_count(struct lwip_sock *sock);
 #define NETCONN_IS_DATAOUT(sock)    (gazelle_ring_readover_count((sock)->send_ring) || (sock)->send_pre_del)
 #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 #define NETCONN_IS_UDP(sock)        (NETCONNTYPE_GROUP(netconn_type((sock)->conn)) == NETCONN_UDP)
-
-struct rte_mempool;
-struct rpc_msg;
-struct rte_mbuf;
-struct protocol_stack;
 
 void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_sock);
 

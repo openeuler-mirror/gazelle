@@ -29,15 +29,12 @@
 #include <lwip/prot/etharp.h>
 
 #include "common/gazelle_base_func.h"
-#include "lstack_ethdev.h"
-#include "lstack_protocol_stack.h"
 #include "lstack_log.h"
-#include "lstack_dpdk.h"
+#include "lstack_cfg.h"
+#include "lstack_protocol_stack.h"
 #include "lstack_stack_stat.h"
 #include "lstack_epoll.h"
-#include "lstack_thread_rpc.h"
-#include "common/dpdk_common.h"
-#include "lstack_cfg.h"
+#include "lstack_dpdk.h"
 #include "lstack_lwip.h"
 
 static const uint8_t fin_packet = 0;
@@ -841,43 +838,24 @@ ssize_t gazelle_same_node_ring_send(struct lwip_sock *sock, const void *buf, siz
     return act_len;
 }
 
-PER_THREAD uint16_t stack_sock_num[GAZELLE_MAX_STACK_NUM] = {0};
-PER_THREAD uint16_t max_sock_stack = 0;
-
-static inline void thread_bind_stack(struct lwip_sock *sock)
-{
-    if (likely(sock->already_bind_numa || !sock->stack)) {
-        return;
-    }
-    sock->already_bind_numa = 1;
-
-    if (get_global_cfg_params()->app_bind_numa == 0) {
-        return;
-    }
-
-    stack_sock_num[sock->stack->stack_idx]++;
-    if (stack_sock_num[sock->stack->stack_idx] > max_sock_stack) {
-        max_sock_stack = stack_sock_num[sock->stack->stack_idx];
-        bind_to_stack_numa(sock->stack);
-    }
-}
-
 ssize_t do_lwip_send_to_stack(int32_t fd, const void *buf, size_t len, int32_t flags,
                               const struct sockaddr *addr, socklen_t addrlen)
 {
+    struct lwip_sock *sock;
     ssize_t send = 0;
-    
+
     if (buf == NULL) {
         GAZELLE_RETURN(EINVAL);
     }
-
     if (addr && addr->sa_family != AF_INET && addr->sa_family != AF_INET6) {
         GAZELLE_RETURN(EINVAL);
     }
-    
-    struct lwip_sock *sock = lwip_get_socket(fd);
 
-    thread_bind_stack(sock);
+    sock = lwip_get_socket(fd);
+    if (unlikely(sock->already_bind_numa == 0 && sock->stack)) {
+        thread_bind_stack(sock->stack);
+        sock->already_bind_numa = 1;
+    }
 
     if (sock->same_node_tx_ring != NULL) {
         return gazelle_same_node_ring_send(sock, buf, len, flags);
@@ -1131,7 +1109,10 @@ ssize_t do_lwip_read_from_stack(int32_t fd, void *buf, size_t len, int32_t flags
         return -1;
     }
 
-    thread_bind_stack(sock);
+    if (unlikely(sock->already_bind_numa == 0 && sock->stack)) {
+        thread_bind_stack(sock->stack);
+        sock->already_bind_numa = 1;
+    }
 
     if (sock->same_node_rx_ring != NULL) {
         return gazelle_same_node_ring_recv(sock, buf, len, flags);
