@@ -11,22 +11,22 @@
 */
 
 #include <sys/types.h>
-#include <signal.h>
-#include <sys/socket.h>
 #include <execinfo.h>
-#include <unistd.h>
+#include <sys/socket.h>
+
 #include <lwip/lwipgz_sock.h>
 #include <lwip/lwipgz_posix_api.h>
 
+#include "lstack_unistd.h"
 #include "common/gazelle_base_func.h"
-#include "lstack_cfg.h"
-#include "common/dpdk_common.h"
 #include "lstack_log.h"
+#include "lstack_cfg.h"
 #include "lstack_control_plane.h"
 
 static int g_hijack_signal[] = { SIGTERM, SIGINT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGKILL};
 #define HIJACK_SIGNAL_COUNT (sizeof(g_hijack_signal) / sizeof(g_hijack_signal[0]))
 #define BACKTRACE_SIZE 64
+
 static void dump_stack(void)
 {
     char **stack_trace = NULL;
@@ -71,10 +71,15 @@ static void lstack_sig_default_handler(int sig)
     (void)kill(getpid(), sig);
 }
 
-void lstack_signal_init(void)
+int lstack_signal_init(void)
 {
     unsigned int i;
     struct sigaction action;
+
+    /* to prevent crash, just ignore SIGPIPE when socket is closed */
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        return -1;
+    }
 
     sigemptyset(&action.sa_mask);
     action.sa_flags = (int)(SA_NODEFER | SA_RESETHAND);
@@ -82,6 +87,8 @@ void lstack_signal_init(void)
     for (i = 0; i < HIJACK_SIGNAL_COUNT; i++) {
         posix_api->sigaction_fn(g_hijack_signal[i], &action, NULL);
     }
+
+    return 0;
 }
 
 int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigaction *old_action)
@@ -103,4 +110,16 @@ int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigacti
     }
 
     return posix_api->sigaction_fn(sig_num, action, old_action);
+}
+
+pid_t lstack_fork(void)
+{
+    pid_t pid;
+
+    pid = posix_api->fork_fn();
+    /* child not support lwip */
+    if (pid == 0) {
+        posix_api->use_kernel = 1;
+    }
+    return pid;
 }

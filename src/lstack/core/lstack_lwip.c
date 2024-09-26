@@ -34,7 +34,7 @@
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
-#include "posix/lstack_epoll.h"
+#include "lstack_epoll.h"
 #include "lstack_thread_rpc.h"
 #include "common/dpdk_common.h"
 #include "lstack_cfg.h"

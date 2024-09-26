@@ -35,7 +35,7 @@
 #include "common/gazelle_base_func.h"
 #include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
-#include "posix/lstack_epoll.h"
+#include "lstack_epoll.h"
 
 #define EPOLL_KERNEL_INTERVAL   10 /* ms */
 #define SEC_TO_NSEC             1000000000

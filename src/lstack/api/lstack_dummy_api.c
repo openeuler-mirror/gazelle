@@ -13,6 +13,10 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include <rte_config.h>
+#include <rte_atomic.h>
+#include <lwip/lwipgz_posix_api.h>
+
 #define DUMMY_SLEEP_S 5
 
 static inline ssize_t dummy_exit(void)
@@ -22,34 +26,48 @@ static inline ssize_t dummy_exit(void)
     return -1;
 }
 
-int dummy_socket(int domain, int type, int protocol)
+static int dummy_socket(int domain, int type, int protocol)
 {
     sleep(DUMMY_SLEEP_S);
     return -1;
 }
 
-ssize_t dummy_write(int s, const void *mem, size_t size)
+static ssize_t dummy_write(int s, const void *mem, size_t size)
 {
     return dummy_exit();
 }
 
-ssize_t dummy_writev(int s, const struct iovec *iov, int iovcnt)
+static ssize_t dummy_writev(int s, const struct iovec *iov, int iovcnt)
 {
     return dummy_exit();
 }
 
-ssize_t dummy_send(int sockfd, const void *buf, size_t len, int flags)
+static ssize_t dummy_send(int sockfd, const void *buf, size_t len, int flags)
 {
     return dummy_exit();
 }
 
-ssize_t dummy_sendmsg(int s, const struct msghdr *message, int flags)
+static ssize_t dummy_sendmsg(int s, const struct msghdr *message, int flags)
 {
     return dummy_exit();
 }
 
-ssize_t dummy_sendto(int sockfd, const void *buf, size_t len, int flags,
-                     const struct sockaddr *addr, socklen_t addrlen)
+static ssize_t dummy_sendto(int sockfd, const void *buf, size_t len, int flags,
+                            const struct sockaddr *addr, socklen_t addrlen)
 {
     return dummy_exit();
+}
+
+void dummy_api_init(posix_api_t *api)
+{
+    api->socket_fn  = dummy_socket;
+    api->send_fn    = dummy_send;
+    api->write_fn   = dummy_write;
+    api->writev_fn  = dummy_writev;
+    api->sendmsg_fn = dummy_sendmsg;
+    api->sendto_fn  = dummy_sendto;
+
+    rte_wmb();
+    /* 1: wait until app thread call send functio complete */
+    sleep(1);
 }

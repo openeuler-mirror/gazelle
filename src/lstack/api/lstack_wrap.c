@@ -10,29 +10,22 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include <dlfcn.h>
-#include <netdb.h>
+#include <securec.h>
 #include <ifaddrs.h>
-
-#include <signal.h>
-#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <sys/epoll.h>
 #include <net/if.h>
-#include <securec.h>
 
 #include <lwip/lwipgz_posix_api.h>
 #include <lwip/lwipgz_sock.h>
 #include <lwip/tcp.h>
 
-#include "posix/lstack_unistd.h"
+#include "common/gazelle_base_func.h"
 #include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
-#include "common/gazelle_base_func.h"
 #include "lstack_preload.h"
-
+#include "lstack_unistd.h"
 #include "lstack_rtc_api.h"
 #include "lstack_rtw_api.h"
 #include "lstack_dummy_api.h"
@@ -45,78 +38,18 @@ void wrap_api_init(void)
     if (g_wrap_api != NULL) {
         return;
     }
-
     g_wrap_api = &g_wrap_api_value;
+
     if (get_global_cfg_params()->stack_mode_rtc) {
-        g_wrap_api->socket_fn        = rtc_socket;
-        g_wrap_api->accept_fn        = lwip_accept;
-        g_wrap_api->accept4_fn       = lwip_accept4;
-        g_wrap_api->bind_fn          = lwip_bind;
-        g_wrap_api->listen_fn        = lwip_listen;
-        g_wrap_api->connect_fn       = lwip_connect;
-        g_wrap_api->setsockopt_fn    = lwip_setsockopt;
-        g_wrap_api->getsockopt_fn    = lwip_getsockopt;
-        g_wrap_api->getpeername_fn   = lwip_getpeername;
-        g_wrap_api->getsockname_fn   = lwip_getsockname;
-        g_wrap_api->read_fn          = lwip_read;
-        g_wrap_api->readv_fn         = lwip_readv;
-        g_wrap_api->write_fn         = lwip_write;
-        g_wrap_api->writev_fn        = lwip_writev;
-        g_wrap_api->recv_fn          = lwip_recv;
-        g_wrap_api->send_fn          = lwip_send;
-        g_wrap_api->recvmsg_fn       = lwip_recvmsg;
-        g_wrap_api->sendmsg_fn       = lwip_sendmsg;
-        g_wrap_api->recvfrom_fn      = lwip_recvfrom;
-        g_wrap_api->sendto_fn        = lwip_sendto;
-        g_wrap_api->epoll_wait_fn    = rtc_epoll_wait;
-        g_wrap_api->poll_fn          = rtc_poll;
-        g_wrap_api->close_fn         = rtc_close;
-        g_wrap_api->shutdown_fn      = rtc_shutdown;
-        g_wrap_api->epoll_ctl_fn     = rtc_epoll_ctl;
-        g_wrap_api->epoll_create1_fn = rtc_epoll_create1;
-        g_wrap_api->epoll_create_fn  = rtc_epoll_create;
-        g_wrap_api->select_fn        = rtc_select;
+        rtc_api_init(g_wrap_api);
     } else {
-        g_wrap_api->socket_fn        = rtw_socket;
-        g_wrap_api->accept_fn        = rtw_accept;
-        g_wrap_api->accept4_fn       = rtw_accept4;
-        g_wrap_api->bind_fn          = rtw_bind;
-        g_wrap_api->listen_fn        = rtw_listen;
-        g_wrap_api->connect_fn       = rtw_connect;
-        g_wrap_api->setsockopt_fn    = rtw_setsockopt;
-        g_wrap_api->getsockopt_fn    = rtw_getsockopt;
-        g_wrap_api->getpeername_fn   = rtw_getpeername;
-        g_wrap_api->getsockname_fn   = rtw_getsockname;
-        g_wrap_api->read_fn          = rtw_read;
-        g_wrap_api->readv_fn         = rtw_readv;
-        g_wrap_api->write_fn         = rtw_write;
-        g_wrap_api->writev_fn        = rtw_writev;
-        g_wrap_api->recv_fn          = rtw_recv;
-        g_wrap_api->send_fn          = rtw_send;
-        g_wrap_api->recvmsg_fn       = rtw_recvmsg;
-        g_wrap_api->sendmsg_fn       = rtw_sendmsg;
-        g_wrap_api->recvfrom_fn      = rtw_recvfrom;
-        g_wrap_api->sendto_fn        = rtw_sendto;
-        g_wrap_api->epoll_wait_fn    = rtw_epoll_wait;
-        g_wrap_api->poll_fn          = rtw_poll;
-        g_wrap_api->close_fn         = rtw_close;
-        g_wrap_api->shutdown_fn      = rtw_shutdown;
-        g_wrap_api->epoll_ctl_fn     = rtw_epoll_ctl;
-        g_wrap_api->epoll_create1_fn = rtw_epoll_create1;
-        g_wrap_api->epoll_create_fn  = rtw_epoll_create;
-        g_wrap_api->select_fn        = rtw_select;
+        rtw_api_init(g_wrap_api);
     }
 }
 
-void wrap_api_set_dummy(void)
+void wrap_api_exit(void)
 {
-    g_wrap_api->socket_fn  = dummy_socket;
-    g_wrap_api->send_fn    = dummy_send;
-    g_wrap_api->write_fn   = dummy_write;
-    g_wrap_api->writev_fn  = dummy_writev;
-    g_wrap_api->sendmsg_fn   = dummy_sendmsg;
-    g_wrap_api->sendto_fn    = dummy_sendto;
-    rte_wmb();
+    dummy_api_init(g_wrap_api);
 }
 
 static inline int32_t do_epoll_create1(int32_t flags)
