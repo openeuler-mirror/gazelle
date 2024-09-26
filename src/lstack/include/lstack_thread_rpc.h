@@ -52,6 +52,7 @@ struct rpc_msg {
     int8_t sync_flag : 1;
     int8_t recall_flag : 1;
     int64_t result; /* func return val */
+    int64_t errno_code;
     lockless_queue_node queue_node;
     struct rpc_msg_pool *rpcpool;
 

@@ -225,7 +225,7 @@ struct gazelle_stat_lstack_snmp {
 };
 
 /* same as define in lwip/stats.h - struct stats_proto */
-struct gazelle_stat_lstack_proto {
+struct gazelle_stats_proto {
     /* data */
     uint64_t xmit;             /* Transmitted packets. */
     uint64_t recv;             /* Received packets. */
@@ -243,6 +243,24 @@ struct gazelle_stat_lstack_proto {
     uint64_t opterr;           /* Error in options. */
     uint64_t err;              /* Misc error. */
     uint64_t cachehit;
+};
+
+/* same as define in lwip/stats.h - spacial stats_proto */
+struct gazelle_stats_igmp {
+  uint64_t xmit;             /* Transmitted packets. */
+  uint64_t recv;             /* Received packets. */
+  uint64_t drop;             /* Dropped packets. */
+  uint64_t chkerr;           /* Checksum error. */
+  uint64_t lenerr;           /* Invalid length error. */
+  uint64_t memerr;           /* Out of memory error. */
+  uint64_t proterr;          /* Protocol error. */
+  uint64_t rx_v1;            /* Received v1 frames. */
+  uint64_t rx_group;         /* Received group-specific queries. */
+  uint64_t rx_general;       /* Received general queries. */
+  uint64_t rx_report;        /* Received reports. */
+  uint64_t tx_join;          /* Sent joins. */
+  uint64_t tx_leave;         /* Sent leaves. */
+  uint64_t tx_report;        /* Sent reports. */
 };
 
 
@@ -352,7 +370,8 @@ struct gazelle_stack_dfx_data {
         struct gazelle_stat_lstack_virtio virtio;
         struct nic_eth_xstats nic_xstats;
         struct nic_eth_features nic_features;
-        struct gazelle_stat_lstack_proto  proto_data;
+        struct gazelle_stats_proto  proto_data;
+        struct gazelle_stats_igmp igmp_data;
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
         struct gazelle_fault_inject_data inject;

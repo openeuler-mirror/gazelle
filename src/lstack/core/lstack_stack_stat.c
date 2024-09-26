@@ -290,6 +290,9 @@ static void get_stack_dfx_data_proto(struct gazelle_stack_dfx_data *dfx, struct 
     } else if (strcmp(proto_mode, "ETHARP") == 0) {
         ret = memcpy_s(&dfx->data.proto_data, sizeof(dfx->data.proto_data),
                        &stack->lwip_stats->etharp, sizeof(stack->lwip_stats->etharp));
+    } else if (strcmp(proto_mode, "IGMP") == 0) {
+        ret = memcpy_s(&dfx->data.igmp_data, sizeof(dfx->data.igmp_data),
+                       &stack->lwip_stats->igmp, sizeof(stack->lwip_stats->igmp));
     } else {
         printf("Error: Invalid protocol\n");
     }

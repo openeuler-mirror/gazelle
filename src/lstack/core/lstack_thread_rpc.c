@@ -47,6 +47,7 @@ static void rpc_msg_init(struct rpc_msg *msg, rpc_msg_func func, struct rpc_msg_
     msg->func = func;
     msg->sync_flag = 1;
     msg->recall_flag = 0;
+    msg->errno_code = 0;
 }
 
 static struct rpc_msg *rpc_msg_alloc_except(rpc_msg_func func)
