@@ -432,8 +432,8 @@ static int eth_params_init(struct eth_params *eth_params, uint16_t port_id, uint
 
     eth_params->port_id = port_id;
     eth_params->nb_queues = nb_queues;
-    eth_params->nb_rx_desc = get_global_cfg_params()->nic.rxqueue_size;
-    eth_params->nb_tx_desc = get_global_cfg_params()->nic.txqueue_size;
+    eth_params->nb_rx_desc = get_global_cfg_params()->rxqueue_size;
+    eth_params->nb_tx_desc = get_global_cfg_params()->txqueue_size;
     eth_params->conf.link_speeds = RTE_ETH_LINK_SPEED_AUTONEG;
     eth_params->conf.txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
     eth_params->conf.rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
@@ -571,7 +571,7 @@ int32_t dpdk_ethdev_init(int port_id)
     }
 
     /* after rte_eth_dev_configure */
-    if ((get_global_cfg_params()->nic.vlan_mode != -1) &&
+    if ((get_global_cfg_params()->vlan_mode != -1) &&
         ((stack_group->rx_offload & RTE_ETH_RX_OFFLOAD_VLAN_FILTER) == RTE_ETH_RX_OFFLOAD_VLAN_FILTER)) {
         /*
          * vlan filter can be configured for switch,nic and software.
@@ -583,7 +583,7 @@ int32_t dpdk_ethdev_init(int port_id)
          */
         if ((get_global_cfg_params()->bond_mode != BONDING_MODE_8023AD) &&
             (get_global_cfg_params()->bond_mode != BONDING_MODE_ALB)) {
-            ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->nic.vlan_mode, 1);
+            ret = rte_eth_dev_vlan_filter(port_id, get_global_cfg_params()->vlan_mode, 1);
             if (ret != 0) {
                 LSTACK_LOG(ERR, LSTACK, "dpdk add vlan filter failed ret = %d\n", ret);
                 return -1;
