@@ -26,7 +26,7 @@
 #include "common/gazelle_dfx_msg.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_protocol_stack.h"
-#include "posix/lstack_epoll.h"
+#include "lstack_epoll.h"
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"

@@ -32,5 +32,6 @@
 - int32_t sigaction(int32_t signum, const struct sigaction *act, struct sigaction *oldact)
 
 # Gazelle支持应用列表
-- mysql 8.0.20
-- ceph client 14.2.8
+- mysql
+- ceph client
+- Redis

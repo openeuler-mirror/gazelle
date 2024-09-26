@@ -31,7 +31,7 @@
 #include "lstack_lwip.h"
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
-#include "posix/lstack_epoll.h"
+#include "lstack_epoll.h"
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"
 #include "lstack_protocol_stack.h"
@@ -886,7 +886,6 @@ void stack_tcp_send(struct rpc_msg *msg)
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (POSIX_IS_CLOSED(sock)) {
         msg->result = -1;
-        LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
         return;
     }
 
@@ -922,7 +921,6 @@ void stack_udp_send(struct rpc_msg *msg)
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (POSIX_IS_CLOSED(sock)) {
         msg->result = -1;
-        LSTACK_LOG(ERR, LSTACK, "get sock error! fd=%d, len=%ld\n", fd, len);
         return;
     }
 

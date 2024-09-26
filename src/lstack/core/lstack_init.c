@@ -20,27 +20,26 @@
 #include <securec.h>
 #include <numa.h>
 #include <pthread.h>
-#include <rte_pdump.h>
 #include <unistd.h>
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <netinet/in.h>
 
-#include <lwip/def.h>
+#include <rte_pdump.h>
+
 #include <lwip/init.h>
 #include <lwip/lwipgz_sock.h>
 #include <lwip/lwipopts.h>
 #include <lwip/lwipgz_posix_api.h>
 
+#include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
 #include "lstack_ethdev.h"
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
-#include "lstack_log.h"
 #include "common/dpdk_common.h"
-#include "posix/lstack_epoll.h"
-#include "posix/lstack_unistd.h"
+#include "lstack_unistd.h"
 #include "common/gazelle_base_func.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_preload.h"
@@ -107,9 +106,7 @@ static int32_t check_process_conflict(void)
 
 void gazelle_exit(void)
 {
-    wrap_api_set_dummy();
-    /* 1: wait until app thread call send functio complete */
-    sleep(1);
+    wrap_api_exit();
     stack_group_exit();
 }
 
@@ -168,18 +165,6 @@ static void create_control_thread(void)
         LSTACK_LOG(ERR, LSTACK, "pthread_setname_np failed errno=%d\n", errno);
     }
     LSTACK_LOG(INFO, LSTACK, "create control_easy_thread success\n");
-}
-
-static void gazelle_signal_init(void)
-{
-    /* to prevent crash , just ignore SIGPIPE when socket is closed */
-    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "signal error, errno:%d.", errno);
-        LSTACK_EXIT(1, "signal SIGPIPE SIG_IGN\n");
-    }
-
-    /* register core sig handler func to dumped stack */
-    lstack_signal_init();
 }
 
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
@@ -278,7 +263,11 @@ __attribute__((constructor)) void gazelle_network_init(void)
         }
     }
 
-    gazelle_signal_init();
+    /* register core sig handler func to dumped stack */
+    if (lstack_signal_init() != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "signal init failed, errno %d\n", errno);
+        LSTACK_EXIT(1, "signal init failed, errno %d\n", errno);
+    }
 
     /* Init control plane and dpdk init */
     create_control_thread();

@@ -13,16 +13,11 @@
 #ifndef _GAZELLE_UNISTD_H_
 #define _GAZELLE_UNISTD_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <unistd.h>
+#include <signal.h>
 
+int lstack_signal_init(void);
+int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigaction *old_action);
 pid_t lstack_fork(void);
-void lstack_signal_init(void);
-int lstack_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _GAZELLE_UNISTD_H_ */

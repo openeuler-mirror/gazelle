@@ -10,23 +10,18 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#include <fcntl.h>
-#include <sys/epoll.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <lwip/lwipgz_sock.h>
+#include <lwip/sockets.h>
 
 #include "lstack_thread_rpc.h"
-#include "posix/lstack_epoll.h"
+#include "lstack_epoll.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
 #include "common/gazelle_base_func.h"
 #include "lstack_rtw_api.h"
 
-
-int rtw_socket(int domain, int type, int protocol)
+static int rtw_socket(int domain, int type, int protocol)
 {
     struct protocol_stack *stack = get_bind_protocol_stack();
     if (stack == NULL) {
@@ -35,17 +30,17 @@ int rtw_socket(int domain, int type, int protocol)
     return rpc_call_socket(&stack->rpc_queue, domain, type, protocol);
 }
 
-int rtw_accept(int s, struct sockaddr *addr, socklen_t *addrlen)
+static int rtw_accept(int s, struct sockaddr *addr, socklen_t *addrlen)
 {
     return stack_broadcast_accept(s, addr, addrlen);
 }
 
-int rtw_accept4(int s, struct sockaddr *addr, socklen_t *addrlen, int flags)
+static int rtw_accept4(int s, struct sockaddr *addr, socklen_t *addrlen, int flags)
 {
     return stack_broadcast_accept4(s, addr, addrlen, flags);
 }
 
-int rtw_bind(int s, const struct sockaddr *name, socklen_t namelen)
+static int rtw_bind(int s, const struct sockaddr *name, socklen_t namelen)
 {
     struct lwip_sock *sock = lwip_get_socket(s);
 
@@ -56,7 +51,7 @@ int rtw_bind(int s, const struct sockaddr *name, socklen_t namelen)
     }
 }
 
-int rtw_listen(int s, int backlog)
+static int rtw_listen(int s, int backlog)
 {
     if (!get_global_cfg_params()->tuple_filter &&
         !get_global_cfg_params()->listen_shadow) {
@@ -66,7 +61,7 @@ int rtw_listen(int s, int backlog)
     }
 }
 
-int rtw_connect(int s, const struct sockaddr *name, socklen_t namelen)
+static int rtw_connect(int s, const struct sockaddr *name, socklen_t namelen)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(s);
     if (stack == NULL) {
@@ -75,7 +70,7 @@ int rtw_connect(int s, const struct sockaddr *name, socklen_t namelen)
     return rpc_call_connect(&stack->rpc_queue, s, name, namelen);
 }
 
-int rtw_setsockopt(int s, int level, int optname, const void *optval, socklen_t optlen)
+static int rtw_setsockopt(int s, int level, int optname, const void *optval, socklen_t optlen)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(s);
     if (stack == NULL) {
@@ -84,7 +79,7 @@ int rtw_setsockopt(int s, int level, int optname, const void *optval, socklen_t 
     return rpc_call_setsockopt(&stack->rpc_queue, s, level, optname, optval, optlen);
 }
 
-int rtw_getsockopt(int s, int level, int optname, void *optval, socklen_t *optlen)
+static int rtw_getsockopt(int s, int level, int optname, void *optval, socklen_t *optlen)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(s);
     if (stack == NULL) {
@@ -93,7 +88,7 @@ int rtw_getsockopt(int s, int level, int optname, void *optval, socklen_t *optle
     return rpc_call_getsockopt(&stack->rpc_queue, s, level, optname, optval, optlen);
 }
 
-int rtw_getpeername(int s, struct sockaddr *name, socklen_t *namelen)
+static int rtw_getpeername(int s, struct sockaddr *name, socklen_t *namelen)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(s);
     if (stack == NULL) {
@@ -102,7 +97,7 @@ int rtw_getpeername(int s, struct sockaddr *name, socklen_t *namelen)
     return rpc_call_getpeername(&stack->rpc_queue, s, name, namelen);
 }
 
-int rtw_getsockname(int s, struct sockaddr *name, socklen_t *namelen)
+static int rtw_getsockname(int s, struct sockaddr *name, socklen_t *namelen)
 {
     struct protocol_stack *stack = get_protocol_stack_by_fd(s);
     if (stack == NULL) {
@@ -111,12 +106,12 @@ int rtw_getsockname(int s, struct sockaddr *name, socklen_t *namelen)
     return rpc_call_getsockname(&stack->rpc_queue, s, name, namelen);
 }
 
-ssize_t rtw_read(int s, void *mem, size_t len)
+static ssize_t rtw_read(int s, void *mem, size_t len)
 {
     return do_lwip_read_from_stack(s, mem, len, 0, NULL, NULL);
 }
 
-ssize_t rtw_readv(int s, const struct iovec *iov, int iovcnt)
+static ssize_t rtw_readv(int s, const struct iovec *iov, int iovcnt)
 {
     struct msghdr msg;
 
@@ -130,12 +125,12 @@ ssize_t rtw_readv(int s, const struct iovec *iov, int iovcnt)
     return do_lwip_recvmsg_from_stack(s, &msg, 0);
 }
 
-ssize_t rtw_write(int s, const void *mem, size_t size)
+static ssize_t rtw_write(int s, const void *mem, size_t size)
 {
     return do_lwip_send_to_stack(s, mem, size, 0, NULL, 0);
 }
 
-ssize_t rtw_writev(int s, const struct iovec *iov, int iovcnt)
+static ssize_t rtw_writev(int s, const struct iovec *iov, int iovcnt)
 {
     struct lwip_sock *sock = lwip_get_socket(s);
     struct msghdr msg;
@@ -150,22 +145,22 @@ ssize_t rtw_writev(int s, const struct iovec *iov, int iovcnt)
     return do_lwip_sendmsg_to_stack(sock, s, &msg, 0);
 }
 
-ssize_t rtw_recv(int sockfd, void *buf, size_t len, int flags)
+static ssize_t rtw_recv(int sockfd, void *buf, size_t len, int flags)
 {
     return do_lwip_read_from_stack(sockfd, buf, len, flags, NULL, NULL);
 }
 
-ssize_t rtw_send(int sockfd, const void *buf, size_t len, int flags)
+static ssize_t rtw_send(int sockfd, const void *buf, size_t len, int flags)
 {
     return do_lwip_send_to_stack(sockfd, buf, len, flags, NULL, 0);
 }
 
-ssize_t rtw_recvmsg(int s, const struct msghdr *message, int flags)
+static ssize_t rtw_recvmsg(int s, struct msghdr *message, int flags)
 {
     return do_lwip_recvmsg_from_stack(s, message, flags);
 }
 
-ssize_t rtw_sendmsg(int s, const struct msghdr *message, int flags)
+static ssize_t rtw_sendmsg(int s, const struct msghdr *message, int flags)
 {
     struct lwip_sock *sock = lwip_get_socket(s);
     return do_lwip_sendmsg_to_stack(sock, s, message, flags);
@@ -207,8 +202,8 @@ static inline ssize_t rtw_tcp_recvfrom(int sockfd, void *buf, size_t len, int fl
 }
 
 
-ssize_t rtw_recvfrom(int sockfd, void *buf, size_t len, int flags,
-                     struct sockaddr *addr, socklen_t *addrlen)
+static ssize_t rtw_recvfrom(int sockfd, void *buf, size_t len, int flags,
+                            struct sockaddr *addr, socklen_t *addrlen)
 {
     struct lwip_sock *sock = lwip_get_socket(sockfd);
     if (NETCONN_IS_UDP(sock)) {
@@ -218,28 +213,28 @@ ssize_t rtw_recvfrom(int sockfd, void *buf, size_t len, int flags,
     }
 }
 
-ssize_t rtw_sendto(int sockfd, const void *buf, size_t len, int flags,
-                   const struct sockaddr *addr, socklen_t addrlen)
+static ssize_t rtw_sendto(int sockfd, const void *buf, size_t len, int flags,
+                          const struct sockaddr *addr, socklen_t addrlen)
 {
     return do_lwip_send_to_stack(sockfd, buf, len, flags, addr, addrlen);
 }
 
-int rtw_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
+static int rtw_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
 {
     return lstack_rtw_epoll_wait(epfd, events, maxevents, timeout);
 }
 
-int rtw_poll(struct pollfd *fds, nfds_t nfds, int timeout)
+static int rtw_poll(struct pollfd *fds, nfds_t nfds, int timeout)
 {
     return lstack_poll(fds, nfds, timeout);
 }
 
-int rtw_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+static int rtw_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
 {
     return lstack_select(nfds, readfds, writefds, exceptfds, timeout);
 }
 
-int rtw_close(int s)
+static int rtw_close(int s)
 {
     struct lwip_sock *sock = lwip_get_socket(s);
     if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
@@ -248,7 +243,7 @@ int rtw_close(int s)
     return stack_broadcast_close(s);
 }
 
-int rtw_shutdown(int fd, int how)
+static int rtw_shutdown(int fd, int how)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock && sock->wakeup && sock->wakeup->epollfd == fd) {
@@ -258,18 +253,53 @@ int rtw_shutdown(int fd, int how)
     return stack_broadcast_shutdown(fd, how);
 }
 
-int rtw_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+static int rtw_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
     return lstack_rtw_epoll_ctl(epfd, op, fd, event);
 }
 
-int rtw_epoll_create1(int flags)
+static int rtw_epoll_create1(int flags)
 {
     return lstack_epoll_create1(flags);
 }
 
-int rtw_epoll_create(int flags)
+static int rtw_epoll_create(int flags)
 {
     return lstack_epoll_create(flags);
 }
 
+void rtw_api_init(posix_api_t *api)
+{
+    api->close_fn         = rtw_close;
+    api->shutdown_fn      = rtw_shutdown;
+    api->socket_fn        = rtw_socket;
+    api->accept_fn        = rtw_accept;
+    api->accept4_fn       = rtw_accept4;
+    api->bind_fn          = rtw_bind;
+    api->listen_fn        = rtw_listen;
+    api->connect_fn       = rtw_connect;
+
+    api->setsockopt_fn    = rtw_setsockopt;
+    api->getsockopt_fn    = rtw_getsockopt;
+    api->getpeername_fn   = rtw_getpeername;
+    api->getsockname_fn   = rtw_getsockname;
+
+    api->read_fn          = rtw_read;
+    api->readv_fn         = rtw_readv;
+    api->write_fn         = rtw_write;
+    api->writev_fn        = rtw_writev;
+    api->recv_fn          = rtw_recv;
+    api->send_fn          = rtw_send;
+    api->recvmsg_fn       = (ssize_t (*)(int, const struct msghdr *, int))rtw_recvmsg; // TODO: fix unnecessary 'const' in lwipgz_posix_api.h
+    api->sendmsg_fn       = rtw_sendmsg;
+    api->recvfrom_fn      = rtw_recvfrom;
+    api->sendto_fn        = rtw_sendto;
+
+    api->epoll_ctl_fn     = rtw_epoll_ctl;
+    api->epoll_create1_fn = rtw_epoll_create1;
+    api->epoll_create_fn  = rtw_epoll_create;
+    api->epoll_wait_fn    = rtw_epoll_wait;
+
+    api->poll_fn          = rtw_poll;
+    api->select_fn        = rtw_select;
+}

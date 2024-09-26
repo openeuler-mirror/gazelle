@@ -1005,6 +1005,13 @@ static void gazelle_print_lstack_tcp_stat(const struct gazelle_stat_lstack_snmp 
     printf("tcp_acceptmbox_full: %u\n",  snmp->tcp_acceptmbox_full);
     printf("tcp_listen_drops: %u\n",     snmp->tcp_listen_drops);
     printf("tcp_in_empty_acks: %u\n",    snmp->tcp_in_empty_acks);
+    printf("tcp_rst_in_keepalive_timeout: %u\n",   snmp->tcp_rst_in_keepalive_timeout);
+    printf("tcp_rst_wrong_syn_in_timewait: %u\n",  snmp->tcp_rst_wrong_syn_in_timewait);
+    printf("tcp_rst_wrong_ack_in_syn_rcvd: %u\n",  snmp->tcp_rst_wrong_ack_in_syn_rcvd);
+    printf("tcp_ooseq_data_drop: %u\n",            snmp->tcp_ooseq_data_drop);
+    printf("tcp_free_pcb_in_syn_maxrtx: %u\n",     snmp->tcp_free_pcb_in_syn_maxrtx);
+    printf("tcp_free_pcb_in_maxrtx: %u\n",         snmp->tcp_free_pcb_in_maxrtx);
+    printf("tcp_alloc_pcb_fails: %u\n",            snmp->tcp_alloc_pcb_fails);
 }
 
 static void gazelle_print_ltran_stat_lb_rate(void *buf, const struct gazelle_stat_msg_request *req_msg)
