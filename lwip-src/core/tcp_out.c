@@ -1499,6 +1499,9 @@ tcp_output(struct tcp_pcb *pcb)
     /* If the TF_ACK_NOW flag is set and the ->unsent queue is empty, construct
      * an empty ACK segment and send it. */
     if (pcb->flags & TF_ACK_NOW) {
+#if GAZELLE_TCP_PINGPONG_MODE
+      MIB2_STATS_INC(mib2.tcpinemptyacks);
+#endif
       return tcp_send_empty_ack(pcb);
     }
     /* nothing to send: shortcut out of here */
@@ -1546,6 +1549,9 @@ tcp_output(struct tcp_pcb *pcb)
     }
     /* We need an ACK, but can't send data now, so send an empty ACK */
     if (pcb->flags & TF_ACK_NOW) {
+#if GAZELLE_TCP_PINGPONG_MODE
+      MIB2_STATS_INC(mib2.tcpinemptyacks);
+#endif
       return tcp_send_empty_ack(pcb);
     }
     goto output_done;
@@ -1826,7 +1832,12 @@ tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb, struct netif *netif
   int seg_chksum_was_swapped = 0;
 #endif
 
-#if GAZELLE_ENABLE
+#if GAZELLE_TCP_PINGPONG_MODE
+  if (!tcp_in_pingpong(pcb)) {
+    if (TIME_BEFORE(sys_now(), pcb->lrcvtime + TCP_ATO_MS)) {
+      tcp_enter_pingpong(pcb);
+    }
+  }
   lstack_calculate_aggregate(1, seg->len);
 #endif
 
@@ -2217,7 +2228,6 @@ tcp_rexmit(struct tcp_pcb *pcb)
      and thus tcp_output directly returns. */
   return ERR_OK;
 }
-
 
 /**
  * Handle retransmission after three dupacks received

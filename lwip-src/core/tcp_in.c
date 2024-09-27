@@ -1765,7 +1765,17 @@ tcp_receive(struct tcp_pcb *pcb)
 
 
         /* Acknowledge the segment(s). */
+#if GAZELLE_TCP_PINGPONG_MODE
+        if (tcp_in_pingpong(pcb)) {
+          tcp_clear_flags(pcb, TF_ACK_NOW);
+          tcp_set_flags(pcb, TF_ACK_DELAY);
+        } else {
+          tcp_ack(pcb);
+        }
+        pcb->lrcvtime = sys_now();
+#else
         tcp_ack(pcb);
+#endif
 
 #if LWIP_TCP_SACK_OUT
         if (LWIP_TCP_SACK_VALID(pcb, 0)) {
@@ -2012,12 +2022,18 @@ tcp_receive(struct tcp_pcb *pcb)
 #endif /* TCP_OOSEQ_BYTES_LIMIT || TCP_OOSEQ_PBUFS_LIMIT */
 #endif /* TCP_QUEUE_OOSEQ */
 
+#if GAZELLE_TCP_PINGONG_MODE
+        tcp_exit_pingpong(pcb); /* ooseq */
+#endif
         /* We send the ACK packet after we've (potentially) dealt with SACKs,
            so they can be included in the acknowledgment. */
         MIB2_STATS_INC(mib2.tcpinemptyacks);
         tcp_send_empty_ack(pcb);
       }
     } else {
+#if GAZELLE_TCP_PINGONG_MODE
+      tcp_exit_pingpong(pcb); /* out of window */
+#endif
       /* The incoming segment is not within the window. */
       MIB2_STATS_INC(mib2.tcpinemptyacks);
       tcp_send_empty_ack(pcb);

@@ -243,6 +243,7 @@
 
 #define GAZELLE_TCP_MAX_CONN_PER_THREAD 65535
 #define GAZELLE_TCP_REUSE_IPPORT 1
+#define GAZELLE_TCP_PINGPONG_MODE 1
 
 /*
    ------------------------------------
