@@ -1257,6 +1257,7 @@ static void copy_pcb_to_conn(struct gazelle_stat_lstack_conn_info *conn, const s
     conn->keep_idle = pcb->keep_idle;
     conn->keep_intvl = pcb->keep_intvl;
     conn->keep_cnt = pcb->keep_cnt;
+    conn->pingpong = tcp_in_pingpong(pcb);
 
     if (netconn != NULL) {
         conn->fd = netconn->callback_arg.socket;
