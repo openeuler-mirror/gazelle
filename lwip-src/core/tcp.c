@@ -1706,7 +1706,7 @@ tcp_fasttmr_start:
       /* send delayed ACKs */
       if (pcb->flags & TF_ACK_DELAY) {
 #else
-      if (!tcp_in_pingpong(pcb) || TIME_BEFORE(pcb->lrcvtime + TCP_ATO_M, sys_now())) {
+      if (!tcp_in_pingpong(pcb) || TIME_BEFORE(pcb->lrcvtime + TCP_ATO_MS, sys_now())) {
         tcp_exit_pingpong(pcb);
 #endif
         LWIP_DEBUGF(TCP_DEBUG, ("tcp_fasttmr: delayed ACK\n"));
