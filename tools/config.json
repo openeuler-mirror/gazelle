@@ -1,0 +1,9 @@
+{
+    "nic": "eth0",
+    "numa": "256",
+    "daemon": "1",
+    "kni": "0",
+    "lowpower": "0",
+    "ltrancore": "0,1",
+    "lstackcore": "2"
+}
