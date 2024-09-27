@@ -76,14 +76,18 @@ u64_t sys_now_us(void)
     return (rte_rdtsc() / g_sys_cycles_per_us);
 }
 
-void sys_timer_run(void)
+u32_t sys_timer_run(void)
 {
     u32_t sleeptime;
 
     sleeptime = sys_timeouts_sleeptime();
     if (sleeptime == 0) {
         sys_check_timeouts();
+        /* get netx timeout */
+        sleeptime = sys_timeouts_sleeptime();
     }
+
+    return sleeptime;
 }
 
 /*

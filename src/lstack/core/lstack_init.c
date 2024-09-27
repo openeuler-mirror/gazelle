@@ -25,6 +25,7 @@
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <netinet/in.h>
+#include <sys/resource.h>
 
 #include <rte_pdump.h>
 
@@ -46,6 +47,7 @@
 #include "lstack_preload.h"
 #include "lstack_wrap.h"
 #include "lstack_flow.h"
+#include "lstack_interrupt.h"
 
 static void check_process_start(void)
 {
@@ -232,6 +234,16 @@ static void set_kni_ip_mac()
 }
 #endif
 
+static int set_rlimit(void)
+{
+    struct rlimit r = {RLIM_INFINITY, RLIM_INFINITY};
+
+    if (setrlimit(RLIMIT_MEMLOCK, &r) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 __attribute__((constructor)) void gazelle_network_init(void)
 {
     /* Init POSXI API and prelog */
@@ -244,6 +256,12 @@ __attribute__((constructor)) void gazelle_network_init(void)
     /* Init LD_PRELOAD */
     if (preload_info_init() < 0) {
         return;
+    }
+
+    /* to remove UDP umem size limit */
+    if (set_rlimit() != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "set_rlimit failed\n");
+        LSTACK_EXIT(1, "set_rlimit failed\n");
     }
 
     /* Read configure from lstack.cfg */
@@ -307,6 +325,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     if (stack_group_init() != 0) {
         LSTACK_EXIT(1, "stack_group_init failed\n");
+    }
+
+    if (intr_init() < 0) {
+        LSTACK_EXIT(1, "intr init failed\n");
     }
 
     if (!use_ltran()) {

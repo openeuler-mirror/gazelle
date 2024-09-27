@@ -109,7 +109,7 @@ static inline __attribute__((always_inline)) int32_t rpc_sync_call(rpc_queue *qu
 
 int32_t rpc_msgcnt(rpc_queue *queue)
 {
-    return lockless_queue_count(queue);
+    return lockless_queue_count(&queue->queue);
 }
 
 int rpc_poll_msg(rpc_queue *queue, uint32_t max_num)
@@ -118,7 +118,7 @@ int rpc_poll_msg(rpc_queue *queue, uint32_t max_num)
     struct rpc_msg *msg = NULL;
 
     while (max_num--) {
-        lockless_queue_node *node = lockless_queue_mpsc_pop(queue);
+        lockless_queue_node *node = lockless_queue_mpsc_pop(&queue->queue);
         if (node == NULL) {
             break;
         }

@@ -38,6 +38,8 @@
 #include "lstack_port_map.h"
 #include "lstack_virtio.h"
 
+#include "lstack_interrupt.h"
+
 /* INUSE_TX_PKTS_WATERMARK < VDEV_RX_QUEUE_SZ;
  * USE_RX_PKTS_WATERMARK < FREE_RX_QUEUE_SZ.
  * less, means more available mbuf.
