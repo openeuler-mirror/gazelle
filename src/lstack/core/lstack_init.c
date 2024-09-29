@@ -17,6 +17,7 @@
 #include <semaphore.h>
 #include <sys/ioctl.h>
 #include <sys/file.h>
+#include <sys/resource.h>
 #include <securec.h>
 #include <numa.h>
 #include <pthread.h>
@@ -99,6 +100,20 @@ static int32_t check_process_conflict(void)
     ret = flock((fileno(fp)), LOCK_EX | LOCK_NB);
     (void)fclose(fp);
     if (ret < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+/* Remove the memory resource limit of the current process.
+ * if the number of locked memory resources is exceeded, xdp_umem_create fails.
+ */
+static int set_rlimit_unlimited(void)
+{
+    struct rlimit r = {RLIM_INFINITY, RLIM_INFINITY};
+
+    if (setrlimit(RLIMIT_MEMLOCK, &r) != 0) {
         return -1;
     }
 
@@ -240,6 +255,11 @@ __attribute__((constructor)) void gazelle_network_init(void)
     LSTACK_PRE_LOG(LSTACK_INFO, "cfg_init success\n");
 
     wrap_api_init();
+
+    if (set_rlimit_unlimited() != 0) {
+        LSTACK_PRE_LOG(LSTACK_INFO, "set rlimit unlimited failed\n");
+        LSTACK_EXIT(1, "set rlimit unlimited failed\n");
+    }
 
     /* check primary process start */
     check_process_start();
