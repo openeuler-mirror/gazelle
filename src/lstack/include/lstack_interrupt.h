@@ -10,11 +10,25 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef _LSTACK_TX_CACHE_H_
-#define _LSTACK_TX_CACHE_H_
+#ifndef __LSTACK_INTERRUPT_H__
+#define __LSTACK_INTERRUPT_H__
 
-int tx_cache_init(uint16_t queue_id, void *priv, struct lstack_dev_ops *dev_ops);
-int tx_cache_send(uint16_t queue_id);
-int tx_cache_count(uint16_t queue_id);
+enum intr_type {
+    INTR_DPDK_EVENT = 0,
+    INTR_LOCAL_EVENT,
+    INTR_REMOTE_EVENT,
+};
 
-#endif /* _LSTACK_TX_CACHE_H_ */
+struct intr_dpdk_event_args {
+    uint16_t port_id;
+    uint16_t queue_id;
+};
+
+int intr_init(void);
+int intr_register(uint16_t stack_id, enum intr_type type, void *priv);
+void intr_wakeup(uint16_t stack_id, enum intr_type type);
+void intr_wait(uint16_t stack_id, uint32_t timeout);
+int intr_stats_get(uint16_t stack_id, void *ptr, int len);
+
+#endif
+

@@ -45,6 +45,7 @@
 #include "lstack_preload.h"
 #include "lstack_wrap.h"
 #include "lstack_flow.h"
+#include "lstack_interrupt.h"
 
 static void check_process_start(void)
 {
@@ -287,6 +288,10 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     if (stack_group_init() != 0) {
         LSTACK_EXIT(1, "stack_group_init failed\n");
+    }
+
+    if (intr_init() < 0) {
+        LSTACK_EXIT(1, "intr init failed\n");
     }
 
     if (!use_ltran()) {

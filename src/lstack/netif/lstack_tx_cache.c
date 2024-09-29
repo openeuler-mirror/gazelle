@@ -58,22 +58,40 @@ int tx_cache_init(uint16_t queue_id, void *priv, struct lstack_dev_ops *dev_ops)
     return 0;
 }
 
+int tx_cache_count(uint16_t queue_id)
+{
+    struct tx_cache *tx_cache = g_tx_cache[queue_id];
+    if (tx_cache == NULL) {
+        return 0;
+    }
+    uint32_t start = tx_cache->send_start;
+    uint32_t end = tx_cache->send_end;
+    uint32_t count = (end - start) & TX_CACHE_MASK;
+    uint32_t capacity = TX_CACHE_MAX - 1;
+
+    return (count > capacity) ? capacity : count;
+}
+
 int tx_cache_send(uint16_t queue_id)
 {
+    uint32_t send_num;
+    uint32_t sent_pkts = 0;
+    uint32_t start;
+    uint32_t end;
+
     struct tx_cache *tx_cache = g_tx_cache[queue_id];
     if (tx_cache == NULL) {
         LSTACK_LOG(ERR, LSTACK, "queue(%d) tx cache get failed\n", queue_id);
         return 0;
     }
 
-    uint32_t send_num = tx_cache->send_end - tx_cache->send_start;
+    send_num = tx_cache_count(queue_id);
     if (send_num == 0) {
         return 0;
     }
 
-    uint32_t start = tx_cache->send_start & TX_CACHE_MASK;
-    uint32_t end = tx_cache->send_end & TX_CACHE_MASK;
-    uint32_t sent_pkts = 0;
+    start = tx_cache->send_start & TX_CACHE_MASK;
+    end = tx_cache->send_end & TX_CACHE_MASK;
     if (start < end) {
         sent_pkts = g_tx_cache_dev_ops.tx_xmit(tx_cache->priv, &tx_cache->send_pkts[start], send_num);
     } else {
@@ -85,6 +103,7 @@ int tx_cache_send(uint16_t queue_id)
     }
 
     tx_cache->send_start += sent_pkts;
+
     return sent_pkts;
 }
 

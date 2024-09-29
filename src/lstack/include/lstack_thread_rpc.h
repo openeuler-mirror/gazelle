@@ -17,6 +17,7 @@
 #include <rte_mempool.h>
 
 #include "lstack_lockless_queue.h"
+#include "lstack_interrupt.h"
 
 #define MSG_ARG_0                      (0)
 #define MSG_ARG_1                      (1)
@@ -25,7 +26,11 @@
 #define MSG_ARG_4                      (4)
 #define RPM_MSG_ARG_SIZE               (5)
 
-typedef struct lockless_queue rpc_queue;
+typedef struct rpc_queue rpc_queue;
+struct rpc_queue {
+    struct lockless_queue queue;
+    uint16_t queue_id;
+};
 
 struct rpc_stats {
     uint16_t call_null;
@@ -60,9 +65,10 @@ struct rpc_msg {
     lockless_queue_node queue_node;
 };
 
-static inline void rpc_queue_init(rpc_queue *queue)
+static inline void rpc_queue_init(rpc_queue *queue, uint16_t queue_id)
 {
-    lockless_queue_init(queue);
+    lockless_queue_init(&queue->queue);
+    queue->queue_id = queue_id;
 }
 struct rpc_stats *rpc_stats_get(void);
 int rpc_msgcnt(rpc_queue *queue);
