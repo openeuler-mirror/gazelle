@@ -281,6 +281,7 @@ struct gazelle_stat_lstack_conn_info {
     uint32_t keep_idle;
     uint32_t keep_intvl;
     uint32_t keep_cnt;
+    uint8_t pingpong;
 };
 
 struct gazelle_stat_lstack_conn {
