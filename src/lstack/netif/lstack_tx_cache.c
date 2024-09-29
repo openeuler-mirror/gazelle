@@ -61,6 +61,9 @@ int tx_cache_init(uint16_t queue_id, void *priv, struct lstack_dev_ops *dev_ops)
 int tx_cache_count(uint16_t queue_id)
 {
     struct tx_cache *tx_cache = g_tx_cache[queue_id];
+    if (tx_cache == NULL ) {
+        return 0;
+    }
     uint32_t start = tx_cache->send_start;
     uint32_t end = tx_cache->send_end;
     uint32_t count = (end - start) & TX_CACHE_MASK;
