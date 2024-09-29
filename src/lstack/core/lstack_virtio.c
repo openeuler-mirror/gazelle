@@ -20,6 +20,7 @@
 #include "lstack_cfg.h"
 #include "lstack_log.h"
 #include "lstack_port_map.h"
+#include "lstack_interrupt.h"
 #include "lstack_virtio.h"
 #include "securec.h"
 
@@ -274,6 +275,7 @@ static int virtio_port_init(uint16_t port)
         return retval;
     }
 
+    port_conf.intr_conf.rxq = get_global_cfg_params()->stack_interrupt;
     retval = rte_eth_dev_configure(port, rx_queue_num, tx_queue_num, &port_conf);
     if (retval != 0) {
         LSTACK_LOG(ERR, LSTACK, "rte_eth_dev_configure failed retval=%d\n", retval);
@@ -296,6 +298,13 @@ static int virtio_port_init(uint16_t port)
         if (retval < 0) {
             LSTACK_LOG(ERR, LSTACK, "rte_eth_rx_queue_setup failed (queue %u) retval=%d \n", q, retval);
             return retval;
+        }
+
+        if (port_conf.intr_conf.rxq) {
+            struct intr_dpdk_event_args intr_arg;
+            intr_arg.port_id = port;
+            intr_arg.queue_id = q;
+            intr_register(q, INTR_DPDK_EVENT, &intr_arg);
         }
     }
     return 0;

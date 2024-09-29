@@ -34,6 +34,8 @@
 #include "lstack_virtio.h"
 #include "lstack_protocol_stack.h"
 
+#include "lstack_interrupt.h"
+
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 #include <rte_kni.h>
 #endif
@@ -480,13 +482,18 @@ int stack_polling(unsigned wakeup_tick)
     uint32_t rpc_number = cfg->rpc_number;
     uint32_t read_connect_number = cfg->read_connect_number;
     struct protocol_stack *stack = get_protocol_stack();
+    uint32_t timeout;
 
     /* 2: one dfx consumes two rpc */
     rpc_poll_msg(&stack->dfx_rpc_queue, 2);
     force_quit = rpc_poll_msg(&stack->rpc_queue, rpc_number);
 
     eth_dev_poll();
-    sys_timer_run();
+    timeout = sys_timer_run();
+    if (cfg->stack_interrupt) {
+        intr_wait(stack->stack_idx, timeout);
+    }
+
     if (cfg->low_power_mod != 0) {
         low_power_idling(stack);
     }
@@ -496,6 +503,7 @@ int stack_polling(unsigned wakeup_tick)
     }
 
     do_lwip_read_recvlist(stack, read_connect_number);
+
     if ((wakeup_tick & 0xf) == 0) {
         wakeup_stack_epoll(stack);
         if (get_global_cfg_params()->send_cache_mode) {
@@ -533,6 +541,19 @@ int stack_polling(unsigned wakeup_tick)
     return force_quit;
 }
 
+static bool stack_local_event_get(uint16_t stack_id)
+{
+    struct protocol_stack *stack = g_stack_group.stacks[stack_id];
+    if (!lockless_queue_empty(&stack->dfx_rpc_queue.queue) ||
+        !lockless_queue_empty(&stack->rpc_queue.queue) ||
+        !list_head_empty(&stack->recv_list) ||
+        !list_head_empty(&stack->wakeup_list) ||
+        tx_cache_count(stack->queue_id)) {
+        return true;
+    }
+    return false;
+}
+
 static void* gazelle_stack_thread(void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
@@ -541,6 +562,7 @@ static void* gazelle_stack_thread(void *arg)
     unsigned wakeup_tick = 0;
 
     stack = stack_thread_init(arg);
+    intr_register(stack->stack_idx, INTR_LOCAL_EVENT, stack_local_event_get);
     free(arg);
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);

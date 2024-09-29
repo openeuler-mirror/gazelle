@@ -85,6 +85,7 @@ static int32_t parse_defaule_nonblock_mode(void);
 static int32_t parse_rpc_msg_max(void);
 static int32_t parse_send_cache_mode(void);
 static int32_t parse_flow_bifurcation(void);
+static int32_t parse_stack_interrupt(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -152,6 +153,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "rpc_msg_max", parse_rpc_msg_max },
     { "send_cache_mode", parse_send_cache_mode },
     { "flow_bifurcation", parse_flow_bifurcation},
+    { "stack_interrupt", parse_stack_interrupt},
     { NULL,           NULL }
 };
 
@@ -1381,5 +1383,28 @@ static int32_t parse_flow_bifurcation(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.flow_bifurcation, "flow_bifurcation", 0, 0, 1, ret);
+    return ret;
+}
+
+static int32_t parse_stack_interrupt(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.stack_interrupt, "stack_interrupt", false, false, true, ret);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: invalid enable intr value %d. only support 0 or 1\n", \
+                       g_config_params.stack_interrupt);
+    }
+
+    if (g_config_params.stack_interrupt == true) {
+        if (g_config_params.stack_mode_rtc == true) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "rtc mode not support interrupt mode now.\n");
+            return -1;
+        }
+        if (g_config_params.bond_mode >= 0) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "bond mode not support interrupt mode.\n");
+            return -1;
+        }
+    }
+
     return ret;
 }

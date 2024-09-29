@@ -138,6 +138,7 @@ static void gazelle_print_lstack_xstats(void *buf, const struct gazelle_stat_msg
 static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_nic_features(void *buf, const struct gazelle_stat_msg_request *req_msg);
 static void gazelle_print_lstack_stat_proto(void *buf, const struct gazelle_stat_msg_request *req_msg);
+static void gazelle_print_lstack_stat_intr(void *buf, const struct gazelle_stat_msg_request *req_msg);
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
 static void gazelle_print_fault_inject_set_status(void *buf, const struct gazelle_stat_msg_request *req_msg);
@@ -172,6 +173,7 @@ static struct gazelle_dfx_list g_gazelle_dfx_tbl[] = {
     {GAZELLE_STAT_LSTACK_SHOW_AGGREGATE, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_aggregate},
     {GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES, sizeof(struct gazelle_stack_dfx_data), gazelle_print_lstack_nic_features},
     {GAZELLE_STAT_LSTACK_SHOW_PROTOCOL,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_proto},
+    {GAZELLE_STAT_LSTACK_SHOW_INTR,    sizeof(struct gazelle_stack_dfx_data),  gazelle_print_lstack_stat_intr},
     
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
     {GAZELLE_STAT_FAULT_INJECT_SET, sizeof(struct gazelle_stack_dfx_data), gazelle_print_fault_inject_set_status},
@@ -1136,6 +1138,17 @@ static void gazelle_print_lstack_stat_proto_core(const struct gazelle_stack_dfx_
     printf("rterr: %lu\n",       proto->rterr);
 }
 
+static void gazelle_print_lstack_stat_intr_core(const struct gazelle_stack_dfx_data *stat,
+                                                const struct interrupt_stats *intr_stats)
+{
+    printf("\n------ stack tid: %6u ------\n", stat->tid);
+    printf("nic_event_cnt: %lu\n",          intr_stats->nic_event_cnt);
+    printf("virtio_user_event_cnt: %lu\n",  intr_stats->virtio_user_event_cnt);
+    printf("local_event_cnt: %lu\n", intr_stats->local_event_cnt);
+    printf("remote_event_cnt: %lu\n", intr_stats->remote_event_cnt);
+    printf("timeout_event_cnt: %lu\n",      intr_stats->timeout_event_cnt);
+}
+
 static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_msg_request *req_msg)
 {
     int32_t ret;
@@ -1145,6 +1158,25 @@ static void gazelle_print_lstack_stat_snmp(void *buf, const struct gazelle_stat_
     printf("Statistics of lstack snmp:\n");
     do {
         gazelle_print_lstack_stat_snmp_core(stat, snmp);
+        if (stat->eof != 0) {
+            break;
+        }
+        ret = dfx_stat_read_from_ltran(buf, sizeof(struct gazelle_stack_dfx_data), req_msg->stat_mode);
+        if (ret != GAZELLE_OK) {
+            return;
+        }
+    } while (true);
+}
+
+static void gazelle_print_lstack_stat_intr(void *buf, const struct gazelle_stat_msg_request *req_msg)
+{
+    int32_t ret;
+    struct gazelle_stack_dfx_data *stat = (struct gazelle_stack_dfx_data *)buf;
+    struct interrupt_stats *intr_stats = &stat->data.intr_stats;
+
+    printf("Statistics of lstack interrupt:\n");
+    do {
+        gazelle_print_lstack_stat_intr_core(stat, intr_stats);
         if (stat->eof != 0) {
             break;
         }
@@ -1579,6 +1611,8 @@ static int32_t parse_dfx_lstack_show_args(int32_t argc, char *argv[], struct gaz
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_MODE_MAX;
     } else if (strcmp(param, "snmp") == 0 || strcmp(param, "-s") == 0) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_SNMP;
+    } else if (strcmp(param, "intr") == 0 || strcmp(param, "-I") == 0) {
+        req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_INTR;
     } else if (strcmp(param, "virtio") == 0 || strcmp(param, "-v") == 0) {
         req_msg[cmd_index++].stat_mode = GAZELLE_STAT_LSTACK_SHOW_VIRTIO;
     } else if (strcmp(param, "connect") == 0 || strcmp(param, "-c") == 0) {

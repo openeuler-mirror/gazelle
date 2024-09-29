@@ -258,8 +258,8 @@ struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t si
 
 int32_t create_shared_ring(struct protocol_stack *stack)
 {
-    rpc_queue_init(&stack->rpc_queue);
-    rpc_queue_init(&stack->dfx_rpc_queue);
+    rpc_queue_init(&stack->rpc_queue, stack->queue_id);
+    rpc_queue_init(&stack->dfx_rpc_queue, stack->queue_id);
 
     if (use_ltran()) {
         stack->rx_ring = gazelle_ring_create_fast("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
@@ -439,6 +439,7 @@ static int eth_params_init(struct eth_params *eth_params, uint16_t port_id, uint
     eth_params->conf.rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
     /* used for tcp port alloc */
     eth_params->reta_mask = dev_info.reta_size - 1;
+    eth_params->conf.intr_conf.rxq = get_global_cfg_params()->stack_interrupt;
 
     eth_params_checksum(&eth_params->conf, &dev_info);
 
@@ -630,10 +631,11 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t i
 
 int32_t dpdk_ethdev_start(void)
 {
+    int i;
     int32_t ret;
     const struct protocol_stack_group *stack_group = get_protocol_stack_group();
 
-    for (int32_t i = 0; i < get_global_cfg_params()->tot_queue_num; i++) {
+    for (i = 0; i < get_global_cfg_params()->tot_queue_num; i++) {
         ret = dpdk_ethdev_setup(stack_group->eth_params, i);
         if (ret < 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_setup fail queueid=%d, ret=%d\n", i, ret);
@@ -645,6 +647,14 @@ int32_t dpdk_ethdev_start(void)
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot start ethdev: %d\n", (-ret));
         return ret;
+    }
+
+    /* after rte_eth_dev_start */
+    for (i = 0; i < get_global_cfg_params()->tot_queue_num; i++) {
+        struct intr_dpdk_event_args intr_arg;
+        intr_arg.port_id = stack_group->eth_params->port_id;
+        intr_arg.queue_id = i;
+        intr_register(i, INTR_DPDK_EVENT, &intr_arg);
     }
 
     return 0;
@@ -799,10 +809,21 @@ int init_dpdk_ethdev(void)
         }
         port_id = rte_eth_bond_primary_get(get_protocol_stack_group()->port_id);
     } else {
+        struct rte_eth_dev_info dev_info;
         port_id = ethdev_port_id(cfg->mac_addr);
         if (port_id < 0) {
             return -1;
         }
+
+        if (rte_eth_dev_info_get(port_id, &dev_info) < 0) {
+            return -1;
+        }
+        if (strcmp(dev_info.driver_name, "net_hinic") == 0 &&
+            get_global_cfg_params()->stack_interrupt == true) {
+            LSTACK_LOG(ERR, LSTACK, "hinic not support interrupt mode\n");
+            return -1;
+        }
+
         ret = dpdk_ethdev_init(port_id);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "dpdk_ethdev_init failed, port id=%d\n", port_id);

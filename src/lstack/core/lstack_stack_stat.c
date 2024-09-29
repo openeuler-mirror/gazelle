@@ -325,6 +325,12 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
                 LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
             }
             break;
+        case GAZELLE_STAT_LSTACK_SHOW_INTR:
+            ret = intr_stats_get(stack->stack_idx, &dfx->data.intr_stats, sizeof(dfx->data.intr_stats));
+            if (ret != EOK) {
+                LSTACK_LOG(ERR, LSTACK, "memcpy_s err ret=%d \n", ret);
+            }
+            break;
         case GAZELLE_STAT_LSTACK_SHOW_VIRTIO:
             ret = memcpy_s(&dfx->data.virtio, sizeof(dfx->data.virtio), virtio_instance_get(),
                            sizeof(*(virtio_instance_get())));

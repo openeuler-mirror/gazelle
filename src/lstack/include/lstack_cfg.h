@@ -118,6 +118,7 @@ struct cfg_params {
 
         bool stack_mode_rtc;
         bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
+        bool stack_interrupt;
 
         uint32_t read_connect_number;
         uint32_t nic_read_number;

@@ -100,7 +100,8 @@ __rte_always_inline
 static void rpc_async_call(rpc_queue *queue, struct rpc_msg *msg)
 {
     msg->sync_flag = 0;
-    lockless_queue_mpsc_push(queue, &msg->queue_node);
+    lockless_queue_mpsc_push(&queue->queue, &msg->queue_node);
+    intr_wakeup(queue->queue_id, INTR_REMOTE_EVENT);
 }
 
 __rte_always_inline
@@ -111,7 +112,8 @@ static int rpc_sync_call(rpc_queue *queue, struct rpc_msg *msg)
     pthread_spin_trylock(&msg->lock);
 
     msg->sync_flag = 1;
-    lockless_queue_mpsc_push(queue, &msg->queue_node);
+    lockless_queue_mpsc_push(&queue->queue, &msg->queue_node);
+    intr_wakeup(queue->queue_id, INTR_REMOTE_EVENT);
 
     // waiting stack unlock
     pthread_spin_lock(&msg->lock);
@@ -123,7 +125,7 @@ static int rpc_sync_call(rpc_queue *queue, struct rpc_msg *msg)
 
 int rpc_msgcnt(rpc_queue *queue)
 {
-    return lockless_queue_count(queue);
+    return lockless_queue_count(&queue->queue);
 }
 
 static struct rpc_msg *rpc_msg_alloc_except(rpc_func_t func)
@@ -159,7 +161,7 @@ int rpc_poll_msg(rpc_queue *queue, int max_num)
     struct rpc_msg *msg;
 
     while (max_num--) {
-        lockless_queue_node *node = lockless_queue_mpsc_pop(queue);
+        lockless_queue_node *node = lockless_queue_mpsc_pop(&queue->queue);
         if (node == NULL) {
             break;
         }
