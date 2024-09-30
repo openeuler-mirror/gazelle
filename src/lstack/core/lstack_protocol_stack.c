@@ -562,7 +562,6 @@ static void* gazelle_stack_thread(void *arg)
     unsigned wakeup_tick = 0;
 
     stack = stack_thread_init(arg);
-    intr_register(stack->stack_idx, INTR_LOCAL_EVENT, stack_local_event_get);
     free(arg);
     if (stack == NULL) {
         LSTACK_LOG(ERR, LSTACK, "stack_thread_init failed queue_id=%hu\n", queue_id);
@@ -577,6 +576,7 @@ static void* gazelle_stack_thread(void *arg)
         return NULL;
     }
 
+    intr_register(stack->stack_idx, INTR_LOCAL_EVENT, stack_local_event_get);
     stack_set_state(stack, RUNNING);
 
     while (stack_polling(wakeup_tick) == 0) {
