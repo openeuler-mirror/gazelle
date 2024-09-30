@@ -137,6 +137,7 @@ struct cfg_params {
     uint32_t rpc_msg_max;
     bool send_cache_mode;
     bool flow_bifurcation;
+    bool stack_interrupt;
 };
 
 struct cfg_params *get_global_cfg_params(void);

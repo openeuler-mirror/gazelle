@@ -285,7 +285,9 @@ af_xdp_rx_zc(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 			(void)recvfrom(xsk_socket__fd(rxq->xsk), NULL, 0,
 				       MSG_DONTWAIT, NULL, NULL);
 		} else if (xsk_ring_prod__needs_wakeup(fq)) {
-			(void)poll(&rxq->fds[0], 1, 1000);
+			if (rxq->fds[0].fd != 0) {
+				(void)poll(&rxq->fds[0], 1, 1000);
+			}
 		}
 
 		return 0;
@@ -356,8 +358,11 @@ af_xdp_rx_cp(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
 	nb_pkts = xsk_ring_cons__peek(rx, nb_pkts, &idx_rx);
 	if (nb_pkts == 0) {
 #if defined(XDP_USE_NEED_WAKEUP)
-		if (xsk_ring_prod__needs_wakeup(fq))
-			(void)poll(rxq->fds, 1, 1000);
+		if (xsk_ring_prod__needs_wakeup(fq)) {
+			if (rxq->fds[0].fd != 0) {
+				(void)poll(rxq->fds, 1, 1000);
+			}
+		}
 #endif
 		return 0;
 	}
@@ -758,6 +763,51 @@ out:
 	return ret;
 }
 
+static int xdp_queues_bind_intr(struct rte_eth_dev *dev)
+{
+	uint32_t i;
+
+	for (i = 0; i < dev->data->nb_rx_queues; ++i) {
+		if (rte_intr_vec_list_index_set(dev->intr_handle, i, i + 1)) {
+			return -rte_errno;
+		}
+	}
+
+	return 0;
+}
+
+static int xdp_configure_intr(struct rte_eth_dev *dev)
+{
+	struct pmd_internals *internals = dev->data->dev_private;
+	int ret;
+
+	ret = rte_intr_efd_enable(dev->intr_handle, dev->data->nb_rx_queues);
+	if (ret < 0) {
+		AF_XDP_LOG(ERR, "Failed to enable intr efd\n");
+		return ret;
+	}
+
+	ret = rte_intr_vec_list_alloc(dev->intr_handle, "intr_vec", internals->max_queue_cnt);
+	if (ret < 0) {
+		AF_XDP_LOG(ERR, "Failed to allocate %u rxq vectors\n", internals->max_queue_cnt);
+		return ret;
+	}
+
+	ret = rte_intr_enable(dev->intr_handle);
+	if (ret < 0) {
+		AF_XDP_LOG(ERR, "Failed to enable interrupt\n");
+		return ret;
+	}
+
+	ret = xdp_queues_bind_intr(dev);
+	if (ret < 0) {
+		AF_XDP_LOG(ERR, "Failed to bind queue/interrupt\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int
 eth_dev_configure(struct rte_eth_dev *dev)
 {
@@ -766,6 +816,13 @@ eth_dev_configure(struct rte_eth_dev *dev)
 	/* rx/tx must be paired */
 	if (dev->data->nb_rx_queues != dev->data->nb_tx_queues)
 		return -EINVAL;
+
+	if (dev->data->dev_conf.intr_conf.rxq) {
+		if (xdp_configure_intr(dev) < 0) {
+			AF_XDP_LOG(ERR, "Failed to configure interrupt\n");
+			return -1;
+		}
+	}
 
 	if (internal->shared_umem) {
 		struct internal_list *list = NULL;
@@ -1386,8 +1443,17 @@ eth_rx_queue_setup(struct rte_eth_dev *dev,
 	if (!rxq->busy_budget)
 		AF_XDP_LOG(DEBUG, "Preferred busy polling not enabled\n");
 
-	rxq->fds[0].fd = xsk_socket__fd(rxq->xsk);
-	rxq->fds[0].events = POLLIN;
+	if (dev->data->dev_conf.intr_conf.rxq) {
+		if (rte_intr_efds_index_set(dev->intr_handle, rx_queue_id, xsk_socket__fd(rxq->xsk))) {
+			AF_XDP_LOG(ERR, "Failed to set intr efds, queue id: %d\n", rx_queue_id);
+			ret = -rte_errno;
+			goto err;
+		}
+		rxq->fds[0].fd = 0;
+	} else {
+		rxq->fds[0].fd = xsk_socket__fd(rxq->xsk);
+		rxq->fds[0].events = POLLIN;
+	}
 
 	dev->data->rx_queues[rx_queue_id] = rxq;
 	return 0;
@@ -1474,6 +1540,18 @@ eth_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	return eth_dev_change_flags(internals->if_name, 0, ~IFF_PROMISC);
 }
 
+static int
+eth_dev_rx_queue_intr_enable(__rte_unused struct rte_eth_dev *dev, __rte_unused uint16_t queue_id)
+{
+	return 0;
+}
+
+static int
+eth_dev_rx_queue_intr_disable(__rte_unused struct rte_eth_dev *dev, __rte_unused uint16_t queue_id)
+{
+	return 0;
+}
+
 static const struct eth_dev_ops ops = {
 	.dev_start = eth_dev_start,
 	.dev_stop = eth_dev_stop,
@@ -1489,6 +1567,8 @@ static const struct eth_dev_ops ops = {
 	.stats_get = eth_stats_get,
 	.stats_reset = eth_stats_reset,
 	.get_monitor_addr = eth_get_monitor_addr,
+	.rx_queue_intr_enable = eth_dev_rx_queue_intr_enable,
+	.rx_queue_intr_disable = eth_dev_rx_queue_intr_disable,
 };
 
 /** parse busy_budget argument */
@@ -1683,6 +1763,47 @@ error:
 	return -1;
 }
 
+static int xdp_fill_intr_handle(struct rte_eth_dev *eth_dev)
+{
+	struct pmd_internals *internals = eth_dev->data->dev_private;
+	if (eth_dev->intr_handle == NULL) {
+		eth_dev->intr_handle = rte_intr_instance_alloc(RTE_INTR_INSTANCE_F_PRIVATE);
+		if (eth_dev->intr_handle == NULL) {
+			AF_XDP_LOG(ERR, "Failed to allocate intr_handle\n");
+			return -1;
+		}
+	}
+
+	for (int i = 0; i < internals->queue_cnt; ++i) {
+		if (rte_intr_efds_index_set(eth_dev->intr_handle, i, -1)) {
+			return -rte_errno;
+		}
+	}
+
+	if (rte_intr_nb_efd_set(eth_dev->intr_handle, internals->queue_cnt)) {
+		return -rte_errno;
+	}
+
+	if (rte_intr_max_intr_set(eth_dev->intr_handle, internals->queue_cnt + 1)) {
+		return -rte_errno;
+	}
+
+	if (rte_intr_type_set(eth_dev->intr_handle, RTE_INTR_HANDLE_VDEV)) {
+		return -rte_errno;
+	}
+
+	/* For xdp vdev, no need to read counter for clean */
+	if (rte_intr_efd_counter_size_set(eth_dev->intr_handle, 0)) {
+		return -rte_errno;
+	}
+
+	if (rte_intr_fd_set(eth_dev->intr_handle, -1)) {
+		return -rte_errno;
+	}
+
+	return 0;
+}
+
 static struct rte_eth_dev *
 init_internals(struct rte_vdev_device *dev, const char *if_name,
 		int start_queue_idx, int queue_cnt, int shared_umem,
@@ -1835,6 +1956,11 @@ rte_pmd_af_xdp_probe(struct rte_vdev_device *dev)
 					busy_budget);
 	if (eth_dev == NULL) {
 		AF_XDP_LOG(ERR, "Failed to init internals\n");
+		return -1;
+	}
+
+	if (xdp_fill_intr_handle(eth_dev) < 0) {
+		AF_XDP_LOG(ERR, "Failed to init interrupt handler\n");
 		return -1;
 	}
 

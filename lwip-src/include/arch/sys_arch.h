@@ -89,7 +89,7 @@ u8_t *sys_hugepage_malloc(const char *name, unsigned size);
 void sys_mempool_var_init(struct memp_desc *memp, char *desc, u16_t size, u16_t num,
     u8_t *base, struct memp **tab, struct stats_mem *stats);
 
-void sys_timer_run(void);
+u32_t sys_timer_run(void);
 u32_t sys_now(void);
 u64_t sys_now_us(void);
 
