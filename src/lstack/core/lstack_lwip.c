@@ -538,8 +538,8 @@ static ssize_t do_lwip_udp_fill_sendring(struct lwip_sock *sock, const void *buf
     return send_len;
 }
 
-static ssize_t do_lwip_tcp_fill_sendring(struct lwip_sock *sock, const void *buf, size_t len,
-                                         const struct sockaddr *addr, socklen_t addrlen)
+static ssize_t __do_lwip_tcp_fill_sendring(struct lwip_sock *sock, const void *buf, size_t len,
+                                           const struct sockaddr *addr, socklen_t addrlen)
 {
     /* refer to the lwip implementation. */
     if (len == 0) {
@@ -565,6 +565,10 @@ static ssize_t do_lwip_tcp_fill_sendring(struct lwip_sock *sock, const void *buf
     while (!netconn_is_nonblocking(sock->conn) && (write_avail < write_num)) {
         if (sock->errevent > 0) {
             GAZELLE_RETURN(ENOTCONN);
+        }
+        /* wait until (send_ring_size / 4) */
+        if (write_avail > (rte_ring_get_capacity(sock->send_ring) >> 2)) {
+            break;
         }
         write_avail = gazelle_ring_readable_count(sock->send_ring);
     }
@@ -598,6 +602,29 @@ END:
     }
 
     return send_len;
+}
+
+static inline void notice_stack_tcp_send(struct lwip_sock *sock, int32_t fd, int32_t len, int32_t flags);
+static ssize_t do_lwip_tcp_fill_sendring(struct lwip_sock *sock, const void *buf, size_t len,
+                                         const struct sockaddr *addr, socklen_t addrlen)
+{
+    ssize_t ret, send_len = 0;
+
+    while (true) {
+        ret = __do_lwip_tcp_fill_sendring(sock, (char *)buf + send_len, len - send_len, addr, addrlen);
+        // send = 0 : tcp peer close connection ?
+        if (unlikely(ret <= 0)) {
+            break;
+        }
+        send_len += ret;
+        if (send_len == len || netconn_is_nonblocking(sock->conn)) {
+            break;
+        }
+
+        notice_stack_tcp_send(sock, sock->conn->callback_arg.socket, ret, 0);
+    }
+
+    return send_len == 0 ? ret : send_len;
 }
 
 bool do_lwip_replenish_sendring(struct protocol_stack *stack, struct lwip_sock *sock)
