@@ -257,8 +257,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
     wrap_api_init();
 
     if (set_rlimit_unlimited() != 0) {
-        LSTACK_PRE_LOG(LSTACK_INFO, "set rlimit unlimited failed\n");
-        LSTACK_EXIT(1, "set rlimit unlimited failed\n");
+        LSTACK_PRE_LOG(LSTACK_WARNING, "set rlimit unlimited failed. errno=%d\n", errno);
     }
 
     /* check primary process start */
