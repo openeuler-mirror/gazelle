@@ -97,11 +97,17 @@ static void rpc_msg_free(struct rpc_msg *msg)
 }
 
 __rte_always_inline
+static void rpc_call(rpc_queue *queue, struct rpc_msg *msg)
+{
+    lockless_queue_mpsc_push(&queue->queue, &msg->queue_node);
+    intr_wakeup(queue->queue_id, INTR_REMOTE_EVENT);
+}
+
+__rte_always_inline
 static void rpc_async_call(rpc_queue *queue, struct rpc_msg *msg)
 {
     msg->sync_flag = 0;
-    lockless_queue_mpsc_push(&queue->queue, &msg->queue_node);
-    intr_wakeup(queue->queue_id, INTR_REMOTE_EVENT);
+    rpc_call(queue, msg);
 }
 
 __rte_always_inline
@@ -112,8 +118,7 @@ static int rpc_sync_call(rpc_queue *queue, struct rpc_msg *msg)
     pthread_spin_trylock(&msg->lock);
 
     msg->sync_flag = 1;
-    lockless_queue_mpsc_push(&queue->queue, &msg->queue_node);
-    intr_wakeup(queue->queue_id, INTR_REMOTE_EVENT);
+    rpc_call(queue, msg);
 
     // waiting stack unlock
     pthread_spin_lock(&msg->lock);
@@ -209,7 +214,7 @@ static void callback_close(struct rpc_msg *msg)
 
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
-        rpc_async_call(&stack->rpc_queue, msg); /* until stack_send recall finish */
+        rpc_call(&stack->rpc_queue, msg); /* until stack_send recall finish */
         return;
     }
 
@@ -228,7 +233,7 @@ static void callback_shutdown(struct rpc_msg *msg)
 
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
-        rpc_async_call(&stack->rpc_queue, msg);
+        rpc_call(&stack->rpc_queue, msg);
         return;
     }
 
@@ -586,7 +591,7 @@ static void callback_tcp_send(struct rpc_msg *msg)
     if (ret > 0 || NETCONN_IS_DATAOUT(sock)) {
         if (__atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) == 1) {
             msg->recall_flag = 1;
-            rpc_async_call(&stack->rpc_queue, msg);
+            rpc_call(&stack->rpc_queue, msg);
             return;
         }
     }
@@ -675,7 +680,7 @@ static void callback_replenish_sendring(struct rpc_msg *msg)
     msg->result = do_lwip_replenish_sendring(stack, sock);
     if (msg->result == true) {
         msg->recall_flag = 1;
-        rpc_async_call(&stack->rpc_queue, msg);
+        rpc_call(&stack->rpc_queue, msg);
     }
 }
 
