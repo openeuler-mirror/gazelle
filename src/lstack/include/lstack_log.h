@@ -23,6 +23,7 @@
 
 #define LSTACK_INFO                     LOG_INFO
 #define LSTACK_ERR                      LOG_ERR
+#define LSTACK_WARNING                  LOG_WARNING
 
 /* before rte_eal_init */
 #define LSTACK_PRE_LOG(level, fmt, ...) \
