@@ -25,7 +25,7 @@ g_subnet_len=""
 g_gateway=""
 g_premask=""
 
-# globla varibles initialized when run
+# global variables initialized when run
 g_netcard_mac=""
 g_kni_mac=""
 g_default_route="$(sudo ip route | grep default)"
@@ -148,7 +148,7 @@ load_vfio_module() {
             msg_show "Loading vfio module"
             sudo /sbin/modprobe vfio enable_unsafe_noiommu_mode=1
         else
-            msg_err "the vfio mudule is not exist"
+            msg_err "the vfio module is not exist"
             return 1
         fi
         sudo modinfo vfio-pci > /dev/null
@@ -156,7 +156,7 @@ load_vfio_module() {
             msg_show "Loading vfio-pci module"
             sudo /sbin/modprobe vfio-pci
         else
-            msg_err "the vfio-pci mudule is not exist"
+            msg_err "the vfio-pci module is not exist"
             return 1
         fi
     fi
@@ -393,7 +393,7 @@ configure_nic() {
     fi
 
     if [ $1 = "usr" ]; then
-        msg_show "use vitual kni card"
+        msg_show "use virtual kni card"
         net_card=$g_conn_if_kni
         default_route="$(echo $g_default_route | grep $g_conn_if)"
     fi
