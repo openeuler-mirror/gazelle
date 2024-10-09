@@ -65,4 +65,6 @@ int32_t dpdk_init_lstack_kni(void);
 void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
 void dpdk_nic_features_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
 
+bool dpdk_nic_is_xdp(void);
+
 #endif /* GAZELLE_DPDK_H */
