@@ -417,6 +417,10 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
 bool dpdk_nic_is_xdp(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    /* eth_params is null in ltran mode */
+    if (stack_group->eth_params == NULL) {
+        return false;
+    }
     return stack_group->eth_params->is_xdp;
 }
 
