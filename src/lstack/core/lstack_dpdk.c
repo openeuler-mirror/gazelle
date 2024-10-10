@@ -50,6 +50,7 @@
 
 struct eth_params {
     uint16_t port_id;
+    bool is_xdp;
 
     uint16_t nb_queues;
     uint16_t nb_rx_desc;
@@ -413,6 +414,12 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
     return rss_enable;
 }
 
+bool dpdk_nic_is_xdp(void)
+{
+    struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    return stack_group->eth_params->is_xdp;
+}
+
 static int eth_params_init(struct eth_params *eth_params, uint16_t port_id, uint16_t nb_queues, int *rss_enable)
 {
     struct rte_eth_dev_info dev_info;
@@ -442,6 +449,9 @@ static int eth_params_init(struct eth_params *eth_params, uint16_t port_id, uint
     eth_params->conf.intr_conf.rxq = get_global_cfg_params()->stack_interrupt;
 
     eth_params_checksum(&eth_params->conf, &dev_info);
+    if (strcmp(dev_info.driver_name, "net_af_xdp") == 0) {
+        eth_params->is_xdp = true;
+    }
 
     if (!get_global_cfg_params()->tuple_filter) {
         *rss_enable = eth_params_rss(&eth_params->conf, &dev_info);

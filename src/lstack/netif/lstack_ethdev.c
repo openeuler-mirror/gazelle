@@ -364,7 +364,13 @@ static err_t eth_dev_init(struct netif *netif)
 
     netif->hwaddr_len = ETHER_ADDR_LEN;
 
-    netif_set_rxol_flags(netif, get_protocol_stack_group()->rx_offload);
+    if (dpdk_nic_is_xdp()) {
+        netif_set_rxol_flags(netif, RTE_ETH_RX_OFFLOAD_TCP_CKSUM |
+                                    RTE_ETH_RX_OFFLOAD_UDP_CKSUM |
+                                    RTE_ETH_RX_OFFLOAD_IPV4_CKSUM);
+    } else {
+        netif_set_rxol_flags(netif, get_protocol_stack_group()->rx_offload);
+    }
     netif_set_txol_flags(netif, get_protocol_stack_group()->tx_offload);
     if (get_global_cfg_params()->stack_mode_rtc) {
         netif_set_rtc_mode(netif);
