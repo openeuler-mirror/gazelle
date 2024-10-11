@@ -42,6 +42,9 @@ Summary:
 - 当前仅支持IPV4，IPV6暂不支持
 - 并发数限制最大为2w
 - 当前不支持gazelle多进程，即一个节点上不能用gazelle启动多个redis server
+- 当前gazelle不支持fork，被gazelle劫持的redis对应的redis.conf内daemonize选项需设置为no 
+- 推荐使用512MB或者1GB大页, 2M大页会消耗较多的文件描述符, 超过redis.conf内maxclients配置的最大值，造成服务异常
+- 若使用2M大页，推荐redis.conf内的maxclients设置为最大连接数加2000, 为gazelle本身预留2000个fd，若不足需继续增大
 
 ## Gazelle加速redis测试步骤
 
@@ -216,7 +219,7 @@ b. redis 哨兵暂不支持用户态启动。
 - 在六台redis服务端安装部署redis，分别修改redis.conf配置文件
 ```sh
 protected-mode no #关闭保护模式
-daemonize yes #前台运行
+daemonize no #前台运行
 bind 0.0.0.0
 port 6379 #redis部署在不同的虚机上，ip不一样，端口可以保持默认
 appendonly yes #开启aof持久化
