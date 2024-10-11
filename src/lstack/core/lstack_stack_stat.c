@@ -64,7 +64,7 @@ void time_stamp_record(int fd, struct pbuf *pbuf)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
 
-    if (get_protocol_stack_group()->latency_start && sock && pbuf) {
+    if (get_protocol_stack_group()->latency_start && sock && sock->stack && pbuf) {
         calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_INTO_MBOX, 0);
         time_stamp_into_recvmbox(sock);
     }
@@ -122,6 +122,10 @@ void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const
     }
 
     lt = &pbuf_to_private(pbuf)->lt;
+    if (lt == NULL) {
+        return;
+    }
+
     lt_type = (type / GAZELLE_LATENCY_READ_MAX) ? GAZELLE_LATENCY_WR : GAZELLE_LATENCY_RD;
     if (lt->stamp != ~(lt->check) || lt->stamp < stack_latency->start_time || lt_type != lt->type) {
         return;
