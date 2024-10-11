@@ -33,7 +33,7 @@ struct ServerMumUnit
     uint64_t recv_bytes;                    ///< total receive bytes
     struct ServerIpInfo server_ip_info;
     uint16_t port;                          ///< server port
-    uint32_t pktlen;                        ///< the length of peckage
+    uint32_t pktlen;                        ///< the length of package
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
@@ -65,7 +65,7 @@ struct ServerMudWorker
     int32_t epfd;                           ///< the worker epoll file descriptor
     struct epoll_event *epevs;              ///< the epoll events
     uint64_t recv_bytes;                    ///< total receive bytes
-    uint32_t pktlen;                        ///< the length of peckage
+    uint32_t pktlen;                        ///< the length of package
     ip_addr_t ip;                           ///< client ip
     uint16_t port;                          ///< client port
     char* api;                              ///< the type of api
@@ -88,7 +88,7 @@ struct ServerMud
     struct epoll_event *epevs;              ///< the epoll events
     struct ServerIpInfo server_ip_info;
     bool* port;                             ///< server port point to parameter's port
-    uint32_t pktlen;                        ///< the length of peckage
+    uint32_t pktlen;                        ///< the length of package
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
@@ -184,7 +184,7 @@ void *sermud_listener_create_and_run(void *arg);
 int32_t sermud_create_and_run(struct ProgramParams *params);
 
 /**
- * @brief the multi thread, unblock, mutliplexing IO server prints informations
+ * @brief the multi thread, unblock, multiplexing IO server prints informations
  * The multi thread, unblock, mutliplexing IO server prints informations.
  * @param server_mum        the server information
  */
@@ -199,7 +199,7 @@ void sermum_info_print(struct ServerMum *server_mum);
 int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit);
 
 /**
- * @brief the single thread, unblock, mutliplexing IO server accepts the connections
+ * @brief the single thread, unblock, multiplexing IO server accepts the connections
  * The single thread, unblock, mutliplexing IO server accepts the connections.
  * @param server_unit       the server unit
  * @param server_handler    the server handler
@@ -208,7 +208,7 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit);
 int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUnit *server_unit);
 
 /**
- * @brief the single thread, unblock, mutliplexing IO server processes the events
+ * @brief the single thread, unblock, multiplexing IO server processes the events
  * The single thread, unblock, mutliplexing IO server processes the events.
  * @param server_unit       the server unit
  * @return                  the result pointer
