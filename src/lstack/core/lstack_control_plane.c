@@ -778,6 +778,12 @@ void control_server_thread(void *arg)
         }
 
         if ((evt_array.events & EPOLLERR) || (evt_array.events & EPOLLHUP)) {
+            /*
+             * if app call fork and child process inherits the fd,
+             * close fd cannot ensure that fd is removed from the epoll,
+             * so epoll_ctl_del need to be called.
+             */
+            posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_DEL, evt_array.data.fd, NULL);
             posix_api->close_fn(evt_array.data.fd);
             continue;
         }
@@ -795,6 +801,8 @@ void control_server_thread(void *arg)
             }
         } else {
             if (handle_stat_request(evt_array.data.fd) < 0) {
+                /* same as the comment above */
+                posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_DEL, evt_array.data.fd, NULL);
                 posix_api->close_fn(evt_array.data.fd);
             }
         }
