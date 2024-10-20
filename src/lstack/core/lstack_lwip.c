@@ -230,6 +230,19 @@ struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type typ
     return init_mbuf_to_pbuf(mbuf, layer, length, type);
 }
 
+int32_t do_lwip_free_pbuf_header(int32_t s, struct pbuf *pbuf, uint16_t length)
+{
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (sock == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "fd=%d sock is NULL errno=%d\n", s, errno);
+        posix_api->close_fn(s);
+        GAZELLE_RETURN(EINVAL);
+    }
+    sock->lastdata.pbuf = pbuf_free_header(pbuf, length);
+    LSTACK_LOG(INFO, LSTACK, "free pbuf header pbuf:%p, length:%d\n", pbuf, length);
+    return 0;
+}
+
 static inline bool pbuf_allow_append(struct pbuf *pbuf, uint16_t remain_size)
 {
     pthread_spin_lock(&pbuf->pbuf_lock);

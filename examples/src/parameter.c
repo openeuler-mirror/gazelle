@@ -302,11 +302,28 @@ void program_param_parse_domain(struct ProgramParams *params)
 // set `api` parameter
 void program_param_parse_api(struct ProgramParams *params)
 {
-    printf("aaaaaa %s\n", optarg);
-    if (strcmp(optarg, "readwrite") == 0 || strcmp(optarg, "readvwritev") == 0 || strcmp(optarg, "recvsend") == 0 || strcmp(optarg, "recvsendmsg") == 0 || strcmp(optarg, "recvfromsendto") == 0 || strcmp(optarg, "recvfrom") == 0) {
-        params->api = optarg;
-    } else {
-        PRINT_ERROR("illigal argument -- %s \n", optarg);
+    const char *valid_apis[] = {
+        "readwrite",
+        "readvwritev",
+        "recvsend",
+        "recvsendmsg",
+        "recvfromsendto",
+        "recvfrom"
+    };
+
+    size_t num_apis = sizeof(valid_apis) / sizeof(valid_apis[0]);
+    bool valid = false;
+
+    for (size_t i = 0; i < num_apis; i++) {
+        if (strcmp(optarg, valid_apis[i]) == 0) {
+            params->api = optarg;
+            valid = true;
+            break;
+        }
+    }
+
+    if (!valid) {
+        PRINT_ERROR("Illegal argument -- %s \n", optarg);
         exit(PROGRAM_ABORT);
     }
 }
