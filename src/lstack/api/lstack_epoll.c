@@ -122,17 +122,6 @@ void wakeup_stack_epoll(struct protocol_stack *stack)
     struct list_node *node, *temp;
 
     list_for_each_node(node, temp, &stack->wakeup_list) {
-        /* When temp is NULL, find the tail node in the wekeup_list and connect it to the back of the node */
-        if (unlikely(temp == NULL)) {
-            struct list_node *nod = &stack->wakeup_list;
-            while (nod->prev && nod->prev != node) {
-                nod = nod->prev;
-            }
-            nod->prev = node;
-            node->next = nod;
-            temp = nod;
-        }
-
         struct wakeup_poll *wakeup = container_of_uncheck_ptr((node - stack->stack_idx), struct wakeup_poll, wakeup_list);
 
         if (__atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
