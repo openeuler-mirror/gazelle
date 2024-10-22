@@ -185,6 +185,10 @@ int do_lwip_init_sock(int32_t fd)
         return 0;
     }
 
+    if (sock->recv_ring != NULL || sock->send_ring != NULL) {
+        LSTACK_LOG(ERR, LSTACK, "socket(%d) not close but open again?\n", fd);
+    }
+
     reset_sock_data(sock);
 
     sock->recv_ring = gazelle_ring_create_fast("sock_recv", SOCK_RECV_RING_SIZE, RING_F_SP_ENQ | RING_F_SC_DEQ);
