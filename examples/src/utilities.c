@@ -104,6 +104,8 @@ static int32_t server_create_sock(uint8_t protocol_mode, int32_t* fd_arry)
             fd_arry[i] = socket(AF_INET, SOCK_STREAM, 0);
         } else if (i == V6_TCP) {
             fd_arry[i] = socket(AF_INET6, SOCK_STREAM, 0);
+        } else if (i == V6_UDP) {
+            fd_arry[i] = socket(AF_INET6, SOCK_DGRAM, 0);
         } else if (i == V4_UDP) {
             fd_arry[i] = socket(AF_INET, SOCK_DGRAM, 0);
         } else if (i == UDP_MULTICAST) {
@@ -142,7 +144,7 @@ static int32_t socket_add_info_init(int32_t idx, uint16_t port, struct ServerIpI
 
     if (idx == V4_TCP || idx == V4_UDP) {
         ((struct sockaddr_in *)socker_add_info)->sin_addr = ip->u_addr.ip4;
-    } else if (idx == V6_TCP) {
+    } else if (idx == V6_TCP || idx == V6_UDP) {
         ((struct sockaddr_in6 *)socker_add_info)->sin6_addr = ip->u_addr.ip6;
     } else if (idx == UDP_MULTICAST) {
         if (process_udp_groupip(listen_fd_array[idx], ip, groupip, socker_add_info, groupip_interface) != PROGRAM_OK) {
@@ -216,7 +218,7 @@ static int32_t creat_socket_init(int32_t *socket_fd, struct ClientUnit *client_u
     if (strcmp(domain, "tcp") == 0) {
         *socket_fd = socket(ip->addr_family, SOCK_STREAM, 0);
     } else {
-        *socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+        *socket_fd = socket(ip->addr_family, SOCK_DGRAM, 0);
     }
     if (*socket_fd < 0) {
         PRINT_ERROR("client can't create socket %d! ", errno);

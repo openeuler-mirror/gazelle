@@ -601,8 +601,9 @@ int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUni
     while (true) {
         sockaddr_t accept_addr;
         bool is_tcp_v6 = (fd == (server_unit->listener.listen_fd_array[V6_TCP])) ? true : false;
+        bool is_udp_v6 = (fd == (server_unit->listener.listen_fd_array[V6_UDP])) ? true : false;
 
-        socklen_t sockaddr_in_len = is_tcp_v6 ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
+        socklen_t sockaddr_in_len = (is_tcp_v6 || is_udp_v6) ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
         int32_t accept_fd;
         int32_t ret = 0;
 
@@ -634,7 +635,7 @@ int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUni
 
         struct ServerHandler *server_handler = (struct ServerHandler *)malloc(sizeof(struct ServerHandler));
         server_handler->fd = accept_fd;
-        server_handler->is_v6 = (is_tcp_v6) ? 1 : 0;
+        server_handler->is_v6 = (is_tcp_v6 || is_udp_v6) ? 1 : 0;
 
         struct epoll_event ep_ev;
         ep_ev.data.ptr = (void *)server_handler;
@@ -649,8 +650,8 @@ int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUni
         // sockaddr tp ip, port
         ip_addr_t remote_ip;
         uint16_t remote_port = ((struct sockaddr_in*)&accept_addr)->sin_port;
-        remote_ip.addr_family = (is_tcp_v6) ? AF_INET6 : AF_INET;
-        if (is_tcp_v6 == false) {
+        remote_ip.addr_family = (is_tcp_v6 || is_udp_v6) ? AF_INET6 : AF_INET;
+        if (is_tcp_v6 == false && is_udp_v6 == false) {
             remote_ip.u_addr.ip4 = ((struct sockaddr_in *)&accept_addr)->sin_addr;
         } else {
             remote_ip.u_addr.ip6 = ((struct sockaddr_in6 *)&accept_addr)->sin6_addr;
@@ -719,6 +720,7 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
             return PROGRAM_ABORT;
         }
     } else if (fd == (server_unit->listener.listen_fd_array[V4_UDP]) ||
+               fd == (server_unit->listener.listen_fd_array[V6_UDP]) ||
                fd == (server_unit->listener.listen_fd_array[UDP_MULTICAST])) {
         uint32_t pktlen = server_unit->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : server_unit->pktlen;
         int32_t server_ans_ret = server_ans(fd, pktlen, server_unit->api, "udp");
