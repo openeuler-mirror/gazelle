@@ -1260,9 +1260,9 @@ void do_lwip_connected_callback(struct netconn *conn)
         posix_api->epoll_ctl_fn(sock->wakeup->epollfd, EPOLL_CTL_DEL, fd, NULL);
     }
 
-    POSIX_SET_TYPE(sock, POSIX_LWIP);
-
     posix_api->shutdown_fn(fd, SHUT_RDWR);
+
+    POSIX_SET_TYPE(sock, POSIX_LWIP);
 
     add_sock_event(sock, EPOLLOUT);
 }
