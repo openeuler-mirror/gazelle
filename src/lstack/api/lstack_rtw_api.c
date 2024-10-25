@@ -233,8 +233,9 @@ static int stack_broadcast_listen(int fd, int backlog)
     }
 
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+#if GAZELLE_TCP_REUSE_IPPORT
     int min_conn_stk_idx = get_min_conn_stack(stack_group);
-
+#endif
     for (int32_t i = 0; i < stack_group->stack_num; ++i) {
         stack = stack_group->stacks[i];
         if (get_global_cfg_params()->seperate_send_recv && stack->is_send_thread) {
@@ -249,13 +250,13 @@ static int stack_broadcast_listen(int fd, int backlog)
         } else {
             clone_fd = fd;
         }
-
+#if GAZELLE_TCP_REUSE_IPPORT
         if (min_conn_stk_idx == i) {
             lwip_get_socket(clone_fd)->conn->is_master_fd = 1;
         } else {
             lwip_get_socket(clone_fd)->conn->is_master_fd = 0;
         }
-
+#endif
         ret = rpc_call_listen(&stack->rpc_queue, clone_fd, backlog);
         if (ret < 0) {
             stack_broadcast_close(fd);
