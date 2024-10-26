@@ -216,7 +216,7 @@ static int32_t server_ans_write(int32_t socket_fd, struct ServerBaseCfgInfo *ser
 }
 
 // server answers
-int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* domain)
+int32_t server_ans(int32_t fd, uint32_t pktlen, const char *api, const char* domain, int32_t epfd_write)
 {
     const uint32_t length = pktlen;
     char *buffer_in = (char *)calloc(length, sizeof(char));
@@ -255,7 +255,7 @@ int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* dom
     }
 
     FAULT_INJECT_SKIP_END
-    
+
     if (strcmp(api, "recvfrom") == 0) {
         server_ans_free_buff(buffer_in, buffer_out);
         return PROGRAM_OK;
@@ -265,10 +265,36 @@ int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* dom
     
     fault_inject_delay(INJECT_DELAY_WRITE);
     FAULT_INJECT_SKIP_BEGIN(INJECT_SKIP_WRITE)
-
-    if (server_ans_write(fd, &server_base_info, buffer_out, (struct sockaddr *)&client_addr) != PROGRAM_OK) {
-        server_ans_free_buff(buffer_in, buffer_out);
-        return PROGRAM_FAULT;
+    
+    if (epfd_write <= 0) {
+        if (server_ans_write(fd, &server_base_info, buffer_out, (struct sockaddr *)&client_addr) != PROGRAM_OK) {
+            server_ans_free_buff(buffer_in, buffer_out);
+            return PROGRAM_FAULT;
+        }
+    } else {
+        int32_t nfds;
+        struct epoll_event ep_ev_write = {0};
+        struct epoll_event events[1];
+        ep_ev_write.events = EPOLLOUT | EPOLLET;
+        ep_ev_write.data.fd = fd;
+        if (epoll_ctl(epfd_write, EPOLL_CTL_ADD, fd, &ep_ev_write)) {
+            PRINT_ERROR("epoll_ctl failed %d! fd = %d\n", errno, fd);
+            server_ans_free_buff(buffer_in, buffer_out);
+            return PROGRAM_FAULT;
+        }
+        nfds = epoll_wait(epfd_write, events, 1, -1);
+        if (nfds != 1) {
+            PRINT_ERROR("impossible!!!\n");
+            server_ans_free_buff(buffer_in, buffer_out);
+            return PROGRAM_FAULT;
+        } else {
+            if (server_ans_write(fd, &server_base_info, buffer_out, (struct sockaddr *)&client_addr) != PROGRAM_OK) {
+                server_ans_free_buff(buffer_in, buffer_out);
+                return PROGRAM_FAULT;
+            }
+        }
+        
+        epoll_ctl(epfd_write, EPOLL_CTL_DEL, fd, &ep_ev_write);
     }
 
     FAULT_INJECT_SKIP_END

@@ -12,6 +12,10 @@
 
 
 #include "server.h"
+#include <poll.h>
+
+#define MAX_CONNECTIONS 1024
+struct ServerHandler *handler[MAX_CONNECTIONS] = { NULL };
 
 static pthread_mutex_t server_debug_mutex;      // the server mutex for debug
 struct LoopInfo loopmod;
@@ -93,6 +97,14 @@ int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
     } else {
         worker_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
     }
+
+    if (worker_unit->epoll_io_multiplex) {
+        worker_unit->epfd_write = epoll_create(SERVER_EPOLL_SIZE_MAX);
+        if (worker_unit->epfd_write < 0) {
+            PRINT_ERROR("server can't create write epoll %d! ", worker_unit->epfd_write);
+            return PROGRAM_FAULT;
+        }
+    }
     
     if (worker_unit->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", worker_unit->epfd);
@@ -117,6 +129,14 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
         server_mud->epfd = epoll_create1(EPOLL_CLOEXEC);
     } else {
         server_mud->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
+    }
+
+    if (server_mud->epoll_io_multiplex) {
+        server_mud->epfd_write = epoll_create(SERVER_EPOLL_SIZE_MAX);
+        if (server_mud->epfd_write < 0) {
+            PRINT_ERROR("server can't create write epoll %d! ", server_mud->epfd_write);
+            return PROGRAM_FAULT;
+        }
     }
     
     if (server_mud->epfd < 0) {
@@ -197,6 +217,27 @@ int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct Se
             return PROGRAM_FAULT;
         }
 
+        int32_t handler_index = -1;
+        for (int i = 0; i < MAX_CONNECTIONS; i++) {
+            if (handler[i] == NULL) {
+                handler_index = i;
+                break;
+            }
+        }
+
+        if (handler_index == -1) {
+            PRINT_ERROR("Max connections reached.");
+            close(accept_fd);
+            continue;
+        }
+
+        /* Create a new ServerHandler and store it in the global array */
+        struct ServerHandler *server_handler = (struct ServerHandler *)malloc(sizeof(struct ServerHandler));
+        server_handler->fd = accept_fd;
+        server_handler->index = handler_index;  // Save index in handler
+
+        handler[handler_index] = server_handler;  // Store in global array
+
         // sockaddr to ip, port
         ip_addr_t remote_ip;
         uint16_t remote_port = ((struct sockaddr_in *)&accept_addr)->sin_port;
@@ -213,11 +254,13 @@ int32_t sermud_listener_accept_connects(struct epoll_event *curr_epev, struct Se
         worker->port = remote_port;
         worker->api = server_mud->api;
         worker->debug = server_mud->debug;
+        worker->poll = server_mud->poll;
         worker->next = server_mud->workers;
         worker->epollcreate = server_mud->epollcreate;
         worker->worker.is_v6 = is_tcp_v6_flag ? 1 : 0;
         worker->domain = server_mud->domain;
         worker->curr_connect = 1;
+        worker->epoll_io_multiplex = server_mud->epoll_io_multiplex;
 
         server_mud->workers = worker;
 
@@ -276,7 +319,8 @@ int32_t sermud_worker_proc_epevs(struct ServerMudWorker *worker_unit, const char
         if (curr_epev->events == EPOLLIN) {
             struct ServerHandler *server_handler = (struct ServerHandler *)curr_epev->data.ptr;
 
-            int32_t server_ans_ret = server_ans(server_handler->fd, worker_unit->pktlen, worker_unit->api, "tcp");
+            int32_t server_ans_ret = server_ans(server_handler->fd, worker_unit->pktlen,
+                                                worker_unit->api, "tcp", worker_unit->epfd_write);
             if (server_ans_ret == PROGRAM_FAULT) {
                 worker_unit->curr_connect--;
                 if (server_handler_close(worker_unit->epfd, server_handler) != 0) {
@@ -305,7 +349,7 @@ static int32_t sermud_process_epollin_event(struct epoll_event *curr_epev, struc
     if (server_handler->fd == server_mud->listener.listen_fd_array[V4_UDP] ||
         server_handler->fd == server_mud->listener.listen_fd_array[UDP_MULTICAST]) {
         uint32_t pktlen = server_mud->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : server_mud->pktlen;
-        int32_t server_ans_ret = server_ans(server_handler->fd, pktlen, server_mud->api, "udp");
+        int32_t server_ans_ret = server_ans(server_handler->fd, pktlen, server_mud->api, "udp", server_mud->epfd_write);
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_mud->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close server_ans_ret %d! \n", server_ans_ret);
@@ -348,6 +392,88 @@ int32_t sermud_listener_proc_epevs(struct ServerMud *server_mud)
             }
         }
     }
+    
+    return PROGRAM_OK;
+}
+
+int32_t sermud_worker_create_pollfd_and_reg(struct ServerMudWorker *worker_unit)
+{
+    worker_unit->poll_fds = (struct pollfd *)malloc(sizeof(struct pollfd) * MAX_CONNECTIONS);
+    if (!worker_unit->poll_fds) {
+        PRINT_ERROR("Memory allocation failed");
+        return PROGRAM_FAULT;
+    }
+   
+    for (int i = 0; i < MAX_CONNECTIONS; i++) {
+        if (handler[i] != NULL) {
+            worker_unit->poll_fds[worker_unit->nfds].fd = handler[i]->fd;
+            worker_unit->poll_fds[worker_unit->nfds].events = POLLIN;
+            worker_unit->nfds++;
+
+            worker_unit->poll_fds[worker_unit->nfds].fd = handler[i]->fd;
+            worker_unit->poll_fds[worker_unit->nfds].events = POLLOUT;
+            worker_unit->nfds++;
+        }
+    }
+
+    return PROGRAM_OK;
+}
+
+int32_t sermud_worker_proc_pollfds(struct ServerMudWorker *worker_unit, const char *domain)
+{
+    int32_t poll_nfds = poll(worker_unit->poll_fds, worker_unit->nfds, SERVER_EPOLL_WAIT_TIMEOUT);
+    if (poll_nfds < 0) {
+        PRINT_ERROR("server poll wait error %d! ", errno);
+        return PROGRAM_FAULT;
+    }
+
+    for (int32_t i = 0; i < worker_unit->nfds; ++i) {
+        struct pollfd *curr_pollfd = &worker_unit->poll_fds[i];
+
+        if (curr_pollfd->revents & (POLLERR | POLLHUP | POLLRDHUP)) {
+            worker_unit->curr_connect--;
+            PRINT_ERROR("server poll wait error %d! ", curr_pollfd->revents);
+            if (server_handler_close(curr_pollfd->fd, handler[i]) != 0) {
+                return PROGRAM_FAULT;
+            }
+        }
+
+        if (curr_pollfd->revents & POLLIN) {
+            struct ServerHandler *server_handler = handler[i];
+
+            int32_t server_ans_ret = server_ans(server_handler->fd, worker_unit->pktlen, worker_unit->api, "tcp", -1);
+            if (server_ans_ret == PROGRAM_FAULT) {
+                worker_unit->curr_connect--;
+                if (server_handler_close(curr_pollfd->fd, server_handler) != 0) {
+                    return PROGRAM_FAULT;
+                }
+            } else if (server_ans_ret == PROGRAM_ABORT) {
+                worker_unit->curr_connect--;
+                server_debug_print("server mud worker", "close", &worker_unit->ip, worker_unit->port, worker_unit->debug);
+                if (server_handler_close(curr_pollfd->fd, server_handler) != 0) {
+                    return PROGRAM_FAULT;
+                }
+            } else {
+                worker_unit->recv_bytes += worker_unit->pktlen;
+                server_debug_print("server mud worker", "receive", &worker_unit->ip, worker_unit->port, worker_unit->debug);
+            }
+        }
+
+        if (curr_pollfd->revents & POLLOUT) {
+            struct ServerHandler *server_handler = handler[i / 2];
+
+            int32_t write_ret = server_ans(server_handler->fd, worker_unit->pktlen, worker_unit->api, "tcp", -1);
+            if (write_ret != PROGRAM_OK) {
+                worker_unit->curr_connect--;
+                if (server_handler_close(curr_pollfd->fd, server_handler) != 0) {
+                    return PROGRAM_FAULT;
+                }
+            } else {
+                worker_unit->recv_bytes += worker_unit->pktlen;
+                server_debug_print("server mud worker", "receive", &worker_unit->ip, worker_unit->port, worker_unit->debug);
+            }
+        }
+    }
 
     return PROGRAM_OK;
 }
@@ -360,12 +486,23 @@ void *sermud_worker_create_and_run(void *arg)
     struct ServerMudWorker *worker_unit = (struct ServerMudWorker *)arg;
     char *domain = worker_unit->domain;
 
-    if (sermud_worker_create_epfd_and_reg(worker_unit) < 0) {
-        return (void *)PROGRAM_OK;
-    }
-    while (true) {
-        if (sermud_worker_proc_epevs(worker_unit, domain) < 0) {
+    if (worker_unit->poll == false) {
+        if (sermud_worker_create_epfd_and_reg(worker_unit) < 0) {
             return (void *)PROGRAM_OK;
+        }
+        while (true) {
+            if (sermud_worker_proc_epevs(worker_unit, domain) < 0) {
+                return (void *)PROGRAM_OK;
+            }
+        }
+    } else {
+        if (sermud_worker_create_pollfd_and_reg(worker_unit) < 0) {
+            return (void *)PROGRAM_OK;
+        }
+        while (true) {
+            if (sermud_worker_proc_pollfds(worker_unit, domain) < 0) {
+                return (void *)PROGRAM_OK;
+            }
         }
     }
 
@@ -478,10 +615,12 @@ int32_t sermud_create_and_run(struct ProgramParams *params)
 
     server_mud->api = params->api;
     server_mud->debug = params->debug;
+    server_mud->poll = params->poll;
     server_mud->epollcreate = params->epollcreate;
     server_mud->accept = params->accept;
     server_mud->tcp_keepalive_idle = params->tcp_keepalive_idle;
     server_mud->tcp_keepalive_interval = params->tcp_keepalive_interval;
+    server_mud->epoll_io_multiplex = params->epoll_io_multiplex;
 
     if (pthread_create(tid, NULL, sermud_listener_create_and_run, server_mud) < 0) {
         PRINT_ERROR("server can't create poisx thread %d! ", errno);
@@ -564,7 +703,15 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
     } else {
         server_unit->epfd = epoll_create(SERVER_EPOLL_SIZE_MAX);
     }
-    
+
+    if (server_unit->epoll_io_multiplex == true) {
+        server_unit->epfd_write = epoll_create(SERVER_EPOLL_SIZE_MAX);
+        if (server_unit->epfd_write < 0) {
+            PRINT_ERROR("server can't create write epoll %d! ", server_unit->epfd_write);
+            return PROGRAM_FAULT;
+        }
+    }
+
     if (server_unit->epfd < 0) {
        PRINT_ERROR("server can't create epoll %d! ", server_unit->epfd);
        return PROGRAM_FAULT;
@@ -693,7 +840,7 @@ static int sersum_process_tcp_accept_event(struct ServerMumUnit *server_unit, st
         return PROGRAM_ABORT;
     }
 
-    int32_t server_ans_ret = server_ans(server_handler->fd, server_unit->pktlen, server_unit->api, "tcp");
+    int32_t server_ans_ret = server_ans(server_handler->fd, server_unit->pktlen, server_unit->api, "tcp", server_unit->epfd_write);
     if (server_ans_ret == PROGRAM_FAULT) {
         --server_unit->curr_connect;
         server_handler_close(server_unit->epfd, server_handler);
@@ -723,7 +870,7 @@ static int sersum_process_epollin_event(struct ServerMumUnit *server_unit, struc
                fd == (server_unit->listener.listen_fd_array[V6_UDP]) ||
                fd == (server_unit->listener.listen_fd_array[UDP_MULTICAST])) {
         uint32_t pktlen = server_unit->pktlen > UDP_PKTLEN_MAX ? UDP_PKTLEN_MAX : server_unit->pktlen;
-        int32_t server_ans_ret = server_ans(fd, pktlen, server_unit->api, "udp");
+        int32_t server_ans_ret = server_ans(fd, pktlen, server_unit->api, "udp", server_unit->epfd_write);
         if (server_ans_ret != PROGRAM_OK) {
             if (server_handler_close(server_unit->epfd, server_handler) != 0) {
                 PRINT_ERROR("server_handler_close ret %d! \n", server_ans_ret);
@@ -786,7 +933,6 @@ void *sersum_create_and_run(void *arg)
             exit(PROGRAM_FAULT);
         }
     }
-    
     close(server_unit->listener.fd);
     close(server_unit->epfd);
 
@@ -817,6 +963,7 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
             server_unit->listener.listen_fd_array[i] = -1;
         }
         server_unit->epfd = -1;
+        server_unit->epfd_write = -1;
         server_unit->epevs = (struct epoll_event *)malloc(SERVER_EPOLL_SIZE_MAX * sizeof(struct epoll_event));
         server_unit->curr_connect = 0;
         server_unit->recv_bytes = 0;
@@ -847,6 +994,7 @@ int32_t sermum_create_and_run(struct ProgramParams *params)
         server_unit->api = params->api;
         server_unit->debug = params->debug;
         server_unit->epollcreate = params->epollcreate;
+        server_unit->epoll_io_multiplex = params->epoll_io_multiplex;
         server_unit->accept = params->accept;
         server_unit->tcp_keepalive_idle = params->tcp_keepalive_idle;
         server_unit->tcp_keepalive_interval = params->tcp_keepalive_interval;

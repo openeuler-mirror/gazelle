@@ -28,6 +28,7 @@ struct ServerMumUnit
 {
     struct ServerHandler listener;          ///< the listen handler
     int32_t epfd;                           ///< the listen epoll file descriptor
+    int32_t epfd_write;                     ///< enables the epoll file descriptor for write events
     struct epoll_event *epevs;              ///< the epoll events
     uint32_t curr_connect;                  ///< current connection number
     uint64_t recv_bytes;                    ///< total receive bytes
@@ -38,6 +39,7 @@ struct ServerMumUnit
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
     char* epollcreate;                      ///< epoll_create method
+    bool epoll_io_multiplex;                ///< enable separate epoll-based I/O multiplexing for read and write
     char* accept;                           ///< accept connections method
     int32_t tcp_keepalive_idle;             ///< tcp keepalive idle time
     int32_t tcp_keepalive_interval;         ///< tcp keepalive interval time
@@ -63,6 +65,7 @@ struct ServerMudWorker
 {
     struct ServerHandler worker;            ///< the worker handler
     int32_t epfd;                           ///< the worker epoll file descriptor
+    int32_t epfd_write;
     struct epoll_event *epevs;              ///< the epoll events
     uint64_t recv_bytes;                    ///< total receive bytes
     uint32_t pktlen;                        ///< the length of peckage
@@ -70,10 +73,14 @@ struct ServerMudWorker
     uint16_t port;                          ///< client port
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
+    bool poll;                              ///< if we use poll in the model of mud
     char* epollcreate;                      ///< epoll_create method
     char* domain;
     uint32_t curr_connect;
     struct ServerMudWorker *next;           ///< next pointer
+    bool epoll_io_multiplex;
+    struct pollfd *poll_fds;
+    int32_t nfds;
 };
 
 /**
@@ -85,6 +92,7 @@ struct ServerMud
     struct ServerHandler listener;          ///< the listen handler
     struct ServerMudWorker *workers;        ///< the workers
     int32_t epfd;                           ///< the listen epoll file descriptor
+    int32_t epfd_write;
     struct epoll_event *epevs;              ///< the epoll events
     struct ServerIpInfo server_ip_info;
     bool* port;                             ///< server port point to parameter's port
@@ -92,11 +100,13 @@ struct ServerMud
     char* domain;                           ///< communication domain
     char* api;                              ///< the type of api
     bool debug;                             ///< if we print the debug information
+    bool poll;                              ///< if we use poll in the model of mud
     char* accept;                           ///< accept connections method
     char* epollcreate;                      ///< epoll_create method
     int32_t tcp_keepalive_idle;             ///< tcp keepalive idle time
     int32_t tcp_keepalive_interval;         ///< tcp keepalive interval time
     uint8_t protocol_type_mode;             ///< tcp/udp ipv4/ipv6 protocol mode
+    bool epoll_io_multiplex;
 };
 
 

@@ -31,6 +31,7 @@ struct ServerHandler
     int32_t listen_fd_array[PROTOCOL_MODE_MAX];
     int32_t fd;                 ///< socket file descriptor
     int32_t is_v6;
+    int32_t index;
 };
 
 /**
@@ -98,7 +99,7 @@ int32_t client_bussiness(char *out, const char *in, uint32_t size, bool verify, 
  * @param api               the api
  * @return                  the result
  */
-int32_t server_ans(int32_t fd, uint32_t pktlen, const char* api, const char* domain);
+int32_t server_ans(int32_t fd, uint32_t pktlen, const char *api, const char* domain, int epfd_write);
 
 /**
  * @brief client asks server
