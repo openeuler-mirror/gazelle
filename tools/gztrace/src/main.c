@@ -35,6 +35,14 @@ int main(int argc, char *argv[])
         list_api();
     }
 
+    if (params.trace_cmd) {
+        trace(params.trace_cmd);
+    }
+
+    if (params.trace_pid) {
+        pid_trace(params.trace_pid);
+    }
+
     if (params.record_cmd || params.record_pid) {
         is_perf_installed();
         if (params.record_cmd) {
@@ -43,6 +51,14 @@ int main(int argc, char *argv[])
             record(NULL, params.record_pid);
         }
         run_perf_script();
+    }
+
+    if (params.multiplex_cmd) {
+        multiplex(params.multiplex_cmd);
+    }
+
+    if (params.multiplex_pid) {
+        pid_multiplex(params.multiplex_pid);
     }
 
     return 0;

@@ -15,6 +15,7 @@ set(SOURCE_FILES
         src/main.c
         src/param.c
         src/trace.c
+        src/syscall.c
         src/record.c
 )
 

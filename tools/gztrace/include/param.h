@@ -37,8 +37,12 @@ void debug_help(void);
 typedef struct {
     int show_help;
     int list;
+    char *trace_cmd;
+    pid_t trace_pid;
     char *record_cmd;
     pid_t record_pid;
+    char *multiplex_cmd;
+    pid_t multiplex_pid;
 } param_t;
 
 /* Parses command-line arguments */
