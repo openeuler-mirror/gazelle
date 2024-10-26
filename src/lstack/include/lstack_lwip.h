@@ -58,6 +58,7 @@ uint32_t do_lwip_get_connnum(void);
 
 void do_lwip_free_pbuf(struct pbuf *pbuf);
 struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type type);
+int32_t do_lwip_free_pbuf_header(int32_t s, struct pbuf *pbuf, uint16_t length);
 
 void read_same_node_recv_list(struct protocol_stack *stack);
 
