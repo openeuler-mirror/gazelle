@@ -28,6 +28,14 @@ struct rpc_stats *rpc_stats_get(void)
     return &g_rpc_stats;
 }
 
+struct rte_mempool *rpc_pool_get(void)
+{
+    if (g_rpc_pool != NULL) {
+        return g_rpc_pool->mempool;
+    }
+    return NULL;
+}
+
 static inline __attribute__((always_inline)) struct rpc_msg *get_rpc_msg(struct rpc_msg_pool *rpc_pool)
 {
     int ret;
@@ -169,6 +177,18 @@ int32_t rpc_call_connnum(rpc_queue *queue)
     if (msg == NULL) {
         return -1;
     }
+
+    return rpc_sync_call(queue, msg);
+}
+
+int32_t rpc_call_lstack_mem(rpc_queue* queue, void* memory)
+{
+    struct rpc_msg *msg = rpc_msg_alloc(stack_get_total_mem);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    msg->args[MSG_ARG_0].p = memory;
 
     return rpc_sync_call(queue, msg);
 }

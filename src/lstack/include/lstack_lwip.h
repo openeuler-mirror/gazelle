@@ -29,6 +29,7 @@ struct rte_mempool;
 struct rpc_msg;
 struct rte_mbuf;
 struct protocol_stack;
+struct netconn;
 
 void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_sock);
 
@@ -61,5 +62,6 @@ struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type typ
 int32_t do_lwip_free_pbuf_header(int32_t s, struct pbuf *pbuf, uint16_t length);
 
 void read_same_node_recv_list(struct protocol_stack *stack);
+void get_socks_mem_info(struct gazelle_stat_lstack_memory *memory);
 
 #endif

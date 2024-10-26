@@ -32,6 +32,7 @@
 #define GAZELLE_RESULT_LEN               4096
 #define GAZELLE_MAX_LATENCY_TIME         1800 // max latency time 30mins
 #define GAZELLE_RESULT_LINE_LEN          80   // for a single row, the max len of result is 80
+#define PERCENTAGE(value)                ((double) (value) * 100.0)
 
 enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LTRAN_SHOW = 0,
@@ -60,6 +61,7 @@ enum GAZELLE_STAT_MODE {
     GAZELLE_STAT_LSTACK_SHOW_XSTATS,
     GAZELLE_STAT_LSTACK_SHOW_AGGREGATE,
     GAZELLE_STAT_LSTACK_SHOW_NIC_FEATURES,
+    GAZELLE_STAT_LSTACK_SHOW_MEMORY_USAGE,
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
     GAZELLE_STAT_FAULT_INJECT_SET,
@@ -263,6 +265,36 @@ struct gazelle_stats_igmp {
   uint64_t tx_report;        /* Sent reports. */
 };
 
+struct gazelle_memory_info {
+    uint32_t total_size;
+    uint32_t avail_size;
+    double total_mem;
+    double avail_mem;
+};
+
+struct gazelle_socket_mem_info {
+    uint32_t fd;
+    struct gazelle_memory_info send_ring_info;
+    struct gazelle_memory_info recv_ring_info;
+    struct gazelle_memory_info recvmbox_info;
+    struct gazelle_memory_info acceptmbox_info;
+};
+
+struct gazelle_stat_lstack_memory {
+    uint32_t sock_num;
+    double rx_queue_mem;
+    double tx_queue_mem;
+    struct gazelle_socket_mem_info sockets[GAZELLE_MAX_CLIENTS];
+    struct gazelle_memory_info rxtx_mempool;
+    struct gazelle_memory_info rpc_mempool;
+};
+
+struct gazelle_general_lstack_memory {
+    double total_mem;
+    double alloc_mem;
+    double free_mem;
+    double fixed_mem;
+};
 
 struct gazelle_stat_lstack_conn_info {
     uint32_t state;
@@ -361,6 +393,7 @@ struct gazelle_stack_dfx_data {
     int32_t loglevel;
     uint32_t stack_id;
     struct gazelle_stat_low_power_info low_power_info;
+    struct gazelle_general_lstack_memory general_mem_info;
 
     union lstack_msg {
         struct gazelle_stat_pkts pkts;
@@ -372,6 +405,7 @@ struct gazelle_stack_dfx_data {
         struct nic_eth_features nic_features;
         struct gazelle_stats_proto  proto_data;
         struct gazelle_stats_igmp igmp_data;
+        struct gazelle_stat_lstack_memory mem_usage;
 
 #ifdef GAZELLE_FAULT_INJECT_ENABLE
         struct gazelle_fault_inject_data inject;

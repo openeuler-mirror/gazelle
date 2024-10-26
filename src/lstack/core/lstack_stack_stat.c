@@ -301,6 +301,12 @@ static void get_stack_dfx_data_proto(struct gazelle_stack_dfx_data *dfx, struct 
     }
 }
 
+static void get_stack_memory_usage(struct gazelle_stack_dfx_data *dfx, struct protocol_stack* stack)
+{
+    struct gazelle_stat_lstack_memory *memory = &(dfx->data.mem_usage);
+    rpc_call_lstack_mem(&stack->dfx_rpc_queue, memory);
+}
+
 static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack,
     struct gazelle_stat_msg_request *msg)
 {
@@ -356,6 +362,9 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             break;
         case GAZELLE_STAT_LSTACK_SHOW_PROTOCOL:
             get_stack_dfx_data_proto(dfx, stack, msg);
+            break;
+        case GAZELLE_STAT_LSTACK_SHOW_MEMORY_USAGE:
+            get_stack_memory_usage(dfx, stack);
             break;
         default:
             break;
@@ -425,6 +434,10 @@ int handle_stack_cmd(int fd, struct gazelle_stat_msg_request *msg)
         dfx.stack_id = i;
         if (i == stack_group->stack_num - 1) {
             dfx.eof = 1;
+        }
+
+        if (stat_mode == GAZELLE_STAT_LSTACK_SHOW_MEMORY_USAGE && i == 0) {
+            dpdk_general_mem_usage(&dfx.general_mem_info);
         }
 
         if (send_control_cmd_data(fd, &dfx) != 0) {

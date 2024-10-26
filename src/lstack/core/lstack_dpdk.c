@@ -1000,3 +1000,61 @@ void dpdk_nic_features_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
     dfx->data.nic_features.rx_offload = dev_conf.rxmode.offloads;
     return;
 }
+
+void dpdk_general_mem_usage(struct gazelle_general_lstack_memory *general_mem_info)
+{
+    struct rte_malloc_socket_stats socket_stats;
+    uint32_t i;
+    size_t total = 0;
+    size_t alloc = 0;
+    size_t free = 0;
+
+    for (i = 0; i < RTE_MAX_NUMA_NODES; i++) {
+        if (rte_malloc_get_socket_stats(i, &socket_stats) ||
+            !socket_stats.heap_totalsz_bytes)
+            continue;
+        total += socket_stats.heap_totalsz_bytes;
+        alloc += socket_stats.heap_allocsz_bytes;
+        free += socket_stats.heap_freesz_bytes;
+    }
+    general_mem_info->total_mem = BYTES2MB(total);
+    general_mem_info->alloc_mem = BYTES2MB(alloc);
+    general_mem_info->free_mem = BYTES2MB(free);
+
+    dpdk_fixed_mem_usage(&general_mem_info->fixed_mem);
+}
+
+/* callback func when track all memzones */
+void filter_unfixed_memzone(const struct rte_memzone *mz, void *arg)
+{
+    double *total = arg;
+    const char *buf_str = "mbuf";
+    const char *rpc_str = "rpc";
+
+    if (strstr(mz->name, buf_str) == NULL && strstr(mz->name, rpc_str) == NULL) {
+        *total += BYTES2MB(mz->len);
+    }
+}
+
+void dpdk_fixed_mem_usage(double *fixed_mem)
+{
+    double total = 0.0;
+    rte_memzone_walk(filter_unfixed_memzone, &total);
+    *fixed_mem = total;
+}
+
+void dpdk_mempool_mem_get(struct rte_mempool *mp, struct gazelle_memory_info *mem_info)
+{
+    uint32_t mp_size;
+    uint32_t obj_size;
+
+    if (mp == NULL || mem_info == NULL) {
+        return;
+    }
+    mp_size = mp->size;
+    obj_size = mp->header_size + mp->elt_size + mp->trailer_size;
+    mem_info->total_mem = BYTES2MB((double) mp_size * obj_size);
+    mem_info->total_size = mp_size;
+    mem_info->avail_size = rte_mempool_avail_count(mp);
+    mem_info->avail_mem = BYTES2MB((double) rte_mempool_avail_count(mp) * obj_size);
+}

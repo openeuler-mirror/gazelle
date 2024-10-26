@@ -1096,6 +1096,45 @@ void stack_get_connnum(struct rpc_msg *msg)
     msg->result = do_lwip_get_connnum();
 }
 
+double stack_get_rxtxqueue_mem(bool is_txqueue)
+{
+    uint32_t size = 0;
+    uint32_t obj_size = 0;
+    struct protocol_stack *stack = get_protocol_stack();
+
+    if (is_txqueue) {
+        size = get_global_cfg_params()->nic.rxqueue_size;
+    } else {
+        size = get_global_cfg_params()->nic.txqueue_size;
+    }
+
+    obj_size = stack->rxtx_mbuf_pool->elt_size +
+        stack->rxtx_mbuf_pool->header_size +
+        stack->rxtx_mbuf_pool->trailer_size;
+    return BYTES2MB(size * obj_size);
+}
+
+void stack_get_total_mem(struct rpc_msg *msg)
+{
+    struct gazelle_stat_lstack_memory *memory = msg->args[MSG_ARG_0].p;
+    bool is_txqueue = true;
+    struct rte_mempool *rpc_pool = NULL;
+
+    /* socket memory info */
+    get_socks_mem_info(memory);
+
+    /* rxtx_pktmempool memory info */
+    dpdk_mempool_mem_get(get_protocol_stack()->rxtx_mbuf_pool, &memory->rxtx_mempool);
+
+    /* rpc_mempool memory info */
+    rpc_pool = rpc_pool_get();
+    if (rpc_pool) {
+        dpdk_mempool_mem_get(rpc_pool, &memory->rpc_mempool);
+    }
+    memory->tx_queue_mem = stack_get_rxtxqueue_mem(is_txqueue);
+    memory->rx_queue_mem = stack_get_rxtxqueue_mem(!is_txqueue);
+}
+
 void stack_recvlist_count(struct rpc_msg *msg)
 {
     struct protocol_stack *stack = get_protocol_stack();

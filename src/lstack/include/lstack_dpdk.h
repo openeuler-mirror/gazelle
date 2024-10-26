@@ -27,6 +27,8 @@
 
 #define MBUF_SZ              (MAX_PACKET_SZ + RTE_PKTMBUF_HEADROOM)
 
+#define BYTES2MB(bytes)      (((double)(bytes)) / (1024 * 1024))
+
 /* DPDK limit ring head-tail distance in rte_ring_init.
  * Max value is RTE_RING_SZ_MASK / HTD_MAX_DEF, RTE_RING_SZ_MASK is 0x7fffffff, HTD_MAX_DEF is 8.
  */
@@ -60,4 +62,7 @@ struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
 void dpdk_nic_xstats_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
 int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num, bool reserve);
 void dpdk_nic_features_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id);
+void dpdk_fixed_mem_usage(double *fixed_mem);
+void dpdk_general_mem_usage(struct gazelle_general_lstack_memory *general_mem_info);
+void dpdk_mempool_mem_get(struct rte_mempool *mp, struct gazelle_memory_info *mem_info);
 #endif /* GAZELLE_DPDK_H */

@@ -24,6 +24,7 @@
 #include <lwip/pbuf.h>
 #include <lwip/priv/tcp_priv.h>
 #include <lwip/lwipgz_posix_api.h>
+#include <lwip/lwipgz_sock.h>
 #include <lwip/api.h>
 #include <lwip/tcp.h>
 #include <lwip/prot/etharp.h>
@@ -1626,6 +1627,98 @@ err_t find_same_node_ring(struct tcp_pcb *npcb)
             npcb->remote_port, npcb->remote_port);
     }
     return 0;
+}
+
+void get_rte_ring_mem_info(struct gazelle_memory_info *mem_info, struct rte_ring *ring, uint32_t obj_size)
+{
+    if (mem_info == NULL || ring == NULL) {
+        return;
+    }
+
+    mem_info->total_size = ring->capacity;
+    mem_info->avail_size = gazelle_ring_free_count(ring);
+    mem_info->total_mem = BYTES2MB((double) ring->capacity * obj_size);
+    mem_info->avail_mem = BYTES2MB((double) gazelle_ring_free_count(ring) * obj_size);
+    mem_info->total_mem += BYTES2MB((double) rte_ring_get_memsize(ring->size) + RTE_CACHE_LINE_SIZE);
+}
+
+void get_mbox_mem_info(struct gazelle_memory_info *mem_info, struct rte_ring *ring, uint32_t obj_size)
+{
+    if (mem_info == NULL || ring == NULL) {
+        return;
+    }
+
+    mem_info->total_size = ring->capacity;
+    mem_info->avail_size = rte_ring_free_count(ring);
+    mem_info->total_mem = BYTES2MB((double) ring->capacity * obj_size);
+    mem_info->avail_mem = BYTES2MB((double) rte_ring_free_count(ring) * obj_size);
+    mem_info->total_mem += BYTES2MB((double) rte_ring_get_memsize(ring->size) + RTE_CACHE_LINE_SIZE);
+}
+
+void get_netconn_mem_info(struct gazelle_socket_mem_info *sock_mem_info, struct netconn *conn)
+{
+    uint32_t obj_size = 0;
+    struct protocol_stack *stack = get_protocol_stack();
+
+    if (conn == NULL) {
+        return;
+    }
+
+    obj_size = stack->rxtx_mbuf_pool->elt_size +
+        stack->rxtx_mbuf_pool->header_size +
+        stack->rxtx_mbuf_pool->trailer_size;
+
+    if (conn->recvmbox != NULL && conn->recvmbox->ring != NULL) {
+        get_mbox_mem_info(&sock_mem_info->recvmbox_info, conn->recvmbox->ring, obj_size);
+    }
+
+    if (conn->acceptmbox != NULL && conn->acceptmbox->ring != NULL) {
+        get_mbox_mem_info(&sock_mem_info->acceptmbox_info, conn->acceptmbox->ring, obj_size);
+    }
+
+    sock_mem_info->fd = conn->callback_arg.socket;
+}
+
+void get_socks_mem_info(struct gazelle_stat_lstack_memory *memory)
+{
+    uint32_t num = 0, i = 0;
+    uint32_t obj_size = 0;
+    struct protocol_stack *stack = get_protocol_stack();
+
+    uint32_t sockets_num = stack->conn_num;
+
+    struct netconn *conn;
+    struct rte_ring *recv_ring;
+    struct rte_ring *send_ring;
+    struct lwip_sock *lwip_sock;
+    struct gazelle_socket_mem_info *socket_mem_info;
+
+    obj_size = stack->rxtx_mbuf_pool->elt_size +
+        stack->rxtx_mbuf_pool->header_size +
+        stack->rxtx_mbuf_pool->trailer_size;
+
+    for (; i < MEMP_NUM_NETCONN && num < sockets_num; i++) {
+        lwip_sock = lwip_get_socket(i);
+        if (lwip_sock == NULL || lwip_sock->stack == NULL || lwip_sock->stack->tid != stack->tid) {
+            continue;
+        }
+        conn = lwip_sock->conn;
+        recv_ring = lwip_sock->recv_ring;
+        send_ring = lwip_sock->send_ring;
+        socket_mem_info = &memory->sockets[num];
+
+        if (conn != NULL) {
+            get_netconn_mem_info(socket_mem_info, conn);
+        }
+        if (send_ring != NULL) {
+            get_rte_ring_mem_info(&socket_mem_info->send_ring_info, send_ring, obj_size);
+        }
+        if (recv_ring != NULL) {
+            get_rte_ring_mem_info(&socket_mem_info->recv_ring_info, recv_ring, obj_size);
+        }
+        num++;
+    }
+    memory->sock_num = num;
 }
 
 unsigned same_node_ring_count(struct lwip_sock *sock)
