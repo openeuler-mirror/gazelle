@@ -61,6 +61,18 @@ int rtc_socket(int domain, int type, int protocol)
     return ret;
 }
 
+int rtc_setsockopt(int s, int level, int optname, const void *optval, socklen_t optlen)
+{
+    int ret = lwip_setsockopt(s, level, optname, optval, optlen);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK,
+                   "sockfd=%d level=%d optname=%d, rtc_setsockopt failed errno=%d, %s\n",
+                   s, level, optname, errno, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 int rtc_close(int s)
 {
     struct lwip_sock *sock = lwip_get_socket(s);

@@ -848,9 +848,12 @@ void stack_setsockopt(struct rpc_msg *msg)
 {
     msg->result = lwip_setsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
         msg->args[MSG_ARG_3].cp, msg->args[MSG_ARG_4].socklen);
+    msg->errno_code = errno;
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d, level %d, optname %d, fail %ld\n", get_stack_tid(),
-                   msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK,
+                   "tid %ld, sockfd %d, level %d, optname %d, rtw_setsockopt failed errno %d, %s\n",
+                   get_stack_tid(), msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i,
+                   msg->args[MSG_ARG_2].i, errno, strerror(errno));
     }
 }
 

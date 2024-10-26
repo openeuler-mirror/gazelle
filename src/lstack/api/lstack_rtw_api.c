@@ -22,6 +22,7 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
 #include "lstack_lwip.h"
+#include "lstack_log.h"
 #include "common/gazelle_base_func.h"
 #include "lstack_rtw_api.h"
 

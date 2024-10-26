@@ -54,7 +54,7 @@ void wrap_api_init(void)
         g_wrap_api->bind_fn          = lwip_bind;
         g_wrap_api->listen_fn        = lwip_listen;
         g_wrap_api->connect_fn       = lwip_connect;
-        g_wrap_api->setsockopt_fn    = lwip_setsockopt;
+        g_wrap_api->setsockopt_fn    = rtc_setsockopt;
         g_wrap_api->getsockopt_fn    = lwip_getsockopt;
         g_wrap_api->getpeername_fn   = lwip_getpeername;
         g_wrap_api->getsockname_fn   = lwip_getsockname;
