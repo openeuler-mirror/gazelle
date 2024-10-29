@@ -8,10 +8,10 @@ The openEuler dpdk package provides the gazelle-pdump command for capturing pack
 
 | Option        | Example Value    | Description |
 | ------------- | ---------------- | ----------- |
-| --file-prefix | gazelle          | Specifies the shared directory location of the main process. It needs to match the value in lstack.conf or ltran.conf. |
-| device_id     | 0000:01:00.0     | PCI address of the capture network card. This needs to match the result from the dpdk-devbind -s command. |
+| device_id     | 0000:01:00.0     | PCI address of the capture network card. This needs to match the result from the dpdk-devbind -s command. Virtual devices need to be configured to the value of --vdev in dpdk_args, for example, the af_xdp device should be set to net_af_xdp. |
 | rx-dev        | /root/capture-rx.pcap | Location where the received data packets from the network card are stored. |
 | tx-dev        | /root/capture-tx.pcap | Location where the transmitted data packets from the network card are stored. If this path is the same as rx-dev, the file will contain both received and transmitted data packets. |
+| -d            | /usr/lib64/librte_net_af_xdp.so | Devices such as af_xdp and mlx need to specify their dynamic libraries using the -d option. |
 
 For more parameter explanations:
 ```
@@ -20,7 +20,12 @@ gazelle-pdump --help
 
 ## Usage example:
 ```
-gazelle-pdump --file-prefix gazelle -- --pdump 'device_id=0000:01:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
+#hinic
+gazelle-pdump -- --pdump 'device_id=0000:01:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
+#af_xdp
+gazelle-pdump -d /usr/lib64/librte_net_af_xdp.so -- --pdump 'device_id=net_af_xdp,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
+#mlx
+gazelle-pdump -d /usr/lib64/librte_net_mlx5.so -- --pdump 'device_id=0000:01:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
 ```
 ![scene](images/pdump.png)
 
@@ -48,19 +53,12 @@ Cause: The network card used by lstack/ltran and the one specified in gazelle-pd
 
 ### Error message 2
 ```
-EAL: Multi-process socket /var/run/dpdk/(null)/mp_socket_3884565_28c50010577fe
-EAL: failed to send to (/var/run/dpdk/(null)/mp_socket) due to Connection refused
-EAL: Fail to send request /var/run/dpdk/(null)/mp_socket:bus_vdev_mp
-vdev_scan(): Failed to request vdev from primary
-EAL: Selected IOVA mode 'PA'
-EAL: Probing VFIO support...
-EAL: failed to send to (/var/run/dpdk/(null)/mp_socket) due to Connection refused
-EAL: Cannot send message to primary
-EAL: error allocating rte services array
-EAL: FATAL: rte_service_init() failed
-EAL: rte_service_init() failed
+vdev_probe(): failed to initialize net_af_xdp device
+EAL: Bus (vdev) probe failed.
+EAL: Error - exiting with code: 1
+  Cause: No Ethernet ports - bye
 ```
-Cause: The specified shared memory path for gazelle-pdump does not contain the appropriate files. Check the --file-prefix parameter.
+Cause: Gazelle-pdump did not link the dynamic library corresponding to the network card. After gazelle-pdump, add -d to specify the corresponding dynamic library, such as for af_xdp, use -d librte_net_af_xdp.so.
 
 ### Error message 3
 ```
