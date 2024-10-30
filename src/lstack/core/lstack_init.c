@@ -98,7 +98,6 @@ static int32_t check_process_conflict(void)
     }
 
     ret = flock((fileno(fp)), LOCK_EX | LOCK_NB);
-    (void)fclose(fp);
     if (ret < 0) {
         return -1;
     }
