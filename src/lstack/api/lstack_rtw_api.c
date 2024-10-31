@@ -190,10 +190,7 @@ static int stack_broadcast_accept4(int fd, struct sockaddr *addr, socklen_t *add
 
 static int stack_broadcast_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
-    if (get_global_cfg_params()->nonblock_mode)
-        return stack_broadcast_accept4(fd, addr, addrlen, O_NONBLOCK);
-    else
-        return stack_broadcast_accept4(fd, addr, addrlen, 0);
+    return stack_broadcast_accept4(fd, addr, addrlen, 0);
 }
 
 /* choice one stack listen */

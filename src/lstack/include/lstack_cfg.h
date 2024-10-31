@@ -136,7 +136,6 @@ struct cfg_params {
     struct { // deprecated
         char unix_socket_filename[NAME_MAX];
         bool use_ltran; // false:lstack read from nic. true:lstack read form ltran process.
-        bool nonblock_mode;
         bool udp_enable;
         bool kni_switch;
     };
