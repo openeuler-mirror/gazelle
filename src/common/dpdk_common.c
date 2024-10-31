@@ -55,7 +55,6 @@ struct rte_kni* get_gazelle_kni(void)
 
 static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
 {
-    int32_t ret = 0;
     static bool g_bond_dev_started = false;
 
     if (port_id >= rte_eth_dev_count_avail() || port_id >= GAZELLE_MAX_ETHPORTS) {
@@ -82,7 +81,7 @@ static int32_t kni_config_network_interface(uint16_t port_id, uint8_t if_up)
     }
 
     COMMON_INFO("Configure network interface of %hu %s \n", port_id, if_up ? "up" : "down");
-    return ret;
+    return 0;
 }
 
 int32_t dpdk_kni_init(uint16_t port, struct rte_mempool *pool)
