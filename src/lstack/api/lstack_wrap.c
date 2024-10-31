@@ -381,7 +381,11 @@ static bool unsupport_optname(int32_t level, int32_t optname)
 
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
+#define SO_NUMA_ID 0x100c
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP && !unsupport_optname(level, optname)) {
+        if (level == IPPROTO_IP && optname == SO_NUMA_ID) {
+            return lwip_get_socket(s)->stack->socket_id;
+        }
         return g_wrap_api->getsockopt_fn(s, level, optname, optval, optlen);
     }
 
