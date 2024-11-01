@@ -14,6 +14,7 @@
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <linux/if_xdp.h>
 
 #include <lwip/lwipgz_posix_api.h>
 #include <lwip/lwipgz_sock.h>
@@ -363,20 +364,28 @@ static bool unsupport_socket_optname(int32_t optname)
     return false;
 }
 
-static bool unsupport_optname(int32_t level, int32_t optname)
+static bool unsupport_xdp_optname(int32_t optname)
 {
-    if (level == SOL_IP) {
-        return unsupport_ip_optname(optname);
-    }
-
-    if (level == SOL_TCP) {
-        return unsupport_tcp_optname(optname);
-    }
-
-    if (level == SOL_SOCKET) {
-        return unsupport_socket_optname(optname);
+    if (optname == XDP_STATISTICS) {
+        return true;
     }
     return false;
+}
+
+static bool unsupport_optname(int32_t level, int32_t optname)
+{
+    switch (level) {
+        case SOL_IP:
+            return unsupport_ip_optname(optname);
+        case SOL_TCP:
+            return unsupport_tcp_optname(optname);
+        case SOL_SOCKET:
+            return unsupport_socket_optname(optname);
+        case SOL_XDP:
+            return unsupport_xdp_optname(optname);
+        default:
+            return false;
+    }
 }
 
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
