@@ -40,7 +40,7 @@ struct protocol_stack {
     uint32_t tid;
     uint16_t queue_id;
     uint16_t port_id;
-    uint16_t socket_id;
+    uint16_t numa_id;
     uint16_t cpu_id;
     uint32_t stack_idx;
     cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
@@ -56,7 +56,6 @@ struct protocol_stack {
     uint32_t reg_head;
 
     volatile bool low_power;
-    bool is_send_thread;
 
     char pad1 __rte_cache_aligned;
     rpc_queue dfx_rpc_queue;

@@ -126,16 +126,9 @@ struct protocol_stack *get_bind_protocol_stack(void)
         pthread_spin_lock(&stack_group->socket_lock);
         for (uint16_t i = 0; i < stack_group->stack_num; i++) {
             struct protocol_stack* stack = stack_group->stacks[i];
-            if (get_global_cfg_params()->seperate_send_recv) {
-                if (stack->is_send_thread && stack->conn_num < min_conn_num) {
-                    index = i;
-                    min_conn_num = stack->conn_num;
-                }
-            } else {
-                if (stack->conn_num < min_conn_num) {
-                    index = i;
-                    min_conn_num = stack->conn_num;
-                }
+            if (stack->conn_num < min_conn_num) {
+                index = i;
+                min_conn_num = stack->conn_num;
             }
         }
     }
@@ -154,16 +147,9 @@ int get_min_conn_stack(struct protocol_stack_group *stack_group)
 
     for (int i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
-        if (get_global_cfg_params()->seperate_send_recv) {
-            if (!stack->is_send_thread && stack->conn_num < min_conn_num) {
-                min_conn_stk_idx = i;
-                min_conn_num = stack->conn_num;
-            }
-        } else {
-            if (stack->conn_num < min_conn_num) {
-                min_conn_stk_idx = i;
-                min_conn_num = stack->conn_num;
-            }
+        if (stack->conn_num < min_conn_num) {
+            min_conn_stk_idx = i;
+            min_conn_num = stack->conn_num;
         }
     }
     return min_conn_stk_idx;
@@ -173,6 +159,10 @@ void bind_to_stack_numa(struct protocol_stack *stack)
 {
     int32_t ret;
     pthread_t tid = pthread_self();
+
+    if (get_global_cfg_params()->stack_num > 0) {
+        return;
+    }
 
     ret = pthread_setaffinity_np(tid, sizeof(stack->idle_cpuset), &stack->idle_cpuset);
     if (ret != 0) {
@@ -268,18 +258,10 @@ static int32_t create_thread(void *arg, char *thread_name, stack_thread_func fun
         return -1;
     }
 
-    if (get_global_cfg_params()->seperate_send_recv) {
-        ret = sprintf_s(name, sizeof(name), "%s", thread_name);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "set name failed\n");
-            return -1;
-        }
-    } else {
-        ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, t_params->queue_id);
-        if (ret < 0) {
-            LSTACK_LOG(ERR, LSTACK, "set name failed\n");
-            return -1;
-        }
+    ret = sprintf_s(name, sizeof(name), "%s%02hu", thread_name, t_params->queue_id);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "set name failed\n");
+        return -1;
     }
 
     ret = pthread_create(&tid, NULL, func, arg);
@@ -343,6 +325,7 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
+    struct cfg_params *cfg_params = get_global_cfg_params();
 
     stack->tid = rte_gettid();
     stack->queue_id = t_params->queue_id;
@@ -363,24 +346,15 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
         return -1;
     }
 
-    int idx = t_params->idx;
-    if (get_global_cfg_params()->seperate_send_recv) {
-        // 2: idx is even, stack is recv thread, idx is odd, stack is send thread
-        if (idx % 2 == 0) {
-            stack->cpu_id = get_global_cfg_params()->recv_cpus[idx / 2];
-            stack->is_send_thread = 0;
-        } else {
-            stack->cpu_id = get_global_cfg_params()->send_cpus[idx / 2];
-            stack->is_send_thread = 1;
-        }
+    if (cfg_params->stack_num > 0) {
+        stack->numa_id = cfg_params->numa_id;
     } else {
-        stack->cpu_id = get_global_cfg_params()->cpus[idx];
-    }
-
-    stack->socket_id = numa_node_of_cpu(stack->cpu_id);
-    if (stack->socket_id < 0) {
-        LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
-        return -1;
+        stack->cpu_id = cfg_params->cpus[t_params->idx];
+        stack->numa_id = numa_node_of_cpu(stack->cpu_id);
+        if (stack->numa_id < 0) {
+            LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
+            return -1;
+        }
     }
 
     if (pktmbuf_pool_init(stack) != 0) {
@@ -441,7 +415,10 @@ static struct protocol_stack *stack_thread_init(void *arg)
     if (thread_affinity_init(stack->cpu_id) != 0) {
         goto END;
     }
-    RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
+
+    if (get_global_cfg_params()->stack_num == 0) {
+        RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
+    }
 
     lwip_init();
     /* Using errno to return lwip_init() result. */
@@ -591,9 +568,7 @@ static void* gazelle_stack_thread(void *arg)
 static int stack_group_init_mempool(void)
 {
     struct cfg_params *cfg_params = get_global_cfg_params();
-    uint32_t total_mbufs = 0;
-    uint32_t total_conn_mbufs = cfg_params->mbuf_count_per_conn * cfg_params->tcp_conn_count;
-    uint32_t total_nic_mbufs = cfg_params->rxqueue_size + cfg_params->txqueue_size;
+    uint32_t total_mbufs = dpdk_pktmbuf_mempool_num();
     struct rte_mempool *rxtx_mbuf = NULL;
     uint32_t cpu_id = 0;
     unsigned numa_id = 0;
@@ -603,8 +578,12 @@ static int stack_group_init_mempool(void)
         "config::num_cpu=%d num_process=%d \n", cfg_params->num_cpu, cfg_params->num_process);
 
     for (int cpu_idx = 0; cpu_idx < cfg_params->num_queue; cpu_idx++) {
-        cpu_id = cfg_params->cpus[cpu_idx];
-        numa_id = numa_node_of_cpu(cpu_id);
+        if (cfg_params->stack_num > 0) {
+            numa_id = cfg_params->numa_id;
+        } else {
+            cpu_id = cfg_params->cpus[cpu_idx];
+            numa_id = numa_node_of_cpu(cpu_id);
+        }
 
         for (int process_idx = 0; process_idx < cfg_params->num_process; process_idx++) {
             queue_id = cpu_idx * cfg_params->num_process + process_idx;
@@ -613,11 +592,9 @@ static int stack_group_init_mempool(void)
                 return -1;
             }
 
-            total_mbufs = (total_conn_mbufs / cfg_params->num_queue) + total_nic_mbufs + MBUFPOOL_RESERVE_NUM;
             rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf", total_mbufs, RXTX_CACHE_SZ, queue_id, numa_id);
             if (rxtx_mbuf == NULL) {
-                LSTACK_LOG(ERR, LSTACK, "cpuid=%u, numid=%d , rxtx_mbuf idx= %d create_pktmbuf_mempool fail\n",
-                    cpu_id, numa_id, queue_id);
+                LSTACK_LOG(ERR, LSTACK, "numid=%d, rxtx_mbuf idx=%d, create_pktmbuf_mempool fail\n", numa_id, queue_id);
                 return -1;
             }
 
@@ -696,23 +673,9 @@ int stack_setup_thread(void)
         }
     }
     for (i = 0; i < queue_num; i++) {
-        if (get_global_cfg_params()->seperate_send_recv) {
-            if (i % 2 == 0) {
-                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_RECV_THREAD_NAME, process_index, i / 2);
-                if (ret < 0) {
-                    goto OUT1;
-                }
-            } else {
-                ret = sprintf_s(name, sizeof(name), "%s_%d_%d", LSTACK_SEND_THREAD_NAME, process_index, i / 2);
-                if (ret < 0) {
-                    goto OUT1;
-                }
-            }
-        } else {
-            ret = sprintf_s(name, sizeof(name), "%s", LSTACK_THREAD_NAME);
-            if (ret < 0) {
-                goto OUT1;
-            }
+        ret = sprintf_s(name, sizeof(name), "%s", LSTACK_THREAD_NAME);
+        if (ret < 0) {
+            goto OUT1;
         }
 
         t_params[i]->idx = i;

@@ -22,14 +22,18 @@
 #include <limits.h>
 #include <unistd.h>
 #include <sched.h>
+#include <numa.h>
 
 #include <rte_eth_bond.h>
+#include <rte_eal.h>
+#include <rte_lcore.h>
 #include <lwip/lwipgz_sock.h>
 #include <lwip/inet.h>
 
 #include "common/gazelle_reg_msg.h"
 #include "common/gazelle_base_func.h"
 #include "lstack_log.h"
+#include "lstack_dpdk.h"
 #include "lstack_cfg.h"
 
 #define DEFAULT_CONF_FILE "/etc/gazelle/lstack.conf"
@@ -70,7 +74,6 @@ static int32_t parse_recv_ring_size(void);
 static int32_t parse_num_process(void);
 static int32_t parse_process_numa(void);
 static int32_t parse_process_index(void);
-static int32_t parse_seperate_sendrecv_args(void);
 static int32_t parse_tuple_filter(void);
 static int32_t parse_bond_mode(void);
 static int32_t parse_bond_miimon(void);
@@ -85,6 +88,7 @@ static int32_t parse_rpc_msg_max(void);
 static int32_t parse_send_cache_mode(void);
 static int32_t parse_flow_bifurcation(void);
 static int32_t parse_stack_interrupt(void);
+static int32_t parse_stack_num(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -118,9 +122,16 @@ static struct config_vector_t g_config_tbl[] = {
     { "mask_addr",    parse_mask_addr },
     { "use_ltran",    parse_use_ltran },
     { "devices",      parse_devices },
-    { "dpdk_args",    parse_dpdk_args },
-    { "seperate_send_recv",    parse_seperate_sendrecv_args },
+    { "tcp_conn_count", parse_tcp_conn_count },
+    { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
+    { "nic_rxqueue_size", parse_nic_rxqueue_size},
+    { "nic_txqueue_size", parse_nic_txqueue_size},
+    { "send_ring_size", parse_send_ring_size },
+    { "recv_ring_size", parse_recv_ring_size },
+    { "rpc_msg_max", parse_rpc_msg_max },
+    { "stack_num",   parse_stack_num },
     { "num_cpus",     parse_stack_cpu_number },
+    { "dpdk_args",    parse_dpdk_args },
     { "low_power_mode", parse_low_power_mode },
     { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
@@ -128,13 +139,9 @@ static struct config_vector_t g_config_tbl[] = {
     { "app_exclude_cpus",   parse_app_exclude_cpus },
     { "main_thread_affinity",  parse_main_thread_affinity },
     { "unix_prefix",    parse_unix_prefix },
-    { "tcp_conn_count", parse_tcp_conn_count },
-    { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
     { "read_connect_number", parse_read_connect_number },
     { "rpc_number", parse_rpc_number },
     { "nic_read_number", parse_nic_read_number },
-    { "send_ring_size", parse_send_ring_size },
-    { "recv_ring_size", parse_recv_ring_size },
     { "num_process",  parse_num_process },
     { "process_numa", parse_process_numa },
     { "process_idx", parse_process_index },
@@ -144,11 +151,8 @@ static struct config_vector_t g_config_tbl[] = {
     { "bond_slave_mac", parse_bond_slave_mac },
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
-    { "nic_rxqueue_size", parse_nic_rxqueue_size},
-    { "nic_txqueue_size", parse_nic_txqueue_size},
     { "stack_thread_mode", parse_stack_thread_mode },
     { "nic_vlan_mode", parse_nic_vlan_mode },
-    { "rpc_msg_max", parse_rpc_msg_max },
     { "send_cache_mode", parse_send_cache_mode },
     { "flow_bifurcation", parse_flow_bifurcation},
     { "stack_interrupt", parse_stack_interrupt},
@@ -354,135 +358,80 @@ static int32_t get_param_idx(int32_t argc, char **argv, const char *param)
     return -1;
 }
 
-static bool have_corelist_arg(int32_t argc, char **argv)
+static int32_t stack_bind_no_cpu(void)
 {
-    for (uint32_t i  = 0; i < argc; i++) {
-        if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
-            return true;
-        }
-
-        if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
-            return true;
-        }
-        
-        if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
-            return true;
-        }
-
-        if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
-            return true;
-        }
-
-        if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
-            return true;
-        }
+    uint16_t numa_id = 0;
+    
+    /* launch a lstack thread when neither num_cpus nor stack_num is specified */
+    if (g_config_params.stack_num == 0) {
+        g_config_params.stack_num = 1;
     }
 
-    return false;
+    numa_id = numa_node_of_cpu(sched_getcpu());
+    if (numa_id < 0) {
+        return -EINVAL;
+    }
+
+    g_config_params.numa_id = numa_id;
+    g_config_params.num_cpu = g_config_params.stack_num;
+    g_config_params.num_queue = g_config_params.num_cpu;
+    g_config_params.tot_queue_num = g_config_params.num_queue;
+
+    LSTACK_PRE_LOG(LSTACK_INFO, "NUMA node: %d\n", g_config_params.numa_id);
+
+    return 0;
+}
+
+
+static int32_t stack_bind_cpus(void)
+{
+    int cnt = 0;
+    char *tmp_arg = NULL;
+    const char *args = NULL;
+    const config_setting_t *num_cpus = NULL;
+
+    num_cpus = config_lookup(&g_config, "num_cpus");
+    if (num_cpus == NULL) {
+        return stack_bind_no_cpu();
+    }
+
+    args = config_setting_get_string(num_cpus);
+    if (args == NULL) {
+        return -EINVAL;
+    }
+
+    strcpy(g_config_params.lcores, args);
+
+    tmp_arg = strdup_assert_return(args);
+    cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
+    free(tmp_arg);
+    if (cnt <= 0) {
+        return stack_bind_no_cpu();
+    } else if (cnt > CFG_MAX_CPUS) {
+        return -EINVAL;
+    }
+
+    g_config_params.num_cpu = cnt;
+    g_config_params.num_queue = (uint16_t)cnt;
+    g_config_params.tot_queue_num = g_config_params.num_queue;
+
+    return 0;
 }
 
 static int32_t parse_stack_cpu_number(void)
 {
-    const config_setting_t *num_cpus = NULL;
-    const char *args = NULL;
-
-    if (!g_config_params.seperate_send_recv) {
-        num_cpus = config_lookup(&g_config, "num_cpus");
-        if (num_cpus == NULL) {
-            return -EINVAL;
-        }
-
-        args = config_setting_get_string(num_cpus);
-        if (args == NULL) {
-            return -EINVAL;
-        }
-
-        if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
-            int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
-            if (idx < 0) {
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(OPT_BIND_CORELIST);
-                g_config_params.dpdk_argc++;
-
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(args);
-                g_config_params.dpdk_argc++;
-            }
-        }
-
-        char *tmp_arg = strdup_assert_return(args);
-        int32_t cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
-        free(tmp_arg);
-        if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
-            return -EINVAL;
-        }
-
-        g_config_params.num_cpu = cnt;
-        g_config_params.num_queue = (uint16_t)cnt;
-        g_config_params.tot_queue_num = g_config_params.num_queue;
-    } else {
-        // send_num_cpus
-        num_cpus = config_lookup(&g_config, "send_num_cpus");
-        if (num_cpus == NULL) {
-            return -EINVAL;
-        }
-
-        args = config_setting_get_string(num_cpus);
-        if (args == NULL) {
-            return -EINVAL;
-        }
-
-        if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
-            int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
-            if (idx < 0) {
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(OPT_BIND_CORELIST);
-                g_config_params.dpdk_argc++;
-
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(args);
-                g_config_params.dpdk_argc++;
-            }
-        }
-
-        char *tmp_arg_send = strdup_assert_return(args);
-        int32_t send_cpu_cnt = separate_str_to_array(tmp_arg_send, g_config_params.send_cpus,
-            CFG_MAX_CPUS, CFG_MAX_CPUS);
-        free(tmp_arg_send);
-
-        // recv_num_cpus
-        num_cpus = config_lookup(&g_config, "recv_num_cpus");
-        if (num_cpus == NULL) {
-            return -EINVAL;
-        }
-
-        args = config_setting_get_string(num_cpus);
-        if (args == NULL) {
-            return -EINVAL;
-        }
-
-        if (!have_corelist_arg(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
-            int32_t idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_BIND_CORELIST);
-            if (idx < 0) {
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(OPT_BIND_CORELIST);
-                g_config_params.dpdk_argc++;
-
-                g_config_params.dpdk_argv[g_config_params.dpdk_argc] = strdup_assert_return(args);
-                g_config_params.dpdk_argc++;
-            }
-        }
-
-        char *tmp_arg_recv = strdup_assert_return(args);
-        int32_t recv_cpu_cnt = separate_str_to_array(tmp_arg_recv, g_config_params.recv_cpus,
-            CFG_MAX_CPUS, CFG_MAX_CPUS);
-        free(tmp_arg_recv);
-
-        if (send_cpu_cnt <= 0 || send_cpu_cnt > CFG_MAX_CPUS / 2 || send_cpu_cnt != recv_cpu_cnt) {
-            return -EINVAL;
-        }
-
-        g_config_params.num_cpu = send_cpu_cnt;
-        g_config_params.num_queue = (uint16_t)send_cpu_cnt * 2;
-        g_config_params.tot_queue_num = g_config_params.num_queue;
+    if (g_config_params.stack_num > 0) {
+        return stack_bind_no_cpu();
     }
 
-    return 0;
+    return stack_bind_cpus();
+}
+
+static int32_t parse_stack_num(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.stack_num, "stack_num", 0, 0, 320, ret);
+    return ret;
 }
 
 static int32_t parse_app_bind_numa(void)
@@ -525,12 +474,12 @@ static int32_t parse_app_exclude_cpus(void)
     return 0;
 }
 
-static int32_t numa_to_cpusnum(unsigned socket_id, uint32_t *cpulist, int32_t num)
+static int32_t numa_to_cpusnum(unsigned numa_id, uint32_t *cpulist, int32_t num)
 {
     char path[PATH_MAX] = {0};
     char strbuf[PATH_MAX] = {0};
 
-    int32_t ret = snprintf_s(path, sizeof(path), PATH_MAX - 1, NUMA_CPULIST_PATH, socket_id);
+    int32_t ret = snprintf_s(path, sizeof(path), PATH_MAX - 1, NUMA_CPULIST_PATH, numa_id);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "snprintf numa_cpulist failed\n");
         return -1;
@@ -557,7 +506,7 @@ static int32_t stack_idle_cpuset(struct protocol_stack *stack, cpu_set_t *exclud
 {
     uint32_t cpulist[CPUS_MAX_NUM];
 
-    int32_t cpunum = numa_to_cpusnum(stack->socket_id, cpulist, CPUS_MAX_NUM);
+    int32_t cpunum = numa_to_cpusnum(stack->numa_id, cpulist, CPUS_MAX_NUM);
     if (cpunum <= 0) {
         LSTACK_LOG(ERR, LSTACK, "numa_to_cpusnum failed\n");
         return -1;
@@ -584,12 +533,7 @@ int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
     cpu_set_t stack_cpuset;
     CPU_ZERO(&stack_cpuset);
     for (int32_t idx = 0; idx < cfg->num_cpu; ++idx) {
-        if (!cfg->seperate_send_recv) {
-            CPU_SET(cfg->cpus[idx], &stack_cpuset);
-        } else {
-            CPU_SET(cfg->send_cpus[idx], &stack_cpuset);
-            CPU_SET(cfg->recv_cpus[idx], &stack_cpuset);
-        }
+        CPU_SET(cfg->cpus[idx], &stack_cpuset);
     }
 
     for (int32_t idx = 0; idx < cfg->app_exclude_num_cpu; ++idx) {
@@ -831,6 +775,94 @@ int32_t gazelle_param_init(int32_t *argc, char **argv)
     return 0;
 }
 
+static bool dpdk_have_corelist(int32_t argc, char **argv)
+{
+    for (uint32_t i  = 0; i < argc; i++) {
+        if (strncmp(argv[i], OPT_BIND_CORELIST, strlen(OPT_BIND_CORELIST)) == 0) {
+            return true;
+        }
+
+        if (strncmp(argv[i], "--lcores", strlen("--lcores")) == 0) {
+            return true;
+        }
+        
+        if (strncmp(argv[i], "-c", strlen("-c")) == 0) {
+            return true;
+        }
+
+        if (strncmp(argv[i], "-s", strlen("-s")) == 0) {
+            return true;
+        }
+
+        if (strncmp(argv[i], "-S", strlen("-S")) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool dpdk_have_socket_mem(int32_t argc, char **argv)
+{
+    for (uint32_t i  = 0; i < argc; i++) {
+        if (strncmp(argv[i], OPT_SOCKET_MEM, strlen(OPT_SOCKET_MEM)) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void dpdk_fill_socket_mem(void)
+{
+    uint32_t socket_mem_size = dpdk_total_socket_memory();
+
+    for (uint32_t i = 0; i < GAZELLE_MAX_NUMA_NODES; i++) {
+        if (i == g_config_params.numa_id) {
+            snprintf(g_config_params.socket_mem + strlen(g_config_params.socket_mem),
+                SOCKET_MEM_STRLEN - strlen(g_config_params.socket_mem), "%d", socket_mem_size);
+        } else {
+            snprintf(g_config_params.socket_mem + strlen(g_config_params.socket_mem),
+                SOCKET_MEM_STRLEN - strlen(g_config_params.socket_mem), "%d", 0);
+        }
+        if (i < (GAZELLE_MAX_NUMA_NODES - 1)) {
+            snprintf(g_config_params.socket_mem + strlen(g_config_params.socket_mem),
+                SOCKET_MEM_STRLEN - strlen(g_config_params.socket_mem), "%s", ",");
+        }
+    }
+}
+
+static void dpdk_add_args(void)
+{
+    int idx;
+    uint16_t lcore_id;
+
+    if (!dpdk_have_corelist(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
+        if (g_config_params.stack_num > 0) {
+            RTE_LCORE_FOREACH(lcore_id) {
+                if (numa_node_of_cpu(lcore_id) == g_config_params.numa_id && rte_lcore_is_enabled(lcore_id)) {
+                    snprintf_s(g_config_params.lcores, sizeof(g_config_params.lcores),
+                        sizeof(g_config_params.lcores) - 1, "%d", lcore_id);
+                    break;
+                }
+            }
+        }
+        g_config_params.dpdk_argv[g_config_params.dpdk_argc++] = strdup_assert_return(OPT_BIND_CORELIST);
+        g_config_params.dpdk_argv[g_config_params.dpdk_argc++] = strdup_assert_return(g_config_params.lcores);
+    }
+
+    if (g_config_params.stack_num > 0) {
+        dpdk_fill_socket_mem();
+        if (!dpdk_have_socket_mem(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
+            g_config_params.dpdk_argv[g_config_params.dpdk_argc++] = strdup_assert_return(OPT_SOCKET_MEM);
+            g_config_params.dpdk_argv[g_config_params.dpdk_argc++] = strdup_assert_return(g_config_params.socket_mem);
+        } else {
+            idx = get_param_idx(g_config_params.dpdk_argc, g_config_params.dpdk_argv, OPT_SOCKET_MEM);
+            strcpy(g_config_params.dpdk_argv[idx + 1], g_config_params.socket_mem);
+        }
+    }
+}
+
 static int32_t parse_dpdk_args(void)
 {
     int32_t i;
@@ -880,8 +912,10 @@ static int32_t parse_dpdk_args(void)
         (void)fprintf(stderr, "%s ", g_config_params.dpdk_argv[start_index + i]);
     }
     (void)fprintf(stderr, "\n");
-
     g_config_params.dpdk_argc++;
+
+    dpdk_add_args();
+
     if (turn_args_to_config(g_config_params.dpdk_argc, g_config_params.dpdk_argv))
         goto free_dpdk_args;
 
@@ -1104,13 +1138,6 @@ static int32_t parse_unix_prefix(void)
     }
 
     return 0;
-}
-
-static int32_t parse_seperate_sendrecv_args(void)
-{
-    int32_t ret;
-    PARSE_ARG(g_config_params.seperate_send_recv, "seperate_send_recv", 0, 0, 1, ret);
-    return ret;
 }
 
 static int32_t parse_num_process(void)

@@ -17,19 +17,22 @@
 
 #include "gazelle_opt.h"
 
-#define NULL_CLIENT_IP          UINT32_MAX
-#define NULL_CLIENT_PORT        UINT16_MAX
+#define NULL_CLIENT_IP              UINT32_MAX
+#define NULL_CLIENT_PORT            UINT16_MAX
 
-#define GAZELLE_MAX_REG_ARGS     32
+#define GAZELLE_MAX_REG_ARGS        32
 
 #define ENQUEUE_RING_RETRY_TIMEOUT  10 // ms
 
-#define OPT_BASE_VIRTADDR       "--base-virtaddr"
-#define OPT_FILE_PREFIX         "--file-prefix"
-#define OPT_SOCKET_MEM          "--socket-mem"
-#define OPT_LEGACY_MEM          "--legacy-mem"
-#define OPT_HUGE_DIR            "--huge-dir"
-#define OPT_BIND_CORELIST       "-l"
+#define OPT_BASE_VIRTADDR           "--base-virtaddr"
+#define OPT_FILE_PREFIX             "--file-prefix"
+#define OPT_SOCKET_MEM              "--socket-mem"
+#define OPT_LEGACY_MEM              "--legacy-mem"
+#define OPT_HUGE_DIR                "--huge-dir"
+#define OPT_BIND_CORELIST           "-l"
+
+#define GAZELLE_MAX_NUMA_NODES      4
+#define SOCKET_MEM_STRLEN           (GAZELLE_MAX_NUMA_NODES * 10)
 
 /* types for msg from lstack to ltran */
 enum response_type {
