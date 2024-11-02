@@ -317,7 +317,7 @@ static inline void intr_block(uint16_t stack_id, uint32_t timeout)
         }
     }
 
-    if (event_cnt < 0) {
+    if (event_cnt == 0) {
         intr_config->stats.timeout_event_cnt++;
     }
 }
