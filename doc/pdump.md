@@ -7,10 +7,10 @@ openEuler的dpdk软件包中提供了gazelle-pdump命令对Gazelle抓包。
 
 |选项|参数值示例|说明|
 |:---|:---|:---|
-|--file-prefix|gazelle|指定主进程共享目录位置<br>需要和lstack.conf或ltran.conf中的-file-prefix保持一致|
-|device_id|0000:01:00.0|抓包网卡的PCI地址<br>需要和dpdk-devbind -s命令查询的结果一致|
+|device_id|0000:01:00.0|抓包网卡的PCI地址<br>需要和dpdk-devbind -s命令查询的结果一致<br>虚拟设备设置为dpdk_args中--vdev的值，如af_xdp需设置为net_af_xdp|
 |rx-dev|/root/capture-rx.pcap|网卡接收的数据包存放的文件位置|
 |tx-dev|/root/capture-tx.pcap|网卡发送的数据包存放的文件位置，如果它配置的路径与rx-dev的相同，则文件中会同时包含收发的数据包|
+|-d|/usr/lib64/librte_net_af_xdp.so|af_xdp、mlx等设备使用时需要指定相应动态库|
 
 更多参数解释：
 ```
@@ -19,7 +19,12 @@ gazelle-pdump --help
 
 ## 使用示例：
 ```
-gazelle-pdump --file-prefix gazelle -- --pdump 'device_id=0000:01:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
+#hinic
+gazelle-pdump -- --pdump 'device_id=0000:01:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
+#af_xdp
+gazelle-pdump -d /usr/lib64/librte_net_af_xdp.so -- --pdump 'device_id=net_af_xdp,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
+#mlx
+gazelle-pdump -d /usr/lib64/librte_net_mlx5.so -- --pdump 'device_id=0000:07:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
 ```
 <img src="images/pdump.png" alt="scene" style="zoom:100%"> 
 
@@ -46,19 +51,12 @@ PDUMP: client request for pdump enable/disable failed
 
 ### 报错信息2
 ```
-EAL: Multi-process socket /var/run/dpdk/(null)/mp_socket_3884565_28c50010577fe
-EAL: failed to send to (/var/run/dpdk/(null)/mp_socket) due to Connection refused
-EAL: Fail to send request /var/run/dpdk/(null)/mp_socket:bus_vdev_mp
-vdev_scan(): Failed to request vdev from primary
-EAL: Selected IOVA mode 'PA'
-EAL: Probing VFIO support...
-EAL: failed to send to (/var/run/dpdk/(null)/mp_socket) due to Connection refused
-EAL: Cannot send message to primary
-EAL: error allocating rte services array
-EAL: FATAL: rte_service_init() failed
-EAL: rte_service_init() failed
+vdev_probe(): failed to initialize net_af_xdp device
+EAL: Bus (vdev) probe failed.
+EAL: Error - exiting with code: 1
+  Cause: No Ethernet ports - bye
 ```
-原因：gazelle-pdump指定的共享内存路径中没有相应的文件，需要重新检查--file-prefix参数。
+原因：gazelle-pdump没有链接网卡对应的动态库。在gazelle-pdump后加-d指定对应的动态库，如af_xdp为-d librte_net_af_xdp.so。
 
 ### 报错信息3
 ```
