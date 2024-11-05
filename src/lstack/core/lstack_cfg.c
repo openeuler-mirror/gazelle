@@ -81,7 +81,6 @@ static int32_t parse_nic_rxqueue_size(void);
 static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
-static int32_t parse_defaule_nonblock_mode(void);
 static int32_t parse_rpc_msg_max(void);
 static int32_t parse_send_cache_mode(void);
 static int32_t parse_flow_bifurcation(void);
@@ -149,7 +148,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "nic_txqueue_size", parse_nic_txqueue_size},
     { "stack_thread_mode", parse_stack_thread_mode },
     { "nic_vlan_mode", parse_nic_vlan_mode },
-    { "nonblock_mode", parse_defaule_nonblock_mode },
     { "rpc_msg_max", parse_rpc_msg_max },
     { "send_cache_mode", parse_send_cache_mode },
     { "flow_bifurcation", parse_flow_bifurcation},
@@ -1355,13 +1353,6 @@ static int32_t parse_nic_vlan_mode(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.vlan_mode, "nic_vlan_mode", -1, -1, 4094, ret);
-    return ret;
-}
-
-static int32_t parse_defaule_nonblock_mode(void)
-{
-    int32_t ret;
-    PARSE_ARG(g_config_params.nonblock_mode, "nonblock_mode", 1, 0, 1, ret);
     return ret;
 }
 
