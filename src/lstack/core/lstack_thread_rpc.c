@@ -470,9 +470,6 @@ int rpc_call_connect(rpc_queue *queue, int fd, const struct sockaddr *addr, sock
 static void callback_getpeername(struct rpc_msg *msg)
 {
     msg->result = lwip_getpeername(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
-    if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
-    }
 }
 
 static void callback_getsockname(struct rpc_msg *msg)
