@@ -264,7 +264,7 @@ __attribute__((constructor)) void gazelle_network_init(void)
 
     /* check conflict */
     if (check_process_conflict() < 0) {
-        LSTACK_PRE_LOG(LSTACK_INFO, "Have another same primary process. WARNING: Posix API will use kernel mode!\n");
+        LSTACK_PRE_LOG(LSTACK_INFO, "Main process has been initialized, this process will use kernel mode!\n");
         return;
     }
 
