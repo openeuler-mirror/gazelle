@@ -14,7 +14,6 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <fcntl.h>
-#include <sys/socket.h>
 #include <inttypes.h>
 #include <securec.h>
 #include <string.h>
@@ -23,12 +22,15 @@
 #include <unistd.h>
 #include <sched.h>
 #include <numa.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <netpacket/packet.h>
 
 #include <rte_eth_bond.h>
 #include <rte_eal.h>
 #include <rte_lcore.h>
 #include <lwip/lwipgz_sock.h>
-#include <lwip/inet.h>
 
 #include "common/gazelle_reg_msg.h"
 #include "common/gazelle_base_func.h"
@@ -36,14 +38,14 @@
 #include "lstack_dpdk.h"
 #include "lstack_cfg.h"
 
-#define DEFAULT_CONF_FILE "/etc/gazelle/lstack.conf"
-#define LSTACK_CONF_ENV   "LSTACK_CONF_PATH"
-#define NUMA_CPULIST_PATH "/sys/devices/system/node/node%u/cpulist"
-#define DEV_MAC_LEN 17
-#define DEV_PCI_ADDR_LEN 12
-#define CPUS_MAX_NUM 256
-#define BOND_MIIMON_MIN 1
-#define BOND_MIIMON_MAX INT_MAX
+#define DEFAULT_CONF_FILE    "/etc/gazelle/lstack.conf"
+#define LSTACK_CONF_ENV      "LSTACK_CONF_PATH"
+#define NUMA_CPULIST_PATH    "/sys/devices/system/node/node%u/cpulist"
+#define DEV_MAC_LEN          17
+#define DEV_PCI_ADDR_LEN     12
+#define CPUS_MAX_NUM         256
+#define BOND_MIIMON_MIN      1
+#define BOND_MIIMON_MAX      INT_MAX
 
 static struct cfg_params g_config_params;
 
@@ -89,6 +91,7 @@ static int32_t parse_send_cache_mode(void);
 static int32_t parse_flow_bifurcation(void);
 static int32_t parse_stack_interrupt(void);
 static int32_t parse_stack_num(void);
+static int32_t parse_xdp_eth_name(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -116,12 +119,7 @@ struct config_vector_t {
 };
 
 static struct config_vector_t g_config_tbl[] = {
-    { "host_addr",    parse_host_addr },
-    { "host_addr6",    parse_host_addr6 },
-    { "gateway_addr", parse_gateway_addr },
-    { "mask_addr",    parse_mask_addr },
     { "use_ltran",    parse_use_ltran },
-    { "devices",      parse_devices },
     { "tcp_conn_count", parse_tcp_conn_count },
     { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
@@ -132,6 +130,12 @@ static struct config_vector_t g_config_tbl[] = {
     { "stack_num",   parse_stack_num },
     { "num_cpus",     parse_stack_cpu_number },
     { "dpdk_args",    parse_dpdk_args },
+    { "xdp_eth_name", parse_xdp_eth_name},
+    { "host_addr",    parse_host_addr },
+    { "host_addr6",    parse_host_addr6 },
+    { "mask_addr",    parse_mask_addr },
+    { "gateway_addr", parse_gateway_addr },
+    { "devices",      parse_devices },
     { "low_power_mode", parse_low_power_mode },
     { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
@@ -211,18 +215,25 @@ static int32_t str_to_dev_addr(const char *src, struct dev_addr *dst)
 
 static int32_t parse_gateway_addr(void)
 {
-    char *value;
     bool ok;
+    char *value;
+    const char *first_addr = "0.0.0.1";
 
     if (ip4_addr_isany_val(g_config_params.host_addr)) {
         return 0;
     }
 
-    ok = config_lookup_string(&g_config, "gateway_addr", (const char **)&value);
-    if (!ok) {
-        return -EINVAL;
+    if (strlen(g_config_params.xdp_eth_name) == 0) {
+        ok = config_lookup_string(&g_config, "gateway_addr", (const char **)&value);
+        if (!ok) {
+            return -EINVAL;
+        }
+        g_config_params.gateway_addr.addr = inet_addr(value);
+    } else {
+        g_config_params.gateway_addr.addr =
+            (g_config_params.host_addr.addr & g_config_params.netmask.addr) | inet_addr(first_addr);
     }
-    g_config_params.gateway_addr.addr = inet_addr(value);
+
     if (g_config_params.gateway_addr.addr == INADDR_NONE) {
         return -EINVAL;
     }
@@ -231,19 +242,40 @@ static int32_t parse_gateway_addr(void)
 
 static int32_t parse_mask_addr(void)
 {
-    char *value = NULL;
+    int32_t ret;
     uint32_t mask;
-    bool ok;
+    char *mask_addr;
+    struct ifaddrs *ifaddr;
+    struct ifaddrs *ifa;
 
     if (ip4_addr_isany_val(g_config_params.host_addr)) {
         return 0;
     }
 
-    ok = config_lookup_string(&g_config, "mask_addr", (const char **)&value);
-    if (!ok) {
-        return -EINVAL;
+    if (strlen(g_config_params.xdp_eth_name) == 0) {
+        ret = config_lookup_string(&g_config, "mask_addr", (const char **)&mask_addr);
+        if (!ret) {
+            return -EINVAL;
+        }
+        g_config_params.netmask.addr = inet_addr(mask_addr);
+    } else {
+        if (getifaddrs(&ifaddr) == -1) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "getifaddrs failed\n");
+            return -1;
+        }
+
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET ||
+                strncmp(ifa->ifa_name, g_config_params.xdp_eth_name, strlen(g_config_params.xdp_eth_name))) {
+                continue;
+            }
+            g_config_params.netmask.addr = ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr.s_addr;
+        }
+
+        freeifaddrs(ifaddr);
+        freeifaddrs(ifa);
     }
-    g_config_params.netmask.addr = inet_addr(value);
+
     if (g_config_params.netmask.addr == INADDR_NONE) {
         return -EINVAL;
     }
@@ -257,21 +289,41 @@ static int32_t parse_mask_addr(void)
 
 static int32_t parse_host_addr(void)
 {
-    char *value = NULL;
-    bool ok;
+    int32_t ret;
+    char *host_addr;
+    struct ifaddrs *ifaddr;
+    struct ifaddrs *ifa;
 
-    ok = config_lookup_string(&g_config, "host_addr", (const char **)&value);
-    if (!ok) {
-        return 0;
+    if (strlen(g_config_params.xdp_eth_name) == 0) {
+        ret = config_lookup_string(&g_config, "host_addr", (const char **)&host_addr);
+        if (!ret) {
+            return 0;
+        }
+        g_config_params.host_addr.addr = inet_addr(host_addr);
+    } else {
+        if (getifaddrs(&ifaddr) == -1) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "getifaddrs failed\n");
+            return -1;
+        }
+
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET ||
+                strncmp(ifa->ifa_name, g_config_params.xdp_eth_name, strlen(g_config_params.xdp_eth_name))) {
+                continue;
+            }
+            g_config_params.host_addr.addr = ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr;
+        }
+
+        freeifaddrs(ifaddr);
+        freeifaddrs(ifa);
     }
 
-    g_config_params.host_addr.addr = inet_addr(value);
     if (g_config_params.host_addr.addr == INADDR_NONE) {
         return -EINVAL;
     }
 
     if (IN_MULTICAST(ntohl(g_config_params.host_addr.addr))) {
-        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: host_addr:%s should not be a multicast IP.", value);
+        LSTACK_PRE_LOG(LSTACK_ERR, "cfg: host_addr:%s should not be a multicast IP.", host_addr);
         return -EINVAL;
     }
     return 0;
@@ -284,7 +336,7 @@ static int32_t parse_host_addr6(void)
 
     ok = config_lookup_string(&g_config, "host_addr6", (const char **)&value);
     if (!ok) {
-        if (ip4_addr_isany_val(g_config_params.host_addr)) {
+        if (ip4_addr_isany_val(g_config_params.host_addr) && (strlen(g_config_params.xdp_eth_name) == 0)) {
             LSTACK_PRE_LOG(LSTACK_ERR, "cfg: host_addr and host_addr6 must have a valid one.");
             return -EINVAL;
         } else {
@@ -322,16 +374,37 @@ int32_t match_host_addr(ip_addr_t *addr)
 static int32_t parse_devices(void)
 {
     int32_t ret;
-    const char *dev = NULL;
-    const config_setting_t *devs = NULL;
+    char *dev = NULL;
+    struct ifaddrs *ifa;
+    struct ifaddrs *ifaddr;
+    char temp_dev[DEV_MAC_LEN + 1] = {0};
 
-    devs = config_lookup(&g_config, "devices");
-    if (devs == NULL) {
-        return -EINVAL;
-    }
-    dev = config_setting_get_string(devs);
-    if (dev == NULL) {
-        return 0;
+    if (strlen(g_config_params.xdp_eth_name) == 0) {
+        ret = config_lookup_string(&g_config, "devices", (const char **)&dev);
+        if (!ret) {
+            return -EINVAL;
+        }
+    } else {
+        if (getifaddrs(&ifaddr) == -1) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "getifaddrs failed\n");
+            return -1;
+        }
+
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_PACKET ||
+                strncmp(ifa->ifa_name, g_config_params.xdp_eth_name, strlen(g_config_params.xdp_eth_name))) {
+                continue;
+            }
+
+            for (uint32_t i = 0; i < ETHER_ADDR_LEN; i++) {
+                sprintf(temp_dev + strlen(temp_dev), "%02x%s",
+                    ((struct sockaddr_ll *)ifa->ifa_addr)->sll_addr[i], i < (ETHER_ADDR_LEN - 1) ? ":" : "");
+            }
+            dev = strdup_assert_return(temp_dev);
+        }
+
+        freeifaddrs(ifaddr);
+        freeifaddrs(ifa);
     }
 
     /* add dev */
@@ -1294,7 +1367,7 @@ static int32_t parse_bond_slave_mac(void)
     char *bond_slave_mac_tmp = strdup_assert_return(bond_slave_mac);
     char *tmp = NULL;
     const char *delim = ";";
-    
+
     char *mac_addr = strtok_s(bond_slave_mac_tmp, delim, &tmp);
     while (mac_addr != NULL) {
         if (k >= GAZELLE_MAX_BOND_NUM) {
@@ -1425,4 +1498,50 @@ static int32_t parse_stack_interrupt(void)
     }
 
     return ret;
+}
+
+static void dpdk_dev_get_iface_name(char *vdev_str)
+{
+    char *token = NULL;
+    char *iface_value = NULL;
+    char *next_token = NULL;
+    char vdev_str_cp[strlen(vdev_str) + 1];
+
+    /* To prevent the original string from being modified, use a copied string. */
+    if (strcpy_s(vdev_str_cp, sizeof(vdev_str_cp), vdev_str) != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "vdev_str strcpy_s fail \n");
+        return;
+    }
+
+    token = strtok_s(vdev_str_cp, ",", &next_token);
+    while (token != NULL) {
+        if (strncmp(token, VDEV_ARG_IFACE, strlen(VDEV_ARG_IFACE)) == 0) {
+            iface_value = token + strlen(VDEV_ARG_IFACE) + 1;
+            break;
+        }
+        token = strtok_s(NULL, ",", &next_token);
+    }
+
+    if (iface_value) {
+        strncpy_s(g_config_params.xdp_eth_name, IFNAMSIZ, iface_value, IFNAMSIZ - 1);
+    }
+}
+
+static int32_t parse_xdp_eth_name(void)
+{
+    int32_t ret;
+
+    ret = memset_s(g_config_params.xdp_eth_name, IFNAMSIZ, 0, IFNAMSIZ);
+    if (ret != 0) {
+        LSTACK_PRE_LOG(LSTACK_ERR, "memset_s failed \n");
+        return ret;
+    }
+
+    for (uint32_t i  = 0; i < g_config_params.dpdk_argc; i++) {
+        if (!strncmp(g_config_params.dpdk_argv[i], OPT_VDEV, strlen(OPT_VDEV))) {
+            dpdk_dev_get_iface_name(g_config_params.dpdk_argv[i + 1]);
+        }
+    }
+
+    return 0;
 }

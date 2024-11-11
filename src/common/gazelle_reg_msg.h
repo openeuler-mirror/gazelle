@@ -30,6 +30,8 @@
 #define OPT_LEGACY_MEM              "--legacy-mem"
 #define OPT_HUGE_DIR                "--huge-dir"
 #define OPT_BIND_CORELIST           "-l"
+#define OPT_VDEV                    "--vdev"
+#define VDEV_ARG_IFACE              "iface"
 
 #define GAZELLE_MAX_NUMA_NODES      4
 #define SOCKET_MEM_STRLEN           (GAZELLE_MAX_NUMA_NODES * 10)
