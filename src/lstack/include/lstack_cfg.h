@@ -14,6 +14,10 @@
 #define _GAZELLE_NET_CFG_H_
 #include <stdbool.h>
 
+#ifndef IFNAMSIZ
+#include <net/if.h>
+#endif
+
 #include <lwip/ip_addr.h>
 #include <rte_ether.h>
 #include <rte_pci.h>
@@ -86,6 +90,7 @@ struct cfg_params {
         ip6_addr_t host_addr6;
         ip4_addr_t netmask;
         ip4_addr_t gateway_addr;
+        char xdp_eth_name[IFNAMSIZ];
         uint8_t mac_addr[ETHER_ADDR_LEN];
         int8_t bond_mode;
         int32_t bond_miimon;

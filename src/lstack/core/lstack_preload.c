@@ -193,6 +193,6 @@ int preload_info_init(void)
     }
 
     g_preload_info.preload_switch = 1;
-    LSTACK_PRE_LOG(LSTACK_INFO, "LD_PRELOAD ok\n");
+
     return preload_check_bind_proc();
 }
