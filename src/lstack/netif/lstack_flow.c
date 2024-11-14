@@ -639,11 +639,7 @@ int distribute_pakages(struct rte_mbuf *mbuf)
         return TRANSFER_KERNEL;
     }
 
-    if (get_global_cfg_params()->seperate_send_recv) {
-        queue_id = user_process_idx * each_process_queue_num + (index / 2) * 2;
-    } else {
-        queue_id = user_process_idx * each_process_queue_num + index;
-    }
+    queue_id = user_process_idx * each_process_queue_num + index;
     if (queue_id != 0) {
         if (user_process_idx == 0) {
             transfer_tcp_to_thread(mbuf, queue_id);

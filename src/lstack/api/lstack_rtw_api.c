@@ -235,9 +235,6 @@ static int stack_broadcast_listen(int fd, int backlog)
 #endif
     for (int32_t i = 0; i < stack_group->stack_num; ++i) {
         stack = stack_group->stacks[i];
-        if (get_global_cfg_params()->seperate_send_recv && stack->is_send_thread) {
-            continue;
-        }
         if (stack != cur_stack) {
             clone_fd = rpc_call_shadow_fd(&stack->rpc_queue, fd, (struct sockaddr *)&addr, addr_len);
             if (clone_fd < 0) {

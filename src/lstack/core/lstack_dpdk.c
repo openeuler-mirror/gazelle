@@ -42,6 +42,8 @@
 
 #include "lstack_log.h"
 #include "common/dpdk_common.h"
+#include "common/gazelle_base_func.h"
+#include "lstack_thread_rpc.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_lwip.h"
 #include "lstack_cfg.h"
@@ -106,6 +108,10 @@ int32_t thread_affinity_init(int32_t cpu_id)
 {
     int32_t ret;
     cpu_set_t cpuset;
+
+    if (get_global_cfg_params()->stack_num > 0) {
+        return 0;
+    }
 
     CPU_ZERO(&cpuset);
     CPU_SET(cpu_id, &cpuset);
@@ -546,9 +552,6 @@ int32_t dpdk_ethdev_init(int port_id)
     int ret;
     int32_t rss_enable = 0;
     uint16_t nb_queues = get_global_cfg_params()->num_cpu;
-    if (get_global_cfg_params()->seperate_send_recv) {
-        nb_queues = get_global_cfg_params()->num_cpu * 2;
-    }
 
     if (!use_ltran()) {
         nb_queues = get_global_cfg_params()->tot_queue_num;
@@ -616,24 +619,23 @@ int32_t dpdk_ethdev_init(int port_id)
 static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t idx)
 {
     int32_t ret;
-
+    uint16_t numa_id = 0;
+    struct cfg_params *cfg = get_global_cfg_params();
     struct rte_mempool *rxtx_mbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx];
 
-    uint16_t socket_id = 0;
-    struct cfg_params *cfg = get_global_cfg_params();
     if (!cfg->use_ltran && cfg->num_process == 1) {
-        socket_id = numa_node_of_cpu(cfg->cpus[idx]);
+        numa_id = (cfg->stack_num > 0) ? cfg->numa_id : numa_node_of_cpu(cfg->cpus[idx]);
     } else {
-        socket_id = cfg->process_numa[idx];
+        numa_id = cfg->process_numa[idx];
     }
-    ret = rte_eth_rx_queue_setup(eth_params->port_id, idx, eth_params->nb_rx_desc, socket_id,
+    ret = rte_eth_rx_queue_setup(eth_params->port_id, idx, eth_params->nb_rx_desc, numa_id,
         &eth_params->rx_conf, rxtx_mbuf_pool);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot setup rx_queue %hu: %s\n", idx, rte_strerror(-ret));
         return -1;
     }
 
-    ret = rte_eth_tx_queue_setup(eth_params->port_id, idx, eth_params->nb_tx_desc, socket_id,
+    ret = rte_eth_tx_queue_setup(eth_params->port_id, idx, eth_params->nb_tx_desc, numa_id,
         &eth_params->tx_conf);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "cannot setup tx_queue %hu: %s\n", idx, rte_strerror(-ret));
@@ -1033,4 +1035,46 @@ void dpdk_nic_features_get(struct gazelle_stack_dfx_data *dfx, uint16_t port_id)
     dfx->data.nic_features.tx_offload = dev_conf.txmode.offloads;
     dfx->data.nic_features.rx_offload = dev_conf.rxmode.offloads;
     return;
+}
+
+uint32_t dpdk_pktmbuf_mempool_num(void)
+{
+    struct cfg_params *cfg = get_global_cfg_params();
+
+    return (MBUFPOOL_RESERVE_NUM + cfg->rxqueue_size + cfg->txqueue_size +
+        (cfg->tcp_conn_count * cfg->mbuf_count_per_conn) / cfg->num_queue);
+}
+
+uint32_t dpdk_total_socket_memory(void)
+{
+    uint32_t elt_size = 0;
+    uint32_t per_pktmbuf_mempool_size = 0;
+    uint32_t per_rpc_mempool_size = 0;
+    uint32_t per_conn_ring_size = 0;
+    /* the actual fixed memory is about 50M, and 100M is reserved here.
+     * including all hugepages memory used by lwip.
+     */
+    uint32_t fixed_mem = 100;
+    uint32_t total_socket_memory = 0;
+    struct cfg_params *cfg = get_global_cfg_params();
+
+    /* calculate the memory(bytes) of rxtx_mempool */
+    elt_size = sizeof(struct rte_mbuf) + MBUF_SZ + RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
+    per_pktmbuf_mempool_size = rte_mempool_calc_obj_size(elt_size, 0, NULL);
+    
+    /* calculate the memory(bytes) of rpc_mempool, reserved num is (app threads + lstack threads + listen thread) */
+    elt_size = sizeof(struct rpc_msg);
+    per_rpc_mempool_size = rte_mempool_calc_obj_size(elt_size, 0, NULL);
+
+    /* calculate the memory(bytes) of rings, reserved num is GAZELLE_LSTACK_MAX_CONN. */
+    per_conn_ring_size = rte_ring_get_memsize(cfg->send_ring_size) +
+        rte_ring_get_memsize(cfg->recv_ring_size) +
+        rte_ring_get_memsize(DEFAULT_ACCEPTMBOX_SIZE);
+
+    total_socket_memory = fixed_mem + bytes_to_mb(
+        (per_pktmbuf_mempool_size * dpdk_pktmbuf_mempool_num()) * cfg->num_queue +
+        per_rpc_mempool_size * cfg->rpc_msg_max * (RPC_MEMPOOL_THREAD_NUM + cfg->num_queue + 1) +
+        per_conn_ring_size * GAZELLE_LSTACK_MAX_CONN);
+
+    return total_socket_memory;
 }

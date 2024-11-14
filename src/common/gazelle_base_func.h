@@ -13,6 +13,8 @@
 #ifndef __GAZELLE_BASE_FUNC_H__
 #define __GAZELLE_BASE_FUNC_H__
 
+#include <math.h>
+
 #define GAZELLE_FREE(p)  do { \
     if (p) { \
         free(p); \
@@ -27,6 +29,12 @@
 
 #define NODE_ENTRY(node, type, member) \
     ((type*)((char*)(node) - (size_t)&((type*)0)->member))
+
+#define MB_IN_BYTES    (1024 * 1024)
+static inline int bytes_to_mb(uint32_t bytes)
+{
+    return ceil((double)bytes / MB_IN_BYTES);
+}
 
 int32_t separate_str_to_array(char *args, uint32_t *array, int32_t array_size, int32_t max_value);
 

@@ -20,6 +20,7 @@
 #include <rte_bus_pci.h>
 
 #include "lstack_protocol_stack.h"
+#include "common/gazelle_reg_msg.h"
 #include "common/gazelle_opt.h"
 
 #define BASE_BIN_SCALE  2
@@ -36,7 +37,6 @@
 #define ARP_MAX_ENTRIES 1024
 #define LOG_DIR_PATH    PATH_MAX
 #define LOG_LEVEL_LEN   16
-#define GAZELLE_MAX_NUMA_NODES 8
 #define MAX_PROCESS_NUM 32
 
 /* Default value of low power mode parameters */
@@ -77,6 +77,8 @@ struct cfg_params {
             uintptr_t base_virtaddr;
             char file_prefix[PATH_MAX];
         } sec_attach_arg;
+        char socket_mem[SOCKET_MEM_STRLEN];
+        char lcores[RTE_MAX_LCORE];
     };
 
     struct { // eth
@@ -109,6 +111,8 @@ struct cfg_params {
 
     struct { // stack
         uint16_t num_cpu;
+        uint16_t numa_id;
+        uint16_t stack_num;
         uint32_t cpus[CFG_MAX_CPUS];
 
         bool main_thread_affinity;
@@ -147,10 +151,6 @@ struct cfg_params {
         uint32_t process_numa[PROTOCOL_STACK_MAX];
         bool tuple_filter;
         bool use_sockmap;
-
-        bool seperate_send_recv;
-        uint32_t send_cpus[CFG_MAX_CPUS];
-        uint32_t recv_cpus[CFG_MAX_CPUS];
     };
 };
 

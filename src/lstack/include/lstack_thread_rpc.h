@@ -26,6 +26,8 @@
 #define MSG_ARG_4                      (4)
 #define RPM_MSG_ARG_SIZE               (5)
 
+#define RPC_MEMPOOL_THREAD_NUM         64
+
 typedef struct rpc_queue rpc_queue;
 struct rpc_queue {
     struct lockless_queue queue;
