@@ -14,6 +14,7 @@
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <fcntl.h>
 #include <linux/if_xdp.h>
 
 #include <lwip/lwipgz_posix_api.h>
@@ -102,14 +103,22 @@ static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *add
         return posix_api->accept_fn(s, addr, addrlen);
     }
 
-    int32_t fd = g_wrap_api->accept_fn(s, addr, addrlen);
-    if (fd >= 0) {
-        struct lwip_sock *sock = lwip_get_socket(fd);
-        POSIX_SET_TYPE(sock, POSIX_LWIP);
-        return fd;
+    int fd = 0;
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (POSIX_HAS_TYPE(sock, POSIX_KERNEL)) {
+        fd = posix_api->accept4_fn(s, addr, addrlen, SOCK_NONBLOCK);
+        if (fd >= 0) {
+            return fd;
+        }
     }
 
-    return posix_api->accept_fn(s, addr, addrlen);
+    fd = g_wrap_api->accept_fn(s, addr, addrlen);
+    if (fd >= 0) {
+        sock = lwip_get_socket(fd);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
+    }
+
+    return fd;
 }
 
 static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, int32_t flags)
@@ -130,6 +139,22 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
     }
 
     return posix_api->accept4_fn(s, addr, addrlen, flags);
+}
+
+static inline int sock_set_nonblocking(int fd)
+{
+    int flags = posix_api->fcntl_fn(fd, F_GETFL, 0);
+    if (flags == -1) {
+        LSTACK_LOG(ERR, LSTACK, " get block status faild errno %d.\n", errno);
+        return -1;
+    }
+    // set nonblock
+    flags |= O_NONBLOCK;
+    if (posix_api->fcntl_fn(fd, F_SETFL, flags) == -1) {
+        LSTACK_LOG(ERR, LSTACK, " set non_block status faild errno %d.\n", errno);
+        return -1;
+    }
+    return 0;
 }
 
 static int kernel_bind_process(int32_t s, const struct sockaddr *name, socklen_t namelen)
@@ -165,6 +190,7 @@ static int kernel_bind_process(int32_t s, const struct sockaddr *name, socklen_t
             ((struct sockaddr_in *)name)->sin_port = kerneladdr.sin_port;
         }
         /* not sure POSIX_LWIP or POSIX_KERNEL */
+        sock_set_nonblocking(s);
     } else {
         POSIX_SET_TYPE(sock, POSIX_LWIP);
         LSTACK_LOG(ERR, LSTACK, "kernel bind failed ret %d errno %d sa_family %u times %u\n",
