@@ -131,14 +131,22 @@ static int32_t do_accept4(int32_t s, struct sockaddr *addr, socklen_t *addrlen, 
         return posix_api->accept4_fn(s, addr, addrlen, flags);
     }
 
-    int32_t fd = g_wrap_api->accept4_fn(s, addr, addrlen, flags);
-    if (fd >= 0) {
-        struct lwip_sock *sock = lwip_get_socket(fd);
-        POSIX_SET_TYPE(sock, POSIX_LWIP);
-        return fd;
+    int fd = 0;
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (POSIX_HAS_TYPE(sock, POSIX_KERNEL)) {
+        fd = posix_api->accept4_fn(s, addr, addrlen, flags);
+        if (fd >= 0) {
+            return fd;
+        }
     }
 
-    return posix_api->accept4_fn(s, addr, addrlen, flags);
+    fd = g_wrap_api->accept4_fn(s, addr, addrlen, flags);
+    if (fd >= 0) {
+        sock = lwip_get_socket(fd);
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
+    }
+
+    return fd;
 }
 
 static inline int sock_set_nonblocking(int fd)
