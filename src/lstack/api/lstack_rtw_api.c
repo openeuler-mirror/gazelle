@@ -136,6 +136,15 @@ static struct lwip_sock *get_min_accept_sock(int fd)
     struct lwip_sock *min_sock = NULL;
 
     while (sock) {
+        if (!netconn_is_nonblocking(sock->conn)) {
+            if (sock->wakeup == NULL) {
+                sock->wakeup = poll_construct_wakeup();
+                if (sock->wakeup == NULL) {
+                    return NULL;
+                }
+                sock->epoll_events = POLLIN | POLLERR;
+            }
+        }
         if (!NETCONN_IS_ACCEPTIN(sock)) {
             sock = sock->listen_next;
             continue;
