@@ -179,7 +179,7 @@ struct cfg_params *get_global_cfg_params(void)
 
 static int32_t str_to_eth_addr(const char *src, unsigned char *dst)
 {
-    if (strlen(src) > DEV_MAC_LEN) {
+    if (src == NULL || strlen(src) > DEV_MAC_LEN) {
         return -EINVAL;
     }
 
@@ -273,7 +273,6 @@ static int32_t parse_mask_addr(void)
         }
 
         freeifaddrs(ifaddr);
-        freeifaddrs(ifa);
     }
 
     if (g_config_params.netmask.addr == INADDR_NONE) {
@@ -315,7 +314,6 @@ static int32_t parse_host_addr(void)
         }
 
         freeifaddrs(ifaddr);
-        freeifaddrs(ifa);
     }
 
     if (g_config_params.host_addr.addr == INADDR_NONE) {
@@ -404,7 +402,6 @@ static int32_t parse_devices(void)
         }
 
         freeifaddrs(ifaddr);
-        freeifaddrs(ifa);
     }
 
     /* add dev */
@@ -1048,7 +1045,7 @@ static int32_t parse_mbuf_count_per_conn(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.mbuf_count_per_conn, "mbuf_count_per_conn",
-                     MBUF_COUNT_PER_CONN, 1, INT32_MAX, ret);
+              MBUF_COUNT_PER_CONN, 1, INT32_MAX, ret);
     return ret;
 }
 
@@ -1173,13 +1170,13 @@ static int32_t parse_unix_prefix(void)
     int32_t ret = 0;
 
     ret = memset_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-            0, sizeof(g_config_params.unix_socket_filename));
+        0, sizeof(g_config_params.unix_socket_filename));
     if (ret != EOK) {
         return ret;
     }
 
     ret = strncpy_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-           GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
+        GAZELLE_RUN_DIR, strlen(GAZELLE_RUN_DIR) + 1);
     if (ret != EOK) {
         return ret;
     }
@@ -1200,10 +1197,10 @@ static int32_t parse_unix_prefix(void)
 
     if (g_config_params.use_ltran) {
         ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-                LTRAN_REG_SOCK_FILENAME, strlen(LTRAN_REG_SOCK_FILENAME) + 1);
+            LTRAN_REG_SOCK_FILENAME, strlen(LTRAN_REG_SOCK_FILENAME) + 1);
     } else {
         ret = strncat_s(g_config_params.unix_socket_filename, sizeof(g_config_params.unix_socket_filename),
-                LSTACK_DFX_SOCK_FILENAME, strlen(LSTACK_DFX_SOCK_FILENAME) + 1);
+            LSTACK_DFX_SOCK_FILENAME, strlen(LSTACK_DFX_SOCK_FILENAME) + 1);
     }
 
     if (ret != EOK) {
