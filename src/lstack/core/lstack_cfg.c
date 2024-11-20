@@ -905,7 +905,7 @@ static void dpdk_fill_socket_mem(void)
     }
 }
 
-static void dpdk_add_args(void)
+static void dpdk_adjust_args(void)
 {
     int idx;
     uint16_t lcore_id;
@@ -936,6 +936,15 @@ static void dpdk_add_args(void)
     }
 }
 
+static void dpdk_show_args(void)
+{
+    (void)fprintf(stderr, "dpdk argv: ");
+    for (uint32_t i = 1; i < g_config_params.dpdk_argc; i++) {
+        (void)fprintf(stderr, "%s ", g_config_params.dpdk_argv[i]);
+    }
+    (void)fprintf(stderr, "\n");
+}
+
 static int32_t parse_dpdk_args(void)
 {
     int32_t i;
@@ -956,8 +965,6 @@ static int32_t parse_dpdk_args(void)
     g_config_params.dpdk_argv = calloc(GAZELLE_MAX_REG_ARGS, sizeof(char *));
     if (!g_config_params.dpdk_argv)
         return -EINVAL;
-
-    (void)fprintf(stderr, "dpdk argv: ");
 
     g_config_params.dpdk_argv[0] = strdup("lstack");
     if (!g_config_params.dpdk_argv[0]) {
@@ -981,13 +988,11 @@ static int32_t parse_dpdk_args(void)
         if (strcmp(p, secondary) == 0) {
             global_params->is_primary = 0;
         }
-
-        (void)fprintf(stderr, "%s ", g_config_params.dpdk_argv[start_index + i]);
     }
-    (void)fprintf(stderr, "\n");
     g_config_params.dpdk_argc++;
 
-    dpdk_add_args();
+    dpdk_adjust_args();
+    dpdk_show_args();
 
     if (turn_args_to_config(g_config_params.dpdk_argc, g_config_params.dpdk_argv))
         goto free_dpdk_args;
