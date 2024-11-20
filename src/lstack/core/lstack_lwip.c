@@ -993,6 +993,7 @@ static bool recv_break_for_err(struct lwip_sock *sock)
 static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf **pbuf)
 {
     int32_t expect = 1; // only get one pbuf
+    int ret = 0;
     uint64_t time_stamp = sys_now_us();
 
     if (sock->recv_lastdata != NULL) {
@@ -1008,8 +1009,20 @@ static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf *
         if (recv_break_for_err(sock)) {
             return -1;
         }
-        if (lstack_block_wait(sock->wakeup, sock->conn->recv_timeout) == ETIMEDOUT) {
+        if (unlikely(sock->wakeup == NULL)) {
+            sock->wakeup = poll_construct_wakeup();
+            if (sock->wakeup == NULL) {
+                return -1;
+            }
+            sock->epoll_events = POLLIN | POLLERR;
+        }
+
+        ret = lstack_block_wait(sock->wakeup, sock->conn->recv_timeout);
+        if (ret == ETIMEDOUT) {
             noblock = true;
+        } else if (ret != 0 && errno == EINTR) {
+            /* SIGALRM signal may interrupt blocking */
+            return ret;
         }
     }
 

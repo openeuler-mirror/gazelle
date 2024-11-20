@@ -872,20 +872,29 @@ static int poll_init(struct wakeup_poll *wakeup, struct pollfd *fds, nfds_t nfds
     return 0;
 }
 
-int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+struct wakeup_poll* poll_construct_wakeup(void)
 {
     static PER_THREAD struct wakeup_poll *wakeup = NULL;
     if (wakeup == NULL) {
         wakeup = calloc(1, sizeof(struct wakeup_poll));
         if (wakeup == NULL) {
             LSTACK_LOG(ERR, LSTACK, "calloc failed errno=%d\n", errno);
-            GAZELLE_RETURN(EINVAL);
+            return NULL;
         }
 
         if (init_poll_wakeup_data(wakeup) < 0) {
             free(wakeup);
-            GAZELLE_RETURN(EINVAL);
+            return NULL;
         }
+    }
+    return wakeup;
+}
+
+int32_t lstack_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
+{
+    struct wakeup_poll *wakeup = poll_construct_wakeup();
+    if (wakeup == NULL) {
+        GAZELLE_RETURN(EINVAL);
     }
 
     if (poll_init(wakeup, fds, nfds) < 0) {
@@ -1015,4 +1024,3 @@ int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfd
 
     return event_num;
 }
-

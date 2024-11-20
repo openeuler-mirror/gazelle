@@ -76,6 +76,8 @@ int lstack_select(int maxfd, fd_set *readfds, fd_set *writefds, fd_set *exceptfd
 
 int32_t lstack_block_wait(struct wakeup_poll *wakeup, int32_t timeout);
 
+struct wakeup_poll* poll_construct_wakeup(void);
+
 static inline void lstack_block_wakeup(struct wakeup_poll *wakeup)
 {
     if (wakeup && __atomic_load_n(&wakeup->in_wait, __ATOMIC_ACQUIRE)) {
