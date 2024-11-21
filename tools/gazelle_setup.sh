@@ -117,7 +117,7 @@ check_nic_name() {
 
 check_numa_pages() {
     numa_num=$(lscpu | grep "NUMA node(s)" | awk '{print $3}')
-    # todo : check the maxmum and minmum of the page numbers, make sure the system available mem support
+    # todo : check the maxmum and minimum of the page numbers, make sure the system available mem support
     g_hugepages=${g_hugepages:-1024}
     msg_show "make sure the huge mem is large enough & not extend the maximum of system mem!"
     myPage=(${g_hugepages//\,/ })
@@ -511,7 +511,7 @@ XDG_RUNTIME_DIR=/tmp nohup /usr/bin/ltran --config-file=$CONF_DIR/ltran.conf > /
 
 check_ltran 120
 if [ $? -ne 0 ]; then
-    msg_err "ltran start faild! Please check ltran's log for the reason of the problem."
+    msg_err "ltran start failed! Please check ltran's log for the reason of the problem."
     nic_recover
     exit 1
 else

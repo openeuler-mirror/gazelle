@@ -117,7 +117,7 @@ static int32_t ltran_core_init(int32_t argc, char *argv[])
 
     ret = ltran_ethdev_init();
     if (ret != GAZELLE_OK) {
-        syslog(LOG_ERR, "ltran ethdev init faild. ret=%d.\n", ret);
+        syslog(LOG_ERR, "ltran ethdev init failed. ret=%d.\n", ret);
         closelog();
         return ret;
     }
@@ -211,7 +211,7 @@ int32_t main(int32_t argc, char *argv[])
         }
 
         /* create multi thread to receive and send packet for multi bond port */
-        LTRAN_INFO("Runing Process forward\n");
+        LTRAN_INFO("Running Process forward\n");
         /* main thread is for port 0 receive packet */
         index = 0;
         upstream_forward((const void *)&index);

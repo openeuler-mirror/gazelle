@@ -58,7 +58,7 @@ static void calculate_ltran_latency(struct gazelle_stack *stack, const struct rt
     uint64_t latency;
 
     lt = &mbuf_to_private(mbuf)->lt;
-    // vaild check
+    // valid check
     if (lt->stamp != ~(lt->check)) {
         return;
     }
@@ -221,7 +221,7 @@ static __rte_always_inline void flush_rx_ring(struct gazelle_stack *stack)
     }
 
     uint32_t flush_cnt = pkt_bufs_enque_rx_ring(stack);
-    /* cant't flush mbuf into backup */
+    /* can't flush mbuf into backup */
     if (unlikely(flush_cnt < stack->pkt_cnt)) {
         pktbufs_move_to_backup_bufs(stack, &(stack->pkt_buf[flush_cnt]), stack->pkt_cnt - flush_cnt);
     }
@@ -475,7 +475,7 @@ static __rte_always_inline void tcp_hash_table_add_conn(struct gazelle_stack *st
             tcp_conn->conn_timeout = -1;
             return;
 	    } else {
-	        /* del old invaild conn */
+	        /* del old invalid conn */
             gazelle_conn_del_by_quintuple(conn_htable, transfer_qtuple);
 	    }
     }

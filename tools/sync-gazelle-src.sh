@@ -8,7 +8,7 @@
 # 2. COMMIT_ID is a committrf hash record from openeuler/gazelle (this repository). 
 #    Multiple committrf hash records should be separated by spaces;
 # 3. TARGET_BRANCH is a branch from src-openeuler/gazelle;
-# 4. USER/EMAIL will be autimatically obtailed from  the git configuration;
+# 4. USER/EMAIL will be automatically obtailed from  the git configuration;
 
 # Example Usage: 
 # > COMMIT_ID="123456789" TARGET_BRANCH="openEuler-20.03-LTS-SP1" bash tools/sync-gazelle-src.sh
@@ -39,7 +39,7 @@ for commitid in ${COMMIT_ID};do
 	cd ${workdir}
 	patchname=$(git format-patch -1 ${commitid} | tail -n1)
 	if [ $? -ne 0 ];then
-		echo "invaild commitid $commitid"
+		echo "invalid commitid $commitid"
 		exit 1
 	fi
 	gitmsg=$(git log --pretty=format:"%s" -1 $commitid | sed -e 's/^![0-9]* //g')
