@@ -74,7 +74,7 @@ void test_ltran_bad_params_clients(void)
     CU_ASSERT(ltran_bad_param("s/dispatch_max_clients = 32/dispatch_max_clients = 0/") != 0);
     CU_ASSERT(gazelle_get_errno() == GAZELLE_ERANGE);
 
-    /* ltran start 999 clinet */
+    /* ltran start 999 client */
     CU_ASSERT(ltran_bad_param("s/dispatch_max_clients = 32/dispatch_max_clients = 999/") != 0);
     CU_ASSERT(gazelle_get_errno() == GAZELLE_ERANGE);
 
