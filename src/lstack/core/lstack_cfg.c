@@ -92,6 +92,7 @@ static int32_t parse_flow_bifurcation(void);
 static int32_t parse_stack_interrupt(void);
 static int32_t parse_stack_num(void);
 static int32_t parse_xdp_eth_name(void);
+static bool xdp_eth_enabled(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -223,7 +224,7 @@ static int32_t parse_gateway_addr(void)
         return 0;
     }
 
-    if (strlen(g_config_params.xdp_eth_name) == 0) {
+    if (!xdp_eth_enabled()) {
         ok = config_lookup_string(&g_config, "gateway_addr", (const char **)&value);
         if (!ok) {
             return -EINVAL;
@@ -252,7 +253,7 @@ static int32_t parse_mask_addr(void)
         return 0;
     }
 
-    if (strlen(g_config_params.xdp_eth_name) == 0) {
+    if (!xdp_eth_enabled()) {
         ret = config_lookup_string(&g_config, "mask_addr", (const char **)&mask_addr);
         if (!ret) {
             return -EINVAL;
@@ -266,7 +267,7 @@ static int32_t parse_mask_addr(void)
 
         for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
             if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET ||
-                strncmp(ifa->ifa_name, g_config_params.xdp_eth_name, strlen(g_config_params.xdp_eth_name))) {
+                strcmp(ifa->ifa_name, g_config_params.xdp_eth_name)) {
                 continue;
             }
             g_config_params.netmask.addr = ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr.s_addr;
@@ -293,7 +294,7 @@ static int32_t parse_host_addr(void)
     struct ifaddrs *ifaddr;
     struct ifaddrs *ifa;
 
-    if (strlen(g_config_params.xdp_eth_name) == 0) {
+    if (!xdp_eth_enabled()) {
         ret = config_lookup_string(&g_config, "host_addr", (const char **)&host_addr);
         if (!ret) {
             return 0;
@@ -307,7 +308,7 @@ static int32_t parse_host_addr(void)
 
         for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
             if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET ||
-                strncmp(ifa->ifa_name, g_config_params.xdp_eth_name, strlen(g_config_params.xdp_eth_name))) {
+                strcmp(ifa->ifa_name, g_config_params.xdp_eth_name)) {
                 continue;
             }
             g_config_params.host_addr.addr = ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr;
@@ -334,7 +335,7 @@ static int32_t parse_host_addr6(void)
 
     ok = config_lookup_string(&g_config, "host_addr6", (const char **)&value);
     if (!ok) {
-        if (ip4_addr_isany_val(g_config_params.host_addr) && (strlen(g_config_params.xdp_eth_name) == 0)) {
+        if (ip4_addr_isany_val(g_config_params.host_addr) && (!xdp_eth_enabled())) {
             LSTACK_PRE_LOG(LSTACK_ERR, "cfg: host_addr and host_addr6 must have a valid one.");
             return -EINVAL;
         } else {
@@ -377,7 +378,7 @@ static int32_t parse_devices(void)
     struct ifaddrs *ifaddr;
     char temp_dev[DEV_MAC_LEN + 1] = {0};
 
-    if (strlen(g_config_params.xdp_eth_name) == 0) {
+    if (!xdp_eth_enabled()) {
         ret = config_lookup_string(&g_config, "devices", (const char **)&dev);
         if (!ret) {
             return -EINVAL;
@@ -390,7 +391,7 @@ static int32_t parse_devices(void)
 
         for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
             if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_PACKET ||
-                strncmp(ifa->ifa_name, g_config_params.xdp_eth_name, strlen(g_config_params.xdp_eth_name))) {
+                strcmp(ifa->ifa_name, g_config_params.xdp_eth_name)) {
                 continue;
             }
 
@@ -399,9 +400,16 @@ static int32_t parse_devices(void)
                     ((struct sockaddr_ll *)ifa->ifa_addr)->sll_addr[i], i < (ETHER_ADDR_LEN - 1) ? ":" : "");
             }
             dev = strdup_assert_return(temp_dev);
+            break;
         }
 
         freeifaddrs(ifaddr);
+
+        if (dev == NULL) {
+            LSTACK_PRE_LOG(LSTACK_ERR, "cfg: can not find the iface \"%s\" specified in dpdk_args."
+                           " devices parsing exit!\n", g_config_params.xdp_eth_name);
+            return -EINVAL;
+        }
     }
 
     /* add dev */
@@ -1497,7 +1505,7 @@ static int32_t parse_stack_interrupt(void)
     return ret;
 }
 
-static void dpdk_dev_get_iface_name(char *vdev_str)
+static int dpdk_dev_get_iface_name(char *vdev_str)
 {
     char *token = NULL;
     char *iface_value = NULL;
@@ -1507,7 +1515,7 @@ static void dpdk_dev_get_iface_name(char *vdev_str)
     /* To prevent the original string from being modified, use a copied string. */
     if (strcpy_s(vdev_str_cp, sizeof(vdev_str_cp), vdev_str) != 0) {
         LSTACK_PRE_LOG(LSTACK_ERR, "vdev_str strcpy_s fail \n");
-        return;
+        return -1;
     }
 
     token = strtok_s(vdev_str_cp, ",", &next_token);
@@ -1519,8 +1527,12 @@ static void dpdk_dev_get_iface_name(char *vdev_str)
         token = strtok_s(NULL, ",", &next_token);
     }
 
-    if (iface_value) {
+    if (iface_value && strlen(iface_value) > 0) {
         strncpy_s(g_config_params.xdp_eth_name, IFNAMSIZ, iface_value, IFNAMSIZ - 1);
+        return 0;
+    } else {
+        LSTACK_PRE_LOG(LSTACK_ERR, "xdp iface name bas not been specified in dpdk_args.\n");
+        return -1;
     }
 }
 
@@ -1536,9 +1548,18 @@ static int32_t parse_xdp_eth_name(void)
 
     for (uint32_t i  = 0; i < g_config_params.dpdk_argc; i++) {
         if (!strncmp(g_config_params.dpdk_argv[i], OPT_VDEV, strlen(OPT_VDEV))) {
-            dpdk_dev_get_iface_name(g_config_params.dpdk_argv[i + 1]);
+            ret = dpdk_dev_get_iface_name(g_config_params.dpdk_argv[i + 1]);
+            break;
         }
     }
 
-    return 0;
+    return ret;
+}
+
+static bool xdp_eth_enabled(void)
+{
+    if (strlen(g_config_params.xdp_eth_name)) {
+        return true;
+    }
+    return false;
 }
