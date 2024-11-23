@@ -31,6 +31,10 @@
 #include "lstack_rtw_api.h"
 #include "lstack_dummy_api.h"
 
+#ifndef SOL_XDP
+#define SOL_XDP 283 /* same as define in bits/socket.h */
+#endif
+
 static posix_api_t g_wrap_api_value;
 static posix_api_t *g_wrap_api;
 
