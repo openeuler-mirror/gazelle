@@ -32,9 +32,8 @@
 #include "lstack_epoll.h"
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"
-#include "lstack_protocol_stack.h"
-
 #include "lstack_interrupt.h"
+#include "lstack_protocol_stack.h"
 
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 #include <rte_kni.h>
@@ -161,6 +160,7 @@ void bind_to_stack_numa(struct protocol_stack *stack)
     pthread_t tid = pthread_self();
 
     if (get_global_cfg_params()->stack_num > 0) {
+        numa_run_on_node(stack->numa_id);
         return;
     }
 
@@ -185,6 +185,75 @@ void thread_bind_stack(struct protocol_stack *stack)
         max_sock_stack = stack_sock_num[stack->stack_idx];
         bind_to_stack_numa(stack);
     }
+}
+
+static int stack_affinity_cpu(int cpu_id)
+{
+    int32_t ret;
+    cpu_set_t cpuset;
+
+    CPU_ZERO(&cpuset);
+    CPU_SET(cpu_id, &cpuset);
+
+    ret = rte_thread_set_affinity(&cpuset);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "thread %d pthread_setaffinity_np failed ret=%d\n", rte_gettid(), ret);
+    }
+
+    return ret;
+}
+
+static void stack_affinity_numa(int numa_id)
+{
+    numa_run_on_node(numa_id);
+}
+
+static int32_t stack_idle_cpuset(struct protocol_stack *stack, cpu_set_t *exclude)
+{
+    int32_t cpunum;
+    uint32_t cpulist[CPUS_MAX_NUM];
+
+    cpunum = numa_to_cpusnum(stack->numa_id, cpulist, CPUS_MAX_NUM);
+    if (cpunum <= 0) {
+        LSTACK_LOG(ERR, LSTACK, "numa_to_cpusnum failed\n");
+        return -1;
+    }
+
+    CPU_ZERO(&stack->idle_cpuset);
+    for (uint32_t i = 0; i < cpunum; i++) {
+        /* skip stack cpu */
+        if (CPU_ISSET(cpulist[i], exclude)) {
+            continue;
+        }
+
+        CPU_SET(cpulist[i], &stack->idle_cpuset);
+    }
+
+    return 0;
+}
+
+static int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
+{
+    int32_t ret;
+    struct cfg_params *cfg = get_global_cfg_params();
+
+    cpu_set_t stack_cpuset;
+    CPU_ZERO(&stack_cpuset);
+    for (int32_t idx = 0; idx < cfg->num_cpu; ++idx) {
+        CPU_SET(cfg->cpus[idx], &stack_cpuset);
+    }
+
+    for (int32_t idx = 0; idx < cfg->app_exclude_num_cpu; ++idx) {
+        CPU_SET(cfg->app_exclude_cpus[idx], &stack_cpuset);
+    }
+
+    ret = stack_idle_cpuset(stack, &stack_cpuset);
+    if (ret < 0) {
+        LSTACK_LOG(ERR, LSTACK, "thread_get_cpuset stack(%u) failed\n", stack->tid);
+        return -1;
+    }
+
+    return 0;
 }
 
 static uint32_t get_protocol_traffic(struct protocol_stack *stack)
@@ -412,12 +481,13 @@ static struct protocol_stack *stack_thread_init(void *arg)
         goto END;
     }
 
-    if (thread_affinity_init(stack->cpu_id) != 0) {
-        goto END;
-    }
-
     if (get_global_cfg_params()->stack_num == 0) {
+        if (stack_affinity_cpu(stack->cpu_id) != 0) {
+            goto END;
+        }
         RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
+    } else {
+        stack_affinity_numa(stack->numa_id);
     }
 
     lwip_init();

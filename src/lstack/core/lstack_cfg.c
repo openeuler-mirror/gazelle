@@ -43,7 +43,6 @@
 #define NUMA_CPULIST_PATH    "/sys/devices/system/node/node%u/cpulist"
 #define DEV_MAC_LEN          17
 #define DEV_PCI_ADDR_LEN     12
-#define CPUS_MAX_NUM         256
 #define BOND_MIIMON_MIN      1
 #define BOND_MIIMON_MAX      INT_MAX
 
@@ -127,6 +126,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "send_ring_size", parse_send_ring_size },
     { "recv_ring_size", parse_recv_ring_size },
     { "rpc_msg_max", parse_rpc_msg_max },
+    { "app_bind_numa",  parse_app_bind_numa },
     { "stack_num",   parse_stack_num },
     { "num_cpus",     parse_stack_cpu_number },
     { "dpdk_args",    parse_dpdk_args },
@@ -139,7 +139,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "low_power_mode", parse_low_power_mode },
     { "kni_switch",     parse_kni_switch },
     { "listen_shadow",  parse_listen_shadow },
-    { "app_bind_numa",  parse_app_bind_numa },
     { "app_exclude_cpus",   parse_app_exclude_cpus },
     { "main_thread_affinity",  parse_main_thread_affinity },
     { "unix_prefix",    parse_unix_prefix },
@@ -446,6 +445,7 @@ static int32_t stack_bind_no_cpu(void)
     g_config_params.num_cpu = g_config_params.stack_num;
     g_config_params.num_queue = g_config_params.num_cpu;
     g_config_params.tot_queue_num = g_config_params.num_queue;
+    g_config_params.app_bind_numa = true;
 
     LSTACK_PRE_LOG(LSTACK_INFO, "NUMA node: %d\n", g_config_params.numa_id);
 
@@ -473,11 +473,11 @@ static int32_t stack_bind_cpus(void)
     strcpy(g_config_params.lcores, args);
 
     tmp_arg = strdup_assert_return(args);
-    cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
+    cnt = separate_str_to_array(tmp_arg, g_config_params.cpus, CPUS_MAX_NUM, CPUS_MAX_NUM);
     free(tmp_arg);
     if (cnt <= 0) {
         return stack_bind_no_cpu();
-    } else if (cnt > CFG_MAX_CPUS) {
+    } else if (cnt > CPUS_MAX_NUM) {
         return -EINVAL;
     }
 
@@ -534,9 +534,9 @@ static int32_t parse_app_exclude_cpus(void)
     }
 
     tmp_arg = strdup_assert_return(args);
-    cnt = separate_str_to_array(tmp_arg, g_config_params.app_exclude_cpus, CFG_MAX_CPUS, CFG_MAX_CPUS);
+    cnt = separate_str_to_array(tmp_arg, g_config_params.app_exclude_cpus, CPUS_MAX_NUM, CPUS_MAX_NUM);
     free(tmp_arg);
-    if (cnt <= 0 || cnt > CFG_MAX_CPUS) {
+    if (cnt <= 0 || cnt > CPUS_MAX_NUM) {
         return -EINVAL;
     }
 
@@ -544,18 +544,20 @@ static int32_t parse_app_exclude_cpus(void)
     return 0;
 }
 
-static int32_t numa_to_cpusnum(unsigned numa_id, uint32_t *cpulist, int32_t num)
+int numa_to_cpusnum(uint16_t numa_id, uint32_t *cpulist, int num)
 {
+    int ret;
+    int fd;
     char path[PATH_MAX] = {0};
     char strbuf[PATH_MAX] = {0};
 
-    int32_t ret = snprintf_s(path, sizeof(path), PATH_MAX - 1, NUMA_CPULIST_PATH, numa_id);
+    ret = snprintf_s(path, sizeof(path), PATH_MAX - 1, NUMA_CPULIST_PATH, numa_id);
     if (ret < 0) {
         LSTACK_LOG(ERR, LSTACK, "snprintf numa_cpulist failed\n");
         return -1;
     }
 
-    int32_t fd = open(path, O_RDONLY);
+    fd = open(path, O_RDONLY);
     if (fd < 0) {
         LSTACK_LOG(ERR, LSTACK, "open %s failed\n", path);
         return -1;
@@ -568,55 +570,7 @@ static int32_t numa_to_cpusnum(unsigned numa_id, uint32_t *cpulist, int32_t num)
         return -1;
     }
 
-    int32_t count = separate_str_to_array(strbuf, cpulist, num, CFG_MAX_CPUS);
-    return count;
-}
-
-static int32_t stack_idle_cpuset(struct protocol_stack *stack, cpu_set_t *exclude)
-{
-    uint32_t cpulist[CPUS_MAX_NUM];
-
-    int32_t cpunum = numa_to_cpusnum(stack->numa_id, cpulist, CPUS_MAX_NUM);
-    if (cpunum <= 0) {
-        LSTACK_LOG(ERR, LSTACK, "numa_to_cpusnum failed\n");
-        return -1;
-    }
-
-    CPU_ZERO(&stack->idle_cpuset);
-    for (int32_t i = 0; i < cpunum; i++) {
-        /* skip stack cpu */
-        if (CPU_ISSET(cpulist[i], exclude)) {
-            continue;
-        }
-
-        CPU_SET(cpulist[i], &stack->idle_cpuset);
-    }
-
-    return 0;
-}
-
-int32_t init_stack_numa_cpuset(struct protocol_stack *stack)
-{
-    int32_t ret;
-    struct cfg_params *cfg = get_global_cfg_params();
-
-    cpu_set_t stack_cpuset;
-    CPU_ZERO(&stack_cpuset);
-    for (int32_t idx = 0; idx < cfg->num_cpu; ++idx) {
-        CPU_SET(cfg->cpus[idx], &stack_cpuset);
-    }
-
-    for (int32_t idx = 0; idx < cfg->app_exclude_num_cpu; ++idx) {
-        CPU_SET(cfg->app_exclude_cpus[idx], &stack_cpuset);
-    }
-
-    ret = stack_idle_cpuset(stack, &stack_cpuset);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "thread_get_cpuset stack(%u) failed\n", stack->tid);
-        return -1;
-    }
-
-    return 0;
+    return separate_str_to_array(strbuf, cpulist, num, CPUS_MAX_NUM);
 }
 
 static int32_t gazelle_parse_base_virtaddr(const char *arg, uintptr_t *base_vaddr)
@@ -883,6 +837,28 @@ static bool dpdk_have_socket_mem(int32_t argc, char **argv)
     return false;
 }
 
+static void dpdk_fill_lcore(void)
+{
+    uint16_t lcore_id;
+    cpu_set_t cpuset;
+
+    CPU_ZERO(&cpuset);
+    if (sched_getaffinity(0, sizeof(cpu_set_t), &cpuset) == -1) {
+        LSTACK_LOG(ERR, LSTACK, "sched_getaffinity failed\n");
+        return;
+    }
+
+    for (lcore_id = 0; lcore_id < CPU_SETSIZE; lcore_id++) {
+        if (CPU_ISSET(lcore_id, &cpuset) &&
+            numa_node_of_cpu(lcore_id) == g_config_params.numa_id &&
+            rte_lcore_is_enabled(lcore_id)) {
+            snprintf_s(g_config_params.lcores, sizeof(g_config_params.lcores),
+                sizeof(g_config_params.lcores) - 1, "%d", lcore_id);
+            break;
+        }
+    }
+}
+
 static void dpdk_fill_socket_mem(void)
 {
     uint32_t socket_mem_size = dpdk_total_socket_memory();
@@ -905,17 +881,10 @@ static void dpdk_fill_socket_mem(void)
 static void dpdk_add_args(void)
 {
     int idx;
-    uint16_t lcore_id;
 
     if (!dpdk_have_corelist(g_config_params.dpdk_argc, g_config_params.dpdk_argv)) {
         if (g_config_params.stack_num > 0) {
-            RTE_LCORE_FOREACH(lcore_id) {
-                if (numa_node_of_cpu(lcore_id) == g_config_params.numa_id && rte_lcore_is_enabled(lcore_id)) {
-                    snprintf_s(g_config_params.lcores, sizeof(g_config_params.lcores),
-                        sizeof(g_config_params.lcores) - 1, "%d", lcore_id);
-                    break;
-                }
-            }
+            dpdk_fill_lcore();
         }
         g_config_params.dpdk_argv[g_config_params.dpdk_argc++] = strdup_assert_return(OPT_BIND_CORELIST);
         g_config_params.dpdk_argv[g_config_params.dpdk_argc++] = strdup_assert_return(g_config_params.lcores);

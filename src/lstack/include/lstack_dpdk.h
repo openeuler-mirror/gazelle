@@ -45,7 +45,6 @@ int dpdk_ethdev_start(void);
 int init_dpdk_ethdev(void);
 
 int thread_affinity_default(void);
-int thread_affinity_init(int cpu_id);
 
 int32_t create_shared_ring(struct protocol_stack *stack);
 int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num);
