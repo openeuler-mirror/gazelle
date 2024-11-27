@@ -250,7 +250,7 @@ static int32_t do_bind(int32_t s, const struct sockaddr *name, socklen_t namelen
     return g_wrap_api->bind_fn(s, name, namelen);
 }
 
-static bool is_dst_ip_localhost(const struct sockaddr *addr)
+static bool kernel_ip_route(const struct sockaddr *addr)
 {
     struct ifaddrs *ifap;
     struct ifaddrs *ifa;
@@ -292,43 +292,84 @@ static bool is_dst_ip_localhost(const struct sockaddr *addr)
     freeifaddrs(ifap);
     return false;
 }
-
-static int32_t do_connect(int32_t s, const struct sockaddr *name, socklen_t namelen)
+static bool is_relatived_kernel_ip(const struct sockaddr *dst_addr)
 {
-    if (name == NULL) {
+    struct ifaddrs *ifap;
+    struct ifaddrs *ifa;
+    uint32_t local_ip;
+    uint32_t local_mask;
+    uint32_t dst_ip;
+    bool ret = false;
+
+    if (getifaddrs(&ifap) == -1) {
+        LSTACK_LOG(ERR, LSTACK, "get interface IP address failed\n");
+        return false;
+    }
+
+    for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) {
+            continue;
+        }
+
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            struct sockaddr_in *if_addr = (struct sockaddr_in *)ifa->ifa_addr;
+            if (get_global_cfg_params()->host_addr.addr == if_addr->sin_addr.s_addr) {
+                continue;
+            }
+        }
+
+        if (ifa->ifa_addr->sa_family == AF_INET && dst_addr->sa_family == AF_INET) {
+            struct sockaddr_in *if_addr = (struct sockaddr_in *)ifa->ifa_addr;
+            struct sockaddr_in *ifa_netmask = (struct sockaddr_in *)ifa->ifa_netmask;
+            local_ip = if_addr->sin_addr.s_addr;
+            local_mask = ifa_netmask->sin_addr.s_addr;
+            dst_ip = ((struct sockaddr_in *)dst_addr) ->sin_addr.s_addr;
+            if ((local_ip & local_mask) == (dst_ip & local_mask)) {
+                ret =  true;
+                break;
+            }
+        }
+    }
+    freeifaddrs(ifap);
+    return ret;
+}
+static int32_t do_connect(int32_t s, const struct sockaddr *addr, socklen_t addrlen)
+{
+    if (addr == NULL) {
         GAZELLE_RETURN(EINVAL);
     }
 
     struct lwip_sock *sock = lwip_get_socket(s);
     if (select_sock_posix_path(sock) == POSIX_KERNEL) {
-        return posix_api->connect_fn(s, name, namelen);
+        return posix_api->connect_fn(s, addr, addrlen);
     }
 
     int32_t ret = 0;
     int32_t remote_port;
-    bool is_local = is_dst_ip_localhost(name);
+    bool is_kernel = kernel_ip_route(addr);
+    bool is_to_kernel_connect = is_relatived_kernel_ip(addr);
     
-    remote_port = htons(((struct sockaddr_in *)name)->sin_port);
+    remote_port = htons(((struct sockaddr_in *)addr)->sin_port);
 
     char listen_ring_name[RING_NAME_LEN];
     snprintf_s(listen_ring_name, sizeof(listen_ring_name), sizeof(listen_ring_name) - 1,
         "listen_rx_ring_%d", remote_port);
-    if (is_local && rte_ring_lookup(listen_ring_name) == NULL) {
-        ret = posix_api->connect_fn(s, name, namelen);
+
+    if ((is_kernel && rte_ring_lookup(listen_ring_name) == NULL) || is_to_kernel_connect) {
+        ret = posix_api->connect_fn(s, addr, addrlen);
         POSIX_SET_TYPE(sock, POSIX_KERNEL);
     } else {
 	/* When the socket is POSIX_LWIP_OR_KERNEL, connect to lwip first and then connect to kernel. */
-        ret = g_wrap_api->connect_fn(s, name, namelen);
+        ret = g_wrap_api->connect_fn(s, addr, addrlen);
         if (ret == 0 || (ret != 0 && errno == EINPROGRESS)) {
             POSIX_SET_TYPE(sock, POSIX_LWIP);
-	} else {
-	    ret = posix_api->connect_fn(s, name, namelen);
+        } else {
+            ret = posix_api->connect_fn(s, addr, addrlen);
             if (ret == 0) {
-		POSIX_SET_TYPE(sock, POSIX_KERNEL);
-	    }
-	}
+                POSIX_SET_TYPE(sock, POSIX_KERNEL);
+            }
+        }
     }
-
     return ret;
 }
 
