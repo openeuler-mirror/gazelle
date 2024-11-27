@@ -105,8 +105,11 @@
 
 #define LSTACK_SEND_THREAD_NAME "lstack_send"
 #define LSTACK_RECV_THREAD_NAME "lstack_recv"
-#define LSTACK_THREAD_NAME "gazellelstack"
+#define LSTACK_THREAD_NAME      "gazellelstack"
 
 #define SLEEP_US_BEFORE_LINK_UP 10000
+
+#define CPUS_MAX_NUM            640
+#define GAZELLE_MAX_NUMA_NODES  4
 
 #endif /* _GAZELLE_OPT_H_ */

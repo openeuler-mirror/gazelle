@@ -104,26 +104,6 @@ int32_t thread_affinity_default(void)
     return 0;
 }
 
-int32_t thread_affinity_init(int32_t cpu_id)
-{
-    int32_t ret;
-    cpu_set_t cpuset;
-
-    if (get_global_cfg_params()->stack_num > 0) {
-        return 0;
-    }
-
-    CPU_ZERO(&cpuset);
-    CPU_SET(cpu_id, &cpuset);
-
-    ret = rte_thread_set_affinity(&cpuset);
-    if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "thread %d pthread_setaffinity_np failed ret=%d\n", rte_gettid(), ret);
-    }
-
-    return 0;
-}
-
 int32_t dpdk_eal_init(void)
 {
     int32_t ret;

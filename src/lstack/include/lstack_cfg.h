@@ -36,7 +36,6 @@
 #define RX_RING_NAME    64
 #define MBUF_POOL_NAME  64
 
-#define CFG_MAX_CPUS    512
 #define CFG_MAX_PORTS   UINT8_MAX
 #define ARP_MAX_ENTRIES 1024
 #define LOG_DIR_PATH    PATH_MAX
@@ -118,12 +117,12 @@ struct cfg_params {
         uint16_t num_cpu;
         uint16_t numa_id;
         uint16_t stack_num;
-        uint32_t cpus[CFG_MAX_CPUS];
+        uint32_t cpus[CPUS_MAX_NUM];
 
         bool main_thread_affinity;
         bool app_bind_numa;
         uint16_t app_exclude_num_cpu;
-        uint32_t app_exclude_cpus[CFG_MAX_CPUS];
+        uint32_t app_exclude_cpus[CPUS_MAX_NUM];
 
         bool stack_mode_rtc;
         bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
@@ -168,10 +167,8 @@ static inline uint8_t use_ltran(void)
 
 int cfg_init(void);
 int gazelle_param_init(int *argc, char **argv);
-int gazelle_copy_param(const char *param, bool is_double,
-    int *argc, char argv[][PATH_MAX]);
-
+int gazelle_copy_param(const char *param, bool is_double, int *argc, char argv[][PATH_MAX]);
 int match_host_addr(ip_addr_t *addr);
-int32_t init_stack_numa_cpuset(struct protocol_stack *stack);
+int numa_to_cpusnum(uint16_t numa_id, uint32_t *cpulist, int num);
 
 #endif /* GAZELLE_NET_CFG_H */
