@@ -11,7 +11,6 @@
 */
 
 #include <sys/types.h>
-#include <execinfo.h>
 #include <sys/socket.h>
 
 #include <lwip/lwipgz_sock.h>
@@ -22,28 +21,11 @@
 #include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "lstack_control_plane.h"
+#include "lstack_dump.h"
 
 static int g_hijack_signal[] = { SIGTERM, SIGINT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGKILL};
 #define HIJACK_SIGNAL_COUNT (sizeof(g_hijack_signal) / sizeof(g_hijack_signal[0]))
-#define BACKTRACE_SIZE 64
 
-static void dump_stack(void)
-{
-    char **stack_trace = NULL;
-    void *stack_array[BACKTRACE_SIZE];
-    int stack_num = backtrace(stack_array, BACKTRACE_SIZE);
-
-    stack_trace = (char**)backtrace_symbols(stack_array, stack_num);
-    if (stack_trace == NULL) {
-        perror("backtrace_symbols");
-        return;
-    }
-
-    for (int i = 0; i < stack_num; i++) {
-        LSTACK_LOG(ERR, LSTACK, "%s\n", stack_trace[i]);
-    }
-    free(stack_trace);
-}
 static inline bool match_hijack_signal(int sig)
 {
     unsigned int i;
@@ -58,14 +40,22 @@ static inline bool match_hijack_signal(int sig)
 static void lstack_sig_default_handler(int sig)
 {
     LSTACK_LOG(ERR, LSTACK, "lstack dumped, caught signal: %d\n", sig);
+
+    /* When operations such as pressing Ctrl+C or Kill, the call stack exit is not displayed. */
+    if (sig != SIGINT && sig != SIGTERM && sig != SIGKILL) {
+        /* dump stack info */
+        dump_stack();
+
+        /* dump internal information of lstack */
+        dump_lstack();
+    }
+
     if (get_global_cfg_params() && get_global_cfg_params()->is_primary) {
         delete_primary_path();
     }
+
     control_fd_close();
-    /* When operations such as pressing Ctrl+C or Kill, the call stack exit is not displayed. */
-    if (sig != SIGINT && sig != SIGTERM && sig != SIGKILL) {
-        dump_stack();
-    }
+
     lwip_exit();
     gazelle_exit();
     (void)kill(getpid(), sig);
