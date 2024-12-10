@@ -24,12 +24,28 @@
 #include "lstack_epoll.h"
 #include "lstack_lwip.h"
 
+struct rpc_pool_array {
+#define RPC_POOL_MAX_COUNT     1024
+    struct rpc_msg_pool *array[RPC_POOL_MAX_COUNT];
+    pthread_mutex_t lock;
+    int cur_count;
+};
+
+static struct rpc_pool_array g_rpc_pool_array;
+
 static PER_THREAD struct rpc_msg_pool *g_rpc_pool = NULL;
 static struct rpc_stats g_rpc_stats;
 
 struct rpc_stats *rpc_stats_get(void)
 {
     return &g_rpc_stats;
+}
+
+static inline void rpc_pool_array_add(struct rpc_msg_pool *pool)
+{
+    pthread_mutex_lock(&g_rpc_pool_array.lock);
+    g_rpc_pool_array.array[g_rpc_pool_array.cur_count++] = pool;
+    pthread_mutex_unlock(&g_rpc_pool_array.lock);
 }
 
 __rte_always_inline
@@ -54,23 +70,41 @@ static void rpc_msg_init(struct rpc_msg *msg, rpc_func_t func, struct rpc_msg_po
     pthread_spin_init(&msg->lock, PTHREAD_PROCESS_PRIVATE);
 }
 
+static struct rpc_msg_pool *rpc_msg_pool_init(void)
+{
+    struct rpc_msg_pool *rpc_pool;
+    if (g_rpc_pool_array.cur_count >= RPC_POOL_MAX_COUNT) {
+        return g_rpc_pool_array.array[rte_gettid() % RPC_POOL_MAX_COUNT];
+    }
+
+    rpc_pool = calloc(1, sizeof(struct rpc_msg_pool));
+    if (rpc_pool == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "g_rpc_pool calloc failed\n");
+        goto END;
+    }
+    rpc_pool->mempool =
+        create_mempool("rpc_pool", get_global_cfg_params()->rpc_msg_max, sizeof(struct rpc_msg), 0, rte_gettid());
+    if (rpc_pool->mempool == NULL) {
+        LSTACK_LOG(INFO, LSTACK, "rpc_pool create failed, errno is %d\n", errno);
+        free(rpc_pool);
+        goto END;
+    }
+
+    rpc_pool_array_add(rpc_pool);
+    return rpc_pool;
+END:
+    g_rpc_stats.call_alloc_fail++;
+    return NULL;
+}
+
+
 static struct rpc_msg *rpc_msg_alloc(rpc_func_t func)
 {
     struct rpc_msg *msg;
 
     if (unlikely(g_rpc_pool == NULL)) {
-        g_rpc_pool = calloc(1, sizeof(struct rpc_msg_pool));
+        g_rpc_pool = rpc_msg_pool_init();
         if (g_rpc_pool == NULL) {
-            LSTACK_LOG(INFO, LSTACK, "g_rpc_pool calloc failed\n");
-            g_rpc_stats.call_alloc_fail++;
-            exit(-1);
-        }
-
-        g_rpc_pool->mempool =
-            create_mempool("rpc_pool", get_global_cfg_params()->rpc_msg_max, sizeof(struct rpc_msg), 0, rte_gettid());
-        if (g_rpc_pool->mempool == NULL) {
-            LSTACK_LOG(INFO, LSTACK, "rpc_pool create failed, errno is %d\n", errno);
-            g_rpc_stats.call_alloc_fail++;
             exit(-1);
         }
     }
