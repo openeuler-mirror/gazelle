@@ -61,6 +61,24 @@ static void lstack_sig_default_handler(int sig)
     (void)kill(getpid(), sig);
 }
 
+static void pthread_block_sig(int sig)
+{
+    sigset_t mask;
+
+    sigemptyset(&mask);
+    sigaddset(&mask, sig);
+    pthread_sigmask(SIG_BLOCK, &mask, NULL);
+}
+
+static void pthread_unblock_sig(int sig)
+{
+    sigset_t mask;
+
+    sigemptyset(&mask);
+    sigaddset(&mask, sig);
+    pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
+}
+
 int lstack_signal_init(void)
 {
     unsigned int i;
@@ -70,6 +88,8 @@ int lstack_signal_init(void)
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
         return -1;
     }
+    pthread_block_sig(SIGUSR1);
+    pthread_block_sig(SIGUSR2);
 
     sigemptyset(&action.sa_mask);
     action.sa_flags = (int)(SA_NODEFER | SA_RESETHAND);
@@ -109,6 +129,8 @@ pid_t lstack_fork(void)
     pid = posix_api->fork_fn();
     /* child not support lwip */
     if (pid == 0) {
+        pthread_unblock_sig(SIGUSR1);
+        pthread_unblock_sig(SIGUSR2);
         posix_api->use_kernel = 1;
     }
     return pid;
