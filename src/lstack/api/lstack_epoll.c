@@ -73,11 +73,18 @@ void add_sock_event_nolock(struct lwip_sock *sock, uint32_t event)
     return;
 }
 
-void add_sock_event(struct lwip_sock *sock, uint32_t event)
+static void _add_sock_event(struct lwip_sock *sock, struct wakeup_poll *wakeup, uint32_t event)
 {
-    struct wakeup_poll *wakeup = sock->wakeup;
     struct protocol_stack *stack = sock->stack;
-    if (wakeup == NULL || wakeup->type == WAKEUP_CLOSE || (event & sock->epoll_events) == 0) {
+    if (wakeup == NULL || wakeup->type == WAKEUP_CLOSE) {
+        return;
+    }
+
+    if (wakeup->type == WAKEUP_BLOCK) {
+        if (!(event & (EPOLLIN | EPOLLERR))) {
+            return;
+        }
+    } else if (!(event & sock->epoll_events)) {
         return;
     }
 
@@ -91,6 +98,12 @@ void add_sock_event(struct lwip_sock *sock, uint32_t event)
     return;
 }
 
+void add_sock_event(struct lwip_sock *sock, uint32_t event)
+{
+    _add_sock_event(sock, sock->wakeup, event);
+    _add_sock_event(sock, sock->recv_block, event);
+}
+
 void del_sock_event_nolock(struct lwip_sock *sock, uint32_t event)
 {
     if (get_global_cfg_params()->stack_mode_rtc) {
@@ -99,7 +112,7 @@ void del_sock_event_nolock(struct lwip_sock *sock, uint32_t event)
         if ((event & EPOLLOUT) && !NETCONN_IS_OUTIDLE(sock)) {
             sock->events &= ~EPOLLOUT;
         }
-	if ((event & EPOLLIN) && !NETCONN_IS_DATAIN(sock) && !NETCONN_IS_ACCEPTIN(sock)) {
+        if ((event & EPOLLIN) && !NETCONN_IS_DATAIN(sock) && !NETCONN_IS_ACCEPTIN(sock)) {
             sock->events &= ~EPOLLIN;
         }
     }
@@ -212,7 +225,8 @@ static void raise_pending_events(struct wakeup_poll *wakeup, struct lwip_sock *s
         if (wakeup->type == WAKEUP_EPOLL && (sock->events & sock->epoll_events) &&
             list_node_null(&sock->event_list)) {
             list_add_node(&sock->event_list, &wakeup->event_list);
-	    sem_post(&wakeup->wait);
+            rte_mb();
+            sem_post(&wakeup->wait);
         }
     }
     pthread_spin_unlock(&wakeup->event_list_lock);

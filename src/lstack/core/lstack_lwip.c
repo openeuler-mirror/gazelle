@@ -1002,30 +1002,43 @@ static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf *
         return 0;
     }
 
-    while (gazelle_ring_read(sock->recv_ring, (void **)pbuf, expect) != expect) {
-        if (noblock) {
+    if (noblock) {
+        if (gazelle_ring_read(sock->recv_ring, (void **)pbuf, expect) != expect) {
             GAZELLE_RETURN(EAGAIN);
         }
-        if (recv_break_for_err(sock)) {
-            return -1;
-        }
-        if (unlikely(sock->wakeup == NULL)) {
-            sock->wakeup = poll_construct_wakeup();
-            if (sock->wakeup == NULL) {
-                return -1;
-            }
-            sock->epoll_events = POLLIN | POLLERR;
-        }
-
-        ret = lstack_block_wait(sock->wakeup, sock->conn->recv_timeout);
-        if (ret == ETIMEDOUT) {
-            noblock = true;
-        } else if (ret != 0 && errno == EINTR) {
-            /* SIGALRM signal may interrupt blocking */
-            return ret;
-        }
+        goto END;
     }
 
+    if (sock->recv_block == NULL) {
+        sock->recv_block = poll_construct_wakeup();
+        if (sock->recv_block == NULL) {
+            GAZELLE_RETURN(ENOMEM);
+        }
+        sock->recv_block->type = WAKEUP_BLOCK;
+    }
+
+    do {
+        __atomic_store_n(&sock->recv_block->in_wait, true, __ATOMIC_RELEASE);
+        if (gazelle_ring_read(sock->recv_ring, (void **)pbuf, expect) == expect) {
+            break;
+        }
+        if (recv_break_for_err(sock)) {
+            sock->recv_block = NULL;
+            return -1;
+        }
+        ret = lstack_block_wait(sock->recv_block, sock->conn->recv_timeout);
+        if (ret != 0) {
+            if (errno = ETIMEDOUT) {
+                errno = EAGAIN;
+            }
+            sock->recv_block = NULL;
+            return ret;
+        }
+    } while (1);
+    __atomic_store_n(&sock->recv_block->in_wait, false, __ATOMIC_RELEASE);
+    sock->recv_block = NULL;
+
+END:
     if (get_protocol_stack_group()->latency_start) {
         calculate_lstack_latency(&sock->stack->latency, *pbuf, GAZELLE_LATENCY_READ_APP_CALL, time_stamp);
     }
