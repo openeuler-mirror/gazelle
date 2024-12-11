@@ -527,9 +527,6 @@ static int32_t parse_app_exclude_cpus(void)
     int32_t cnt;
 
     g_config_params.app_exclude_num_cpu = 0;
-    if (!g_config_params.app_bind_numa) {
-        return 0;
-    }
 
     num_cpus = config_lookup(&g_config, "app_exclude_cpus");
     if (num_cpus == NULL) {
