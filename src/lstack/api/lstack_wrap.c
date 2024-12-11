@@ -174,12 +174,7 @@ static int kernel_bind_process(int32_t s, const struct sockaddr *name, socklen_t
     struct lwip_sock *sock = lwip_get_socket(s);
     int times = 10;
     int ret = 0;
-    /* lstack not sense if ltran enable kni, so only checks use_ltran. */
-    if (!get_global_cfg_params()->use_ltran && !get_global_cfg_params()->kni_switch &&
-        !get_global_cfg_params()->flow_bifurcation) {
-        POSIX_SET_TYPE(sock, POSIX_LWIP);
-        return 0;
-    }
+
     ret = posix_api->bind_fn(s, name, namelen);
     /* maybe kni addr, ipv6 addr maybe is tentative,need to wait a few seconds */
     if (name->sa_family == AF_INET6 && ret < 0 && errno == EADDRNOTAVAIL) {
