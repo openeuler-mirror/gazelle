@@ -28,6 +28,7 @@ enum wakeup_type {
     WAKEUP_EPOLL = 0,
     WAKEUP_POLL,
     WAKEUP_CLOSE,
+    WAKEUP_BLOCK,
 };
 
 struct protocol_stack;
