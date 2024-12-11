@@ -1028,7 +1028,7 @@ static int recv_ring_get_one(struct lwip_sock *sock, bool noblock, struct pbuf *
         }
         ret = lstack_block_wait(sock->recv_block, sock->conn->recv_timeout);
         if (ret != 0) {
-            if (errno = ETIMEDOUT) {
+            if (errno == ETIMEDOUT) {
                 errno = EAGAIN;
             }
             sock->recv_block = NULL;
