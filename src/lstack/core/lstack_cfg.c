@@ -509,6 +509,15 @@ static int32_t parse_stack_num(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.stack_num, "stack_num", 0, 0, 320, ret);
+    if (ret != 0) {
+        return ret;
+    }
+
+    if (g_config_params.stack_num > 1) {
+        LSTACK_LOG(ERR, LSTACK, "Multi stacks bound to numa are not supported currently. Please set stack_num <= 1.\n");
+        return -EINVAL;
+    }
+
     return ret;
 }
 
