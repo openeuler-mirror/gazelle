@@ -426,6 +426,7 @@ static bool unsupport_tcp_optname(int32_t optname)
     if ((optname == TCP_QUICKACK) ||
         (optname == TCP_INFO) ||
         (optname == TCP_MAXSEG) ||
+        (optname == TCP_USER_TIMEOUT) ||
         (optname == TCP_CONGESTION)) {
         return true;
     }
