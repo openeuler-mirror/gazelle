@@ -31,7 +31,9 @@ struct rpc_pool_array {
     int cur_count;
 };
 
-static struct rpc_pool_array g_rpc_pool_array;
+static struct rpc_pool_array g_rpc_pool_array = {
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+};
 
 static PER_THREAD struct rpc_msg_pool *g_rpc_pool = NULL;
 static struct rpc_stats g_rpc_stats;
@@ -39,13 +41,6 @@ static struct rpc_stats g_rpc_stats;
 struct rpc_stats *rpc_stats_get(void)
 {
     return &g_rpc_stats;
-}
-
-static inline void rpc_pool_array_add(struct rpc_msg_pool *pool)
-{
-    pthread_mutex_lock(&g_rpc_pool_array.lock);
-    g_rpc_pool_array.array[g_rpc_pool_array.cur_count++] = pool;
-    pthread_mutex_unlock(&g_rpc_pool_array.lock);
 }
 
 __rte_always_inline
@@ -73,7 +68,9 @@ static void rpc_msg_init(struct rpc_msg *msg, rpc_func_t func, struct rpc_msg_po
 static struct rpc_msg_pool *rpc_msg_pool_init(void)
 {
     struct rpc_msg_pool *rpc_pool;
+    pthread_mutex_lock(&g_rpc_pool_array.lock);
     if (g_rpc_pool_array.cur_count >= RPC_POOL_MAX_COUNT) {
+        pthread_mutex_unlock(&g_rpc_pool_array.lock);
         return g_rpc_pool_array.array[rte_gettid() % RPC_POOL_MAX_COUNT];
     }
 
@@ -90,9 +87,11 @@ static struct rpc_msg_pool *rpc_msg_pool_init(void)
         goto END;
     }
 
-    rpc_pool_array_add(rpc_pool);
+    g_rpc_pool_array.array[g_rpc_pool_array.cur_count++] = rpc_pool;
+    pthread_mutex_unlock(&g_rpc_pool_array.lock);
     return rpc_pool;
 END:
+    pthread_mutex_unlock(&g_rpc_pool_array.lock);
     g_rpc_stats.call_alloc_fail++;
     return NULL;
 }
