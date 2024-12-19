@@ -14,6 +14,8 @@
 #include <sys/time.h>
 #include <execinfo.h>
 
+#include <rte_cycles.h>
+
 #include "lstack_cfg.h"
 #include "lstack_log.h"
 
