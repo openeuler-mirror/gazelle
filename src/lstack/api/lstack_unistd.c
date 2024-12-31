@@ -26,28 +26,67 @@
 static int g_hijack_signal[] = { SIGTERM, SIGINT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGKILL};
 #define HIJACK_SIGNAL_COUNT (sizeof(g_hijack_signal) / sizeof(g_hijack_signal[0]))
 
+static struct sigaction g_register_sigactions[NSIG]; // NSIG is the signal counts of system, normally equal 65 in Linux.
+static void lstack_sig_default_handler(int sig);
+
+static bool sig_is_registered(int sig)
+{
+    if (g_register_sigactions[sig].sa_handler != NULL &&
+        g_register_sigactions[sig].sa_handler != (void *) lstack_sig_default_handler) {
+        return true;
+    }
+    return false;
+}
+
 static inline bool match_hijack_signal(int sig)
 {
     unsigned int i;
     for (i = 0; i < HIJACK_SIGNAL_COUNT; i++) {
         if (sig == g_hijack_signal[i]) {
-            return 1;
+            return true;
         }
     }
-    return 0;
+    return false;
 }
 
-static void lstack_sig_default_handler(int sig)
+/* When operations such as pressing Ctrl+C or Kill are executed, we don't need to dump the stack. */
+bool sig_need_dump(int sig)
 {
+    if (sig == SIGINT || sig == SIGTERM || sig == SIGKILL) {
+        return false;
+    }
+    return true;
+}
+
+static void lstack_sigaction_default_handler(int sig, siginfo_t *info, void *context)
+{
+    static bool skip_process_exit = false;
+
+    /* avoiding sig function being executed twice. */
+    if (!skip_process_exit) {
+        skip_process_exit = true;
+    } else {
+        return;
+    }
+
     LSTACK_LOG(ERR, LSTACK, "lstack dumped, caught signal: %d\n", sig);
 
-    /* When operations such as pressing Ctrl+C or Kill, the call stack exit is not displayed. */
-    if (sig != SIGINT && sig != SIGTERM && sig != SIGKILL) {
+    stack_stop();
+
+    if (sig_need_dump(sig)) {
         /* dump stack info */
         dump_stack();
 
         /* dump internal information of lstack */
         dump_lstack();
+    }
+
+    if (sig_is_registered(sig)) {
+        if (g_register_sigactions[sig].sa_flags & SA_SIGINFO) {
+            g_register_sigactions[sig].sa_sigaction(sig, info, context);
+        } else {
+            g_register_sigactions[sig].sa_handler(sig);
+        }
     }
 
     if (get_global_cfg_params() && get_global_cfg_params()->is_primary) {
@@ -56,9 +95,15 @@ static void lstack_sig_default_handler(int sig)
 
     control_fd_close();
 
+    stack_exit();
     lwip_exit();
     gazelle_exit();
     (void)kill(getpid(), sig);
+}
+
+static void lstack_sig_default_handler(int sig)
+{
+    lstack_sigaction_default_handler(sig, NULL, NULL);
 }
 
 static void pthread_block_sig(int sig)
@@ -105,18 +150,34 @@ int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigacti
 {
     struct sigaction new_action;
 
-    if ((match_hijack_signal(sig_num) != 0) && (action && action->sa_handler == SIG_DFL)) {
+    if (match_hijack_signal(sig_num) && action != NULL) {
         new_action = *action;
-        new_action.sa_flags |= SA_RESETHAND;
-        new_action.sa_handler = lstack_sig_default_handler;
-        return posix_api->sigaction_fn(sig_num, &new_action, old_action);
-    }
 
-    /* SA_INTERRUPT is deprecated, use SA_RESETHAND instead. */
-    if ((match_hijack_signal(sig_num) != 0) && (action && action->sa_flags == SA_INTERRUPT)) {
-        new_action = *action;
-        new_action.sa_flags |= SA_RESETHAND;
-        return posix_api->sigaction_fn(sig_num, &new_action, old_action);
+        if (action->sa_handler == SIG_DFL) {
+            new_action = *action;
+            new_action.sa_flags |= SA_RESETHAND;
+            new_action.sa_handler = lstack_sig_default_handler;
+            return posix_api->sigaction_fn(sig_num, &new_action, old_action);
+        }
+
+        /* SA_INTERRUPT is deprecated, use SA_RESETHAND instead. */
+        if (action->sa_flags == SA_INTERRUPT) {
+            new_action = *action;
+            new_action.sa_flags |= SA_RESETHAND;
+            return posix_api->sigaction_fn(sig_num, &new_action, old_action);
+        }
+
+        if (sig_need_dump(sig_num)) {
+            g_register_sigactions[sig_num] = new_action;
+
+            /* If SA_SIGINFO is setted, we use sa_sigaction. */
+            if (action->sa_flags & SA_SIGINFO) {
+                new_action.sa_sigaction = lstack_sigaction_default_handler;
+            } else {
+                new_action.sa_handler = lstack_sig_default_handler;
+            }
+            return posix_api->sigaction_fn(sig_num, &new_action, old_action);
+        }
     }
 
     return posix_api->sigaction_fn(sig_num, action, old_action);
