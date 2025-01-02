@@ -23,7 +23,7 @@
 #include "lstack_control_plane.h"
 #include "lstack_dump.h"
 
-static int g_hijack_signal[] = { SIGTERM, SIGINT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGKILL};
+static int g_hijack_signal[] = { SIGTERM, SIGINT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT, SIGQUIT};
 #define HIJACK_SIGNAL_COUNT (sizeof(g_hijack_signal) / sizeof(g_hijack_signal[0]))
 
 static struct sigaction g_register_sigactions[NSIG]; // NSIG is the signal counts of system, normally equal 65 in Linux.
@@ -52,7 +52,7 @@ static inline bool match_hijack_signal(int sig)
 /* When operations such as pressing Ctrl+C or Kill are executed, we don't need to dump the stack. */
 bool sig_need_dump(int sig)
 {
-    if (sig == SIGINT || sig == SIGTERM || sig == SIGKILL) {
+    if (sig == SIGINT || sig == SIGTERM || sig == SIGQUIT) {
         return false;
     }
     return true;
