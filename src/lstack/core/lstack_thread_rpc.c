@@ -179,6 +179,7 @@ static struct rpc_msg *rpc_msg_alloc_except(rpc_func_t func)
 
 static void stack_exit_by_rpc(struct rpc_msg *msg)
 {
+    stack_stop();
     stack_exit();
 }
 

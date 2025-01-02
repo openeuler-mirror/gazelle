@@ -25,14 +25,16 @@
 #define DUMP_BACKTRACE_SIZE 64
 
 static const char *dump_command[] = {
-    "gazellectl lstack show 1",
     "gazellectl lstack show 1 -s",
     "gazellectl lstack show 1 -x",
+    "gazellectl lstack show 1 -v",
+    "gazellectl lstack show 1 -I",
     "gazellectl lstack show 1 -p UDP",
     "gazellectl lstack show 1 -p TCP",
     "gazellectl lstack show 1 -p ICMP",
     "gazellectl lstack show 1 -p IP",
     "gazellectl lstack show 1 -p ETHARP",
+    "gazellectl lstack show 1",
     "gazellectl lstack show 1 -c"
 };
 

@@ -120,10 +120,13 @@ void thread_bind_stack(struct protocol_stack *stack);
 int stack_group_init(void);
 void stack_group_exit(void);
 void stack_exit(void);
+void stack_stop(void);
 
 int stack_setup_thread(void);
 int stack_setup_app_thread(void);
 
 int stack_polling(unsigned wakeup_tick);
+
+enum rte_lcore_state_t stack_get_state(struct protocol_stack *stack);
 
 #endif

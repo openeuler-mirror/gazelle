@@ -51,7 +51,7 @@ static void stack_set_state(struct protocol_stack *stack, enum rte_lcore_state_t
     __atomic_store_n(&stack->state, state, __ATOMIC_RELEASE);
 }
 
-static enum rte_lcore_state_t stack_get_state(struct protocol_stack *stack)
+enum rte_lcore_state_t stack_get_state(struct protocol_stack *stack)
 {
     return __atomic_load_n(&stack->state, __ATOMIC_ACQUIRE);
 }
@@ -777,14 +777,29 @@ OUT2:
     return -1;
 }
 
-void stack_exit(void)
+static void stack_all_fds_close(struct protocol_stack *stack)
 {
-    /* close all fd */
     for (int i = 3; i < GAZELLE_MAX_CLIENTS + GAZELLE_RESERVED_CLIENTS; i++) {
         struct lwip_sock *sock = lwip_get_socket(i);
-        if (!POSIX_IS_CLOSED(sock) && sock->stack == get_protocol_stack()) {
+        if (!POSIX_IS_CLOSED(sock) && sock->stack == stack) {
             lwip_close(i);
         }
+    }
+}
+
+void stack_exit(void)
+{
+    struct protocol_stack *stack = get_protocol_stack();
+    if (stack != NULL) {
+        stack_all_fds_close(stack);
+    }
+}
+
+void stack_stop(void)
+{
+    struct protocol_stack *stack = get_protocol_stack();
+    if (stack != NULL) {
+        stack_set_state(stack, WAIT);
     }
 }
 
