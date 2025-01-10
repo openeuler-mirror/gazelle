@@ -96,7 +96,7 @@ static int dump_command_excute(const char *command)
 
         /* get and print command output */
         if (fgets(buffer, sizeof(buffer), fp) != NULL) {
-            LSTACK_LOG(INFO, LSTACK, "\r        %s", buffer);
+            LSTACK_LOG(INFO, LSTACK, "\r\033[K        %s", buffer);
         } else if (feof(fp)) {
             break;
         } else {
