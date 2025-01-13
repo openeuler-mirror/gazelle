@@ -398,7 +398,7 @@ static int32_t parse_devices(void)
                 sprintf(temp_dev + strlen(temp_dev), "%02x%s",
                     ((struct sockaddr_ll *)ifa->ifa_addr)->sll_addr[i], i < (ETHER_ADDR_LEN - 1) ? ":" : "");
             }
-            dev = strdup_assert_return(temp_dev);
+            dev = temp_dev;
             break;
         }
 
