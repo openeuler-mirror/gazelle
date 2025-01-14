@@ -795,7 +795,7 @@ void stack_exit(void)
     }
 }
 
-void stack_stop(void)
+void stack_wait(void)
 {
     struct protocol_stack *stack = get_protocol_stack();
     if (stack != NULL) {
@@ -824,6 +824,7 @@ void stack_group_exit(void)
         stack_exit();
     }
 
+    /* Waiting all stacks' status transfer to WAIT, which means stacks are ready to exit. */
     for (i = 0; i < stack_group->stack_num; i++) {
         if (stack_group->stacks[i] == NULL || stack == stack_group->stacks[i]) {
             continue;
