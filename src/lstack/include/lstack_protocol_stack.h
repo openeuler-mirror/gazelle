@@ -120,7 +120,7 @@ void thread_bind_stack(struct protocol_stack *stack);
 int stack_group_init(void);
 void stack_group_exit(void);
 void stack_exit(void);
-void stack_stop(void);
+void stack_wait(void);
 
 int stack_setup_thread(void);
 int stack_setup_app_thread(void);

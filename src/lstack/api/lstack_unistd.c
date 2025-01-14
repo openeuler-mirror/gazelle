@@ -71,7 +71,7 @@ static void lstack_sigaction_default_handler(int sig, siginfo_t *info, void *con
 
     LSTACK_LOG(ERR, LSTACK, "lstack dumped, caught signal: %d\n", sig);
 
-    stack_stop();
+    stack_wait();
 
     if (sig_need_dump(sig)) {
         /* dump stack info */
