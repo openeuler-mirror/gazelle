@@ -58,6 +58,15 @@ bool sig_need_dump(int sig)
     return true;
 }
 
+static void pthread_block_sig(int sig)
+{
+    sigset_t mask;
+
+    sigemptyset(&mask);
+    sigaddset(&mask, sig);
+    pthread_sigmask(SIG_BLOCK, &mask, NULL);
+}
+
 static void lstack_sigaction_default_handler(int sig, siginfo_t *info, void *context)
 {
     static bool skip_process_exit = false;
@@ -81,6 +90,9 @@ static void lstack_sigaction_default_handler(int sig, siginfo_t *info, void *con
         dump_lstack();
     }
 
+    /* App sig_handler may access invalid memory address in gazelle threads,
+     * so we block this signal avoiding getting stuck during exit. */
+    pthread_block_sig(SIGSEGV);
     if (sig_is_registered(sig)) {
         if (g_register_sigactions[sig].sa_flags & SA_SIGINFO) {
             g_register_sigactions[sig].sa_sigaction(sig, info, context);
@@ -104,15 +116,6 @@ static void lstack_sigaction_default_handler(int sig, siginfo_t *info, void *con
 static void lstack_sig_default_handler(int sig)
 {
     lstack_sigaction_default_handler(sig, NULL, NULL);
-}
-
-static void pthread_block_sig(int sig)
-{
-    sigset_t mask;
-
-    sigemptyset(&mask);
-    sigaddset(&mask, sig);
-    pthread_sigmask(SIG_BLOCK, &mask, NULL);
 }
 
 static void pthread_unblock_sig(int sig)
