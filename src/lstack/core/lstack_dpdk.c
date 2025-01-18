@@ -52,7 +52,6 @@
 
 struct eth_params {
     uint16_t port_id;
-    bool is_xdp;
 
     uint16_t nb_queues;
     uint16_t nb_rx_desc;
@@ -155,7 +154,12 @@ struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
     }
 
     /* time stamp before pbuf_custom as priv_data */
-    uint16_t private_size = RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
+    uint16_t private_size = sizeof(struct mbuf_private);
+    if (xdp_eth_enabled()) {
+        /* reserved for xdp metadata, see struct xsk_tx_metadata in /usr/include/linux/if_xdp.h */
+        private_size += 24;
+    }
+    private_size = RTE_ALIGN(private_size, RTE_CACHE_LINE_SIZE);
     pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size, private_size, MBUF_SZ, numa_id);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
@@ -400,16 +404,6 @@ static int eth_params_rss(struct rte_eth_conf *conf, struct rte_eth_dev_info *de
     return rss_enable;
 }
 
-bool dpdk_nic_is_xdp(void)
-{
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    /* eth_params is null in ltran mode */
-    if (stack_group->eth_params == NULL) {
-        return false;
-    }
-    return stack_group->eth_params->is_xdp;
-}
-
 static int eth_params_init(struct eth_params *eth_params, uint16_t port_id, uint16_t nb_queues, int *rss_enable)
 {
     struct rte_eth_dev_info dev_info;
@@ -439,9 +433,6 @@ static int eth_params_init(struct eth_params *eth_params, uint16_t port_id, uint
     eth_params->conf.intr_conf.rxq = get_global_cfg_params()->stack_interrupt;
 
     eth_params_checksum(&eth_params->conf, &dev_info);
-    if (strcmp(dev_info.driver_name, "net_af_xdp") == 0) {
-        eth_params->is_xdp = true;
-    }
 
     if (!get_global_cfg_params()->tuple_filter) {
         *rss_enable = eth_params_rss(&eth_params->conf, &dev_info);

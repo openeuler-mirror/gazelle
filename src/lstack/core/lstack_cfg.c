@@ -91,7 +91,6 @@ static int32_t parse_flow_bifurcation(void);
 static int32_t parse_stack_interrupt(void);
 static int32_t parse_stack_num(void);
 static int32_t parse_xdp_eth_name(void);
-static bool xdp_eth_enabled(void);
 
 #define PARSE_ARG(_arg, _arg_string, _default_val, _min_val, _max_val, _ret) \
     do { \
@@ -1491,6 +1490,7 @@ static int dpdk_dev_get_iface_name(char *vdev_str)
     char *iface_value = NULL;
     char *next_token = NULL;
     char vdev_str_cp[strlen(vdev_str) + 1];
+    int idx = 0;
 
     /* To prevent the original string from being modified, use a copied string. */
     if (strcpy_s(vdev_str_cp, sizeof(vdev_str_cp), vdev_str) != 0) {
@@ -1498,7 +1498,15 @@ static int dpdk_dev_get_iface_name(char *vdev_str)
         return -1;
     }
 
-    token = strtok_s(vdev_str_cp, ",", &next_token);
+    while (vdev_str_cp[idx] == ' ') {
+           idx++;
+    }
+
+    if (strncmp(&vdev_str_cp[idx], "net_af_xdp", strlen("net_af_xdp")) != 0) {
+           return 0;
+    }
+
+    token = strtok_s(&vdev_str_cp[idx], ",", &next_token);
     while (token != NULL) {
         if (strncmp(token, VDEV_ARG_IFACE, strlen(VDEV_ARG_IFACE)) == 0) {
             iface_value = token + strlen(VDEV_ARG_IFACE) + 1;
@@ -1534,12 +1542,4 @@ static int32_t parse_xdp_eth_name(void)
     }
 
     return ret;
-}
-
-static bool xdp_eth_enabled(void)
-{
-    if (strlen(g_config_params.xdp_eth_name)) {
-        return true;
-    }
-    return false;
 }
