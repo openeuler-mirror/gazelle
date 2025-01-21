@@ -165,6 +165,14 @@ static inline uint8_t use_ltran(void)
     return get_global_cfg_params()->use_ltran;
 }
 
+static inline bool xdp_eth_enabled(void)
+{
+    if (strlen(get_global_cfg_params()->xdp_eth_name)) {
+        return true;
+    }
+    return false;
+}
+
 int cfg_init(void);
 int gazelle_param_init(int *argc, char **argv);
 int gazelle_copy_param(const char *param, bool is_double, int *argc, char argv[][PATH_MAX]);

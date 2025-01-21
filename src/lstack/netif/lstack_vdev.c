@@ -147,7 +147,7 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
     }
 
     if (get_protocol_stack_group()->rx_offload == 0 || /* skip gro when tcp/ip cksum offloads disable */
-        dpdk_nic_is_xdp() || /* kernel has done GRO */
+        xdp_eth_enabled() || /* kernel has done GRO */
         (get_global_cfg_params()->vlan_mode >= 0
             && !(get_protocol_stack_group()->rx_offload & RTE_ETH_RX_OFFLOAD_VLAN_STRIP))) {
         return pkt_num;

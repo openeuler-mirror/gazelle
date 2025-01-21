@@ -364,14 +364,21 @@ static err_t eth_dev_init(struct netif *netif)
 
     netif->hwaddr_len = ETHER_ADDR_LEN;
 
-    if (dpdk_nic_is_xdp()) {
+    if (xdp_eth_enabled()) {
         netif_set_rxol_flags(netif, RTE_ETH_RX_OFFLOAD_TCP_CKSUM |
                                     RTE_ETH_RX_OFFLOAD_UDP_CKSUM |
                                     RTE_ETH_RX_OFFLOAD_IPV4_CKSUM);
+        netif_set_txol_flags(netif, RTE_ETH_TX_OFFLOAD_TCP_CKSUM | RTE_ETH_TX_OFFLOAD_TCP_TSO);
+        /* 16: see kernel MAX_SKB_FRAGS define in skbuff.h */
+        netif_set_max_pbuf_frags(netif, 16);
     } else {
         netif_set_rxol_flags(netif, get_protocol_stack_group()->rx_offload);
+        netif_set_txol_flags(netif, get_protocol_stack_group()->tx_offload);
+        /* 40: dpdk pmd support 40 max segs */
+        netif_set_max_pbuf_frags(netif, 40);
     }
-    netif_set_txol_flags(netif, get_protocol_stack_group()->tx_offload);
+    netif_set_min_tso_seglen(netif, 256);
+
     if (get_global_cfg_params()->stack_mode_rtc) {
         netif_set_rtc_mode(netif);
     }
