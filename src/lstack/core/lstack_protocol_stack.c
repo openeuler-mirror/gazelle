@@ -704,6 +704,7 @@ int stack_setup_app_thread(void)
 {
     static PER_THREAD int first_flags = 1;
     static _Atomic uint32_t queue_id = 0;
+    struct protocol_stack *stack;
 
     if (likely(first_flags == 0)) {
         return 0;
@@ -723,6 +724,10 @@ int stack_setup_app_thread(void)
         free(t_params);
         return -1;
     }
+
+    stack = get_protocol_stack();
+    stack_set_state(stack, RUNNING);
+
     atomic_fetch_add(&g_stack_group.stack_num, 1);
     free(t_params);
     return 0;
