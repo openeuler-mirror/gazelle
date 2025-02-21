@@ -267,7 +267,14 @@ struct pbuf *do_lwip_alloc_pbuf(pbuf_layer layer, uint16_t length, pbuf_type typ
 
 static inline bool pbuf_allow_append(struct pbuf *pbuf, uint16_t remain_size)
 {
-    pthread_spin_lock(&pbuf->pbuf_lock);
+    int ret;
+
+    /* Using pthread_spin_trylock to avoid deadlock between app thread and lstack threads */
+    ret = pthread_spin_trylock(&pbuf->pbuf_lock);
+    if (ret != 0) {
+        return false;
+    }
+
     if (pbuf->tot_len > remain_size) {
         pthread_spin_unlock(&pbuf->pbuf_lock);
         return false;
