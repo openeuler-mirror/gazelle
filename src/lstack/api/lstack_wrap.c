@@ -404,7 +404,7 @@ static int32_t do_connect(int32_t s, const struct sockaddr *addr, socklen_t addr
 
     /* When the socket is POSIX_LWIP_OR_KERNEL, connect to lwip first and then connect to kernel. */
     ret = g_wrap_api->connect_fn(s, addr, addrlen);
-    if (ret == 0 || (ret != 0 && errno == EINPROGRESS)) {
+    if (ret == 0 || (ret != 0 && (errno == EINPROGRESS || errno == EISCONN))) {
         POSIX_SET_TYPE(sock, POSIX_LWIP);
     } else {
         ret = posix_api->connect_fn(s, addr, addrlen);
