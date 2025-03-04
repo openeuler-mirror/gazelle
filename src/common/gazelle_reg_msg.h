@@ -33,7 +33,7 @@
 #define OPT_VDEV                    "--vdev"
 #define VDEV_ARG_IFACE              "iface"
 
-#define GAZELLE_MAX_NUMA_NODES      4
+#define GAZELLE_MAX_NUMA_NODES      8
 #define SOCKET_MEM_STRLEN           (GAZELLE_MAX_NUMA_NODES * 10)
 
 /* types for msg from lstack to ltran */
