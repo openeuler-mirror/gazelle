@@ -57,13 +57,13 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
 {
     uint32_t rcvd_pkts;
     uint32_t nr_pkts;
-    struct rte_mbuf *free_buf[DPDK_PKT_BURST_SIZE];
+    struct rte_mbuf *free_buf[VDEV_RX_QUEUE_SZ];
 
     rcvd_pkts = gazelle_ring_sc_dequeue(stack->rx_ring, (void **)pkts, max_mbuf);
 
     stack->rx_ring_used += rcvd_pkts;
     if (unlikely(stack->rx_ring_used >= USED_RX_PKTS_WATERMARK)) {
-        uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, RING_SIZE(DPDK_PKT_BURST_SIZE));
+        uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, RING_SIZE(VDEV_RX_QUEUE_SZ));
         int32_t ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, (struct rte_mbuf **)free_buf, free_cnt, true);
         if (likely(ret == 0)) {
             nr_pkts = gazelle_ring_sp_enqueue(stack->rx_ring, (void **)free_buf, free_cnt);
@@ -161,7 +161,7 @@ static uint32_t vdev_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pkt
 static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pkts, uint32_t nr_pkts)
 {
     uint32_t sent_pkts = 0;
-    struct rte_mbuf *free_buf[DPDK_PKT_BURST_SIZE];
+    struct rte_mbuf *free_buf[VDEV_TX_QUEUE_SZ];
     const uint32_t tbegin = sys_now();
 
     do {
@@ -292,7 +292,7 @@ int32_t vdev_reg_xmit(enum reg_ring_type type, struct gazelle_quintuple *qtuple)
 
         tmp_buf = &stack->reg_buf[reg_index];
         tmp_buf->type = type;
-        tmp_buf->tid = get_stack_tid();
+        tmp_buf->tid = rte_gettid();
         ret = memcpy_s(&tmp_buf->qtuple, sizeof(*qtuple), qtuple, sizeof(struct gazelle_quintuple));
         if (ret != EOK) {
             LSTACK_LOG(ERR, LSTACK, "memcpy_s failed ret=%d.\n", ret);
