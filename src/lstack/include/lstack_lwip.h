@@ -16,15 +16,15 @@
 
 #include "common/gazelle_dfx_msg.h"
 #include "common/dpdk_common.h"
+#include "same_node.h"
 
 struct lwip_sock;
 struct rpc_msg;
 struct protocol_stack;
 
-unsigned same_node_ring_count(struct lwip_sock *sock);
 
 #define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
-#define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)))
+#define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || NETCONN_NEED_SAME_NODE(sock))
 #define NETCONN_IS_DATAOUT(sock)    (gazelle_ring_readover_count((sock)->send_ring) || (sock)->send_pre_del)
 #define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 #define NETCONN_IS_UDP(sock)        (NETCONNTYPE_GROUP(netconn_type((sock)->conn)) == NETCONN_UDP)
@@ -62,7 +62,5 @@ void do_lwip_clone_sockopt(struct lwip_sock *dst_sock, struct lwip_sock *src_soc
 
 uint32_t do_lwip_get_conntable(struct gazelle_stat_lstack_conn_info *conn, uint32_t max_num);
 uint32_t do_lwip_get_connnum(void);
-
-void read_same_node_recv_list(struct protocol_stack *stack);
 
 #endif

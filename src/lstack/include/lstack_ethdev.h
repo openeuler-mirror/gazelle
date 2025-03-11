@@ -32,6 +32,4 @@ void kni_handle_rx(uint16_t port_id);
 void kni_handle_tx(struct rte_mbuf *mbuf);
 #endif
 
-void netif_poll(struct netif *netif);
-
 #endif /* __GAZELLE_ETHDEV_H__ */
