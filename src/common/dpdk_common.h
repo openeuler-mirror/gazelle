@@ -125,49 +125,6 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
 
 /*
     gazelle custom rte ring interface
-    lightweight ring reduce atomic and smp_mb.
-    only surpport single-consumers or the single-consumer.
- */
-static __rte_always_inline uint32_t gazelle_light_ring_enqueue_busrt(struct rte_ring *r, void **obj_table, uint32_t n)
-{
-    uint32_t cons = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
-    uint32_t prod = r->prod.tail;
-    uint32_t free_entries = r->capacity + cons - prod;
-
-    if (n > free_entries) {
-        return 0;
-    }
-
-    __rte_ring_enqueue_elems(r, prod, obj_table, sizeof(void *), n);
-
-    __atomic_store_n(&r->prod.tail, prod + n, __ATOMIC_RELEASE);
-
-    return n;
-}
-
-static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_ring *r, void **obj_table, uint32_t n)
-{
-    uint32_t prod = __atomic_load_n(&r->prod.tail, __ATOMIC_ACQUIRE);
-    uint32_t cons = r->cons.tail;
-    uint32_t entries = prod - cons;
-
-    if (n > entries) {
-        n = entries;
-    }
-
-    if (n == 0) {
-        return 0;
-    }
-
-    __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
-
-    __atomic_store_n(&r->cons.tail, cons + n, __ATOMIC_RELEASE);
-
-    return n;
-}
-
-/*
-    gazelle custom rte ring interface
     one thread enqueue and dequeue, other thread read object use and object still in queue.
     so malloc and free in same thread. only surpport single-consumers or the single-consumer.
 
@@ -177,15 +134,16 @@ static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_
     gazelle_ring_read:       prod.head-->> cons.head, read object, prod.head = prod.tail + N
     gazelle_ring_read_over:  prod.tail  =  prod.head, update prod.tail
  */
-static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void **obj_table, uint32_t n)
+static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void *const *obj_table, uint32_t n)
 {
     uint32_t head = __atomic_load_n(&r->cons.head, __ATOMIC_ACQUIRE);
     uint32_t tail = r->cons.tail;
 
-    uint32_t entries = r->capacity + tail - head;
-    if (n > entries) {
+    uint32_t free_entries = r->capacity + tail - head;
+    if (unlikely(free_entries == 0))
         return 0;
-    }
+    if (n > free_entries)
+        n = free_entries;
 
     __rte_ring_enqueue_elems(r, head, obj_table, sizeof(void *), n);
 
@@ -200,12 +158,10 @@ static __rte_always_inline uint32_t gazelle_ring_sc_dequeue(struct rte_ring *r, 
     uint32_t cons = r->cons.tail;
 
     uint32_t entries = prod - cons;
-    if (n > entries) {
-        n = entries;
-    }
-    if (unlikely(n == 0)) {
+    if (unlikely(entries == 0))
         return 0;
-    }
+    if (n > entries)
+        n = entries;
 
     __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
 
