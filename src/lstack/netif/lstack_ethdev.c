@@ -41,7 +41,6 @@
 
 /* FRAME_MTU + 14byte header */
 #define MBUF_MAX_LEN                            1514
-#define PACKET_READ_SIZE                        32
 
 /* any protocol stack thread receives arp packet and sync it to other threads,
  * so that it can have the arp table */
@@ -150,11 +149,11 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 void kni_handle_rx(uint16_t port_id)
 {
-    struct rte_mbuf *pkts_burst[PACKET_READ_SIZE];
+    struct rte_mbuf *pkts_burst[GAZELLE_PACKET_READ_SIZE];
     struct rte_kni* kni = get_gazelle_kni();
     uint32_t nb_kni_rx = 0;
     if (kni) {
-        nb_kni_rx = rte_kni_rx_burst(kni, pkts_burst, PACKET_READ_SIZE);
+        nb_kni_rx = rte_kni_rx_burst(kni, pkts_burst, GAZELLE_PACKET_READ_SIZE);
     }
     if (nb_kni_rx > 0) {
         uint16_t nb_rx = rte_eth_tx_burst(port_id, 0, pkts_burst, nb_kni_rx);

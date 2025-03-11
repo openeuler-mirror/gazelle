@@ -17,12 +17,13 @@
 #include <lwip/lwipgz_posix_api.h>
 #include <lwip/dpdk_version.h>
 #include <linux/ipv6.h>
+#include <securec.h>
+
 #include "lstack_cfg.h"
 #include "lstack_log.h"
 #include "lstack_port_map.h"
 #include "lstack_interrupt.h"
 #include "lstack_virtio.h"
-#include "securec.h"
 
 #define VIRTIO_USER_NAME "virtio_user"
 #define VIRTIO_DPDK_PARA_LEN 256

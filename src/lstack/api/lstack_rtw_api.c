@@ -92,7 +92,7 @@ static int stack_broadcast_bind(int fd, const struct sockaddr *name, socklen_t n
 
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL || cur_stack == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, %d get sock null or stack null\n", get_stack_tid(), fd);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, %d get sock null or stack null\n", rte_gettid(), fd);
         GAZELLE_RETURN(EBADF);
     }
 
@@ -229,7 +229,7 @@ static int stack_broadcast_listen(int fd, int backlog)
 
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (sock == NULL || cur_stack == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, %d get sock null or stack null\n", get_stack_tid(), fd);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, %d get sock null or stack null\n", rte_gettid(), fd);
         GAZELLE_RETURN(EBADF);
     }
 

@@ -106,8 +106,6 @@ struct protocol_stack_group {
     pthread_spinlock_t socket_lock;
 };
 
-long get_stack_tid(void);
-
 struct protocol_stack *get_protocol_stack(void);
 struct protocol_stack *get_protocol_stack_by_fd(int fd);
 struct protocol_stack *get_bind_protocol_stack(void);

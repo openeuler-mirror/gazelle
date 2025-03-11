@@ -235,7 +235,7 @@ static void callback_socket(struct rpc_msg *msg)
 {
     msg->result = lwip_socket(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i);
     if (msg->result < 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, %ld socket failed\n", get_stack_tid(), msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, %ld socket failed\n", rte_gettid(), msg->result);
     }
 }
 
@@ -253,7 +253,7 @@ static void callback_close(struct rpc_msg *msg)
 
     msg->result = lwip_close(fd);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d failed %ld\n", rte_gettid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -272,7 +272,7 @@ static void callback_shutdown(struct rpc_msg *msg)
 
     msg->result = lwip_shutdown(fd, how);
     if (msg->result != 0 && errno != ENOTCONN) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), fd, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d fail %ld\n", rte_gettid(), fd, msg->result);
     }
 
     posix_api->shutdown_fn(fd, how);
@@ -282,7 +282,7 @@ static void callback_bind(struct rpc_msg *msg)
 {
     msg->result = lwip_bind(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].cp, msg->args[MSG_ARG_2].u);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d failed %ld\n", rte_gettid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -300,7 +300,7 @@ static void callback_listen(struct rpc_msg *msg)
     /* new listen add to stack listen list */
     msg->result = lwip_listen(fd, backlog);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d failed %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d failed %ld\n", rte_gettid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -509,7 +509,7 @@ static void callback_getsockname(struct rpc_msg *msg)
 {
     msg->result = lwip_getsockname(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d fail %ld\n", get_stack_tid(), msg->args[MSG_ARG_0].i, msg->result);
+        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d fail %ld\n", rte_gettid(), msg->args[MSG_ARG_0].i, msg->result);
     }
 }
 
@@ -518,7 +518,7 @@ static void callback_getsockopt(struct rpc_msg *msg)
     msg->result = lwip_getsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
         msg->args[MSG_ARG_3].p, msg->args[MSG_ARG_4].p);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d, level %d, optname %d, fail %ld\n", get_stack_tid(),
+        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d, level %d, optname %d, fail %ld\n", rte_gettid(),
                    msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i, msg->result);
     }
 }
@@ -528,7 +528,7 @@ static void callback_setsockopt(struct rpc_msg *msg)
     msg->result = lwip_setsockopt(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i,
         msg->args[MSG_ARG_3].cp, msg->args[MSG_ARG_4].u);
     if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %ld, fd %d, level %d, optname %d, fail %ld\n", get_stack_tid(),
+        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d, level %d, optname %d, fail %ld\n", rte_gettid(),
                    msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].i, msg->args[MSG_ARG_2].i, msg->result);
     }
 }

@@ -76,17 +76,6 @@ static inline void set_stack_idx(uint16_t idx)
     g_stack_p = g_stack_group.stacks[idx];
 }
 
-long get_stack_tid(void)
-{
-    static PER_THREAD int32_t g_stack_tid = 0;
-
-    if (g_stack_tid == 0) {
-        g_stack_tid = rte_gettid();
-    }
-
-    return g_stack_tid;
-}
-
 struct protocol_stack_group *get_protocol_stack_group(void)
 {
     return &g_stack_group;
