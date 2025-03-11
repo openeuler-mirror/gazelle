@@ -113,7 +113,9 @@ struct protocol_stack *get_protocol_stack_by_fd(int fd);
 struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
+#if GAZELLE_TCP_REUSE_IPPORT
 int get_min_conn_stack(struct protocol_stack_group *stack_group);
+#endif /* GAZELLE_TCP_REUSE_IPPORT */
 void bind_to_stack_numa(struct protocol_stack *stack);
 void thread_bind_stack(struct protocol_stack *stack);
 

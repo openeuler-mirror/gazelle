@@ -362,6 +362,7 @@ static bool kernel_ip_route(const struct sockaddr *dst_addr)
 
 static bool should_enter_kernel_connect(const struct sockaddr *addr)
 {
+#if GAZELLE_SAME_NODE
     int32_t remote_port;
     char listen_ring_name[RING_NAME_LEN];
 
@@ -371,6 +372,7 @@ static bool should_enter_kernel_connect(const struct sockaddr *addr)
     if (kernel_ip_match(addr) && rte_ring_lookup(listen_ring_name) == NULL) {
         return true;
     }
+#endif /* GAZELLE_SAME_NODE */
 
     if (lwip_ip_route(addr)) {
         return false;

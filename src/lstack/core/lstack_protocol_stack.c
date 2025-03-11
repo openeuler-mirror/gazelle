@@ -146,6 +146,7 @@ struct protocol_stack *get_bind_protocol_stack(void)
     return stack_group->stacks[index];
 }
 
+#if GAZELLE_TCP_REUSE_IPPORT
 int get_min_conn_stack(struct protocol_stack_group *stack_group)
 {
     struct protocol_stack* stack;
@@ -161,6 +162,7 @@ int get_min_conn_stack(struct protocol_stack_group *stack_group)
     }
     return min_conn_stk_idx;
 }
+#endif /* GAZELLE_TCP_REUSE_IPPORT */
 
 void bind_to_stack_numa(struct protocol_stack *stack)
 {
@@ -566,6 +568,7 @@ int stack_polling(unsigned wakeup_tick)
         }
     }
 
+#if GAZELLE_SAME_NODE
     /* run to completion mode currently does not support sockmap */
     if (use_sockmap) {
         netif_poll(&stack->netif);
@@ -574,6 +577,7 @@ int stack_polling(unsigned wakeup_tick)
             read_same_node_recv_list(stack);
         }
     }
+#endif /* GAZELLE_SAME_NODE */
 
     if (cfg->udp_enable) {
         udp_netif_poll(&stack->netif);
