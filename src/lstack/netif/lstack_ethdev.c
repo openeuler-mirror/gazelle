@@ -31,16 +31,13 @@
 #include "lstack_stack_stat.h"
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
-#include "lstack_lwip.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_flow.h"
 #include "lstack_tx_cache.h"
 #include "lstack_virtio.h"
 #include "lstack_ethdev.h"
-
-/* FRAME_MTU + 14byte header */
-#define MBUF_MAX_LEN                            1514
+#include "lstack_mempool.h"
 
 /* any protocol stack thread receives arp packet and sync it to other threads,
  * so that it can have the arp table */
@@ -62,23 +59,23 @@ static void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cu
             continue;
         }
 
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
-        if (ret != 0) {
+        ret = mem_get_mbuf_bulk(stack->stack_idx, &mbuf_copy, 1, true);
+        if (ret == 0) {
             stack->stats.rx_allocmbuf_fail++;
             return;
         }
         copy_mbuf(mbuf_copy, mbuf);
 
-        ret = rpc_call_arp(&stack->rpc_queue, mbuf_copy);
+        ret = rpc_call_arp(stack->stack_idx, mbuf_copy);
         if (ret != 0) {
-            rte_pktmbuf_free(mbuf_copy);
+            mem_put_mbuf_bulk(&mbuf_copy, 1);
             return;
         }
     }
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
     if (get_global_cfg_params()->kni_switch) {
-        ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
-        if (ret != 0) {
+        ret = mem_get_mbuf_bulk(cur_stack->stack_idx, &mbuf_copy, 1, true);
+        if (ret == 0) {
             cur_stack->stats.rx_allocmbuf_fail++;
             return;
         }
@@ -87,8 +84,8 @@ static void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cu
     }
 #endif
     if (get_global_cfg_params()->flow_bifurcation) {
-        ret = dpdk_alloc_pktmbuf(cur_stack->rxtx_mbuf_pool, &mbuf_copy, 1, true);
-        if (ret != 0) {
+        ret = mem_get_mbuf_bulk(cur_stack->stack_idx, &mbuf_copy, 1, true);
+        if (ret == 0) {
             cur_stack->stats.rx_allocmbuf_fail++;
             return;
         }
@@ -100,12 +97,10 @@ static void stack_broadcast_arp(struct rte_mbuf *mbuf, struct protocol_stack *cu
 
 void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
 {
-    int32_t ret;
-    void *payload = NULL;
+    int ret;
     struct pbuf *next = NULL;
     struct pbuf *prev = NULL;
     struct pbuf *head = NULL;
-    struct pbuf_custom *pc = NULL;
     struct rte_mbuf *m = mbuf;
     uint16_t len, pkt_len;
     struct rte_mbuf *next_m = NULL;
@@ -114,14 +109,9 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
 
     while (m != NULL) {
         len = (uint16_t)rte_pktmbuf_data_len(m);
-        payload = rte_pktmbuf_mtod(m, void *);
-        pc = mbuf_to_pbuf(m);
-        next = pbuf_alloced_custom(PBUF_RAW, (uint16_t)len, PBUF_RAM, pc, payload, (uint16_t)len);
-        if (next == NULL) {
-            stack->stats.rx_allocmbuf_fail++;
-            break;
-        }
-        next->tot_len = pkt_len;
+        next = mbuf_to_pbuf(m);
+        mem_init_pbuf(next, PBUF_RAW, pkt_len, len, PBUF_POOL);
+
         pkt_len -= len;
 
         if (head == NULL) {
@@ -135,6 +125,8 @@ void eth_dev_recv(struct rte_mbuf *mbuf, struct protocol_stack *stack)
         next_m = m->next;
         m->next = NULL;
         m = next_m;
+
+        mem_preput_pbuf(next);
     }
 
     if (head != NULL) {
@@ -291,15 +283,16 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
     struct protocol_stack *stack = get_protocol_stack();
     struct rte_mbuf *pre_mbuf = NULL;
     struct rte_mbuf *first_mbuf = NULL;
+    struct rte_mbuf *mbuf;
     void *buf_addr;
 
     while (likely(pbuf != NULL)) {
-        struct rte_mbuf *mbuf = pbuf_to_mbuf(pbuf);
-
+        mbuf = pbuf_to_mbuf(pbuf);
+        // rte_mbuf_refcnt_set(mbuf, pbuf->ref + 1);
+        rte_mbuf_refcnt_update(mbuf, 1);
         mbuf->data_len = pbuf->len;
         mbuf->pkt_len = pbuf->tot_len;
         mbuf->next = NULL;
-        buf_addr = rte_pktmbuf_mtod(mbuf, void *);
 
         /*
          * |rte_mbuf | mbuf_private | data_off | data |
@@ -307,6 +300,7 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
          *                       buf_addr    payload
          * m->buf_addr pointer pbuf->payload
          */
+        buf_addr = rte_pktmbuf_mtod(mbuf, void *);
         mbuf->data_off += (uint8_t *)pbuf->payload - (uint8_t *)buf_addr;
 
         if (first_mbuf == NULL) {
@@ -316,26 +310,19 @@ static err_t eth_dev_output(struct netif *netif, struct pbuf *pbuf)
             first_mbuf->nb_segs++;
             pre_mbuf->next = mbuf;
         }
-
-        if (likely(first_mbuf->pkt_len > MBUF_MAX_LEN)) {
-            mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
-            mbuf->tso_segsz = MBUF_MAX_DATA_LEN;
-        }
-
         pre_mbuf = mbuf;
-        rte_mbuf_refcnt_update(mbuf, 1);
 
-        if (get_protocol_stack_group()->latency_start) {
-            calculate_lstack_latency(&stack->latency, pbuf, GAZELLE_LATENCY_WRITE_LSTACK, 0);
-        }
+        if (get_protocol_stack_group()->latency_start)
+            calculate_lstack_latency(stack->stack_idx, &pbuf, 1, GAZELLE_LATENCY_WRITE_LSTACK, 0);
+
         pbuf = pbuf->next;
     }
 
     uint32_t sent_pkts = stack->dev_ops.tx_xmit(stack, &first_mbuf, 1);
     stack->stats.tx += sent_pkts;
     if (sent_pkts < 1) {
+        mem_put_mbuf_bulk(&first_mbuf, 1);
         stack->stats.tx_drop++;
-        rte_pktmbuf_free(first_mbuf);
         return ERR_MEM;
     }
 
@@ -349,7 +336,7 @@ static err_t eth_dev_init(struct netif *netif)
     netif->name[0] = 'e';
     netif->name[1] = 't';
     netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_MLD6;
-    netif->mtu = FRAME_MTU;
+    netif->mtu = GAZELLE_IP_MTU;
     netif->output = etharp_output;
     netif->linkoutput = eth_dev_output;
     netif->output_ip6 = ethip6_output;
@@ -368,18 +355,11 @@ static err_t eth_dev_init(struct netif *netif)
                                     RTE_ETH_RX_OFFLOAD_UDP_CKSUM |
                                     RTE_ETH_RX_OFFLOAD_IPV4_CKSUM);
         netif_set_txol_flags(netif, RTE_ETH_TX_OFFLOAD_TCP_CKSUM | RTE_ETH_TX_OFFLOAD_TCP_TSO);
-        /* 16: see kernel MAX_SKB_FRAGS define in skbuff.h */
-        netif_set_max_pbuf_frags(netif, 16);
+        netif_set_max_pbuf_frags(netif, OFFLOAD_TX_TSO_4K_FRAGS);
     } else {
         netif_set_rxol_flags(netif, get_protocol_stack_group()->rx_offload);
         netif_set_txol_flags(netif, get_protocol_stack_group()->tx_offload);
-        /* 40: dpdk pmd support 40 max segs */
-        netif_set_max_pbuf_frags(netif, 40);
-    }
-    netif_set_min_tso_seglen(netif, 256);
-
-    if (get_global_cfg_params()->stack_mode_rtc) {
-        netif_set_rtc_mode(netif);
+        netif_set_max_pbuf_frags(netif, OFFLOAD_TX_TSO_MTU_FRAGS);
     }
 
     return ERR_OK;
@@ -400,7 +380,7 @@ int32_t ethdev_init(struct protocol_stack *stack)
 
     if (use_ltran()) {
         stack->rx_ring_used = 0;
-        int32_t ret = fill_mbuf_to_ring(stack->rxtx_mbuf_pool, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
+        int32_t ret = fill_mbuf_to_ring(stack->stack_idx, stack->rx_ring, RING_SIZE(VDEV_RX_QUEUE_SZ));
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "fill mbuf to rx_ring failed ret=%d\n", ret);
             return ret;

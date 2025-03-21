@@ -13,30 +13,26 @@
 #ifndef GAZELLE_STACK_STAT_H
 #define GAZELLE_STACK_STAT_H
 
+#include <lwip/lwipgz_sock.h>
+#include <lwip/pbuf.h>
+
 struct gazelle_stack_latency;
-struct pbuf;
 struct rpc_msg;
 struct gazelle_stat_low_power_info;
-struct wakeup_poll;
-struct protocol_stack;
 enum GAZELLE_LATENCY_TYPE;
 enum GAZELLE_STAT_MODE;
 struct gazelle_stat_msg_request;
-struct lwip_sock;
 
-void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+void calculate_lstack_latency(int stack_id, struct pbuf *const *pbuf, uint32_t num, 
     enum GAZELLE_LATENCY_TYPE type, uint64_t time_record);
-void calculate_sock_latency(struct gazelle_stack_latency *stack_latency, struct lwip_sock *sock,
-    enum GAZELLE_LATENCY_TYPE type);
+void calculate_sock_latency(struct lwip_sock *sock, enum GAZELLE_LATENCY_TYPE type);
 void stack_stat_init(void);
 int handle_stack_cmd(int fd, struct gazelle_stat_msg_request *msg);
 int handle_dpdk_cmd(int fd, enum GAZELLE_STAT_MODE stat_mode);
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info);
-void unregister_wakeup(struct protocol_stack *stack, struct wakeup_poll *wakeup);
 void lstack_calculate_aggregate(int type, uint32_t len);
-void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new);
+void time_stamp_into_write(struct pbuf *pbufs[], uint32_t num);
 void time_stamp_into_rpcmsg(struct lwip_sock *sock);
-void time_stamp_into_recvmbox(struct lwip_sock *sock);
 void time_stamp_record(int fd, struct pbuf *pbuf);
 
 #endif /* GAZELLE_STACK_STAT_H */

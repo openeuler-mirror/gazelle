@@ -40,8 +40,7 @@ struct latency_timestamp {
 struct mbuf_private {
     /* struct pbuf_custom must at first */
     struct pbuf_custom pc;
-    /* don't use `struct tcp_seg` directly to avoid conflicts by include lwip tcp header */
-    char ts[32]; // 32 > sizeof(struct tcp_seg)
+    int stack_id; /* the stack to which buf belongs */
     struct latency_timestamp lt;
 };
 
@@ -49,13 +48,9 @@ static __rte_always_inline struct mbuf_private *mbuf_to_private(const struct rte
 {
     return (struct mbuf_private *)RTE_PTR_ADD(m, sizeof(struct rte_mbuf));
 }
-static __rte_always_inline struct pbuf_custom *mbuf_to_pbuf(const struct rte_mbuf *m)
+static __rte_always_inline struct pbuf *mbuf_to_pbuf(const struct rte_mbuf *m)
 {
-    return &mbuf_to_private(m)->pc;
-}
-static __rte_always_inline struct rte_mbuf *pbuf_to_mbuf(const struct pbuf *p)
-{
-    return (struct rte_mbuf *)RTE_PTR_SUB(p, sizeof(struct rte_mbuf));
+    return &mbuf_to_private(m)->pc.pbuf;
 }
 static __rte_always_inline struct mbuf_private *pbuf_to_private(const struct pbuf *p)
 {

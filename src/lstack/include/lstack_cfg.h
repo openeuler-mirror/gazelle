@@ -128,15 +128,12 @@ struct cfg_params {
         bool listen_shadow; // true:listen in all stack thread. false:listen in one stack thread.
         bool stack_interrupt;
 
-        uint32_t read_connect_number;
         uint32_t nic_read_number;
         uint32_t rpc_number;
         uint32_t rpc_msg_max;
     };
 
     struct { // socket
-        uint16_t send_ring_size;
-        uint16_t recv_ring_size;
         uint32_t tcp_conn_count;
         uint32_t mbuf_count_per_conn;
     };
@@ -167,7 +164,8 @@ static inline uint8_t use_ltran(void)
 
 static inline bool xdp_eth_enabled(void)
 {
-    if (strlen(get_global_cfg_params()->xdp_eth_name)) {
+    /* strlen > 0 */
+    if (get_global_cfg_params()->xdp_eth_name[0] != '\0') {
         return true;
     }
     return false;

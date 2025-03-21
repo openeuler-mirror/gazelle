@@ -292,7 +292,7 @@ static uint32_t get_vlan_offset(const struct rte_mbuf *m)
     uint32_t offset = 0;
     struct rte_ether_hdr *ethh = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
     u16_t type = ethh->ether_type;
-    if (type == PP_HTONS(RTE_ETHER_TYPE_VLAN)) {
+    if (type == htons(RTE_ETHER_TYPE_VLAN)) {
         offset += sizeof(struct rte_vlan_hdr);
     }
     return offset;

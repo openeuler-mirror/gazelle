@@ -285,7 +285,7 @@ int mt_ring_create(struct mbox_ring *mr, const char *name, unsigned count)
         mr->ops = &g_mbox_rtw_default_ops;
         mr->st_obj = NULL;
     }
-    if ((mr->flags & MBOX_FLAG_RECV) && !dpdk_nic_is_xdp()) {
+    if ((mr->flags & MBOX_FLAG_RECV) && !xdp_eth_enabled()) {
         mr->flags |= MBOX_FLAG_PEEK;
         mr->ops = &g_mbox_rtw_peek_ops;
         mr->ops->create(mr, name, count);

@@ -24,6 +24,7 @@
 #include "lstack_port_map.h"
 #include "lstack_interrupt.h"
 #include "lstack_virtio.h"
+#include "mbox_ring.h"
 
 #define VIRTIO_USER_NAME "virtio_user"
 #define VIRTIO_DPDK_PARA_LEN 256
@@ -293,7 +294,7 @@ static int virtio_port_init(uint16_t port)
     }
 
     for (uint16_t q = 0; q < rx_queue_num; q++) {
-        struct rte_mempool *rxtx_mbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[q % mbuf_total_num];
+        struct rte_mempool *rxtx_mbuf_pool = mem_get_mbuf_pool(q % mbuf_total_num);
         retval = rte_eth_rx_queue_setup(port, q, VIRTIO_TX_RX_RING_SIZE, rte_eth_dev_socket_id(port),
                                         NULL, rxtx_mbuf_pool);
         if (retval < 0) {

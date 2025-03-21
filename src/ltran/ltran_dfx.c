@@ -740,7 +740,6 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("app_write: %-18"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_write_cnt);
     printf("write_lwip: %-17"PRIu64" ", lstack_stat->data.pkts.stack_stat.write_lwip_cnt);
     printf("app_write_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.app_write_rpc);
-    printf("recv_list: %-18"PRIu64" ", lstack_stat->data.pkts.recv_list_cnt);
     printf("conn_num: %-19hu ", lstack_stat->data.pkts.conn_num);
 
     printf("kernel_events: %-14"PRIu64"\n", lstack_stat->data.pkts.wakeup_stat.kernel_events);
@@ -902,11 +901,10 @@ static void gazelle_print_lstack_stat_latency(void *buf, const struct gazelle_st
     printf("Recv:\n");
 
     printf("range: t0--->t1\n%s", res[GAZELLE_LATENCY_INTO_MBOX].latency_stat_result);
-    printf("range: t1--->t2\n%s", res[GAZELLE_LATENCY_READ_LWIP].latency_stat_result);
-    printf("range: t2--->t3\n%s", res[GAZELLE_LATENCY_READ_APP_CALL].latency_stat_result);
-    printf("range: t3--->t4\n%s", res[GAZELLE_LATENCY_READ_LSTACK].latency_stat_result);
-    printf("range: t0--->t4\n%s", res[GAZELLE_LATENCY_READ_MAX].latency_stat_result);
-    printf("t0: read from nic  t1: into recvmbox  t2: into recvring t3: app read start  t4: app read end\n");
+    printf("range: t1--->t2\n%s", res[GAZELLE_LATENCY_READ_APP_CALL].latency_stat_result);
+    printf("range: t2--->t3\n%s", res[GAZELLE_LATENCY_READ_LSTACK].latency_stat_result);
+    printf("range: t0--->t3\n%s", res[GAZELLE_LATENCY_READ_MAX].latency_stat_result);
+    printf("t0: read from nic  t1: into recvmbox  t2: app read start  t3: app read end\n");
 
     printf("Send:\n");
     printf("range: t0--->t1\n%s", res[GAZELLE_LATENCY_WRITE_INTO_RING].latency_stat_result);
@@ -1271,7 +1269,7 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
     printf("Active Internet connections (servers and established)\n");
     do {
         printf("\n------ stack tid: %6u ------time=%s\n", stat->tid, sys_local_time_str);
-        printf("No.   Proto lwip_recv recv_ring in_send send_ring cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
+        printf("No.   Proto recvmbox recvtail sendmbox sendtail in_send cwn      rcv_wnd  snd_wnd   snd_buf   snd_nxt"
             "        lastack        rcv_nxt        events    epoll_ev  evlist fd     Local Address"
             "                                        Foreign Address                                      State"
             "     keep-alive keep-alive(idle,intvl,cnt) pingpong\n");
@@ -1292,10 +1290,12 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
                 
                 sprintf_s(str_laddr, sizeof(str_laddr), "%s:%hu", str_ip, conn_info->l_port);
                 sprintf_s(str_raddr, sizeof(str_raddr), "%s:%hu", str_rip, conn_info->r_port);
-                printf("%-6utcp   %-10u%-10u%-8u%-10u%-9d%-9d%-10d%-10d%-15u%-15u%-15u%-10x%-10x%-7d%-7d"
-                    "%-52s %-52s %s  %-5d %s  %d\n",
-                    i, conn_info->recv_cnt, conn_info->recv_ring_cnt, conn_info->in_send,
-                    conn_info->send_ring_cnt, conn_info->cwn, conn_info->rcv_wnd, conn_info->snd_wnd,
+                printf("%-6utcp   %-9u%-9u%-9u%-9u%-8u%-9d%-9d%-10d%-10d%-15u%-15u%-15u%-10x%-10x%-7d%-7d"
+                    "%-52s %-52s %s  %-5d %s  %d\n", i, 
+                    conn_info->recvmbox_cnt, conn_info->recvmbox_tail, 
+                    conn_info->sendmbox_cnt, conn_info->sendmbox_tail,
+                    conn_info->in_send,
+                    conn_info->cwn, conn_info->rcv_wnd, conn_info->snd_wnd,
                     conn_info->snd_buf, conn_info->snd_nxt, conn_info->lastack, conn_info->rcv_nxt, conn_info->events,
                     conn_info->epoll_events, conn_info->eventlist, conn_info->fd,
                     str_laddr, str_raddr, tcp_state_to_str(conn_info->tcp_sub_state),
@@ -1304,14 +1304,14 @@ static void gazelle_print_lstack_stat_conn(void *buf, const struct gazelle_stat_
                 inet_ntop(domain, lip, str_ip, sizeof(str_ip));
                 sprintf_s(str_laddr, sizeof(str_laddr), "%s:%hu", str_ip, conn_info->l_port);
                 sprintf_s(str_raddr, sizeof(str_raddr), "%s:*", domain == AF_INET ? "0.0.0.0" : "::0");
-                printf("%-6utcp    %-147u%-7d%-52s %-52s LISTEN\n", i, conn_info->recv_cnt,
+                printf("%-6utcp    %-147u%-7d%-52s %-52s LISTEN\n", i, conn_info->recvmbox_cnt,
                     conn_info->fd, str_laddr, str_raddr);
             } else {
                 printf("Got unknow tcp conn::%s:%5hu, state:%u\n",
                     inet_ntop(domain, lip, str_ip, sizeof(str_ip)), conn_info->l_port, conn_info->state);
             }
-            unread_pkts += conn_info->recv_ring_cnt + conn_info->recv_cnt;
-            unsend_pkts += conn_info->send_ring_cnt + conn_info->in_send;
+            unread_pkts += conn_info->recvmbox_cnt;
+            unsend_pkts += conn_info->sendmbox_cnt + conn_info->in_send;
         }
         if (conn->conn_num > 0) {
             printf("Total unread pkts:%u  unsend pkts:%u\n", unread_pkts, unsend_pkts);
@@ -1478,12 +1478,6 @@ static void gazelle_print_lstack_aggregate(void *buf, const struct gazelle_stat_
         printf("tx_size_513_1460 byte: %u\n", stats->size_513_1460[1]);
         printf("tx_size_1461_8192 byte: %u\n", stats->size_1461_8192[1]);
         printf("tx_size_8193_max byte: %u\n", stats->size_8193_max[1]);
-
-        printf("app_tx_szie_1_64: %u\n", stats->size_1_64[2]);
-        printf("app_tx_size_65_512: %u\n", stats->size_65_512[2]);
-        printf("app_tx_size_513_1460 byte: %u\n", stats->size_513_1460[2]);
-        printf("app_tx_size_1461_8192 byte: %u\n", stats->size_1461_8192[2]);
-        printf("app_tx_size_8193_max byte: %u\n", stats->size_8193_max[2]);
 
         if ((dfx->eof != 0) || (ret != GAZELLE_OK)) {
             break;

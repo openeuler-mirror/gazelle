@@ -29,12 +29,6 @@
 #include "lstack_ethdev.h"
 #include "lstack_tx_cache.h"
 
-#define SOCK_RECV_RING_SIZE         (get_global_cfg_params()->recv_ring_size)
-#define SOCK_RECV_RING_SIZE_MAX     (2048)
-#define SOCK_SEND_RING_SIZE_MAX     (2048)
-
-#define MBUFPOOL_RESERVE_NUM (2 * get_global_cfg_params()->rxqueue_size + 1024)
-
 struct protocol_stack {
     uint32_t tid;
     uint16_t queue_id;
@@ -52,7 +46,6 @@ struct protocol_stack {
     volatile bool low_power;
     volatile uint16_t conn_num;
 
-    struct rte_mempool *rxtx_mbuf_pool;
     struct rte_ring *rx_ring;
     struct rte_ring *tx_ring;
     struct rte_ring *reg_ring;
@@ -67,9 +60,6 @@ struct protocol_stack {
     rpc_queue dfx_rpc_queue;
     rpc_queue rpc_queue;
     char pad2 __rte_cache_aligned;
-
-    struct list_node recv_list;
-    struct list_node same_node_recv_list; /* used for same node processes communication */
 
     struct stats_ *lwip_stats;
     struct gazelle_stack_latency latency;
@@ -88,7 +78,6 @@ struct protocol_stack_group {
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
 
     sem_t sem_listen_thread;
-    struct rte_mempool *total_rxtx_pktmbuf_pool[PROTOCOL_STACK_MAX];
     sem_t sem_stack_setup;
     bool stack_setup_fail;
 

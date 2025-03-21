@@ -94,15 +94,10 @@ enum posix_type select_sock_posix_path(struct lwip_sock *sock)
     }
 
     /* CLOSED means not sockfd, such as file fd or unix fd */
-    if (POSIX_IS_CLOSED(sock) || POSIX_IS_TYPE(sock, POSIX_KERNEL)) {
+    if (POSIX_IS_CLOSED(sock)) {
         return POSIX_KERNEL;
     }
-
-    if (likely(POSIX_IS_TYPE(sock, POSIX_LWIP))) {
-        return POSIX_LWIP;
-    }
-
-    return POSIX_ALL;
+    return sock->type;
 }
 
 enum posix_type select_posix_path(void)
@@ -193,6 +188,6 @@ int preload_info_init(void)
     }
 
     g_preload_info.preload_switch = 1;
-
+    LSTACK_PRE_LOG(LSTACK_INFO, "LD_PRELOAD ok\n");
     return preload_check_bind_proc();
 }

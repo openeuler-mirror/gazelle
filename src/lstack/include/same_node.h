@@ -19,7 +19,6 @@
 
 unsigned same_node_ring_count(const struct lwip_sock *sock);
 
-void read_same_node_recv_list(struct protocol_stack *stack);
 ssize_t gazelle_same_node_ring_recv(struct lwip_sock *sock, const void *buf, size_t len, int32_t flags);
 ssize_t gazelle_same_node_ring_send(struct lwip_sock *sock, const void *buf, size_t len, int32_t flags);
 

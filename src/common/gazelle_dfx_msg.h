@@ -72,10 +72,9 @@ enum GAZELLE_STAT_MODE {
 
 enum GAZELLE_LATENCY_TYPE {
     GAZELLE_LATENCY_INTO_MBOX,       // t0 -> t1
-    GAZELLE_LATENCY_READ_LWIP,       // t1 -> t2
-    GAZELLE_LATENCY_READ_APP_CALL,   // t2 -> t3
-    GAZELLE_LATENCY_READ_LSTACK,     // t3 -> t4
-    GAZELLE_LATENCY_READ_MAX,        // t0 -> t4
+    GAZELLE_LATENCY_READ_APP_CALL,   // t1 -> t2
+    GAZELLE_LATENCY_READ_LSTACK,     // t2 -> t3
+    GAZELLE_LATENCY_READ_MAX,        // t0 -> t3
 
     GAZELLE_LATENCY_WRITE_INTO_RING, // t0 -> t1
     GAZELLE_LATENCY_WRITE_LWIP,      // t1 -> t2
@@ -123,12 +122,12 @@ struct gazelle_wakeup_stat {
 };
 
 struct gazelle_stack_aggregate_stats {
-    /* 0: RX, 1: TX, 2: APP_TX */
-    uint32_t size_1_64[3];
-    uint32_t size_65_512[3];
-    uint32_t size_513_1460[3];
-    uint32_t size_1461_8192[3];
-    uint32_t size_8193_max[3];
+    /* 0: RX, 1: TX */
+    uint32_t size_1_64[2];
+    uint32_t size_65_512[2];
+    uint32_t size_513_1460[2];
+    uint32_t size_1461_8192[2];
+    uint32_t size_8193_max[2];
 
     uint64_t rx_bytes;
     uint64_t tx_bytes;
@@ -138,7 +137,6 @@ struct gazelle_stat_pkts {
     uint16_t conn_num;
     uint32_t mbufpool_avail_cnt;
     uint64_t call_msg_cnt;
-    uint64_t recv_list_cnt;
     uint64_t call_alloc_fail;
     struct gazelle_stack_stat stack_stat;
     struct gazelle_wakeup_stat wakeup_stat;
@@ -257,15 +255,17 @@ struct gazelle_stat_lstack_proto {
 
 struct gazelle_stat_lstack_conn_info {
     uint32_t state;
+    uint32_t tcp_sub_state;
+
     gz_addr_t rip;
     gz_addr_t lip;
     uint16_t r_port;
     uint16_t l_port;
     uint32_t in_send;
-    uint32_t recv_cnt;
-    uint32_t send_ring_cnt;
-    uint32_t recv_ring_cnt;
-    uint32_t tcp_sub_state;
+    uint32_t recvmbox_cnt;
+    uint16_t recvmbox_tail;
+    uint32_t sendmbox_cnt;
+    uint16_t sendmbox_tail;
 
     uint32_t cwn;
     uint32_t rcv_wnd;

@@ -29,6 +29,7 @@
 #include "lstack_cfg.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_flow.h"
+#include "lstack_mempool.h"
 
 #define MAX_PATTERN_NUM                         4
 #define MAX_ACTION_NUM                          2
@@ -435,7 +436,7 @@ static void transfer_tcp_to_thread(struct rte_mbuf *mbuf, uint16_t stk_idx)
     struct protocol_stack *stack = get_protocol_stack_group()->stacks[stk_idx];
     int ret  = -1;
     while (ret != 0) {
-        ret = rpc_call_arp(&stack->rpc_queue, mbuf);
+        ret = rpc_call_arp(stack->stack_idx, mbuf);
         printf("transfer_tcp_to_thread, ret : %d \n", ret);
     }
 }
@@ -449,17 +450,15 @@ static void parse_arp_and_transefer(char* buf)
     int32_t ret;
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
         stack = stack_group->stacks[i];
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, false);
-        while (ret != 0) {
-            ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, false);
+        while (mem_get_mbuf_bulk(stack->stack_idx, &mbuf_copy, 1, false) == 0) {
             stack->stats.rx_allocmbuf_fail++;
         }
         copy_mbuf(mbuf_copy, mbuf);
 
-        ret = rpc_call_arp(&stack->rpc_queue, mbuf_copy);
+        ret = rpc_call_arp(stack->stack_idx, mbuf_copy);
 
         while (ret != 0) {
-            rpc_call_arp(&stack->rpc_queue, mbuf_copy);
+            rpc_call_arp(stack->stack_idx, mbuf_copy);
         }
     }
 }
@@ -478,9 +477,7 @@ static void parse_tcp_and_transefer(char* buf)
     struct rte_mbuf *mbuf_copy = NULL;
     struct protocol_stack *stack = stack_group->stacks[stk_index];
 
-    int32_t ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, false);
-    while (ret != 0) {
-        ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, &mbuf_copy, 1, false);
+    while (mem_get_mbuf_bulk(stack->stack_idx, &mbuf_copy, 1, false) == 0) {
         stack->stats.rx_allocmbuf_fail++;
     }
 
