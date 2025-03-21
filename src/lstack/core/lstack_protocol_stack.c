@@ -29,7 +29,7 @@
 #include "lstack_ethdev.h"
 #include "lstack_lwip.h"
 #include "lstack_control_plane.h"
-#include "lstack_epoll.h"
+#include "lstack_wait.h"
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"
 #include "lstack_interrupt.h"
@@ -39,9 +39,7 @@
 #include <rte_kni.h>
 #endif
 
-#define KERNEL_EVENT_10us               10
-
-static PER_THREAD struct protocol_stack *g_stack_p = NULL;
+PER_THREAD struct protocol_stack *g_stack_p = NULL;
 static struct protocol_stack_group g_stack_group = {0};
 
 typedef void *(*stack_thread_func)(void *arg);
@@ -81,19 +79,15 @@ struct protocol_stack_group *get_protocol_stack_group(void)
     return &g_stack_group;
 }
 
-struct protocol_stack *get_protocol_stack(void)
+struct protocol_stack *get_protocol_stack_by_id(int stack_id)
 {
-    return g_stack_p;
-}
+    struct protocol_stack_group *stack_group;
 
-struct protocol_stack *get_protocol_stack_by_fd(int fd)
-{
-    struct lwip_sock *sock = lwip_get_socket(fd);
-    if (POSIX_IS_CLOSED(sock)) {
+    if (stack_id < 0) {
         return NULL;
     }
-
-    return sock->stack;
+    stack_group = get_protocol_stack_group();
+    return stack_group->stacks[stack_id];
 }
 
 struct protocol_stack *get_bind_protocol_stack(void)
@@ -153,10 +147,11 @@ int get_min_conn_stack(struct protocol_stack_group *stack_group)
 }
 #endif /* GAZELLE_TCP_REUSE_IPPORT */
 
-void bind_to_stack_numa(struct protocol_stack *stack)
+void bind_to_stack_numa(int stack_id)
 {
-    int32_t ret;
+    int ret;
     pthread_t tid = pthread_self();
+    struct protocol_stack *stack = get_protocol_stack_by_id(stack_id);
 
     if (get_global_cfg_params()->stack_num > 0) {
         numa_run_on_node(stack->numa_id);
@@ -170,7 +165,7 @@ void bind_to_stack_numa(struct protocol_stack *stack)
     }
 }
 
-void thread_bind_stack(struct protocol_stack *stack)
+void thread_bind_stack(int stack_id)
 {
     static PER_THREAD uint16_t stack_sock_num[GAZELLE_MAX_STACK_NUM] = {0};
     static PER_THREAD uint16_t max_sock_stack = 0;
@@ -179,10 +174,10 @@ void thread_bind_stack(struct protocol_stack *stack)
         return;
     }
 
-    stack_sock_num[stack->stack_idx]++;
-    if (stack_sock_num[stack->stack_idx] > max_sock_stack) {
-        max_sock_stack = stack_sock_num[stack->stack_idx];
-        bind_to_stack_numa(stack);
+    stack_sock_num[stack_id]++;
+    if (stack_sock_num[stack_id] > max_sock_stack) {
+        max_sock_stack = stack_sock_num[stack_id];
+        bind_to_stack_numa(stack_id);
     }
 }
 
@@ -308,11 +303,6 @@ void low_power_idling(struct protocol_stack *stack)
     }
 }
 
-struct thread_params {
-    uint16_t queue_id;
-    uint16_t idx;
-};
-
 static int32_t create_thread(void *arg, char *thread_name, stack_thread_func func)
 {
     /* thread may run slow, if arg is temp var maybe have relese */
@@ -347,48 +337,6 @@ static int32_t create_thread(void *arg, char *thread_name, stack_thread_func fun
     return 0;
 }
 
-static void wakeup_kernel_event(struct protocol_stack *stack)
-{
-    if (stack->kernel_event_num <= 0) {
-        return;
-    }
-
-    for (int32_t i = 0; i < stack->kernel_event_num; i++) {
-        struct wakeup_poll *wakeup = stack->kernel_events[i].data.ptr;
-        if (wakeup->type == WAKEUP_CLOSE) {
-            continue;
-        }
-
-        __atomic_store_n(&wakeup->have_kernel_event, true, __ATOMIC_RELEASE);
-        lstack_block_wakeup(wakeup);
-    }
-
-    return;
-}
-
-static void* gazelle_kernelevent_thread(void *arg)
-{
-    struct thread_params *t_params = (struct thread_params*) arg;
-    uint16_t idx = t_params->idx;
-    struct protocol_stack *stack = get_protocol_stack_group()->stacks[idx];
-
-    bind_to_stack_numa(stack);
-
-    LSTACK_LOG(INFO, LSTACK, "kernelevent_%02hu start\n", idx);
-    free(arg);
-    sem_post(&g_stack_group.sem_stack_setup);
-
-    for (;;) {
-        stack->kernel_event_num = posix_api->epoll_wait_fn(stack->epollfd, stack->kernel_events, KERNEL_EPOLL_MAX, -1);
-        if (stack->kernel_event_num > 0) {
-            wakeup_kernel_event(stack);
-            usleep(KERNEL_EVENT_10us);
-        }
-    }
-
-    return NULL;
-}
-
 static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
 {
     struct thread_params *t_params = (struct thread_params*) arg;
@@ -403,16 +351,10 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
 
     list_init_head(&stack->recv_list);
     list_init_head(&stack->same_node_recv_list);
-    list_init_head(&stack->wakeup_list);
 
     stack_group->stacks[t_params->idx] = stack;
     set_stack_idx(t_params->idx);
 
-    stack->epollfd = posix_api->epoll_create_fn(GAZELLE_LSTACK_MAX_CONN);
-    if (stack->epollfd < 0) {
-        LSTACK_LOG(ERR, LSTACK, "kernel epoll_create failed\n");
-        return -1;
-    }
 
     if (cfg_params->stack_num > 0) {
         stack->numa_id = cfg_params->numa_id;
@@ -453,7 +395,7 @@ static int32_t create_affiliate_thread(void *arg)
         return -1;
     }
     memcpy_s(params, sizeof(*params), arg, sizeof(struct thread_params));
-    if (create_thread((void *)params, "gazellekernel", gazelle_kernelevent_thread) != 0) {
+    if (create_thread((void *)params, "gazellekernel", kernel_wait_thread) != 0) {
         LSTACK_LOG(ERR, LSTACK, "gazellekernel errno=%d\n", errno);
         return -1;
     }
@@ -551,7 +493,9 @@ int stack_polling(unsigned wakeup_tick)
     do_lwip_read_recvlist(stack, read_connect_number);
 
     if ((wakeup_tick & 0xf) == 0) {
-        wakeup_stack_epoll(stack);
+#if SOCK_WAIT_BATCH_NOTIFY
+        stack->stats.wakeup_events += lwip_wait_foreach_notify(stack->stack_idx);
+#endif /* SOCK_WAIT_BATCH_NOTIFY */
         if (get_global_cfg_params()->send_cache_mode) {
             tx_cache_send(stack->queue_id);
         }
@@ -595,7 +539,7 @@ static bool stack_local_event_get(uint16_t stack_id)
     if (!lockless_queue_empty(&stack->dfx_rpc_queue.queue) ||
         !lockless_queue_empty(&stack->rpc_queue.queue) ||
         !list_head_empty(&stack->recv_list) ||
-        !list_head_empty(&stack->wakeup_list) ||
+        !lwip_wait_notify_empty(stack_id) ||
         tx_cache_count(stack->queue_id)) {
         return true;
     }
@@ -681,8 +625,6 @@ int stack_group_init(void)
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     stack_group->stack_num = 0;
 
-    list_init_head(&stack_group->poll_list);
-    pthread_spin_init(&stack_group->poll_list_lock, PTHREAD_PROCESS_PRIVATE);
     pthread_spin_init(&stack_group->socket_lock, PTHREAD_PROCESS_PRIVATE);
     if (sem_init(&stack_group->sem_stack_setup, 0, 0) < 0) {
         LSTACK_LOG(ERR, LSTACK, "sem_init failed errno=%d\n", errno);
@@ -783,21 +725,19 @@ OUT2:
     return -1;
 }
 
-static void stack_all_fds_close(struct protocol_stack *stack)
-{
-    for (int i = 3; i < GAZELLE_MAX_CLIENTS + GAZELLE_RESERVED_CLIENTS; i++) {
-        struct lwip_sock *sock = lwip_get_socket(i);
-        if (!POSIX_IS_CLOSED(sock) && sock->stack == stack) {
-            lwip_close(i);
-        }
-    }
-}
 
 void stack_exit(void)
 {
     struct protocol_stack *stack = get_protocol_stack();
-    if (stack != NULL) {
-        stack_all_fds_close(stack);
+    if (stack == NULL)
+        return;
+
+    /* close all fd */
+    for (int i = 3; i < GAZELLE_MAX_CLIENTS + GAZELLE_RESERVED_CLIENTS; i++) {
+        struct lwip_sock *sock = lwip_get_socket(i);
+        if (!POSIX_IS_CLOSED(sock) && sock->stack_id == stack->stack_idx) {
+            lwip_close(i);
+        }
     }
 }
 

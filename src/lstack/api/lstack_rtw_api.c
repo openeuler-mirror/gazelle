@@ -19,30 +19,31 @@
 #include "lstack_thread_rpc.h"
 #include "lstack_protocol_stack.h"
 #include "lstack_lwip.h"
-#include "lstack_epoll.h"
 #include "lstack_rtw_api.h"
+#include "lstack_epoll.h"
+#include "lstack_wait.h"
 
 /* when fd is listenfd, listenfd of all protocol stack thread will be closed */
 static int stack_broadcast_close(int fd)
 {
     int ret = 0;
+    struct protocol_stack *stack;
     struct lwip_sock *sock = lwip_get_socket(fd);
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
 
     do {
-        sock = sock->listen_next;
+        if (POSIX_IS_CLOSED(sock)) {
+            break;
+        }
+        stack = get_protocol_stack_by_id(sock->stack_id);
         if (stack == NULL || rpc_call_close(&stack->rpc_queue, fd)) {
             ret = -1;
         }
 
-        if (POSIX_IS_CLOSED(sock)) {
-            break;
-        }
+        sock = sock->listen_next;
         fd = sock->conn->callback_arg.socket;
-        stack = get_protocol_stack_by_fd(fd);
     } while (1);
 
     return ret;
@@ -51,23 +52,23 @@ static int stack_broadcast_close(int fd)
 static int stack_broadcast_shutdown(int fd, int how)
 {
     int32_t ret = 0;
+    struct protocol_stack *stack;
     struct lwip_sock *sock = lwip_get_socket(fd);
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
 
     do {
-        sock = sock->listen_next;
+        if (POSIX_IS_CLOSED(sock)) {
+            break;
+        }
+        stack = get_protocol_stack_by_id(sock->stack_id);
         if (stack == NULL || rpc_call_shutdown(&stack->rpc_queue, fd, how)) {
             ret = -1;
         }
 
-        if (POSIX_IS_CLOSED(sock)) {
-            break;
-        }
+        sock = sock->listen_next;
         fd = sock->conn->callback_arg.socket;
-        stack = get_protocol_stack_by_fd(fd);
     } while (1);
 
     return ret;
@@ -76,26 +77,29 @@ static int stack_broadcast_shutdown(int fd, int how)
 /* choice one stack bind */
 static int stack_single_bind(int fd, const struct sockaddr *name, socklen_t namelen)
 {
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
-    if (stack == NULL) {
+    struct protocol_stack *stack;
+    struct lwip_sock *sock = lwip_get_socket(fd);
+    if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
+    stack = get_protocol_stack_by_id(sock->stack_id);
     return rpc_call_bind(&stack->rpc_queue, fd, name, namelen);
 }
 
 /* bind sync to all protocol stack thread, so that any protocol stack thread can build connect */
 static int stack_broadcast_bind(int fd, const struct sockaddr *name, socklen_t namelen)
 {
-    struct protocol_stack *cur_stack = get_protocol_stack_by_fd(fd);
+    struct protocol_stack *cur_stack;
     struct protocol_stack *stack = NULL;
     int ret, clone_fd;
 
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL || cur_stack == NULL) {
+    if (sock == NULL) {
         LSTACK_LOG(ERR, LSTACK, "tid %d, %d get sock null or stack null\n", rte_gettid(), fd);
         GAZELLE_RETURN(EBADF);
     }
 
+    cur_stack = get_protocol_stack_by_id(sock->stack_id);
     ret = rpc_call_bind(&cur_stack->rpc_queue, fd, name, namelen);
     if (ret < 0) {
         close(fd);
@@ -116,45 +120,30 @@ static int stack_broadcast_bind(int fd, const struct sockaddr *name, socklen_t n
     return 0;
 }
 
-static void inline del_accept_in_event(struct lwip_sock *sock)
-{
-    pthread_spin_lock(&sock->wakeup->event_list_lock);
-
-    if (!NETCONN_IS_ACCEPTIN(sock)) {
-        sock->events &= ~EPOLLIN;
-        if (sock->events == 0) {
-            list_del_node(&sock->event_list);
-        }
-    }
-
-    pthread_spin_unlock(&sock->wakeup->event_list_lock);
-}
-
 static struct lwip_sock *get_min_accept_sock(int fd)
 {
-    struct lwip_sock *sock = lwip_get_socket(fd);
+    struct lwip_sock *sock;
     struct lwip_sock *min_sock = NULL;
 
-    while (sock) {
+    for (sock = lwip_get_socket(fd); sock != NULL; sock = sock->listen_next) {
         if (!netconn_is_nonblocking(sock->conn)) {
-            if (sock->wakeup == NULL) {
-                sock->wakeup = poll_construct_wakeup();
-                if (sock->wakeup == NULL) {
-                    return NULL;
-                }
-                sock->epoll_events = POLLIN | POLLERR;
+            /* init all sock sk_wait */
+            if (unlikely(sock->sk_wait == NULL) || sock->sk_wait->type == WAIT_CLOSE) {
+                sock->sk_wait = poll_construct_wait(0);
+            }
+            if (!(sock->sk_wait->type & WAIT_BLOCK)) {
+                sock->sk_wait->type |= WAIT_BLOCK;
             }
         }
-        if (!NETCONN_IS_ACCEPTIN(sock)) {
-            sock = sock->listen_next;
+
+        if (!sock_event_hold_pending(sock, WAIT_BLOCK, NETCONN_EVT_RCVPLUS, 0)) {
             continue;
         }
 
-        if (min_sock == NULL || min_sock->stack->conn_num > sock->stack->conn_num) {
+        if (min_sock == NULL || 
+            get_protocol_stack_by_id(min_sock->stack_id)->conn_num > get_protocol_stack_by_id(sock->stack_id)->conn_num) {
             min_sock = sock;
         }
-
-        sock = sock->listen_next;
     }
 
     return min_sock;
@@ -171,24 +160,16 @@ static int stack_broadcast_accept4(int fd, struct sockaddr *addr, socklen_t *add
         GAZELLE_RETURN(EBADF);
     }
 
-    if (netconn_is_nonblocking(sock->conn)) {
-        min_sock = get_min_accept_sock(fd);
-    } else {
-        while ((min_sock = get_min_accept_sock(fd)) == NULL) {
-            lstack_block_wait(sock->wakeup, 0);
-	}
-    }
-
-    if (min_sock && min_sock->conn) {
-        stack = get_protocol_stack_by_fd(min_sock->conn->callback_arg.socket);
-        if (stack == NULL) {
-            GAZELLE_RETURN(EBADF);
+    min_sock = get_min_accept_sock(fd);
+    if (min_sock == NULL) {
+        if (sock_event_wait(sock, netconn_is_nonblocking(sock->conn) || (flags & SOCK_NONBLOCK))) {
+            min_sock = get_min_accept_sock(fd);
         }
-        ret = rpc_call_accept(&stack->rpc_queue, min_sock->conn->callback_arg.socket, addr, addrlen, flags);
     }
 
-    if (min_sock && min_sock->wakeup && min_sock->wakeup->type == WAKEUP_EPOLL) {
-        del_accept_in_event(min_sock);
+    if (!POSIX_IS_CLOSED(min_sock)) {
+        stack = get_protocol_stack_by_id(min_sock->stack_id);
+        ret = rpc_call_accept(&stack->rpc_queue, min_sock->conn->callback_arg.socket, addr, addrlen, flags);
     }
 
     if (ret < 0) {
@@ -205,10 +186,12 @@ static int stack_broadcast_accept(int fd, struct sockaddr *addr, socklen_t *addr
 /* choice one stack listen */
 static int stack_single_listen(int fd, int backlog)
 {
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
-    if (stack == NULL) {
+    struct protocol_stack *stack;
+    struct lwip_sock *sock = lwip_get_socket(fd);
+    if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
+    stack = get_protocol_stack_by_id(sock->stack_id);
     return rpc_call_listen(&stack->rpc_queue, fd, backlog);
 }
 
@@ -221,18 +204,19 @@ static int stack_broadcast_listen(int fd, int backlog)
         struct sockaddr_in6 in6;
     } sockaddr_t;
 
-    struct protocol_stack *cur_stack = get_protocol_stack_by_fd(fd);
+    struct protocol_stack *cur_stack;
     struct protocol_stack *stack = NULL;
     sockaddr_t addr;
     socklen_t addr_len = sizeof(addr);
     int ret, clone_fd;
 
     struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock == NULL || cur_stack == NULL) {
+    if (sock == NULL) {
         LSTACK_LOG(ERR, LSTACK, "tid %d, %d get sock null or stack null\n", rte_gettid(), fd);
         GAZELLE_RETURN(EBADF);
     }
 
+    cur_stack = get_protocol_stack_by_id(sock->stack_id);
     ret = rpc_call_getsockname(&cur_stack->rpc_queue, fd, (struct sockaddr *)&addr, &addr_len);
     if (ret != 0) {
         return ret;
@@ -311,46 +295,56 @@ static int rtw_listen(int s, int backlog)
 
 static int rtw_connect(int s, const struct sockaddr *name, socklen_t namelen)
 {
-    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
-    if (stack == NULL) {
+    struct protocol_stack *stack;
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
+    stack = get_protocol_stack_by_id(sock->stack_id);
     return rpc_call_connect(&stack->rpc_queue, s, name, namelen);
 }
 
 static int rtw_setsockopt(int s, int level, int optname, const void *optval, socklen_t optlen)
 {
-    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
-    if (stack == NULL) {
+    struct protocol_stack *stack;
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
+    stack = get_protocol_stack_by_id(sock->stack_id);
     return rpc_call_setsockopt(&stack->rpc_queue, s, level, optname, optval, optlen);
 }
 
 static int rtw_getsockopt(int s, int level, int optname, void *optval, socklen_t *optlen)
 {
-    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
-    if (stack == NULL) {
+    struct protocol_stack *stack;
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
+    stack = get_protocol_stack_by_id(sock->stack_id);
     return rpc_call_getsockopt(&stack->rpc_queue, s, level, optname, optval, optlen);
 }
 
 static int rtw_getpeername(int s, struct sockaddr *name, socklen_t *namelen)
 {
-    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
-    if (stack == NULL) {
+    struct protocol_stack *stack;
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
+    stack = get_protocol_stack_by_id(sock->stack_id);
     return rpc_call_getpeername(&stack->rpc_queue, s, name, namelen);
 }
 
 static int rtw_getsockname(int s, struct sockaddr *name, socklen_t *namelen)
 {
-    struct protocol_stack *stack = get_protocol_stack_by_fd(s);
-    if (stack == NULL) {
+    struct protocol_stack *stack;
+    struct lwip_sock *sock = lwip_get_socket(s);
+    if (sock == NULL) {
         GAZELLE_RETURN(EBADF);
     }
+    stack = get_protocol_stack_by_id(sock->stack_id);
     return rpc_call_getsockname(&stack->rpc_queue, s, name, namelen);
 }
 
@@ -467,53 +461,14 @@ static ssize_t rtw_sendto(int sockfd, const void *buf, size_t len, int flags,
     return do_lwip_send_to_stack(sockfd, buf, len, flags, addr, addrlen);
 }
 
-static int rtw_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
-{
-    return lstack_rtw_epoll_wait(epfd, events, maxevents, timeout);
-}
-
-static int rtw_poll(struct pollfd *fds, nfds_t nfds, int timeout)
-{
-    return lstack_poll(fds, nfds, timeout);
-}
-
-static int rtw_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
-{
-    return lstack_select(nfds, readfds, writefds, exceptfds, timeout);
-}
-
 static int rtw_close(int s)
 {
-    struct lwip_sock *sock = lwip_get_socket(s);
-    if (sock && sock->wakeup && sock->wakeup->epollfd == s) {
-        return lstack_epoll_close(s);
-    }
     return stack_broadcast_close(s);
 }
 
 static int rtw_shutdown(int fd, int how)
 {
-    struct lwip_sock *sock = lwip_get_socket(fd);
-    if (sock && sock->wakeup && sock->wakeup->epollfd == fd) {
-        GAZELLE_RETURN(ENOTSOCK);
-    }
-
     return stack_broadcast_shutdown(fd, how);
-}
-
-static int rtw_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
-{
-    return lstack_rtw_epoll_ctl(epfd, op, fd, event);
-}
-
-static int rtw_epoll_create1(int flags)
-{
-    return lstack_epoll_create1(flags);
-}
-
-static int rtw_epoll_create(int flags)
-{
-    return lstack_epoll_create(flags);
 }
 
 void rtw_api_init(posix_api_t *api)
@@ -538,16 +493,8 @@ void rtw_api_init(posix_api_t *api)
     api->writev_fn        = rtw_writev;
     api->recv_fn          = rtw_recv;
     api->send_fn          = rtw_send;
-    api->recvmsg_fn       = (ssize_t (*)(int, const struct msghdr *, int))rtw_recvmsg; // TODO: fix unnecessary 'const' in lwipgz_posix_api.h
+    api->recvmsg_fn       = rtw_recvmsg;
     api->sendmsg_fn       = rtw_sendmsg;
     api->recvfrom_fn      = rtw_recvfrom;
     api->sendto_fn        = rtw_sendto;
-
-    api->epoll_ctl_fn     = rtw_epoll_ctl;
-    api->epoll_create1_fn = rtw_epoll_create1;
-    api->epoll_create_fn  = rtw_epoll_create;
-    api->epoll_wait_fn    = rtw_epoll_wait;
-
-    api->poll_fn          = rtw_poll;
-    api->select_fn        = rtw_select;
 }

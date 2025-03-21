@@ -26,7 +26,7 @@
 #include "lstack_log.h"
 #include "lstack_cfg.h"
 #include "same_node.h"
-#include "mbox_ring.h"
+#include "lstack_lwip.h"
 
 #define KERNEL_EVENT_WAIT_US    10
 #define LWIP_EVENT_WAIT_US      10
@@ -340,34 +340,26 @@ void sock_wait_kernel_free(struct sock_wait *sk_wait)
 static inline bool NETCONN_NEED_ACCEPT(const struct lwip_sock *sock)
 {
     if (sys_mbox_valid(&sock->conn->acceptmbox)) {
-        const struct mbox_ring *mr = &sock->conn->acceptmbox->mring;
-        return mr->ops->count(mr) > 0;
+        return !sys_mbox_empty(sock->conn->acceptmbox);
     }
     return false;
 }
 
 static inline bool NETCONN_NEED_RECV(const struct lwip_sock *sock)
 {
-    if (sock->lastdata.pbuf != NULL)
+    if (sock->recv_lastdata != NULL)
         return true;
-    if (sys_mbox_valid(&sock->conn->recvmbox)) {
-        const struct mbox_ring *mr = &sock->conn->recvmbox->mring;
-        return mr->ops->recv_count(mr) > 0;
-    }
+    if (gazelle_ring_readable_count(sock->recv_ring) > 0)
+        return true;
+    if (NETCONN_NEED_SAME_NODE(sock))
+        return true;
     return false;
 }
 
 static inline bool NETCONN_ALLOW_SEND(const struct lwip_sock *sock)
 {
-    if (get_global_cfg_params()->stack_mode_rtc) {
-        if (NETCONN_TYPE(sock->conn) == NETCONN_TCP)
-            return lwip_tcp_allow_send(sock->conn->pcb.tcp);
-        return false;
-    }
-    if (sys_mbox_valid(&sock->conn->sendmbox)) {
-        const struct mbox_ring *mr = &sock->conn->sendmbox->mring;
-        return mr->ops->free_count(mr) > 0;
-    }
+    if (gazelle_ring_readable_count(sock->send_ring) > 0)
+        return true;
     return false;
 }
 

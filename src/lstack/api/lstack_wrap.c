@@ -27,6 +27,7 @@
 #include "lstack_lwip.h"
 #include "lstack_preload.h"
 #include "lstack_unistd.h"
+#include "lstack_epoll.h"
 #include "lstack_rtc_api.h"
 #include "lstack_rtw_api.h"
 #include "lstack_dummy_api.h"
@@ -35,8 +36,8 @@
 #define SOL_XDP 283 /* same as define in bits/socket.h */
 #endif
 
-static posix_api_t g_wrap_api_value;
-static posix_api_t *g_wrap_api;
+static posix_api_t g_wrap_api_value = {0};
+static posix_api_t *g_wrap_api = NULL;
 
 void wrap_api_init(void)
 {
@@ -50,55 +51,13 @@ void wrap_api_init(void)
     } else {
         rtw_api_init(g_wrap_api);
     }
+
+    epoll_api_init(g_wrap_api);
 }
 
 void wrap_api_exit(void)
 {
     dummy_api_init(g_wrap_api);
-}
-
-static inline int32_t do_epoll_create1(int32_t flags)
-{
-    if (select_posix_path() == POSIX_KERNEL) {
-        return posix_api->epoll_create1_fn(flags);
-    }
-
-    return g_wrap_api->epoll_create1_fn(flags);
-}
-
-static inline int32_t do_epoll_create(int32_t size)
-{
-    if (select_posix_path() == POSIX_KERNEL) {
-        return posix_api->epoll_create_fn(size);
-    }
-
-    return g_wrap_api->epoll_create_fn(size);
-}
-
-static inline int32_t do_epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
-{
-    if (select_posix_path() == POSIX_KERNEL) {
-        return posix_api->epoll_ctl_fn(epfd, op, fd, event);
-    }
-
-    return g_wrap_api->epoll_ctl_fn(epfd, op, fd, event);
-}
-
-static inline int32_t do_epoll_wait(int32_t epfd, struct epoll_event* events, int32_t maxevents, int32_t timeout)
-{
-    if (select_posix_path() == POSIX_KERNEL) {
-        return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
-    }
-
-    if (epfd < 0) {
-        GAZELLE_RETURN(EBADF);
-    }
-
-    if ((events == NULL) || (timeout < -1) || (maxevents <= 0)) {
-        GAZELLE_RETURN(EINVAL);
-    }
-
-    return g_wrap_api->epoll_wait_fn(epfd, events, maxevents, timeout);
 }
 
 static inline int32_t do_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen)
@@ -515,9 +474,14 @@ static bool unsupport_optname(int32_t level, int32_t optname)
 static inline int32_t do_getsockopt(int32_t s, int32_t level, int32_t optname, void *optval, socklen_t *optlen)
 {
 #define SO_NUMA_ID 0x100c
-    if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP && !unsupport_optname(level, optname)) {
+    const struct protocol_stack *stack;
+    struct lwip_sock *sock;
+
+    sock = lwip_get_socket(s);
+    if (select_sock_posix_path(sock) == POSIX_LWIP && !unsupport_optname(level, optname)) {
         if (level == IPPROTO_IP && optname == SO_NUMA_ID) {
-            return lwip_get_socket(s)->stack->numa_id;
+            stack = get_protocol_stack_by_id(sock->stack_id);
+            return stack->numa_id;
         }
         return g_wrap_api->getsockopt_fn(s, level, optname, optval, optlen);
     }
@@ -549,6 +513,12 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
         ((domain == AF_INET6) && ip6_addr_isany(&get_global_cfg_params()->host_addr6)) ||
         ((type & SOCK_DGRAM) && !get_global_cfg_params()->udp_enable)) {
         return posix_api->socket_fn(domain, type, protocol);
+    }
+
+    if (get_global_cfg_params()->stack_mode_rtc) {
+        if (stack_setup_app_thread() != 0) {
+            LSTACK_EXIT(1, "stack_setup_app_thread failed\n");
+        }
     }
 
     ret = g_wrap_api->socket_fn(domain, type, protocol);
@@ -677,13 +647,19 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
 
 static inline int32_t do_close(int fd)
 {
+    struct lwip_sock *sock = lwip_get_socket(fd);
+
     /* Can not use select_sock_posix_path() !
      * When fd created by lwip_stocket() set as POSIX_KERNEL,
      * lwip_close() is still required.
      */
     if (select_posix_path() == POSIX_KERNEL ||
-        POSIX_IS_CLOSED(lwip_get_socket(fd))) {
+        POSIX_IS_CLOSED(sock)) {
         return posix_api->close_fn(fd);
+    }
+
+    if (select_sock_posix_path(sock) == POSIX_EPOLL) {
+        return lstack_epoll_close(fd);
     }
     return g_wrap_api->close_fn(fd);
 }
@@ -701,9 +677,56 @@ static int32_t do_shutdown(int fd, int how)
     return g_wrap_api->shutdown_fn(fd, how);
 }
 
+
+static inline int do_epoll_create1(int flags)
+{
+    int epfd;
+
+    if (select_posix_path() == POSIX_KERNEL) {
+        return posix_api->epoll_create1_fn(flags);
+    }
+
+    if (get_global_cfg_params()->stack_mode_rtc) {
+        if (stack_setup_app_thread() != 0) {
+            LSTACK_EXIT(1, "stack_setup_app_thread failed\n");
+        }
+    }
+
+    epfd = g_wrap_api->epoll_create1_fn(flags);
+    if (epfd > 0) {
+        POSIX_SET_TYPE(lwip_get_socket(epfd), POSIX_EPOLL);
+    }
+    return epfd;
+}
+
+static inline int do_epoll_create(int size)
+{
+    /* Since Linux 2.6.8, the size argument is ignored, 
+     * but must be greater than zero. */
+    return size <= 0 ? -1 : do_epoll_create1(0);
+}
+
+static inline int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event* event)
+{
+    if (select_sock_posix_path(lwip_get_socket(epfd)) == POSIX_KERNEL) {
+        return posix_api->epoll_ctl_fn(epfd, op, fd, event);
+    }
+
+    return g_wrap_api->epoll_ctl_fn(epfd, op, fd, event);
+}
+
+static inline int do_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
+{
+    if (select_sock_posix_path(lwip_get_socket(epfd)) == POSIX_KERNEL) {
+        return posix_api->epoll_wait_fn(epfd, events, maxevents, timeout);
+    }
+
+    return g_wrap_api->epoll_wait_fn(epfd, events, maxevents, timeout);
+}
+
 static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 {
-    if ((select_posix_path() == POSIX_KERNEL) || fds == NULL || nfds == 0) {
+    if ((select_posix_path() == POSIX_KERNEL)) {
         return posix_api->poll_fn(fds, nfds, timeout);
     }
 
@@ -712,18 +735,21 @@ static int32_t do_poll(struct pollfd *fds, nfds_t nfds, int32_t timeout)
 
 static int32_t do_ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo_p, const sigset_t *sigmask)
 {
-    int32_t ready;
     int32_t timeout;
-
-    if (fds == NULL || tmo_p == NULL) {
-        GAZELLE_RETURN(EINVAL);
-    }
 
     // s * 1000 and ns / 1000000 -> ms
     timeout = (tmo_p == NULL) ? -1 : (tmo_p->tv_sec * 1000 + tmo_p->tv_nsec / 1000000);
-    ready = do_poll(fds, nfds, timeout);
 
-    return ready;
+    return do_poll(fds, nfds, timeout);
+}
+
+static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    if (select_posix_path() == POSIX_KERNEL) {
+        return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
+    }
+
+    return g_wrap_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
 }
 
 static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct sigaction *oldact)
@@ -738,19 +764,6 @@ static int32_t do_sigaction(int32_t signum, const struct sigaction *act, struct 
     return lstack_sigaction(signum, act, oldact);
 }
 
-static int32_t do_select(int32_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
-{
-    /* while input args are invalid, param timeout will steal be executed in kernel */
-    if (nfds <= 0 || !(readfds || writefds || exceptfds)) {
-        return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
-    }
-
-    if (select_posix_path() == POSIX_KERNEL) {
-        return posix_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
-    }
-
-    return g_wrap_api->select_fn(nfds, readfds, writefds, exceptfds, timeout);
-}
 
 #define POSIX_VA_PARAM(fd, cmd, type, lwip_fn, kernel_fn) \
     do { \

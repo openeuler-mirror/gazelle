@@ -34,7 +34,7 @@ void read_same_node_recv_list(struct protocol_stack *stack)
         sock = list_entry(node, struct lwip_sock, recv_list);
 
         if (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)) {
-            add_sock_event(sock, EPOLLIN);
+            API_EVENT(sock->conn, NETCONN_EVT_RCVPLUS, 0);
         }
     }
 }
@@ -231,7 +231,8 @@ err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
 
     /* rcvlink init in alloc_socket() */
     /* remove from g_rcv_process_list in free_socket */
-    list_add_node(&nsock->recv_list, &nsock->stack->same_node_recv_list);
+    struct protocol_stack *stack = get_protocol_stack_by_id(nsock->stack_id);
+    list_add_node(&nsock->recv_list, &stack->same_node_recv_list);
     return 0;
 }
 
