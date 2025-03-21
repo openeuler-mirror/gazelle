@@ -13,6 +13,8 @@
 #ifndef _GAZELLE_EPOLL_H_
 #define _GAZELLE_EPOLL_H_
 
+#if /* SOCK_EVENT_V2 */
+
 #include <poll.h>
 #include <stdbool.h>
 #include <semaphore.h>
@@ -87,5 +89,21 @@ static inline void lstack_block_wakeup(struct wakeup_poll *wakeup)
         sem_post(&wakeup->wait);
     }
 }
+
+#else /* SOCK_EVENT_V2 */
+
+#include <lwip/lwipgz_posix_api.h>
+#include <lwip/lwipgz_sock.h>
+
+#include "lstack_wait.h"
+
+struct sock_wait *poll_construct_wait(int nfds);
+void poll_destruct_wait(void);
+
+int lstack_epoll_close(int epfd);
+void epoll_api_init(posix_api_t *api);
+bool sock_event_wait(struct lwip_sock *sock, bool noblocking);
+
+#endif /* SOCK_EVENT_V2 */
 
 #endif /* _GAZELLE_EPOLL_H_ */
