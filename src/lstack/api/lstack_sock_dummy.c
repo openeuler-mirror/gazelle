@@ -85,7 +85,7 @@ static ssize_t dummy_sendto(int sockfd, const void *buf, size_t len, int flags,
     return dummy_exit();
 }
 
-void dummy_api_init(posix_api_t *api)
+void sock_dummy_api_init(posix_api_t *api)
 {
     api->socket_fn  = dummy_socket;
     api->send_fn    = dummy_send;

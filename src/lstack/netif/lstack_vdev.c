@@ -32,12 +32,11 @@
 #include "common/dpdk_common.h"
 #include "lstack_protocol_stack.h"
 #include "common/gazelle_reg_msg.h"
-#include "lstack_lwip.h"
 #include "lstack_flow.h"
 #include "lstack_vdev.h"
 #include "lstack_port_map.h"
 #include "lstack_virtio.h"
-
+#include "lstack_mempool.h"
 #include "lstack_interrupt.h"
 
 /* INUSE_TX_PKTS_WATERMARK < VDEV_RX_QUEUE_SZ;
@@ -64,8 +63,8 @@ static uint32_t ltran_rx_poll(struct protocol_stack *stack, struct rte_mbuf **pk
     stack->rx_ring_used += rcvd_pkts;
     if (unlikely(stack->rx_ring_used >= USED_RX_PKTS_WATERMARK)) {
         uint32_t free_cnt = LWIP_MIN(stack->rx_ring_used, RING_SIZE(VDEV_RX_QUEUE_SZ));
-        int32_t ret = dpdk_alloc_pktmbuf(stack->rxtx_mbuf_pool, (struct rte_mbuf **)free_buf, free_cnt, true);
-        if (likely(ret == 0)) {
+        int ret = mem_get_mbuf_bulk(stack->stack_idx, (struct rte_mbuf **)free_buf, free_cnt, true);
+        if (likely(ret > 0)) {
             nr_pkts = gazelle_ring_sp_enqueue(stack->rx_ring, (void **)free_buf, free_cnt);
             stack->rx_ring_used -= nr_pkts;
         } else {
@@ -167,9 +166,7 @@ static uint32_t ltran_tx_xmit(struct protocol_stack *stack, struct rte_mbuf **pk
     do {
         if (unlikely(stack->tx_ring_used >= INUSE_TX_PKTS_WATERMARK)) {
             uint32_t free_pkts = gazelle_ring_sc_dequeue(stack->tx_ring, (void **)free_buf, stack->tx_ring_used);
-            for (uint32_t i = 0; i < free_pkts; i++) {
-                rte_pktmbuf_free(free_buf[i]);
-            }
+            mem_put_mbuf_bulk(free_buf, free_pkts);
             stack->tx_ring_used -= free_pkts;
         }
 

@@ -27,13 +27,13 @@
 #include "lstack_cfg.h"
 #include "lstack_dpdk.h"
 #include "lstack_ethdev.h"
-#include "lstack_lwip.h"
 #include "lstack_control_plane.h"
 #include "lstack_wait.h"
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"
 #include "lstack_interrupt.h"
 #include "lstack_protocol_stack.h"
+#include "lstack_mempool.h"
 
 #if RTE_VERSION < RTE_VERSION_NUM(23, 11, 0, 0)
 #include <rte_kni.h>
@@ -349,8 +349,8 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
     stack->stack_idx = t_params->idx;
     stack->lwip_stats = &lwip_stats;
 
-    list_init_head(&stack->recv_list);
-    list_init_head(&stack->same_node_recv_list);
+    rpc_queue_init(&stack->rpc_queue, stack->queue_id);
+    rpc_queue_init(&stack->dfx_rpc_queue, stack->queue_id);
 
     stack_group->stacks[t_params->idx] = stack;
     set_stack_idx(t_params->idx);
@@ -365,11 +365,6 @@ static int32_t init_stack_value(struct protocol_stack *stack, void *arg)
             LSTACK_LOG(ERR, LSTACK, "numa_node_of_cpu failed\n");
             return -1;
         }
-    }
-
-    if (pktmbuf_pool_init(stack) != 0) {
-        LSTACK_LOG(ERR, LSTACK, "pktmbuf_pool_init failed\n");
-        return -1;
     }
 
     if (create_shared_ring(stack) != 0) {
@@ -426,9 +421,12 @@ static struct protocol_stack *stack_thread_init(void *arg)
         if (stack_affinity_cpu(stack->cpu_id) != 0) {
             goto END;
         }
-        RTE_PER_LCORE(_lcore_id) = stack->cpu_id;
     } else {
         stack_affinity_numa(stack->numa_id);
+    }
+
+    if (mem_stack_mpcache_init(stack->stack_idx, stack->cpu_id) < 0) {
+        goto END;
     }
 
     lwip_init();
@@ -468,7 +466,6 @@ int stack_polling(unsigned wakeup_tick)
     bool use_sockmap = cfg->use_sockmap;
     bool stack_mode_rtc = cfg->stack_mode_rtc;
     uint32_t rpc_number = cfg->rpc_number;
-    uint32_t read_connect_number = cfg->read_connect_number;
     struct protocol_stack *stack = get_protocol_stack();
     uint32_t timeout;
 
@@ -490,8 +487,6 @@ int stack_polling(unsigned wakeup_tick)
         return force_quit;
     }
 
-    do_lwip_read_recvlist(stack, read_connect_number);
-
     if ((wakeup_tick & 0xf) == 0) {
 #if SOCK_WAIT_BATCH_NOTIFY
         stack->stats.wakeup_events += lwip_wait_foreach_notify(stack->stack_idx);
@@ -505,10 +500,6 @@ int stack_polling(unsigned wakeup_tick)
     /* run to completion mode currently does not support sockmap */
     if (use_sockmap) {
         netif_poll(&stack->netif);
-        /* reduce traversal times */
-        if ((wakeup_tick & 0xff) == 0) {
-            read_same_node_recv_list(stack);
-        }
     }
 #endif /* GAZELLE_SAME_NODE */
 
@@ -538,7 +529,6 @@ static bool stack_local_event_get(uint16_t stack_id)
     struct protocol_stack *stack = g_stack_group.stacks[stack_id];
     if (!lockless_queue_empty(&stack->dfx_rpc_queue.queue) ||
         !lockless_queue_empty(&stack->rpc_queue.queue) ||
-        !list_head_empty(&stack->recv_list) ||
         !lwip_wait_notify_empty(stack_id) ||
         tx_cache_count(stack->queue_id)) {
         return true;
@@ -582,9 +572,8 @@ static void* gazelle_stack_thread(void *arg)
 
 static int stack_group_init_mempool(void)
 {
+    int ret;
     struct cfg_params *cfg_params = get_global_cfg_params();
-    uint32_t total_mbufs = dpdk_pktmbuf_mempool_num();
-    struct rte_mempool *rxtx_mbuf = NULL;
     uint32_t cpu_id = 0;
     unsigned numa_id = 0;
     int queue_id = 0;
@@ -607,13 +596,12 @@ static int stack_group_init_mempool(void)
                 return -1;
             }
 
-            rxtx_mbuf = create_pktmbuf_mempool("rxtx_mbuf", total_mbufs, RXTX_CACHE_SZ, queue_id, numa_id);
-            if (rxtx_mbuf == NULL) {
-                LSTACK_LOG(ERR, LSTACK, "numid=%d, rxtx_mbuf idx=%d, create_pktmbuf_mempool fail\n", numa_id, queue_id);
+            ret = mem_stack_pool_init(queue_id, numa_id);
+            if (ret != 0) {
+                LSTACK_LOG(ERR, LSTACK, "mem_stack_pool_init failed, cpuid=%u, numid=%d, queue_id=%d\n",
+                    cpu_id, numa_id, queue_id);
                 return -1;
             }
-
-            get_protocol_stack_group()->total_rxtx_pktmbuf_pool[queue_id] = rxtx_mbuf;
         }
     }
 
@@ -633,6 +621,11 @@ int stack_group_init(void)
 
     stack_group->stack_setup_fail = 0;
 
+    if (mem_thread_manager_init() != 0) {
+        LSTACK_LOG(ERR, LSTACK, "mem_thread_manager_init failed\n");
+        return -1;
+    }
+
     if (get_global_cfg_params()->is_primary) {
         if (stack_group_init_mempool() != 0) {
             LSTACK_LOG(ERR, LSTACK, "stack group init mempool failed\n");
@@ -640,7 +633,7 @@ int stack_group_init(void)
         }
     }
 
-    return 0;
+    return sock_wait_group_init();
 }
 
 int stack_setup_app_thread(void)
@@ -749,6 +742,24 @@ void stack_wait(void)
     }
 }
 
+static void stack_exit_by_rpc(struct rpc_msg *msg)
+{
+    stack_exit();
+}
+
+static int rpc_call_stack_exit(int stack_id)
+{
+    rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, stack_exit_by_rpc);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    msg->flags |= RPC_MSG_EXIT;
+    rpc_async_call(queue, msg, RPC_MSG_FREE | RPC_MSG_EXIT);
+    return 0;
+}
+
 void stack_group_exit(void)
 {
     int i;
@@ -762,7 +773,7 @@ void stack_group_exit(void)
         }
 
         if (stack != stack_group->stacks[i]) {
-            rpc_call_stack_exit(&stack_group->stacks[i]->rpc_queue);
+            rpc_call_stack_exit(i);
         }
     }
 

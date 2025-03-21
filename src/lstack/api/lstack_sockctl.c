@@ -27,9 +27,6 @@
 static void callback_getpeername(struct rpc_msg *msg)
 {
     msg->result = lwip_getpeername(msg->args[MSG_ARG_0].i, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p);
-    if (msg->result != 0) {
-        LSTACK_LOG(ERR, LSTACK, "tid %d, fd %d fail %ld\n", rte_gettid(), msg->args[MSG_ARG_0].i, msg->result);
-    }
 }
 
 static void callback_getsockname(struct rpc_msg *msg)
@@ -191,7 +188,7 @@ static void callback_close(struct rpc_msg *msg)
 
     if (sockio_mbox_pending(sock)) {
         rpc_queue *queue = &get_protocol_stack_by_id(sock->stack_id)->rpc_queue;
-        rpc_async_call(queue, msg, RPC_MSG_FREE | RPC_MSG_RECALL); /* until stack_send recall finish */
+        rpc_async_call(queue, msg, RPC_MSG_RECALL); /* until stack_send recall finish */
         return;
     }
 
@@ -209,7 +206,7 @@ static void callback_shutdown(struct rpc_msg *msg)
 
     if (sockio_mbox_pending(sock)) {
         rpc_queue *queue = &get_protocol_stack_by_id(sock->stack_id)->rpc_queue;
-        rpc_async_call(queue, msg, RPC_MSG_FREE | RPC_MSG_RECALL);
+        rpc_async_call(queue, msg, RPC_MSG_RECALL);
         return;
     }
 
@@ -458,12 +455,15 @@ static int rpc_call_connect(int stack_id, int fd, const struct sockaddr *addr, s
 /* for lwip nonblock connected callback */
 void do_lwip_connected_callback(int fd)
 {
+    bool has_kernel;
     struct lwip_sock *sock = lwip_get_socket(fd);
     if (POSIX_IS_CLOSED(sock)) {
         return;
     }
 
-    if (POSIX_HAS_TYPE(sock, POSIX_KERNEL)) {
+    has_kernel = POSIX_HAS_TYPE(sock, POSIX_KERNEL);
+    POSIX_SET_TYPE(sock, POSIX_LWIP);
+    if (has_kernel) {
         /* delete kernel event */
         if (sock->sk_wait != NULL) {
             posix_api->epoll_ctl_fn(sock->sk_wait->epfd, EPOLL_CTL_DEL, fd, NULL);
@@ -471,10 +471,7 @@ void do_lwip_connected_callback(int fd)
         /* shutdown kernel connect, do_connect() has tried both kernel and lwip. */
         posix_api->shutdown_fn(fd, SHUT_RDWR);
     }
-
-    POSIX_SET_TYPE(sock, POSIX_LWIP);
-
-    API_EVENT(sock->conn, NETCONN_EVT_RCVPLUS, 0);
+    return;
 }
 
 /* when fd is listenfd, listenfd of all protocol stack thread will be closed */
@@ -625,10 +622,7 @@ static int stack_broadcast_accept4(int fd, struct sockaddr *addr, socklen_t *add
 
 static int stack_broadcast_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
-    if (get_global_cfg_params()->nonblock_mode)
-        return stack_broadcast_accept4(fd, addr, addrlen, SOCK_NONBLOCK);
-    else
-        return stack_broadcast_accept4(fd, addr, addrlen, 0);
+    return stack_broadcast_accept4(fd, addr, addrlen, 0);
 }
 
 /* choice one stack listen */
@@ -675,9 +669,6 @@ static int stack_broadcast_listen(int fd, int backlog)
 
     for (int32_t i = 0; i < stack_group->stack_num; ++i) {
         stack = stack_group->stacks[i];
-        if (get_global_cfg_params()->seperate_send_recv && stack->is_send_thread) {
-            continue;
-        }
         if (stack != cur_stack) {
             clone_fd = rpc_call_shadow_fd(stack->stack_idx, fd, (struct sockaddr *)&addr, addr_len);
             if (clone_fd < 0) {

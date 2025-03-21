@@ -284,7 +284,7 @@ struct mem_thread {
 } __rte_cache_aligned;
 
 void mem_stack_pool_free(int stack_id);
-int mem_stack_pool_init(int stack_id);
+int mem_stack_pool_init(int stack_id, unsigned numa_id);
 int mem_stack_mpcache_init(int stack_id, unsigned cpu_id);
 
 int mem_thread_manager_init(void);

@@ -38,17 +38,15 @@
 
 #include <lwip/pbuf.h>
 #include <lwip/lwipgz_flow.h>
-#include <lwip/priv/tcp_priv.h>
 
 #include "lstack_log.h"
 #include "common/dpdk_common.h"
 #include "common/gazelle_base_func.h"
-#include "lstack_thread_rpc.h"
 #include "lstack_protocol_stack.h"
-#include "lstack_lwip.h"
 #include "lstack_cfg.h"
 #include "lstack_virtio.h"
 #include "lstack_dpdk.h"
+#include "mbox_ring.h"
 
 struct eth_params {
     uint16_t port_id;
@@ -109,6 +107,8 @@ int32_t dpdk_eal_init(void)
     struct cfg_params *global_params = get_global_cfg_params();
 
     ret = rte_eal_init(global_params->dpdk_argc, global_params->dpdk_argv);
+    /* rte_eal_init() would call __rte_thread_init(), and set _lcore_id. */
+    RTE_PER_LCORE(_lcore_id) = LCORE_ID_ANY;
     if (ret < 0) {
         if (rte_errno == EALREADY) {
             LSTACK_PRE_LOG(LSTACK_INFO, "rte_eal_init aleady init\n");
@@ -135,58 +135,6 @@ int32_t dpdk_eal_init(void)
     return ret;
 }
 
-struct rte_mempool *create_pktmbuf_mempool(const char *name, uint32_t nb_mbuf,
-    uint32_t mbuf_cache_size, uint16_t queue_id, unsigned numa_id)
-{
-    int32_t ret;
-    char pool_name[PATH_MAX];
-    struct rte_mempool *pool;
-
-    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d \n", ret);
-        return NULL;
-    }
-    /* limit mbuf max num based on the dpdk capability */
-    if (nb_mbuf > MBUF_MAX_NUM) {
-        LSTACK_LOG(ERR, LSTACK, "out of the dpdk mbuf quantity range\n");
-        return NULL;
-    }
-
-    /* time stamp before pbuf_custom as priv_data */
-    uint16_t private_size = sizeof(struct mbuf_private);
-    if (xdp_eth_enabled()) {
-        /* reserved for xdp metadata, see struct xsk_tx_metadata in /usr/include/linux/if_xdp.h */
-        private_size += 24;
-    }
-    private_size = RTE_ALIGN(private_size, RTE_CACHE_LINE_SIZE);
-    pool = rte_pktmbuf_pool_create(pool_name, nb_mbuf, mbuf_cache_size, private_size, MBUF_SZ, numa_id);
-    if (pool == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "cannot create %s pool rte_err=%d\n", pool_name, rte_errno);
-    }
-
-    return pool;
-}
-
-static struct rte_mempool* get_pktmbuf_mempool(const char *name, uint16_t queue_id)
-{
-    int32_t ret;
-    char pool_name[PATH_MAX];
-    struct rte_mempool *pool;
-
-    ret = snprintf_s(pool_name, sizeof(pool_name), PATH_MAX - 1, "%s_%hu", name, queue_id);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d\n", ret);
-        return NULL;
-    }
-    pool = rte_mempool_lookup(pool_name);
-    if (pool == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "look up %s pool rte_err=%d\n", pool_name, rte_errno);
-    }
-
-    return pool;
-}
-
 static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_id)
 {
     int ret;
@@ -207,115 +155,56 @@ static struct reg_ring_msg *create_reg_mempool(const char *name, uint16_t queue_
     return reg_buf;
 }
 
-int32_t pktmbuf_pool_init(struct protocol_stack *stack)
+int32_t create_shared_ring(struct protocol_stack *stack)
 {
-    stack->rxtx_mbuf_pool = get_pktmbuf_mempool("rxtx_mbuf", stack->queue_id);
-    if (stack->rxtx_mbuf_pool == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "rxtx_mbuf_pool is NULL\n");
+    if (!use_ltran()) {
+        return 0;
+    }
+
+    stack->rx_ring = rte_ring_create_fast("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
+    if (stack->rx_ring == NULL) {
         return -1;
     }
 
-    if (use_ltran()) {
-        stack->reg_buf = create_reg_mempool("reg_ring_msg", stack->queue_id);
-        if (stack->reg_buf == NULL) {
-            LSTACK_LOG(ERR, LSTACK, "rxtx_mbuf_pool is NULL\n");
-            return -1;
-        }
+    stack->tx_ring = rte_ring_create_fast("RING_TX", VDEV_TX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
+    if (stack->tx_ring == NULL) {
+        return -1;
+    }
+
+    stack->reg_ring = rte_ring_create_fast("SHARED_REG_RING", VDEV_REG_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
+    if (stack->reg_ring == NULL) {
+        return -1;
+    }
+
+    stack->reg_buf = create_reg_mempool("reg_ring_msg", stack->queue_id);
+    if (stack->reg_buf == NULL) {
+        LSTACK_LOG(ERR, LSTACK, "reg_buf is NULL\n");
+        return -1;
     }
 
     return 0;
 }
 
-struct rte_mempool *create_mempool(const char *name, uint32_t count, uint32_t size,
-    uint32_t flags, int32_t idx)
-{
-    char pool_name [RTE_MEMPOOL_NAMESIZE];
-    struct rte_mempool *mempool;
-    int32_t ret = snprintf_s(pool_name, sizeof(pool_name), RTE_MEMPOOL_NAMESIZE - 1,
-        "%s_%d", name, idx);
-    if (ret < 0) {
-        LSTACK_LOG(ERR, LSTACK, "snprintf_s fail ret=%d\n", ret);
-        return NULL;
-    }
-
-    mempool = rte_mempool_create(pool_name, count, size,
-        0, 0, NULL, NULL, NULL, NULL, rte_socket_id(), flags);
-    if (mempool == NULL) {
-        LSTACK_LOG(ERR, LSTACK, "%s create failed. errno: %d.\n", name, rte_errno);
-    }
-
-    return mempool;
-}
-
-int32_t create_shared_ring(struct protocol_stack *stack)
-{
-    rpc_queue_init(&stack->rpc_queue, stack->queue_id);
-    rpc_queue_init(&stack->dfx_rpc_queue, stack->queue_id);
-
-    if (use_ltran()) {
-        stack->rx_ring = gazelle_ring_create_fast("RING_RX", VDEV_RX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
-        if (stack->rx_ring == NULL) {
-            return -1;
-        }
-
-        stack->tx_ring = gazelle_ring_create_fast("RING_TX", VDEV_TX_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
-        if (stack->tx_ring == NULL) {
-            return -1;
-        }
-
-        stack->reg_ring = gazelle_ring_create_fast("SHARED_REG_RING", VDEV_REG_QUEUE_SZ, RING_F_SP_ENQ | RING_F_SC_DEQ);
-        if (stack->reg_ring == NULL) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-int32_t dpdk_alloc_pktmbuf(struct rte_mempool *pool, struct rte_mbuf **mbufs, uint32_t num, bool reserve)
-{
-    if (reserve) {
-        /*
-         * don't use rte_mempool_avail_count, it traverse cpu local cache,
-         * when RTE_MAX_LCORE is too large, it's time-consuming
-         */
-        if (rte_ring_count(pool->pool_data) < MBUFPOOL_RESERVE_NUM + num) {
-            return -ENOMEM;
-        }
-    }
-
-    int32_t ret = rte_pktmbuf_alloc_bulk(pool, mbufs, num);
-    if (ret != 0) {
-        LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_alloc_bulk fail allocNum=%d, ret=%d, info:%s \n",
-                   num, ret, rte_strerror(-ret));
-        return ret;
-    }
-
-    return 0;
-}
-
-int32_t fill_mbuf_to_ring(struct rte_mempool *mempool, struct rte_ring *ring, uint32_t mbuf_num)
+int32_t fill_mbuf_to_ring(int stack_id, struct rte_ring *ring, uint32_t mbuf_num)
 {
     int32_t ret;
     uint32_t batch;
     uint32_t remain = mbuf_num;
-    struct rte_mbuf *free_buf[FREE_RX_QUEUE_SZ];
+    struct rte_mbuf *free_buf[VDEV_RX_QUEUE_SZ];
 
     while (remain > 0) {
-        batch = LWIP_MIN(remain, RING_SIZE(FREE_RX_QUEUE_SZ));
+        batch = LWIP_MIN(remain, RING_SIZE(VDEV_RX_QUEUE_SZ));
 
-        ret = dpdk_alloc_pktmbuf(mempool, free_buf, batch, true);
+        ret = mem_get_mbuf_bulk(stack_id, free_buf, batch, true);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %u ret=%d\n", batch, ret);
             return -1;
         }
 
         ret = gazelle_ring_sp_enqueue(ring, (void **)free_buf, batch);
-        if (ret == 0) {
+        if (ret < batch) {
+            mem_put_mbuf_bulk(&free_buf[ret], batch - ret);
             LSTACK_LOG(ERR, LSTACK, "cannot enqueue to ring, count: %u\n", batch);
-            for (int i = 0; i < batch; i++) {
-                rte_pktmbuf_free(free_buf[i]);
-            }
             return -1;
         }
 
@@ -592,7 +481,7 @@ static int32_t dpdk_ethdev_setup(const struct eth_params *eth_params, uint16_t i
     int32_t ret;
     uint16_t numa_id = 0;
     struct cfg_params *cfg = get_global_cfg_params();
-    struct rte_mempool *rxtx_mbuf_pool = get_protocol_stack_group()->total_rxtx_pktmbuf_pool[idx];
+    struct rte_mempool *rxtx_mbuf_pool = mem_get_mbuf_pool(idx);
 
     if (!cfg->use_ltran && cfg->num_process == 1) {
         numa_id = (cfg->stack_num > 0) ? cfg->numa_id : numa_node_of_cpu(cfg->cpus[idx]);
@@ -651,7 +540,7 @@ int32_t dpdk_ethdev_start(void)
 int32_t dpdk_init_lstack_kni(void)
 {
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
-    stack_group->kni_pktmbuf_pool = create_pktmbuf_mempool("kni_mbuf", KNI_NB_MBUF, 0, 0, rte_socket_id());
+    stack_group->kni_pktmbuf_pool = rte_pktmbuf_pool_create("kni_mbuf", KNI_NB_MBUF, 0, 0, MBUF_DATA_SIZE, rte_socket_id());
     if (stack_group->kni_pktmbuf_pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "kni_mbuf is NULL\n");
         return -1;
@@ -1030,7 +919,7 @@ uint32_t dpdk_total_socket_memory(void)
     struct cfg_params *cfg = get_global_cfg_params();
 
     /* calculate the memory(bytes) of rxtx_mempool */
-    elt_size = sizeof(struct rte_mbuf) + MBUF_SZ + RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
+    elt_size = sizeof(struct rte_mbuf) + MBUF_DATA_SIZE + RTE_ALIGN(sizeof(struct mbuf_private), RTE_CACHE_LINE_SIZE);
     per_pktmbuf_mempool_size = rte_mempool_calc_obj_size(elt_size, 0, NULL);
     
     /* calculate the memory(bytes) of rpc_mempool, reserved num is (app threads + lstack threads + listen thread) */
@@ -1038,13 +927,12 @@ uint32_t dpdk_total_socket_memory(void)
     per_rpc_mempool_size = rte_mempool_calc_obj_size(elt_size, 0, NULL);
 
     /* calculate the memory(bytes) of rings, reserved num is GAZELLE_LSTACK_MAX_CONN. */
-    per_conn_ring_size = rte_ring_get_memsize(cfg->send_ring_size) +
-        rte_ring_get_memsize(cfg->recv_ring_size) +
-        rte_ring_get_memsize(DEFAULT_ACCEPTMBOX_SIZE);
+    per_conn_ring_size = rte_ring_get_memsize(DEFAULT_SENDMBOX_SIZE) +
+                         rte_ring_get_memsize(DEFAULT_ACCEPTMBOX_SIZE);
 
     total_socket_memory = fixed_mem + bytes_to_mb(
         (per_pktmbuf_mempool_size * dpdk_pktmbuf_mempool_num()) * cfg->num_queue +
-        per_rpc_mempool_size * cfg->rpc_msg_max * (RPC_MEMPOOL_THREAD_NUM + cfg->num_queue + 1) +
+        per_rpc_mempool_size * cfg->rpc_msg_max +
         per_conn_ring_size * GAZELLE_LSTACK_MAX_CONN);
 
     return total_socket_memory;

@@ -20,25 +20,10 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_stack_stat.h"
 #include "same_node.h"
-#include "lstack_epoll.h"
-#include "lstack_lwip.h"
+#include "lstack_wait.h"
+
 
 #if GAZELLE_SAME_NODE
-void read_same_node_recv_list(struct protocol_stack *stack)
-{
-    struct list_node *list = &(stack->same_node_recv_list);
-    struct list_node *node, *temp;
-    struct lwip_sock *sock;
-
-    list_for_each_node(node, temp, list) {
-        sock = list_entry(node, struct lwip_sock, recv_list);
-
-        if (sock->same_node_rx_ring != NULL && same_node_ring_count(sock)) {
-            API_EVENT(sock->conn, NETCONN_EVT_RCVPLUS, 0);
-        }
-    }
-}
-
 /* process on same node use ring to recv data */
 ssize_t gazelle_same_node_ring_recv(struct lwip_sock *sock, const void *buf, size_t len, int32_t flags)
 {
@@ -231,8 +216,7 @@ err_t find_same_node_memzone(struct tcp_pcb *pcb, struct lwip_sock *nsock)
 
     /* rcvlink init in alloc_socket() */
     /* remove from g_rcv_process_list in free_socket */
-    struct protocol_stack *stack = get_protocol_stack_by_id(nsock->stack_id);
-    list_add_node(&nsock->recv_list, &stack->same_node_recv_list);
+    API_EVENT(nsock->conn, NETCONN_EVT_RCVPLUS, 0);
     return 0;
 }
 

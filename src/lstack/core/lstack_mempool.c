@@ -332,13 +332,14 @@ static const struct mempool_ops mbuf_mp_ops = {
 };
 
 
-static struct rte_mempool *mbuf_pool_create(int stack_id)
+static struct rte_mempool *mbuf_pool_create(int stack_id, uint16_t numa_id)
 {
     struct cfg_params *cfg_params = get_global_cfg_params();
     char name[RTE_MEMPOOL_NAMESIZE];
     struct rte_mempool *pool;
     uint32_t total_conn_mbufs, total_nic_mbufs, total_mbufs;
     uint16_t private_size;
+    uint16_t xdp_metadata = 0;
 
     total_conn_mbufs = cfg_params->mbuf_count_per_conn * cfg_params->tcp_conn_count;
     total_nic_mbufs = cfg_params->rxqueue_size + cfg_params->txqueue_size;
@@ -351,9 +352,13 @@ static struct rte_mempool *mbuf_pool_create(int stack_id)
     }
 
     SYS_FORMAT_NAME(name, RTE_MEMPOOL_NAMESIZE, "%s_%hu", "mbuf_pool", stack_id);
-    private_size = RTE_ALIGN(sizeof(struct mbuf_private) + 24, RTE_CACHE_LINE_SIZE);
+    /* reserved for xdp metadata, see struct xsk_tx_metadata in /usr/include/linux/if_xdp.h */
+    if (xdp_eth_enabled()) {
+        xdp_metadata = 24;
+    }
+    private_size = RTE_ALIGN(sizeof(struct mbuf_private) + xdp_metadata, RTE_CACHE_LINE_SIZE);
 
-    pool = mbuf_mp_ops.create(name, total_mbufs, MBUFPOOL_CACHE_NUM, private_size, MBUF_DATA_SIZE, rte_socket_id());
+    pool = mbuf_mp_ops.create(name, total_mbufs, MBUFPOOL_CACHE_NUM, private_size, MBUF_DATA_SIZE, numa_id);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_pool_create %s failed, rte_errno %d\n", name, rte_errno);
         return NULL;
@@ -362,7 +367,7 @@ static struct rte_mempool *mbuf_pool_create(int stack_id)
     return pool;
 }
 
-static struct rte_mempool *rpc_pool_create(int stack_id)
+static struct rte_mempool *rpc_pool_create(int stack_id, uint16_t numa_id)
 {
     char name [RTE_MEMPOOL_NAMESIZE];
     struct rte_mempool *pool;
@@ -370,7 +375,7 @@ static struct rte_mempool *rpc_pool_create(int stack_id)
 
     SYS_FORMAT_NAME(name, RTE_MEMPOOL_NAMESIZE, "%s_%hu", "rpc_pool", stack_id);
 
-    pool = mem_mp_ops.create(name, total_bufs, MEMPOOL_CACHE_NUM, 0, sizeof(struct rpc_msg), rte_socket_id());
+    pool = mem_mp_ops.create(name, total_bufs, MEMPOOL_CACHE_NUM, 0, sizeof(struct rpc_msg), numa_id);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "rte_mempool_create %s failed, rte_errno %d\n", name, rte_errno);
     }
@@ -392,16 +397,16 @@ void mem_stack_pool_free(int stack_id)
     }
 }
 
-int mem_stack_pool_init(int stack_id)
+int mem_stack_pool_init(int stack_id, unsigned numa_id)
 {
     struct mem_stack *ms = mem_stack_get(stack_id);
 
-    ms->mbuf_pool = mbuf_pool_create(stack_id);
+    ms->mbuf_pool = mbuf_pool_create(stack_id, numa_id);
     if (ms->mbuf_pool == NULL) {
         return -1;
     }
 
-    ms->rpc_pool = rpc_pool_create(stack_id);
+    ms->rpc_pool = rpc_pool_create(stack_id, numa_id);
     if (ms->rpc_pool == NULL) {
         mem_stack_pool_free(stack_id);
         return -1;
@@ -469,7 +474,7 @@ void mem_thread_cache_free(struct mem_thread *mt)
 
 int mem_thread_cache_init(struct mem_thread *mt)
 {
-    if (!get_global_cfg_params()->stack_mode_rtc && !dpdk_nic_is_xdp()) {
+    if (!get_global_cfg_params()->stack_mode_rtc && !xdp_eth_enabled()) {
         char name [RTE_MEMPOOL_NAMESIZE];
         SYS_FORMAT_NAME(name, RTE_MEMPOOL_NAMESIZE, "%s_%p", "migrate_ring", mt);
 

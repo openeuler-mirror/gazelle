@@ -10,11 +10,9 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef _LSTACK_RTW_API_H_
-#define _LSTACK_RTW_API_H_
+#ifndef _LSTACK_SOCK_DUMMY_H_
+#define _LSTACK_SOCK_DUMMY_H_
 
-#include <lwip/lwipgz_posix_api.h>
+void sock_dummy_api_init(posix_api_t *api);
 
-void rtw_api_init(posix_api_t *api);
-
-#endif /* _LSTACK_RTW_API_H_ */
+#endif /* _LSTACK_SOCK_DUMMY_H_  */

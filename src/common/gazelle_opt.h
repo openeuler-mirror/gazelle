@@ -56,12 +56,6 @@
 #define STACK_THREAD_DEFAULT        4
 #define STACK_NIC_READ_DEFAULT      128
 
-#define MTU_DEFAULT_DATA_LEN        1460
-#define VLAN_HEAD_LEN               4
-#define IPV6_EXTRA_HEAD_LEN         20
-#define MBUF_MAX_DATA_LEN           (MTU_DEFAULT_DATA_LEN - VLAN_HEAD_LEN - IPV6_EXTRA_HEAD_LEN)
-
-#define GAZELLE_UDP_PKGLEN_MAX      (65535 - IP_HLEN - UDP_HLEN)
 
 /* total:33 client, index 32 is invaild client */
 #define GAZELLE_CLIENT_NUM_ALL      33
