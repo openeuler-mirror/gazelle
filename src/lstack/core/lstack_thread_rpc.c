@@ -242,8 +242,8 @@ static void callback_socket(struct rpc_msg *msg)
 static void callback_close(struct rpc_msg *msg)
 {
     int fd = msg->args[MSG_ARG_0].i;
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     struct lwip_sock *sock = lwip_get_socket(fd);
+    struct protocol_stack *stack = get_protocol_stack_by_id(sock->stack_id);
 
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
@@ -261,8 +261,8 @@ static void callback_shutdown(struct rpc_msg *msg)
 {
     int fd = msg->args[MSG_ARG_0].i;
     int how = msg->args[MSG_ARG_1].i;
-    struct protocol_stack *stack = get_protocol_stack_by_fd(fd);
     struct lwip_sock *sock = lwip_get_socket(fd);
+    struct protocol_stack *stack = get_protocol_stack_by_id(sock->stack_id);
 
     if (sock && __atomic_load_n(&sock->call_num, __ATOMIC_ACQUIRE) > 0) {
         msg->recall_flag = 1;
@@ -365,14 +365,14 @@ static void callback_accept(struct rpc_msg *msg)
     }
 
     struct lwip_sock *sock = lwip_get_socket(accept_fd);
-    if (sock == NULL || sock->stack == NULL) {
+    if (sock == NULL) {
         lwip_close(accept_fd);
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
     }
 
     msg->result = accept_fd;
-    sock->stack->conn_num++;
+    stack->conn_num++;
     if (rte_ring_count(sock->conn->recvmbox->ring)) {
         do_lwip_add_recvlist(accept_fd);
     }
@@ -749,27 +749,6 @@ int rpc_call_recvlistcnt(rpc_queue *queue)
     }
 
     return rpc_sync_call(queue, msg);
-}
-
-static void callback_clean_epoll(struct rpc_msg *msg)
-{
-    struct protocol_stack *stack = get_protocol_stack();
-    struct wakeup_poll *wakeup = (struct wakeup_poll *)msg->args[MSG_ARG_0].p;
-
-    list_del_node(&wakeup->wakeup_list[stack->stack_idx]);
-}
-
-int rpc_call_clean_epoll(rpc_queue *queue, void *wakeup)
-{
-    struct rpc_msg *msg = rpc_msg_alloc(callback_clean_epoll);
-    if (msg == NULL) {
-        return -1;
-    }
-
-    msg->args[MSG_ARG_0].p = wakeup;
-
-    rpc_sync_call(queue, msg);
-    return 0;
 }
 
 static void callback_arp(struct rpc_msg *msg)

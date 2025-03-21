@@ -22,11 +22,7 @@ struct lwip_sock;
 struct rpc_msg;
 struct protocol_stack;
 
-
-#define NETCONN_IS_ACCEPTIN(sock)   (((sock)->conn->acceptmbox != NULL) && !sys_mbox_empty((sock)->conn->acceptmbox))
-#define NETCONN_IS_DATAIN(sock)     ((gazelle_ring_readable_count((sock)->recv_ring) || (sock)->recv_lastdata) || NETCONN_NEED_SAME_NODE(sock))
 #define NETCONN_IS_DATAOUT(sock)    (gazelle_ring_readover_count((sock)->send_ring) || (sock)->send_pre_del)
-#define NETCONN_IS_OUTIDLE(sock)    gazelle_ring_readable_count((sock)->send_ring)
 #define NETCONN_IS_UDP(sock)        (NETCONNTYPE_GROUP(netconn_type((sock)->conn)) == NETCONN_UDP)
 
 /* lwip api */

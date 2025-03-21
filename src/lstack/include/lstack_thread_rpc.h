@@ -101,7 +101,6 @@ int rpc_call_udp_send(rpc_queue *queue, int fd, size_t len, int flags);
 int rpc_call_replenish(rpc_queue *queue, void *sock);
 int rpc_call_recvlistcnt(rpc_queue *queue);
 
-int rpc_call_clean_epoll(rpc_queue *queue, void *wakeup);
 int rpc_call_arp(rpc_queue *queue, void *mbuf);
 
 int rpc_call_conntable(rpc_queue *queue, void *conn_table, unsigned max_conn);

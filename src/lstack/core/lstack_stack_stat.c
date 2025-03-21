@@ -65,8 +65,9 @@ void time_stamp_record(int fd, struct pbuf *pbuf)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
 
-    if (get_protocol_stack_group()->latency_start && sock && sock->stack && pbuf) {
-        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_INTO_MBOX, 0);
+    if (get_protocol_stack_group()->latency_start && sock && pbuf) {
+        struct protocol_stack *stack = get_protocol_stack_by_id(sock->stack_id);
+        calculate_lstack_latency(&stack->latency, pbuf, GAZELLE_LATENCY_INTO_MBOX, 0);
         time_stamp_into_recvmbox(sock);
     }
 }
@@ -209,29 +210,6 @@ static void set_latency_start_flag(bool start)
     }
 }
 
-static void get_wakeup_stat(struct protocol_stack_group *stack_group, struct protocol_stack *stack,
-    struct gazelle_wakeup_stat *stat)
-{
-    struct list_node *node, *temp;
-
-    pthread_spin_lock(&stack_group->poll_list_lock);
-
-    list_for_each_node(node, temp, &stack_group->poll_list) {
-        struct wakeup_poll *wakeup = list_entry(node, struct wakeup_poll, poll_list);
-
-        if (wakeup->bind_stack == stack) {
-            stat->kernel_events += wakeup->stat.kernel_events;
-            stat->app_events += wakeup->stat.app_events;
-            stat->read_null += wakeup->stat.read_null;
-            stat->app_write_cnt += wakeup->stat.app_write_cnt;
-            stat->app_write_rpc += wakeup->stat.app_write_rpc;
-            stat->app_read_cnt += wakeup->stat.app_read_cnt;
-        }
-    }
-
-    pthread_spin_unlock(&stack_group->poll_list_lock);
-}
-
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info)
 {
     struct cfg_params *cfg = get_global_cfg_params();
@@ -244,8 +222,6 @@ void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_inf
 
 static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-
     dfx->loglevel = rte_log_get_level(RTE_LOGTYPE_LSTACK);
 
     lstack_get_low_power_info(&dfx->low_power_info);
@@ -257,7 +233,7 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
         return;
     }
 
-    get_wakeup_stat(stack_group, stack, &dfx->data.pkts.wakeup_stat);
+    sock_wait_group_stat(stack->stack_idx, &dfx->data.pkts.wakeup_stat);
 
     dfx->data.pkts.call_alloc_fail = rpc_stats_get()->call_alloc_fail;
 
