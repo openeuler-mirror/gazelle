@@ -332,7 +332,7 @@ static const struct mempool_ops mbuf_mp_ops = {
 };
 
 
-static struct rte_mempool *mbuf_pool_create(int stack_id, uint16_t numa_id)
+static struct rte_mempool *mbuf_pool_create(int stack_id, unsigned numa_id)
 {
     struct cfg_params *cfg_params = get_global_cfg_params();
     char name[RTE_MEMPOOL_NAMESIZE];
@@ -367,7 +367,7 @@ static struct rte_mempool *mbuf_pool_create(int stack_id, uint16_t numa_id)
     return pool;
 }
 
-static struct rte_mempool *rpc_pool_create(int stack_id, uint16_t numa_id)
+static struct rte_mempool *rpc_pool_create(int stack_id, unsigned numa_id)
 {
     char name [RTE_MEMPOOL_NAMESIZE];
     struct rte_mempool *pool;
@@ -478,14 +478,14 @@ int mem_thread_cache_init(struct mem_thread *mt)
         char name [RTE_MEMPOOL_NAMESIZE];
         SYS_FORMAT_NAME(name, RTE_MEMPOOL_NAMESIZE, "%s_%p", "migrate_ring", mt);
 
-        mt->mbuf_migrate_ring = rte_ring_create(name, BUF_CACHE_DEFAULT_NUM, 
+        mt->mbuf_migrate_ring = rte_ring_create(name, BUF_CACHE_MAX_NUM, 
             rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
         if (mt->mbuf_migrate_ring == NULL) {
             return -1;
         }
     }
 
-    mt->mbuf_cache = buf_cache_create(BUF_CACHE_DEFAULT_NUM);
+    mt->mbuf_cache = buf_cache_create(get_global_cfg_params()->mem_cache_num);
     if (mt->mbuf_cache == NULL) {
         mem_thread_cache_free(mt);
         return -1;

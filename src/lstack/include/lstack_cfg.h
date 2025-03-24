@@ -130,12 +130,13 @@ struct cfg_params {
 
         uint32_t nic_read_number;
         uint32_t rpc_number;
-        uint32_t rpc_msg_max;
     };
 
     struct { // socket
-        uint32_t tcp_conn_count;
-        uint32_t mbuf_count_per_conn;
+        uint16_t tcp_conn_count;
+        uint16_t mbuf_count_per_conn;
+        uint16_t rpc_msg_max;
+        uint16_t mem_cache_num;
     };
 
     struct { // deprecated
