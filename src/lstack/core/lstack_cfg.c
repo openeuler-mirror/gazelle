@@ -36,6 +36,7 @@
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_cfg.h"
+#include "lstack_mempool.h"
 
 #define DEFAULT_CONF_FILE    "/etc/gazelle/lstack.conf"
 #define LSTACK_CONF_ENV      "LSTACK_CONF_PATH"
@@ -82,6 +83,7 @@ static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
 static int32_t parse_rpc_msg_max(void);
+static int32_t parse_mem_cache_num(void);
 static int32_t parse_send_cache_mode(void);
 static int32_t parse_flow_bifurcation(void);
 static int32_t parse_stack_interrupt(void);
@@ -120,6 +122,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
     { "nic_txqueue_size", parse_nic_txqueue_size},
     { "rpc_msg_max", parse_rpc_msg_max },
+    { "mem_cache_num", parse_mem_cache_num },
     { "app_bind_numa",  parse_app_bind_numa },
     { "stack_num",   parse_stack_num },
     { "num_cpus",     parse_stack_cpu_number },
@@ -1424,7 +1427,16 @@ static int32_t parse_nic_vlan_mode(void)
 static int32_t parse_rpc_msg_max(void)
 {
     int32_t ret;
-    PARSE_ARG(g_config_params.rpc_msg_max, "rpc_msg_max", 4096, 1, 8192, ret);
+    PARSE_ARG(g_config_params.rpc_msg_max, "rpc_msg_max", 
+        4096, GAZELLE_RESERVED_CLIENTS, MEMP_NUM_SYS_MBOX + GAZELLE_RESERVED_CLIENTS, ret);
+    return ret;
+}
+
+static int32_t parse_mem_cache_num(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.mem_cache_num, "mem_cache_num", 
+        MEMPOOL_CACHE_NUM, BUF_CACHE_MIN_NUM, BUF_CACHE_MAX_NUM, ret);
     return ret;
 }
 

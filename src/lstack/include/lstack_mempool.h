@@ -45,7 +45,7 @@
 #define MEMPOOL_CACHE_NUM           32
 
 #define BUF_CACHE_MIN_NUM           32
-#define BUF_CACHE_DEFAULT_NUM       1024
+#define BUF_CACHE_MAX_NUM           1024
 #define BUF_CACHE_WATERSTEP_SHIFT   4   /* 1/16 */
 
 #define BUF_BULK_MAX_NUM            32
