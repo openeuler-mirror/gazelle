@@ -474,7 +474,7 @@ void mem_thread_cache_free(struct mem_thread *mt)
 
 int mem_thread_cache_init(struct mem_thread *mt)
 {
-    if (!get_global_cfg_params()->stack_mode_rtc && !xdp_eth_enabled()) {
+    if (get_global_cfg_params()->mem_async_mode) {
         char name [RTE_MEMPOOL_NAMESIZE];
         SYS_FORMAT_NAME(name, RTE_MEMPOOL_NAMESIZE, "%s_%p", "migrate_ring", mt);
 

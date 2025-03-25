@@ -285,10 +285,12 @@ int mt_ring_create(struct mbox_ring *mr, const char *name, unsigned count)
         mr->ops = &g_mbox_rtw_default_ops;
         mr->st_obj = NULL;
     }
-    if ((mr->flags & MBOX_FLAG_RECV) && !xdp_eth_enabled()) {
-        mr->flags |= MBOX_FLAG_PEEK;
-        mr->ops = &g_mbox_rtw_peek_ops;
-        mr->ops->create(mr, name, count);
+    if (mr->flags & MBOX_FLAG_RECV) {
+        if (get_global_cfg_params()->mem_async_mode) {
+            mr->flags |= MBOX_FLAG_PEEK;
+            mr->ops = &g_mbox_rtw_peek_ops;
+            mr->ops->create(mr, name, count);
+        }
     }
 
     mr->ring = rte_ring_create_fast(name, count, RING_F_SP_ENQ | RING_F_SC_DEQ);

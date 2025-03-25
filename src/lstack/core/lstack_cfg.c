@@ -84,6 +84,7 @@ static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
 static int32_t parse_rpc_msg_max(void);
 static int32_t parse_mem_cache_num(void);
+static int32_t parse_mem_async_mode(void);
 static int32_t parse_send_cache_mode(void);
 static int32_t parse_flow_bifurcation(void);
 static int32_t parse_stack_interrupt(void);
@@ -151,6 +152,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
     { "stack_thread_mode", parse_stack_thread_mode },
+    { "mem_async_mode", parse_mem_async_mode },
     { "nic_vlan_mode", parse_nic_vlan_mode },
     { "send_cache_mode", parse_send_cache_mode },
     { "flow_bifurcation", parse_flow_bifurcation},
@@ -1438,6 +1440,15 @@ static int32_t parse_mem_cache_num(void)
     PARSE_ARG(g_config_params.mem_cache_num, "mem_cache_num", 
         MEMPOOL_CACHE_NUM, BUF_CACHE_MIN_NUM, BUF_CACHE_MAX_NUM, ret);
     return ret;
+}
+
+static int32_t parse_mem_async_mode(void)
+{
+    // TODO
+    g_config_params.mem_async_mode = 1;
+    if (g_config_params.stack_mode_rtc || xdp_eth_enabled())
+        g_config_params.mem_async_mode = 0;
+    return 0;
 }
 
 static int32_t parse_send_cache_mode(void)
