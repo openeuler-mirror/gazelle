@@ -137,6 +137,7 @@ struct cfg_params {
         uint16_t mbuf_count_per_conn;
         uint16_t rpc_msg_max;
         uint16_t mem_cache_num;
+        bool mem_async_mode;
     };
 
     struct { // deprecated
