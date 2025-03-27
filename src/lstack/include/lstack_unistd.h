@@ -16,6 +16,9 @@
 #include <unistd.h>
 #include <signal.h>
 
+void pthread_block_sig(int sig);
+void pthread_unblock_sig(int sig);
+
 int lstack_signal_init(void);
 int lstack_sigaction(int sig_num, const struct sigaction *action, struct sigaction *old_action);
 pid_t lstack_fork(void);
