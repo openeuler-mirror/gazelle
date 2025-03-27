@@ -44,11 +44,14 @@
 #define MEMPOOL_OPS_NAME            "ring_mt_rts"
 #define MEMPOOL_CACHE_NUM           32
 
-#define BUF_CACHE_MIN_NUM           32
+#define BUF_CACHE_MIN_NUM           16
 #define BUF_CACHE_MAX_NUM           1024
 #define BUF_CACHE_WATERSTEP_SHIFT   4   /* 1/16 */
+#define BUF_CACHE_WATERSTEP_MIN     4
 
 #define BUF_BULK_MAX_NUM            32
+
+#define MIGRATE_RING_MIN_NUM        (BUF_CACHE_MIN_NUM << 1)
 
 struct buf_cache {
     unsigned size;           /* Size of cache. */
@@ -91,8 +94,8 @@ struct buf_cache *buf_cache_create(unsigned count)
     cache->tail = 0;
 
     cache->waterstep = cache->size >> BUF_CACHE_WATERSTEP_SHIFT;
-    if (cache->waterstep < BUF_CACHE_WATERSTEP_SHIFT)
-        cache->waterstep = BUF_CACHE_WATERSTEP_SHIFT;
+    if (cache->waterstep < BUF_CACHE_WATERSTEP_MIN)
+        cache->waterstep = BUF_CACHE_WATERSTEP_MIN;
     cache->watermark = cache->waterstep;
     cache->flushthresh = cache->size - cache->waterstep;
 
@@ -140,6 +143,12 @@ void buf_cache_sub_watermark(struct buf_cache *cache)
     if (cache->watermark > cache->waterstep) {
         cache->watermark -= cache->waterstep;
     }
+}
+
+static __rte_always_inline
+void buf_cache_reset_watermark(struct buf_cache *cache)
+{
+    cache->watermark = cache->waterstep;
 }
 
 static __rte_always_inline
@@ -273,6 +282,8 @@ struct mem_stack {
 };
 
 struct mem_thread {
+    int stack_id;
+
     struct buf_cache *rpc_cache;
 
     struct buf_cache *mbuf_cache;
@@ -289,7 +300,7 @@ int mem_stack_mpcache_init(int stack_id, unsigned cpu_id);
 
 int mem_thread_manager_init(void);
 void mem_thread_cache_free(struct mem_thread *mt);
-int mem_thread_cache_init(struct mem_thread *mt);
+int mem_thread_cache_init(struct mem_thread *mt, int stack_id);
 
 unsigned mem_stack_mbuf_pool_count(int stack_id);
 struct rte_mempool *mem_get_mbuf_pool(int stack_id);

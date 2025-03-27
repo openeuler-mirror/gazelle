@@ -21,14 +21,18 @@
 #include "common/dpdk_common.h"
 #include "lstack_dpdk.h"
 #include "lstack_protocol_stack.h"
+#include "lstack_unistd.h"
 
-#define MEM_THREAD_MANAGER_TIMEOUT  1
-#define MEM_THREAD_MANAGER_MAX      64
+#define MEM_THREAD_FLUSH_SIG            (SIGRTMIN + 11)
+#define MEM_THREAD_MANAGER_FLUSH_MS     100
+#define MEM_THREAD_MANAGER_FREE_S       2
+#define MEM_THREAD_MANAGER_FREE_MAX     64
 
 struct mem_thread_manager {
     struct list_node mt_work_list;
     struct list_node mt_free_list;
     rte_spinlock_t list_lock;
+    uint32_t flush_time;
 };
 
 struct mem_thread_group {
@@ -36,6 +40,9 @@ struct mem_thread_group {
     pthread_t thread;
     struct list_node mt_node;
     struct mem_thread mt_array[PROTOCOL_STACK_MAX];
+
+    bool used_flag;
+    uint32_t used_time;
 };
 
 static struct mem_stack g_mem_stack_group[PROTOCOL_STACK_MAX] = {0};
@@ -58,11 +65,73 @@ struct rte_mempool *mem_get_rpc_pool(int stack_id)
     return g_mem_stack_group[stack_id].rpc_pool;
 }
 
-static void mem_thread_manager_add_work(struct mem_thread_group *mt_group)
+static inline bool mem_thread_group_in_used(const struct mem_thread_group *mt_grooup, uint32_t timeout)
 {
-    rte_spinlock_lock(&g_mem_thread_manager.list_lock);
-    list_add_node(&mt_group->mt_node, &g_mem_thread_manager.mt_work_list);
-    rte_spinlock_unlock(&g_mem_thread_manager.list_lock);
+    return mt_grooup->used_flag || 
+           (sys_now() - mt_grooup->used_time < timeout);
+}
+
+static inline void mem_thread_group_used(void)
+{
+    g_mem_thread_group->used_flag = true;
+    g_mem_thread_group->used_time = sys_now();
+}
+
+static inline void mem_thread_group_done(void)
+{
+    g_mem_thread_group->used_flag = false;
+}
+
+static void mem_thread_cache_flush(struct mem_thread *mt);
+static unsigned mem_thread_cache_count(const struct mem_thread *mt);
+static void mem_thread_group_action_flush(int signum)
+{
+    struct mem_thread *mt;
+    int stack_id;
+
+    if (g_mem_thread_group == NULL)
+        return;
+    if (mem_thread_group_in_used(g_mem_thread_group, MEM_THREAD_MANAGER_FLUSH_MS))
+        return;
+
+    for (stack_id = 0; stack_id < PROTOCOL_STACK_MAX; stack_id++) {
+        mt = &g_mem_thread_group->mt_array[stack_id];
+        mem_thread_cache_flush(mt);
+    }
+}
+
+static int mem_thread_group_register_flush(void)
+{
+    sighandler_t handler;
+    handler = signal(MEM_THREAD_FLUSH_SIG, mem_thread_group_action_flush);
+    if (handler == SIG_ERR) {
+        LSTACK_LOG(ERR, LSTACK, "signal failed\n");
+        return -1;
+    }
+    pthread_unblock_sig(MEM_THREAD_FLUSH_SIG);
+    return 0;
+}
+
+static inline void mem_thread_group_notify_flush(const struct mem_thread_group *mt_group, uint32_t timeout)
+{
+    const struct mem_thread *mt;
+    int stack_id;
+    unsigned count = 0;
+
+    if (mem_thread_group_in_used(mt_group, timeout))
+        return;
+
+    for (stack_id = 0; stack_id < PROTOCOL_STACK_MAX; stack_id++) {
+        mt = &mt_group->mt_array[stack_id];
+        count += mem_thread_cache_count(mt);
+    }
+    if (count == 0) {
+        return;
+    }
+
+    if (pthread_kill(mt_group->thread, MEM_THREAD_FLUSH_SIG) != 0) {
+        LSTACK_LOG(ERR, LSTACK, "pthread_kill tid %d failed\n", mt_group->tid);
+    }
 }
 
 static inline bool mem_thread_group_exist(const struct mem_thread_group *mt_group)
@@ -70,6 +139,13 @@ static inline bool mem_thread_group_exist(const struct mem_thread_group *mt_grou
     if (pthread_tryjoin_np(mt_group->thread, NULL) == 0)
         return false;
     return true;
+}
+
+static void mem_thread_manager_add_work(struct mem_thread_group *mt_group)
+{
+    rte_spinlock_lock(&g_mem_thread_manager.list_lock);
+    list_add_node(&mt_group->mt_node, &g_mem_thread_manager.mt_work_list);
+    rte_spinlock_unlock(&g_mem_thread_manager.list_lock);
 }
 
 static void mem_thread_group_free(struct mem_thread_group *mt_group)
@@ -100,6 +176,8 @@ static int mem_thread_group_init(int stack_id)
             LSTACK_LOG(ERR, LSTACK, "alloc mem_thread_group failed, stack_id %d\n", stack_id);
             return -1;
         }
+        mem_thread_group_register_flush();
+
         g_mem_thread_group->tid = rte_gettid();
         g_mem_thread_group->thread = pthread_self();
         list_init_node(&g_mem_thread_group->mt_node);
@@ -107,7 +185,7 @@ static int mem_thread_group_init(int stack_id)
     }
 
     mt = &g_mem_thread_group->mt_array[stack_id];
-    if (mem_thread_cache_init(mt) != 0) {
+    if (mem_thread_cache_init(mt, stack_id) != 0) {
         LSTACK_LOG(ERR, LSTACK, "mem_thread_cache_init failed, stack_id %d\n", stack_id);
         return -1;
     }
@@ -133,6 +211,31 @@ static inline struct mem_thread *mem_thread_group_get(int stack_id)
     return mt;
 }
 
+static void mem_thread_manager_flush_all(void)
+{
+    struct list_node *node, *next;
+    struct mem_thread_group *mt_group;
+    uint32_t now = sys_now();
+
+    rte_spinlock_lock(&g_mem_thread_manager.list_lock);
+
+    if (now - g_mem_thread_manager.flush_time < MEM_THREAD_MANAGER_FLUSH_MS) {
+        rte_spinlock_unlock(&g_mem_thread_manager.list_lock);
+        return;
+    }
+    g_mem_thread_manager.flush_time = now;
+
+    list_for_each_node(node, next, &g_mem_thread_manager.mt_work_list) {
+        mt_group = container_of(node, struct mem_thread_group, mt_node);
+        /* skip myself */
+        if (mt_group == g_mem_thread_group)
+            continue;
+        mem_thread_group_notify_flush(mt_group, MEM_THREAD_MANAGER_FLUSH_MS);
+    }
+
+    rte_spinlock_unlock(&g_mem_thread_manager.list_lock);
+}
+
 static void *mem_thread_manager_thread(void *arg)
 {
     struct list_node *node, *next;
@@ -142,9 +245,10 @@ static void *mem_thread_manager_thread(void *arg)
     rte_spinlock_init(&g_mem_thread_manager.list_lock);
     list_init_head(&g_mem_thread_manager.mt_work_list);
     list_init_head(&g_mem_thread_manager.mt_free_list);
+    g_mem_thread_manager.flush_time = sys_now();
 
     while(true) {
-        sleep(MEM_THREAD_MANAGER_TIMEOUT);
+        sleep(MEM_THREAD_MANAGER_FREE_S);
 
         rte_spinlock_lock(&g_mem_thread_manager.list_lock);
 
@@ -156,7 +260,7 @@ static void *mem_thread_manager_thread(void *arg)
 
         list_for_each_node(node, next, &g_mem_thread_manager.mt_work_list) {
             count++;
-            if (count > MEM_THREAD_MANAGER_MAX) {
+            if (count > MEM_THREAD_MANAGER_FREE_MAX) {
                 /* move list head after the current node, 
                  * and start traversing from this node next time */
                 list_del_node(&g_mem_thread_manager.mt_work_list);
@@ -166,6 +270,7 @@ static void *mem_thread_manager_thread(void *arg)
 
             mt_group = container_of(node, struct mem_thread_group, mt_node);
             if (mem_thread_group_exist(mt_group)) {
+                mem_thread_group_notify_flush(mt_group, MEM_THREAD_MANAGER_FREE_S * MS_PER_S);
                 continue;
             }
             list_del_node(node);
@@ -183,8 +288,7 @@ int mem_thread_manager_init(void)
     return thread_create("gzmempool", 0, mem_thread_manager_thread, NULL);
 }
 
-static __rte_always_inline
-struct mem_thread *mem_thread_get(int stack_id)
+static inline struct mem_thread *mem_thread_get(int stack_id)
 {
     /* stack thread uses mbufpool_cache instead of buf_cache */
     if (get_protocol_stack() != NULL)
@@ -443,42 +547,97 @@ unsigned mem_stack_mbuf_pool_count(int stack_id)
     return rte_mempool_avail_count(ms->mbuf_pool);
 }
 
-void mem_thread_cache_free(struct mem_thread *mt)
+static void mem_thread_cache_flush(struct mem_thread *mt)
 {
-    void *obj;
+    struct mem_stack *ms = mem_stack_get(mt->stack_id);
+    void *obj_table[BUF_BULK_MAX_NUM];
+    unsigned num;
 
     if (mt->mbuf_migrate_ring != NULL) {
-        while (rte_ring_sc_dequeue(mt->mbuf_migrate_ring, &obj) == 0) {
-            mem_put_mbuf_bulk((struct rte_mbuf **)&obj, 1);
+        LWIP_DEBUGF(MEMP_DEBUG, ("%s(mem_thread=%p, stack_id=%d, mbuf_migrate_ring count=%u)\n", 
+                    __FUNCTION__, mt, mt->stack_id, rte_ring_count(mt->mbuf_migrate_ring)));
+
+        while (true) {
+            num = rte_ring_sc_dequeue_burst(mt->mbuf_migrate_ring, obj_table, BUF_BULK_MAX_NUM, NULL);
+            if (num == 0)
+                break;
+            mbuf_mp_ops.put_bulk(ms->mbuf_pool, obj_table, num);
         }
-        rte_ring_free(mt->mbuf_migrate_ring);
-        mt->mbuf_migrate_ring = NULL;
     }
 
     if (mt->mbuf_cache != NULL) {
-        while (buf_cache_pop_bulk(mt->mbuf_cache, &obj, 1, NULL) > 0) {
-            mem_put_mbuf_bulk((struct rte_mbuf **)&obj, 1);
+        LWIP_DEBUGF(MEMP_DEBUG, ("%s(mem_thread=%p, stack_id=%d, mbuf_cache count=%u)\n", 
+                    __FUNCTION__, mt, mt->stack_id, buf_cache_count(mt->mbuf_cache)));
+
+        while (true) {
+            num = LWIP_MIN(buf_cache_count(mt->mbuf_cache), BUF_BULK_MAX_NUM);
+            num = buf_cache_pop_bulk(mt->mbuf_cache, obj_table, num, NULL);
+            if (num == 0)
+                break;
+            mbuf_mp_ops.put_bulk(ms->mbuf_pool, obj_table, num);
         }
-        buf_cache_free(mt->mbuf_cache);
-        mt->mbuf_cache = NULL;
+        buf_cache_reset_watermark(mt->mbuf_cache);
     }
 
     if (mt->rpc_cache != NULL) {
-        while (buf_cache_pop_bulk(mt->rpc_cache, &obj, 1, NULL) > 0) {
-            mem_put_rpc(obj);
+        LWIP_DEBUGF(MEMP_DEBUG, ("%s(mem_thread=%p, stack_id=%d, rpc_cache count=%u)\n", 
+                    __FUNCTION__, mt, mt->stack_id, buf_cache_count(mt->rpc_cache)));
+
+        while (true) {
+            num = LWIP_MIN(buf_cache_count(mt->rpc_cache), BUF_BULK_MAX_NUM);
+            num = buf_cache_pop_bulk(mt->rpc_cache, obj_table, num, NULL);
+            if (num == 0)
+                break;
+            mem_mp_ops.put_bulk(ms->rpc_pool, obj_table, num);
         }
+        buf_cache_reset_watermark(mt->rpc_cache);
+    }
+}
+
+static unsigned mem_thread_cache_count(const struct mem_thread *mt)
+{
+    unsigned count = 0;
+
+    if (mt->mbuf_migrate_ring != NULL) {
+        count += rte_ring_count(mt->mbuf_migrate_ring);
+    }
+    if (mt->mbuf_cache != NULL) {
+        count += buf_cache_count(mt->mbuf_cache);
+    }
+    if (mt->rpc_cache != NULL) {
+        count += buf_cache_count(mt->rpc_cache);
+    }
+    return count;
+}
+
+void mem_thread_cache_free(struct mem_thread *mt)
+{
+    mem_thread_cache_flush(mt);
+
+    if (mt->mbuf_migrate_ring != NULL) {
+        rte_ring_free(mt->mbuf_migrate_ring);
+        mt->mbuf_migrate_ring = NULL;
+    }
+    if (mt->mbuf_cache != NULL) {
+        buf_cache_free(mt->mbuf_cache);
+        mt->mbuf_cache = NULL;
+    }
+    if (mt->rpc_cache != NULL) {
         buf_cache_free(mt->rpc_cache);
         mt->rpc_cache = NULL;
     }
 }
 
-int mem_thread_cache_init(struct mem_thread *mt)
+int mem_thread_cache_init(struct mem_thread *mt, int stack_id)
 {
+    mt->stack_id = stack_id;
+
     if (get_global_cfg_params()->mem_async_mode) {
         char name [RTE_MEMPOOL_NAMESIZE];
         SYS_FORMAT_NAME(name, RTE_MEMPOOL_NAMESIZE, "%s_%p", "migrate_ring", mt);
 
-        mt->mbuf_migrate_ring = rte_ring_create(name, BUF_CACHE_MAX_NUM, 
+        mt->mbuf_migrate_ring = rte_ring_create(name, 
+            LWIP_MAX(get_global_cfg_params()->mem_cache_num, MIGRATE_RING_MIN_NUM), 
             rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
         if (mt->mbuf_migrate_ring == NULL) {
             return -1;
@@ -522,9 +681,17 @@ void mem_mbuf_migrate_enqueue(struct mem_thread *mt, unsigned n)
     mpcache = ms->mbuf_mpcache;
 
     mt->stk_migrate_count += n;
-
-    if (mpcache->len <= ms->migrate_watermark)
+    if (mt->stk_migrate_count < BUF_CACHE_WATERSTEP_MIN)
         return;
+    if (mpcache->len < ms->migrate_watermark)
+        return;
+
+    /* no sufficient mbuf */
+    if (rte_ring_count(ms->mbuf_pool->pool_data) < MBUFPOOL_RESERVE_NUM) {
+        mem_thread_manager_flush_all();
+        mt->stk_migrate_count = 0;
+        return;
+    }
 
     num = LWIP_MIN(mpcache->len - ms->migrate_watermark, 
                    mt->stk_migrate_count);
@@ -654,8 +821,8 @@ static void pool_put_bulk_with_cache(const struct mempool_ops *pool_ops,
 
     /* dequeue from cache, then put to the pool */
     put_count = count - cache->watermark;
-    LWIP_DEBUGF(MEMP_DEBUG, ("pool_put_bulk_with_cache(cache=%p, watermark=%u, put_count=%u)\n", 
-                cache, cache->watermark, put_count));
+    LWIP_DEBUGF(MEMP_DEBUG, ("%s(cache=%p, watermark=%u, put_count=%u)\n", 
+                __FUNCTION__, cache, cache->watermark, put_count));
 
     pool_ops->put_bulk(pool, &cache->objs[cache->head - put_count], put_count);
     cache->head -= put_count;
@@ -674,10 +841,12 @@ void *mem_get_rpc(int stack_id)
     if (mt == NULL) {
         ret = mem_mp_ops.get_bulk(ms->rpc_pool, &obj, 1);
     } else {
+        mem_thread_group_used();
         ret = pool_get_bulk_with_cache(&mem_mp_ops, ms->rpc_pool, mt->rpc_cache, &obj, 1);
+        mem_thread_group_done();
     }
 
-    LWIP_DEBUGF(MEMP_DEBUG, ("mem_get_rpc(stack_id=%d, obj=%p)\n", stack_id, obj));
+    LWIP_DEBUGF(MEMP_DEBUG, ("%s(stack_id=%d, obj=%p)\n", __FUNCTION__, stack_id, obj));
 
     return ret == 0 ? NULL : obj;
 }
@@ -688,12 +857,14 @@ void mem_put_rpc(void *obj)
     struct mem_stack *ms = mem_stack_get(stack_id);
     struct mem_thread *mt = mem_thread_get(stack_id);
 
-    LWIP_DEBUGF(MEMP_DEBUG, ("mem_put_rpc(stack_id=%d, obj=%p)\n", stack_id, obj));
+    LWIP_DEBUGF(MEMP_DEBUG, ("%s(stack_id=%d, obj=%p)\n", __FUNCTION__, stack_id, obj));
 
     if (mt == NULL) {
         mem_mp_ops.put_bulk(ms->rpc_pool, &obj, 1);
     } else {
+        mem_thread_group_used();
         pool_put_bulk_with_cache(&mem_mp_ops, ms->rpc_pool, mt->rpc_cache, &obj, 1);
+        mem_thread_group_done();
     }
 }
 
@@ -712,6 +883,7 @@ unsigned mem_get_mbuf_bulk(int stack_id, struct rte_mbuf **mbuf_table, unsigned 
          * when RTE_MAX_LCORE is too large, it's time-consuming
          */
         if (rte_ring_count(ms->mbuf_pool->pool_data) < MBUFPOOL_RESERVE_NUM + n) {
+            mem_thread_manager_flush_all();
             return 0;
         }
     }
@@ -719,14 +891,16 @@ unsigned mem_get_mbuf_bulk(int stack_id, struct rte_mbuf **mbuf_table, unsigned 
     if (mt == NULL) {
         ret = mbuf_mp_ops.get_bulk(ms->mbuf_pool, (void **)mbuf_table, n);
     } else {
+        mem_thread_group_used();
         mem_mbuf_migrate_dequeue(mt);
         ret = pool_get_bulk_with_cache(&mbuf_mp_ops, ms->mbuf_pool, mt->mbuf_cache, (void **)mbuf_table, n);
+        mem_thread_group_done();
     }
 
 #if MEMP_DEBUG
     for (unsigned i = 0; i < ret; ++i) {
-        LWIP_DEBUGF(MEMP_DEBUG, ("mem_get_mbuf_bulk(stack_id=%d, n=%u, mbuf_table[%u]=%p, pbuf=%p)\n", 
-                    stack_id, n, i, mbuf_table[i], mbuf_to_pbuf(mbuf_table[i])));
+        LWIP_DEBUGF(MEMP_DEBUG, ("%s(stack_id=%d, n=%u, mbuf_table[%u]=%p, pbuf=%p)\n", 
+                    __FUNCTION__, stack_id, n, i, mbuf_table[i], mbuf_to_pbuf(mbuf_table[i])));
     }
 #endif /* MEMP_DEBUG */
 
@@ -745,15 +919,17 @@ static void mem_put_mbuf_bulk_by_pbuf(struct rte_mbuf *const *mbuf_table, unsign
 
 #if MEMP_DEBUG
     for (unsigned i = 0; i < n; ++i) {
-        LWIP_DEBUGF(MEMP_DEBUG, ("mem_put_mbuf_bulk(stack_id=%d, n=%u, mbuf_table[%u]=%p, pbuf=%p)\n", 
-                    stack_id, n, i, mbuf_table[i], mbuf_to_pbuf(mbuf_table[i])));
+        LWIP_DEBUGF(MEMP_DEBUG, ("%s(stack_id=%d, n=%u, mbuf_table[%u]=%p, pbuf=%p)\n", 
+                    __FUNCTION__, stack_id, n, i, mbuf_table[i], mbuf_to_pbuf(mbuf_table[i])));
     }
 #endif /* MEMP_DEBUG */
 
     if (mt == NULL) {
         mbuf_mp_ops.put_bulk(ms->mbuf_pool, (void *const *)mbuf_table, n);
     } else {
+        mem_thread_group_used();
         pool_put_bulk_with_cache(&mbuf_mp_ops, ms->mbuf_pool, mt->mbuf_cache, (void *const *)mbuf_table, n);
+        mem_thread_group_done();
     }
 
 }
@@ -826,8 +1002,8 @@ struct rte_mbuf *pbuf_to_mbuf_prefree(struct pbuf *p)
     struct rte_mbuf *m = pbuf_to_mbuf(p);
 #if MEMP_DEBUG
     if (rte_mbuf_refcnt_read(m) > 1) {
-        LWIP_DEBUGF(MEMP_DEBUG, ("pbuf_to_mbuf_prefree(mbuf=%p, pbuf=%p, refcnt=%u)\n", 
-                    m, p, rte_mbuf_refcnt_read(m)));
+        LWIP_DEBUGF(MEMP_DEBUG, ("%s(mbuf=%p, pbuf=%p, refcnt=%u)\n", 
+                    __FUNCTION__, m, p, rte_mbuf_refcnt_read(m)));
     }
 #endif /* MEMP_DEBUG */
     if (p->mbuf_refcnt != 1) {
@@ -868,6 +1044,9 @@ void mem_put_pbuf_list_bulk(struct pbuf *const *pbuf_table, unsigned n)
     struct pbuf *q, *next;
     struct rte_mbuf *mbuf;
 
+    if (mt != NULL)
+        mem_thread_group_used();
+
     for (unsigned i = 0; i < n; ++i) {
         q = pbuf_table[i];
         while (q != NULL) {
@@ -893,6 +1072,10 @@ void mem_put_pbuf_list_bulk(struct pbuf *const *pbuf_table, unsigned n)
                 __FUNCTION__, stack_id, n, i, mbuf, q));
         }
     }
+
+    if (mt != NULL)
+        mem_thread_group_done();
+    return;
 }
 
 struct pbuf *mem_get_pbuf(int stack_id, bool reserve)
@@ -1001,7 +1184,9 @@ void mem_init_pbuf(struct pbuf *p, pbuf_layer layer, uint16_t tot_len, uint16_t 
     struct rte_mbuf *mbuf;
     void *data;
 
-    if (p->type_internal == PBUF_POOL_PREINIT) {
+    /* PBUF_POOL_PREINIT maybe give back to mbuf_pool, and alloc to NIC rx.
+     * so ignore PBUF_POOL_PREINIT at this time. */
+    if (layer == PBUF_TRANSPORT && p->type_internal == PBUF_POOL_PREINIT) {
         p->payload = (uint8_t *)p->payload + LWIP_MEM_ALIGN_SIZE((uint16_t)layer);
         p->type_internal = type;
         p->len = len;

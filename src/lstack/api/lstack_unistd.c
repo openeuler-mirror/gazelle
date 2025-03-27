@@ -58,13 +58,22 @@ bool sig_need_dump(int sig)
     return true;
 }
 
-static void pthread_block_sig(int sig)
+void pthread_block_sig(int sig)
 {
     sigset_t mask;
 
     sigemptyset(&mask);
     sigaddset(&mask, sig);
     pthread_sigmask(SIG_BLOCK, &mask, NULL);
+}
+
+void pthread_unblock_sig(int sig)
+{
+    sigset_t mask;
+
+    sigemptyset(&mask);
+    sigaddset(&mask, sig);
+    pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
 }
 
 static void lstack_sigaction_default_handler(int sig, siginfo_t *info, void *context)
@@ -116,15 +125,6 @@ static void lstack_sigaction_default_handler(int sig, siginfo_t *info, void *con
 static void lstack_sig_default_handler(int sig)
 {
     lstack_sigaction_default_handler(sig, NULL, NULL);
-}
-
-static void pthread_unblock_sig(int sig)
-{
-    sigset_t mask;
-
-    sigemptyset(&mask);
-    sigaddset(&mask, sig);
-    pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
 }
 
 int lstack_signal_init(void)
