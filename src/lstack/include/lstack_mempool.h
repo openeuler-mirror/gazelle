@@ -302,9 +302,10 @@ int mem_thread_manager_init(void);
 void mem_thread_cache_free(struct mem_thread *mt);
 int mem_thread_cache_init(struct mem_thread *mt, int stack_id);
 
-unsigned mem_stack_mbuf_pool_count(int stack_id);
 struct rte_mempool *mem_get_mbuf_pool(int stack_id);
 struct rte_mempool *mem_get_rpc_pool(int stack_id);
+unsigned mem_stack_mbuf_pool_count(int stack_id);
+unsigned mem_stack_rpc_pool_count(int stack_id);
 
 void *mem_get_rpc(int stack_id);
 void mem_put_rpc(void *obj);

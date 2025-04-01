@@ -73,7 +73,6 @@ struct sock_wait {
 
     /* dfx stat */
     struct list_node group_node;
-    struct gazelle_wakeup_stat stat;
 
     /* epoll kernel fd */
     int epfd;
@@ -82,6 +81,9 @@ struct sock_wait {
     unsigned lwip_nfds;
     unsigned kernel_nfds;
     struct wait_affinity affinity;
+
+#define SOCK_WAIT_STAT(sk_wait, name, count)  if ((sk_wait) != NULL && (sk_wait)->type != WAIT_CLOSE) { (sk_wait)->stat.name += count; }
+    struct gazelle_wakeup_stat stat;
 
     char pad0 __rte_cache_aligned;  /* new cache line */
 

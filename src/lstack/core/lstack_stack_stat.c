@@ -221,6 +221,8 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
 
     lstack_get_low_power_info(&dfx->low_power_info);
 
+    stack->stats.conn_num = stack->conn_num;
+    stack->stats.mbuf_pool_cnt = mem_stack_mbuf_pool_count(stack->stack_idx);
     int32_t ret = memcpy_s(&dfx->data.pkts.stack_stat, sizeof(struct gazelle_stack_stat),
         &stack->stats, sizeof(struct gazelle_stack_stat));
     if (ret != EOK) {
@@ -229,15 +231,9 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
     }
 
     sock_wait_group_stat(stack->stack_idx, &dfx->data.pkts.wakeup_stat);
+    rpc_get_stat(&stack->rpc_queue, &dfx->data.pkts.rpc_stat);
 
-    dfx->data.pkts.call_alloc_fail = rpc_stats_get()->call_alloc_fail;
-
-    int32_t rpc_call_result = rpc_msgcnt(&stack->rpc_queue);
-    dfx->data.pkts.call_msg_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
-
-    dfx->data.pkts.mbufpool_avail_cnt = mem_stack_mbuf_pool_count(stack->stack_idx);
-
-    dfx->data.pkts.conn_num = stack->conn_num;
+    return;
 }
 
 static void get_stack_dfx_data_proto(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack,

@@ -734,26 +734,23 @@ static void show_lstack_stats(struct gazelle_stack_dfx_data *lstack_stat)
     printf("tx_pkts: %-20"PRIu64" ", lstack_stat->data.pkts.stack_stat.tx);
     printf("tx_drop: %-20"PRIu64" ", lstack_stat->data.pkts.stack_stat.tx_drop);
     printf("tx_allocmbuf_fail: %-10"PRIu64"\n", lstack_stat->data.pkts.stack_stat.tx_allocmbuf_fail);
-    printf("app_read: %-19"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_read_cnt);
-    printf("read_lwip: %-18"PRIu64" ", lstack_stat->data.pkts.stack_stat.read_lwip_cnt);
-    printf("read_lwip_drop: %-13"PRIu64" \n", lstack_stat->data.pkts.stack_stat.read_lwip_drop);
-    printf("app_write: %-18"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_write_cnt);
-    printf("write_lwip: %-17"PRIu64" ", lstack_stat->data.pkts.stack_stat.write_lwip_cnt);
-    printf("app_write_rpc: %-14"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.app_write_rpc);
-    printf("conn_num: %-19hu ", lstack_stat->data.pkts.conn_num);
 
-    printf("kernel_events: %-14"PRIu64"\n", lstack_stat->data.pkts.wakeup_stat.kernel_events);
-    printf("wakeup_events: %-14"PRIu64" ", lstack_stat->data.pkts.stack_stat.wakeup_events);
-    printf("app_events: %-17"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_events);
+    printf("mbuf_pool_freecnt: %-10"PRIu32" ", lstack_stat->data.pkts.stack_stat.mbuf_pool_cnt);
+    printf("conn_num: %-19hu ", lstack_stat->data.pkts.stack_stat.conn_num);
+    printf("wakeup_events: %-14"PRIu64" \n", lstack_stat->data.pkts.stack_stat.wakeup_events);
+
+    printf("rpc_pool_cnt: %-15"PRIu32" ", lstack_stat->data.pkts.rpc_stat.rpc_pool_cnt);
+    printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.rpc_stat.call_alloc_fail);
+    printf("call_msg: %-19"PRIu64" \n", lstack_stat->data.pkts.rpc_stat.call_msg_cnt);
+
+    printf("kernel_events: %-14"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.kernel_events);
+    printf("app_events: %-17"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.app_events);
+    printf("app_read: %-19"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_read_cnt);
+    printf("app_write: %-18"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.app_write_cnt);
     printf("read_null: %-18"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.read_null);
-    printf("call_msg: %-19"PRIu64" ", lstack_stat->data.pkts.call_msg_cnt);
-    printf("call_alloc_fail: %-12"PRIu64" ", lstack_stat->data.pkts.call_alloc_fail);
-    printf("call_null: %-18"PRIu64" \n", lstack_stat->data.pkts.stack_stat.call_null);
-    printf("send_pkts_fail: %-13"PRIu64" ", lstack_stat->data.pkts.stack_stat.send_pkts_fail);
-    printf("mbuf_pool_freecnt: %-10"PRIu32" \n", lstack_stat->data.pkts.mbufpool_avail_cnt);
-    printf("accpet_fail: %-16"PRIu64" ", lstack_stat->data.pkts.stack_stat.accept_fail);
-    printf("sock_rx_drop: %-15"PRIu64" ", lstack_stat->data.pkts.stack_stat.sock_rx_drop);
-    printf("sock_tx_merge: %-16"PRIu64" \n", lstack_stat->data.pkts.stack_stat.sock_tx_merge);
+    printf("sock_rx_drop: %-15"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.sock_rx_drop);
+    printf("sock_tx_merge: %-14"PRIu64" ", lstack_stat->data.pkts.wakeup_stat.sock_tx_merge);
+    printf("accpet_fail: %-16"PRIu64" \n", lstack_stat->data.pkts.wakeup_stat.accept_fail);
 }
 
 static void gazelle_print_lstack_stat_detail(struct gazelle_stack_dfx_data *lstack_stat,

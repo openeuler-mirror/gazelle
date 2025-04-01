@@ -129,10 +129,17 @@ void sock_wait_group_stat(int stack_id, struct gazelle_wakeup_stat *stat)
     list_for_each_node(node, next, &g_wait_group.group_list) {
         sk_wait = list_entry(node, struct sock_wait, group_node);
 
-        if (sk_wait->affinity.bind_stack_id == stack_id) {
-            memcpy_s(stat, sizeof(struct gazelle_wakeup_stat), 
-                     &sk_wait->stat, sizeof(struct gazelle_wakeup_stat));
-        }
+        if (sk_wait->affinity.bind_stack_id != stack_id)
+            continue;
+
+        stat->kernel_events += sk_wait->stat.kernel_events ;
+        stat->app_events    += sk_wait->stat.app_events    ;
+        stat->accept_fail   += sk_wait->stat.accept_fail   ;
+        stat->app_write_cnt += sk_wait->stat.app_write_cnt ;
+        stat->app_read_cnt  += sk_wait->stat.app_read_cnt  ;
+        stat->read_null     += sk_wait->stat.read_null     ;
+        stat->sock_rx_drop  += sk_wait->stat.sock_rx_drop  ;
+        stat->sock_tx_merge += sk_wait->stat.sock_tx_merge ;
     }
 
     rte_spinlock_unlock(&g_wait_group.group_list_lock);
