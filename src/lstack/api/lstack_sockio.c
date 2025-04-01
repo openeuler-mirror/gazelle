@@ -49,7 +49,7 @@ struct sockio_ops {
                                const struct sockaddr *to, socklen_t tolen);
     void    (*stack_udp_send)(struct lwip_sock *sock);
 
-    ssize_t (*stack_udp_readmsg)(struct lwip_sock *sock, struct msghdr *msg, int flags);
+    ssize_t (*stack_udp_readmsg)(struct lwip_sock *sock, struct msghdr *msg, size_t len, int flags);
 
     ssize_t (*stack_tcp_write)(struct lwip_sock *sock, const char *data, size_t len, int flags);
     void    (*stack_tcp_send)(struct lwip_sock *sock);
@@ -260,6 +260,8 @@ static uint16_t stack_udp_write_one(const struct lwip_sock *sock, struct mbox_ri
     mr->ops->enqueue_burst(mr, (void **)&nbuf, 1);
     mr->app_free_count -= 1;
 
+    SOCK_WAIT_STAT(sock->sk_wait, app_write_cnt, 1);
+
     return len;
 }
 
@@ -268,7 +270,7 @@ static uint16_t stack_udp_write_bulk(const struct lwip_sock *sock, struct mbox_r
     const struct sockaddr *to, socklen_t tolen)
 {
     struct pbuf *pbuf_pkts[UDP_SND_QUEUELEN_MAX];
-    unsigned pbuf_num;
+    unsigned pbuf_num = 0;
     struct netbuf *nbuf;
     uint16_t payload_size;
     uint8_t optlen;
@@ -327,6 +329,8 @@ static uint16_t stack_udp_write_bulk(const struct lwip_sock *sock, struct mbox_r
     } else {
         mr->ops->push_tail(mr, nbuf);
     }
+
+    SOCK_WAIT_STAT(sock->sk_wait, app_write_cnt, pbuf_num);
 
     return copied_total;
 }
@@ -473,7 +477,7 @@ static void rtc_stack_udp_send(struct lwip_sock *sock)
     } while (output_again);
 }
 
-static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, int flags)
+static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, size_t len, int flags)
 {
     struct mbox_ring *mr = &sock->conn->recvmbox->mring;
     struct pbuf **extcache_list;
@@ -505,6 +509,8 @@ static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, int
     err = lwip_recvfrom_udp_raw(sock, flags | MSG_PEEK, msg, &copied_total, 0);
     sock->lastdata.netbuf = NULL;
 
+    SOCK_WAIT_STAT(sock->sk_wait, app_read_cnt, 1);
+    SOCK_WAIT_STAT(sock->sk_wait, sock_rx_drop, copied_total < len ? 1 : 0);
     if (get_protocol_stack_group()->latency_start)
         calculate_lstack_latency(sock->stack_id, &nbuf->p, 1, GAZELLE_LATENCY_READ_LSTACK, 0);
 
@@ -532,6 +538,8 @@ static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, int
         return copied_total;
     }
 out:
+    SOCK_WAIT_STAT(sock->sk_wait, read_null, 1);
+
     set_errno(err_to_errno(err));
     return -1;
 }
@@ -561,6 +569,8 @@ static uint16_t rtw_stack_tcp_write_one(const struct lwip_sock *sock, struct mbo
     mr->ops->enqueue_burst(mr, (void **)&p, 1);
     mr->app_free_count -= 1;
 
+    SOCK_WAIT_STAT(sock->sk_wait, app_write_cnt, 1);
+
     return len;
 }
 
@@ -582,6 +592,7 @@ static uint16_t rtw_stack_tcp_write_bulk(const struct lwip_sock *sock, struct mb
 
     write_pbuf_bulk(pbuf_pkts, pbuf_num, TCP_MSS, data, len, 0);
 
+    SOCK_WAIT_STAT(sock->sk_wait, app_write_cnt, pbuf_num);
     if (get_protocol_stack_group()->latency_start)
         calculate_lstack_latency(sock->stack_id, pbuf_pkts, pbuf_num, GAZELLE_LATENCY_WRITE_INTO_RING, 0);
 
@@ -670,6 +681,7 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
     }
 
     copied_total = rtw_stack_tcp_append(mr, data, LWIP_MIN(TCP_MSS, total_copy_len), flags);
+    SOCK_WAIT_STAT(sock->sk_wait, sock_tx_merge, copied_total > 0 ? 1 : 0);
     if (copied_total == total_copy_len) {
         return copied_total;
     }
@@ -843,6 +855,7 @@ static ssize_t stack_tcp_read(struct lwip_sock *sock, char *data, size_t len, in
             break;
         }
 
+        SOCK_WAIT_STAT(sock->sk_wait, app_read_cnt, 1);
         if (get_protocol_stack_group()->latency_start)
             calculate_lstack_latency(sock->stack_id, &p, 1, GAZELLE_LATENCY_READ_APP_CALL, sys_now_us());
 
@@ -878,6 +891,8 @@ static ssize_t stack_tcp_read(struct lwip_sock *sock, char *data, size_t len, in
         API_EVENT(sock->conn, NETCONN_EVT_RCVMINUS, copied_total);
         return copied_total;
     }
+
+    SOCK_WAIT_STAT(sock->sk_wait, read_null, 1);
 
     set_errno(err_to_errno(err));
     if (err == ERR_CLSD) {
@@ -1133,10 +1148,10 @@ ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
         msg.msg_iovlen = 1;
         msg.msg_name = from;
         msg.msg_namelen = (fromlen ? *fromlen : 0);
-        recvd = ioops.stack_udp_readmsg(sock, &msg, flags);
+        recvd = ioops.stack_udp_readmsg(sock, &msg, len, flags);
         if (recvd < 0 && errno == EWOULDBLOCK) {
             if (sock_event_wait(sock, netconn_is_nonblocking(sock->conn) || (flags & MSG_DONTWAIT))) {
-                recvd = ioops.stack_udp_readmsg(sock, &msg, flags);
+                recvd = ioops.stack_udp_readmsg(sock, &msg, len, flags);
             }
         }
         if (recvd > 0 && fromlen != NULL) {
@@ -1154,11 +1169,11 @@ ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
 ssize_t sockio_recvmsg(int fd, struct msghdr *msg, int flags)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
-    ssize_t ret, recvd = 0;
+    ssize_t len, recvd = 0;
 
-    ret = lwip_recvmsg_check(NULL, msg, flags);
-    if (unlikely(ret <= 0)) {
-        return ret;
+    len = lwip_recvmsg_check(NULL, msg, flags);
+    if (unlikely(len <= 0)) {
+        return len;
     }
 
     if (unlikely(!sock->affinity_numa)) {
@@ -1169,20 +1184,20 @@ ssize_t sockio_recvmsg(int fd, struct msghdr *msg, int flags)
     switch (NETCONN_TYPE(sock->conn)) {
     case NETCONN_TCP:
         for (int i = 0; i < msg->msg_iovlen; ++i) {
-            ret = sockio_recvfrom(fd, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags, NULL, NULL);
-            if (ret <= 0) {
+            len = sockio_recvfrom(fd, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags, NULL, NULL);
+            if (len <= 0) {
                 if (recvd == 0)
-                    recvd = ret;
+                    recvd = len;
                 break;
             }
-            recvd += ret;
+            recvd += len;
         }
         break;
     case NETCONN_UDP:
-        recvd = ioops.stack_udp_readmsg(sock, msg, flags);
+        recvd = ioops.stack_udp_readmsg(sock, msg, len, flags);
         if (recvd < 0 && errno == EWOULDBLOCK) {
             if (sock_event_wait(sock, netconn_is_nonblocking(sock->conn) || (flags & MSG_DONTWAIT))) {
-                recvd = ioops.stack_udp_readmsg(sock, msg, flags);
+                recvd = ioops.stack_udp_readmsg(sock, msg, len, flags);
             }
         }
         break;

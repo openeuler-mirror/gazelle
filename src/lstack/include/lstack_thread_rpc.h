@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <rte_mempool.h>
 
+#include "common/gazelle_dfx_msg.h"
 #include "lstack_lockless_queue.h"
 #include "lstack_interrupt.h"
 
@@ -31,12 +32,6 @@ struct rpc_queue {
     struct lockless_queue queue;
     uint16_t queue_id;
 };
-
-struct rpc_stats {
-    uint16_t call_null;
-    uint64_t call_alloc_fail;
-};
-struct rpc_stats *rpc_stats_get(void);
 
 union rpc_msg_arg {
     int i;
@@ -66,6 +61,8 @@ struct rpc_msg {
     pthread_spinlock_t lock; /* msg handler unlock notice sender msg process done */
     lockless_queue_node queue_node;
 };
+
+void rpc_get_stat(rpc_queue *queue, struct gazelle_rpc_stat *stat);
 
 struct rpc_msg *rpc_msg_alloc(int stack_id, rpc_func_t func);
 void rpc_msg_free(struct rpc_msg *msg);

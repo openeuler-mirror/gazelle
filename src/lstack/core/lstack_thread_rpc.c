@@ -10,6 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
+#include <securec.h>
+
 #include <lwip/lwipgz_sock.h>
 #include <lwip/priv/tcp_priv.h>
 
@@ -20,11 +22,13 @@
 #include "lstack_thread_rpc.h"
 #include "lstack_mempool.h"
 
-static struct rpc_stats g_rpc_stats;
+static struct gazelle_rpc_stat g_rpc_stats = {0};
 
-struct rpc_stats *rpc_stats_get(void)
+void rpc_get_stat(rpc_queue *queue, struct gazelle_rpc_stat *stat)
 {
-    return &g_rpc_stats;
+    g_rpc_stats.rpc_pool_cnt = mem_stack_rpc_pool_count(queue->queue_id);
+    g_rpc_stats.call_msg_cnt = rpc_msgcnt(queue);
+    memcpy_s(stat, sizeof(struct gazelle_rpc_stat), &g_rpc_stats, sizeof(struct gazelle_rpc_stat));
 }
 
 __rte_always_inline
@@ -114,11 +118,7 @@ int rpc_poll_msg(rpc_queue *queue, int max_num)
         }
         msg = container_of(node, struct rpc_msg, queue_node);
 
-        if (likely(msg->func)) {
-            msg->func(msg);
-        } else {
-            g_rpc_stats.call_null++;
-        }
+        msg->func(msg);
 
         if (msg->flags & RPC_MSG_RECALL) {
             msg->flags &= ~RPC_MSG_RECALL;

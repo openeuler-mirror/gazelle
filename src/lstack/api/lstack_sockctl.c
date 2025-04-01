@@ -388,13 +388,16 @@ static int rpc_call_shadow_fd(int stack_id, int fd, const struct sockaddr *addr,
 
 static void callback_accept(struct rpc_msg *msg)
 {
+    struct lwip_sock *sock;
     int fd = msg->args[MSG_ARG_0].i;
     msg->result = -1;
-    struct protocol_stack *stack = get_protocol_stack();
 
     int accept_fd = lwip_accept4(fd, msg->args[MSG_ARG_1].p, msg->args[MSG_ARG_2].p, msg->args[MSG_ARG_3].i);
     if (accept_fd < 0) {
-        stack->stats.accept_fail++;
+        sock = lwip_get_socket(fd);
+        if (!POSIX_IS_CLOSED(sock)) {
+            SOCK_WAIT_STAT(sock->sk_wait, accept_fail, 1);
+        }
         LSTACK_LOG(ERR, LSTACK, "fd %d ret %d\n", fd, accept_fd);
         return;
     }

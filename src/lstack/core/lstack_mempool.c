@@ -65,6 +65,18 @@ struct rte_mempool *mem_get_rpc_pool(int stack_id)
     return g_mem_stack_group[stack_id].rpc_pool;
 }
 
+unsigned mem_stack_mbuf_pool_count(int stack_id)
+{
+    struct mem_stack *ms = mem_stack_get(stack_id);
+    return rte_mempool_avail_count(ms->mbuf_pool);
+}
+
+unsigned mem_stack_rpc_pool_count(int stack_id)
+{
+    struct mem_stack *ms = mem_stack_get(stack_id);
+    return rte_mempool_avail_count(ms->rpc_pool);
+}
+
 static inline bool mem_thread_group_in_used(const struct mem_thread_group *mt_grooup, uint32_t timeout)
 {
     return mt_grooup->used_flag || 
@@ -539,12 +551,6 @@ int mem_stack_mpcache_init(int stack_id, unsigned cpu_id)
         rte_gettid(), stack_id, rte_lcore_id(), ms->migrate_watermark);
 
     return 0;
-}
-
-unsigned mem_stack_mbuf_pool_count(int stack_id)
-{
-    struct mem_stack *ms = mem_stack_get(stack_id);
-    return rte_mempool_avail_count(ms->mbuf_pool);
 }
 
 static void mem_thread_cache_flush(struct mem_thread *mt)

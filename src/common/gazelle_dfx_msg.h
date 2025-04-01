@@ -94,31 +94,33 @@ enum GAZELLE_TCP_LIST_STATE {
 };
 
 struct gazelle_stack_stat {
+    uint32_t conn_num;
+    uint32_t mbuf_pool_cnt;
     uint64_t wakeup_events;
-    uint64_t write_lwip_cnt;
-    uint64_t send_pkts_fail;
-    uint64_t read_lwip_drop;
-    uint64_t read_lwip_cnt;
     uint64_t rx_allocmbuf_fail;
     uint64_t tx_allocmbuf_fail;
-    uint64_t call_null;
     uint64_t rx_drop;
     uint64_t rx;
     uint64_t tx_drop;
     uint64_t tx;
     uint64_t tx_prepare_fail;
+};
+
+struct gazelle_wakeup_stat {
+    uint64_t kernel_events;
+    uint64_t app_events;
     uint64_t accept_fail;
+    uint64_t app_write_cnt;
+    uint64_t app_read_cnt;
+    uint64_t read_null;
     uint64_t sock_rx_drop;
     uint64_t sock_tx_merge;
 };
 
-struct gazelle_wakeup_stat {
-    uint64_t app_events;
-    uint64_t app_write_rpc;
-    uint64_t app_write_cnt;
-    uint64_t app_read_cnt;
-    uint64_t read_null;
-    uint64_t kernel_events;
+struct gazelle_rpc_stat {
+    uint32_t rpc_pool_cnt;
+    uint64_t call_alloc_fail;
+    uint64_t call_msg_cnt;
 };
 
 struct gazelle_stack_aggregate_stats {
@@ -134,12 +136,9 @@ struct gazelle_stack_aggregate_stats {
 };
 
 struct gazelle_stat_pkts {
-    uint16_t conn_num;
-    uint32_t mbufpool_avail_cnt;
-    uint64_t call_msg_cnt;
-    uint64_t call_alloc_fail;
     struct gazelle_stack_stat stack_stat;
     struct gazelle_wakeup_stat wakeup_stat;
+    struct gazelle_rpc_stat rpc_stat;
     struct gazelle_stack_aggregate_stats aggregate_stats;
 };
 
