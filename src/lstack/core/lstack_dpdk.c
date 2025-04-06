@@ -196,7 +196,7 @@ int32_t fill_mbuf_to_ring(int stack_id, struct rte_ring *ring, uint32_t mbuf_num
         batch = LWIP_MIN(remain, RING_SIZE(VDEV_RX_QUEUE_SZ));
 
         ret = mem_get_mbuf_bulk(stack_id, free_buf, batch, true);
-        if (ret != 0) {
+        if (ret == 0) {
             LSTACK_LOG(ERR, LSTACK, "cannot alloc mbuf for ring, count: %u ret=%d\n", batch, ret);
             return -1;
         }
