@@ -38,9 +38,11 @@ struct latency_timestamp {
         uint16_t type;  // latency type
 };
 struct mbuf_private {
-    /* struct pbuf_custom must at first */
+    /* struct pbuf_custom must at first. do not copy in copy_mbuf_private() !!! */
     struct pbuf_custom pc;
-    int stack_id; /* the stack to which buf belongs */
+    /* the stack to which buf belongs. do not copy in copy_mbuf_private() !!! */
+    int stack_id;
+
     struct latency_timestamp lt;
 };
 
@@ -57,11 +59,16 @@ static __rte_always_inline struct mbuf_private *pbuf_to_private(const struct pbu
     return mbuf_to_private(pbuf_to_mbuf(p));
 }
 
+static __rte_always_inline void copy_mbuf_private(struct mbuf_private *dst, const struct mbuf_private *src)
+{
+    rte_memcpy(&dst->lt, &src->lt, sizeof(struct latency_timestamp));
+}
+
 /* NOTE!!! magic code, even the order.
 *  I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,
 *  and if there is no cache miss, it only take less than 20 cycle(store pipe is the bottleneck).
 */
-static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf *src)
+static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, const struct rte_mbuf *src)
 {
     /* In the direction of tx, data is copied from lstack to ltran. It is necessary to judge whether
        the length of data transmitted from lstack has been tampered with to prevent overflow
@@ -79,10 +86,7 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf 
     uint8_t *src_data = rte_pktmbuf_mtod(src, void*);
     rte_memcpy(dst_data, src_data, data_len);
 
-    // copy private date.
-    dst_data = (uint8_t *)mbuf_to_private(dst);
-    src_data = (uint8_t *)mbuf_to_private(src);
-    rte_memcpy(dst_data, src_data, sizeof(struct mbuf_private));
+    copy_mbuf_private(mbuf_to_private(dst), mbuf_to_private(src));
 }
 
 static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)
