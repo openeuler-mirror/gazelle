@@ -421,7 +421,7 @@ unsigned sock_event_hold_pending(const struct lwip_sock *sock,
         }
         break;
     case NETCONN_EVT_SENDPLUS:
-        if (sock->sk_event.events & EPOLLOUT) {
+        if (sock->sk_event.events & EPOLLOUT || type & WAIT_BLOCK) {
             if (len > 0 ||
                 NETCONN_ALLOW_SEND(sock)) {
                 event = EPOLLOUT;

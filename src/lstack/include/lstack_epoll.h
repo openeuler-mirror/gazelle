@@ -23,6 +23,6 @@ void poll_destruct_wait(void);
 
 int lstack_epoll_close(int epfd);
 void epoll_api_init(posix_api_t *api);
-bool sock_event_wait(struct lwip_sock *sock, bool noblocking);
+bool sock_event_wait(struct lwip_sock *sock, enum netconn_evt evt, bool noblocking);
 
 #endif /* _GAZELLE_EPOLL_H_ */

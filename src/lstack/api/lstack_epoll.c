@@ -814,12 +814,12 @@ void epoll_api_init(posix_api_t *api)
     api->select_fn        = lstack_select;
 }
 
-bool sock_event_wait(struct lwip_sock *sock, bool noblocking)
+bool sock_event_wait(struct lwip_sock *sock, enum netconn_evt evt, bool noblocking)
 {
     bool rtc_mode = get_global_cfg_params()->stack_mode_rtc;
     uint32_t start;
     int timeout;
-    unsigned pending;
+    unsigned pending = 0;
 
     if (!rtc_mode && noblocking)
         return false;
@@ -829,6 +829,7 @@ bool sock_event_wait(struct lwip_sock *sock, bool noblocking)
     }
     if (!(sock->sk_wait->type & WAIT_BLOCK)) {
         sock->sk_wait->type |= WAIT_BLOCK;
+        rte_wmb();
     }
 
     if (rtc_mode) {
@@ -840,13 +841,17 @@ bool sock_event_wait(struct lwip_sock *sock, bool noblocking)
     timeout = sock->conn->recv_timeout == 0 ? -1 : sock->conn->recv_timeout;
     start = sys_now();
     do {
-        pending = sock_event_hold_pending(sock, WAIT_BLOCK, NETCONN_EVT_RCVPLUS, 0) |
+        pending = sock_event_hold_pending(sock, WAIT_BLOCK, evt, 0) |
                   sock_event_hold_pending(sock, WAIT_BLOCK, NETCONN_EVT_ERROR, 0);
-        if (pending) {
-            return true;
+        if (pending != 0) {
+            break;
         }
         timeout = sock->sk_wait->timedwait_fn(sock->sk_wait, timeout, start);
     } while (timeout != 0);
 
-    return false;
+    if (evt == NETCONN_EVT_SENDPLUS) {
+        /* remove WAIT_BLOCK type */
+        sock->sk_wait->type &= ~WAIT_BLOCK;
+    }
+    return pending != 0;
 }
