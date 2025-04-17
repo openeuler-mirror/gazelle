@@ -838,6 +838,14 @@ static ssize_t stack_tcp_read(struct lwip_sock *sock, char *data, size_t len, in
         copied_total += buf_copy_len;
         total_copy_len -= buf_copy_len;
         mr->app_recvd_len += buf_copy_len;
+
+        if (mr->app_queued_num >= RECV_EXTEND_CACHE_MAX || 
+            mr->app_recvd_len >= RECV_EXTEND_CACHE_LEN) {
+            if (sock->lastdata.pbuf == NULL) {
+                mr->ops->recv_finish_burst(mr);
+                mr->app_queued_num = 0;
+            }
+        }
     }
 
     while (total_copy_len > 0) {
