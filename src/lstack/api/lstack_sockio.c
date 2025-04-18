@@ -910,47 +910,34 @@ static ssize_t stack_tcp_read(struct lwip_sock *sock, char *data, size_t len, in
 }
 
 
-#define RECVD_UNCOMMITTED(msg)  ((msg)->args[MSG_ARG_2].ul)
-#define RECVD_CURR_SEQ(msg)     ((msg)->args[MSG_ARG_3].ul)
-#define RECVD_LAST_SEQ(msg)     ((msg)->args[MSG_ARG_4].ul)
-
-static inline bool rpc_commit_tcp_recvd(struct rpc_msg *recvmsg, unsigned long threshold)
+#if GAZELLE_TCP_ASYNC_RECVD
+#define RECVD_UNSUBMITED(msg)  ((msg)->args[MSG_ARG_2].ul)
+static inline bool rpc_submit_tcp_recvd(struct rpc_msg *recvmsg, size_t threshold, size_t recvd)
 {
-    if (RECVD_UNCOMMITTED(recvmsg) >= threshold) {
-        __atomic_add_fetch(&RECVD_CURR_SEQ(recvmsg), RECVD_UNCOMMITTED(recvmsg), __ATOMIC_RELEASE);
-        RECVD_UNCOMMITTED(recvmsg) = 0;
+    RECVD_UNSUBMITED(recvmsg) += recvd;
+    if (RECVD_UNSUBMITED(recvmsg) >= threshold) {
+        RECVD_UNSUBMITED(recvmsg) = 0;
         return true;
     }
     return false;
 }
 
-#if TCP_RECV_AND_UPDATE
-static inline unsigned long rpc_read_tcp_recvd(struct rpc_msg *recvmsg)
-{
-    unsigned long curr_recvd_seq;
-    unsigned long recvd;
-
-    curr_recvd_seq = __atomic_load_n(&RECVD_CURR_SEQ(recvmsg), __ATOMIC_ACQUIRE);
-    recvd = curr_recvd_seq - RECVD_LAST_SEQ(recvmsg);
-    if (recvd > 0) {
-        /* update last recvd seq */
-        RECVD_LAST_SEQ(recvmsg) = curr_recvd_seq;
-    }
-    return recvd;
-}
-
 static void callback_tcp_recvd(struct rpc_msg *recvmsg)
 {
     struct lwip_sock *sock = recvmsg->args[MSG_ARG_0].p;
-    unsigned long recvd;
+    struct mbox_ring *mr;
+    u32_t recvd;
 
-    recvd = rpc_read_tcp_recvd(recvmsg);
-    lwip_tcp_recvd(sock->conn, recvd, 0);
+    mr = &sock->conn->recvmbox->mring;
+    if (mr->flags & MBOX_FLAG_PEEK) {
+        sockio_peek_recv_free(mr, 0);
+    }
 
+    recvd = lwip_netconn_get_recvd(sock->conn, 0, 0);
+    lwip_netconn_update_recvd(sock->conn, recvd);
     recvmsg->result = recvd;
     return;
 }
-#endif /* TCP_RECV_AND_UPDATE */
 
 static inline int rpc_call_tcp_recvd(rpc_queue *queue, struct lwip_sock *sock, size_t recvd, int flags)
 {
@@ -960,22 +947,23 @@ static inline int rpc_call_tcp_recvd(rpc_queue *queue, struct lwip_sock *sock, s
     recvmsg->args[MSG_ARG_0].p  = sock;
     recvmsg->result = 0;
 
-    RECVD_UNCOMMITTED(recvmsg) += recvd;
-    if (rpc_commit_tcp_recvd(recvmsg, TCP_WND_UPDATE_THRESHOLD << 1)) {
+    if (rpc_submit_tcp_recvd(recvmsg, TCP_WND >> 1, recvd)) {
         rpc_async_call(queue, recvmsg, RPC_MSG_REUSE);
     }
-
     return 0;
 }
+#endif /* GAZELLE_TCP_ASYNC_RECVD */
 
 static void rtw_stack_tcp_recvd(struct lwip_sock *sock, ssize_t recvd, int flags)
 {
+#if GAZELLE_TCP_ASYNC_RECVD
     struct protocol_stack *stack = get_protocol_stack_by_id(sock->stack_id);
 
     if (recvd <= 0 || flags & MSG_PEEK) {
         return;
     }
     rpc_call_tcp_recvd(&stack->rpc_queue, sock, recvd, flags);
+#endif /* GAZELLE_TCP_ASYNC_RECVD */
 }
 
 static void rtc_stack_tcp_recvd(struct lwip_sock *sock, ssize_t recvd, int flags)
@@ -1012,14 +1000,14 @@ static void callback_tcp_send(struct rpc_msg *sendmsg)
         LSTACK_LOG(ERR, LSTACK, "tcp_output failed, sock %p, err %u\n", sock, err);
     }
 
-#if TCP_RECV_AND_UPDATE
+#if GAZELLE_TCP_ASYNC_RECVD
     struct rpc_msg *recvmsg;
-    if (RECVD_UNCOMMITTED(sendmsg)) {
-        RECVD_UNCOMMITTED(sendmsg) = 0;
+    if (RECVD_UNSUBMITED(sendmsg)) {
+        RECVD_UNSUBMITED(sendmsg) = 0;
         recvmsg = sock_mbox_private_get(sock->conn->recvmbox);
         callback_tcp_recvd(recvmsg);
     }
-#endif /* TCP_RECV_AND_UPDATE */
+#endif /* GAZELLE_TCP_ASYNC_RECVD */
 
     return;
 }
@@ -1036,11 +1024,11 @@ static inline int rpc_call_tcp_send(rpc_queue *queue, struct lwip_sock *sock)
     sendmsg->args[MSG_ARG_0].p = sock;
     sendmsg->args[MSG_ARG_1].p = mem_thread_migrate_get(sock->stack_id);
 
-#if TCP_RECV_AND_UPDATE
+#if GAZELLE_TCP_ASYNC_RECVD
     struct rpc_msg *recvmsg;
     recvmsg = sock_mbox_private_get(sock->conn->recvmbox);
-    RECVD_UNCOMMITTED(sendmsg) = rpc_commit_tcp_recvd(recvmsg, TCP_WND_UPDATE_THRESHOLD);
-#endif /* TCP_RECV_AND_UPDATE */
+    RECVD_UNSUBMITED(sendmsg) = rpc_submit_tcp_recvd(recvmsg, TCP_WND >> 2, 0);
+#endif /* GAZELLE_TCP_ASYNC_RECVD */
 
     rpc_async_call(queue, sendmsg, RPC_MSG_REUSE);
     return 0;
@@ -1140,11 +1128,9 @@ ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
                 recvd = ioops.stack_tcp_read(sock, mem, len, flags, from, fromlen);
             }
         }
-#if TCP_RECV_AND_UPDATE
         if (recvd > 0) {
             ioops.stack_tcp_recvd(sock, recvd, flags);
         }
-#endif /* TCP_RECV_AND_UPDATE */
         break;
     case NETCONN_UDP:
         vec.iov_base = mem;
@@ -1412,11 +1398,11 @@ static int sockio_mbox_init(struct lwip_sock *sock)
     switch (NETCONN_TYPE(sock->conn)) {
     case NETCONN_TCP:
         ret = sock_mbox_private_init(sendmbox, callback_tcp_send);
-#if TCP_RECV_AND_UPDATE
+#if GAZELLE_TCP_ASYNC_RECVD
         if (sys_mbox_valid(&recvmbox)) {
             ret |= sock_mbox_private_init(recvmbox, callback_tcp_recvd);
         }
-#endif /* TCP_RECV_AND_UPDATE */
+#endif /* GAZELLE_TCP_ASYNC_RECVD */
         break;
     case NETCONN_UDP:
         ret = sock_mbox_private_init(sendmbox, callback_udp_send);
