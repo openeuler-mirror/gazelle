@@ -817,7 +817,7 @@ static ssize_t stack_tcp_read(struct lwip_sock *sock, char *data, size_t len, in
     struct mbox_ring *mr = &sock->conn->recvmbox->mring;
     struct pbuf **extcache_list;
     err_t err = ERR_OK;
-    struct pbuf *p;
+    struct pbuf *p = NULL;
 
     uint32_t buf_copy_len;
     uint32_t total_copy_len = len;
@@ -832,50 +832,40 @@ static ssize_t stack_tcp_read(struct lwip_sock *sock, char *data, size_t len, in
         extcache_list = (struct pbuf **)&mr->st_obj;
     }
 
-    if (sock->lastdata.pbuf != NULL) {
-        // TODO: support MSG_PEEK
-        buf_copy_len = pbuf_copy_and_free(&sock->lastdata.pbuf, extcache_list, data, total_copy_len);
-        copied_total += buf_copy_len;
-        total_copy_len -= buf_copy_len;
-        mr->app_recvd_len += buf_copy_len;
-
-        if (mr->app_queued_num >= RECV_EXTEND_CACHE_MAX || 
-            mr->app_recvd_len >= RECV_EXTEND_CACHE_LEN) {
-            if (sock->lastdata.pbuf == NULL) {
-                mr->ops->recv_finish_burst(mr);
-                mr->app_queued_num = 0;
-            }
-        }
-    }
-
     while (total_copy_len > 0) {
-        if (mr->ops->recv_start_burst(mr, (void **)&p, 1) == 0) {
-            if (unlikely(sock_event_hold_pending(sock, WAIT_BLOCK, NETCONN_EVT_ERROR, 0))) {
-                err = ERR_CONN;
-            } else {
-                err = ERR_WOULDBLOCK;
+        if (sock->lastdata.pbuf == NULL) {
+            if (mr->ops->recv_start_burst(mr, (void **)&sock->lastdata.pbuf, 1) == 0) {
+                if (unlikely(sock_event_hold_pending(sock, WAIT_BLOCK, NETCONN_EVT_ERROR, 0))) {
+                    err = ERR_CONN;
+                } else {
+                    err = ERR_WOULDBLOCK;
+                }
+                break;
             }
-            break;
+            mr->app_queued_num++;
+            SOCK_WAIT_STAT(sock->sk_wait, app_read_cnt, 1);
         }
-        mr->app_queued_num++;
-        if (unlikely(lwip_netconn_is_err_msg(p, &err))) {
+
+        if (unlikely(lwip_netconn_is_err_msg(sock->lastdata.pbuf, &err))) {
             API_EVENT(sock->conn, NETCONN_EVT_RCVMINUS, copied_total);
             break;
         }
 
-        SOCK_WAIT_STAT(sock->sk_wait, app_read_cnt, 1);
-        if (get_protocol_stack_group()->latency_start)
+        if (get_protocol_stack_group()->latency_start) {
+            p = sock->lastdata.pbuf;
             calculate_lstack_latency(sock->stack_id, &p, 1, GAZELLE_LATENCY_READ_APP_CALL, sys_now_us());
+        }
 
-        sock->lastdata.pbuf = p;
         // TODO: support MSG_PEEK
         buf_copy_len = pbuf_copy_and_free(&sock->lastdata.pbuf, extcache_list, data + copied_total, total_copy_len);
         copied_total += buf_copy_len;
         total_copy_len -= buf_copy_len;
         mr->app_recvd_len += buf_copy_len;
 
-        if (get_protocol_stack_group()->latency_start)
+        if (get_protocol_stack_group()->latency_start) {
             calculate_lstack_latency(sock->stack_id, &p, 1, GAZELLE_LATENCY_READ_LSTACK, 0);
+            p = NULL;
+        }
 
         if (mr->app_queued_num >= RECV_EXTEND_CACHE_MAX || 
             mr->app_recvd_len >= RECV_EXTEND_CACHE_LEN) {
