@@ -98,7 +98,7 @@ struct sock_wait {
     /* kernel event flag */
     rte_atomic16_t kernel_pending;
     /* run-to-wakeup blocking lock */
-    struct sys_mutex mutex;
+    struct sys_sem sem; /* Do not use mutex, as it cannot be interrupted by signals */
 
     union {
         struct epoll_cb epcb;
