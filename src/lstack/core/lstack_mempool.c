@@ -450,20 +450,15 @@ static const struct mempool_ops mbuf_mp_ops = {
 
 static struct rte_mempool *mbuf_pool_create(int stack_id, unsigned numa_id)
 {
-    struct cfg_params *cfg_params = get_global_cfg_params();
     char name[RTE_MEMPOOL_NAMESIZE];
     struct rte_mempool *pool;
-    uint32_t total_conn_mbufs, total_nic_mbufs, total_mbufs;
+    uint32_t total_bufs;
     uint16_t private_size;
     uint16_t xdp_metadata = 0;
 
-    total_conn_mbufs = cfg_params->mbuf_count_per_conn * cfg_params->tcp_conn_count;
-    total_nic_mbufs = cfg_params->rxqueue_size + cfg_params->txqueue_size;
-
-    total_mbufs = (total_conn_mbufs / cfg_params->num_queue) + total_nic_mbufs + MBUFPOOL_RESERVE_NUM;
-    /* limit mbuf max num based on the dpdk capability */
-    if (total_mbufs > MBUFPOOL_MAX_NUM) {
-        LSTACK_LOG(ERR, LSTACK, "total_mbufs %u out of the dpdk mbuf_pool range\n", total_mbufs);
+    total_bufs = dpdk_pktmbuf_mempool_num();
+    if (total_bufs > MEMPOOL_MAX_NUM) {
+        LSTACK_LOG(ERR, LSTACK, "total_bufs %u out of the dpdk mempool range\n", total_bufs);
         return NULL;
     }
 
@@ -474,7 +469,7 @@ static struct rte_mempool *mbuf_pool_create(int stack_id, unsigned numa_id)
     }
     private_size = RTE_ALIGN(sizeof(struct mbuf_private) + xdp_metadata, RTE_CACHE_LINE_SIZE);
 
-    pool = mbuf_mp_ops.create(name, total_mbufs, MBUFPOOL_CACHE_NUM, private_size, MBUF_DATA_SIZE, numa_id);
+    pool = mbuf_mp_ops.create(name, total_bufs, MBUFPOOL_CACHE_NUM, private_size, MBUF_DATA_SIZE, numa_id);
     if (pool == NULL) {
         LSTACK_LOG(ERR, LSTACK, "rte_pktmbuf_pool_create %s failed, rte_errno %d\n", name, rte_errno);
         return NULL;
@@ -487,7 +482,14 @@ static struct rte_mempool *rpc_pool_create(int stack_id, unsigned numa_id)
 {
     char name [RTE_MEMPOOL_NAMESIZE];
     struct rte_mempool *pool;
-    uint32_t total_bufs = get_global_cfg_params()->rpc_msg_max;
+    uint32_t total_bufs;
+
+    total_bufs = MEMPOOL_CACHE_NUM + BUF_CACHE_MIN_NUM + 
+        (get_global_cfg_params()->rpc_msg_max / get_global_cfg_params()->num_queue);
+    if (total_bufs > MEMPOOL_MAX_NUM) {
+        LSTACK_LOG(ERR, LSTACK, "total_bufs %u out of the dpdk mempool range\n", total_bufs);
+        return NULL;
+    }
 
     SYS_FORMAT_NAME(name, RTE_MEMPOOL_NAMESIZE, "%s_%hu", "rpc_pool", stack_id);
 
