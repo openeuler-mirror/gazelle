@@ -36,7 +36,7 @@
 /* DPDK limit ring head-tail distance in rte_ring_init.
  * Max value is RTE_RING_SZ_MASK / HTD_MAX_DEF, RTE_RING_SZ_MASK is 0x7fffffff, HTD_MAX_DEF is 8.
  */
-#define MBUFPOOL_MAX_NUM        0xfffffff
+#define MEMPOOL_MAX_NUM         0xfffffff
 
 #define MBUFPOOL_CACHE_NUM      LWIP_MIN(NIC_QUEUE_SIZE_MAX >> 1, RTE_MEMPOOL_CACHE_MAX_SIZE)
 #define MBUFPOOL_RESERVE_NUM    (NIC_QUEUE_SIZE_MAX + MBUFPOOL_CACHE_NUM)

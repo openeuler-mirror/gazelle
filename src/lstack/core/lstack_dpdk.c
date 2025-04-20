@@ -901,8 +901,9 @@ uint32_t dpdk_pktmbuf_mempool_num(void)
 {
     struct cfg_params *cfg = get_global_cfg_params();
 
-    return (MBUFPOOL_RESERVE_NUM + cfg->rxqueue_size + cfg->txqueue_size +
-        (cfg->tcp_conn_count * cfg->mbuf_count_per_conn) / cfg->num_queue);
+    return (MBUFPOOL_RESERVE_NUM + MBUFPOOL_CACHE_NUM +
+            cfg->rxqueue_size + cfg->txqueue_size +
+            (cfg->tcp_conn_count * cfg->mbuf_count_per_conn) / cfg->num_queue);
 }
 
 uint32_t dpdk_total_socket_memory(void)
