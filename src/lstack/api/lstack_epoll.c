@@ -40,13 +40,16 @@ static int rtc_sock_wait_timedwait(struct sock_wait *sk_wait, int timeout, uint3
 
     if (timeout > 0 && timeout <= (int)(sys_now() - start)) {
         timeout = 0;
+    } else if (timeout < 0) {
+        errno = 0;
     }
     return timeout;
 }
 
 static int rtw_sock_wait_timedwait(struct sock_wait *sk_wait, int timeout, uint32_t start)
 {
-    return sys_mutex_timedlock_internal(&sk_wait->mutex, timeout);
+    /* when sem interrupted by signals, errno = EINTR */
+    return sys_sem_wait_internal(&sk_wait->sem, timeout);
 }
 
 static void rtc_epoll_notify_event(struct sock_wait *sk_wait, struct sock_event *sk_event, 
@@ -83,7 +86,7 @@ static void rtw_epoll_notify_event(struct sock_wait *sk_wait, struct sock_event 
     }
     rte_spinlock_unlock(&sk_wait->epcb.lock);
 
-    sys_mutex_unlock_internal(&sk_wait->mutex);
+    sys_sem_signal_internal(&sk_wait->sem);
 }
 
 static void rtw_epoll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, unsigned pending)
@@ -112,7 +115,7 @@ static void rtw_poll_notify_event(struct sock_wait *sk_wait, struct sock_event *
         return;
     }
 #endif /* SOCK_WAIT_BATCH_NOTIFY */
-    sys_mutex_unlock_internal(&sk_wait->mutex);
+    sys_sem_signal_internal(&sk_wait->sem);
 }
 static void rtw_poll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, unsigned pending)
 {
@@ -433,7 +436,7 @@ int lstack_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int t
         }
 
         timeout = sk_wait->timedwait_fn(sk_wait, timeout, start);
-    } while (timeout != 0);
+    } while (timeout > 0 || (timeout < 0 && errno == 0));
 
     sk_wait->stat.app_events += lwip_num;
     sk_wait->stat.kernel_events += kernel_num;
@@ -706,7 +709,7 @@ int lstack_poll(struct pollfd *fds, nfds_t nfds, int timeout)
         }
 
         timeout = sk_wait->timedwait_fn(sk_wait, timeout, start);
-    } while (timeout != 0);
+    } while (timeout > 0 || (timeout < 0 && errno == 0));
 
     sk_wait->stat.app_events += lwip_num;
     sk_wait->stat.kernel_events += kernel_num;
@@ -847,7 +850,11 @@ bool sock_event_wait(struct lwip_sock *sock, enum netconn_evt evt, bool noblocki
             break;
         }
         timeout = sock->sk_wait->timedwait_fn(sock->sk_wait, timeout, start);
-    } while (timeout != 0);
+    } while (timeout > 0 || (timeout < 0 && errno == 0));
+
+    if (errno == ETIMEDOUT) {
+        errno = EAGAIN;
+    }
 
     if (evt == NETCONN_EVT_SENDPLUS) {
         /* remove WAIT_BLOCK type */

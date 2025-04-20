@@ -208,7 +208,7 @@ void* kernel_wait_thread(void *arg)
             if (sk_wait->type == WAIT_CLOSE)
                 continue;
             rte_atomic16_set(&sk_wait->kernel_pending, true);
-            sys_mutex_unlock_internal(&sk_wait->mutex);
+            sys_sem_signal_internal(&sk_wait->sem);
         }
         usleep(KERNEL_EVENT_WAIT_US);
     }
@@ -285,7 +285,7 @@ int sock_wait_common_init(struct sock_wait *sk_wait)
 {
     sk_wait->lwip_nfds = 0;
     sk_wait->kernel_nfds = 0;
-    sys_mutex_new_internal(&sk_wait->mutex);
+    sys_sem_new_internal(&sk_wait->sem, 0);
 
 #if SOCK_WAIT_BATCH_NOTIFY
     for (int i = 0; i < PROTOCOL_STACK_MAX; ++i) {
@@ -318,7 +318,7 @@ void sock_wait_common_free(struct sock_wait *sk_wait)
 #endif /* SOCK_WAIT_BATCH_NOTIFY */
 
     sock_wait_group_del(sk_wait);
-    sys_mutex_free_internal(&sk_wait->mutex);
+    sys_sem_free_internal(&sk_wait->sem);
 }
 
 int sock_wait_kernel_init(struct sock_wait *sk_wait, int epfd, int stack_num)
@@ -543,7 +543,7 @@ unsigned lwip_wait_foreach_notify(int stack_id)
 
         sock_wait_foreach_event(sk_wait, stack_id);
 
-        sys_mutex_unlock_internal(&sk_wait->mutex);
+        sys_sem_signal_internal(&sk_wait->sem);
         count++;
     }
     return count;
