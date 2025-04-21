@@ -33,7 +33,7 @@ static inline void lockless_queue_node_set_poped(lockless_queue_node *node)
     node->next = node;
 }
 
-static inline bool lockless_queue_node_is_poped(lockless_queue_node *node)
+static inline bool lockless_queue_node_is_poped(const lockless_queue_node *node)
 {
     return node->next == node;
 }
@@ -60,18 +60,18 @@ static inline void lockless_queue_init(lockless_queue *queue)
     queue->stub.next = NULL;
 }
 
-static inline bool lockless_queue_empty(lockless_queue *queue)
+static inline bool lockless_queue_empty(const lockless_queue *queue)
 {
     return (queue->head == queue->tail) && (queue->tail == &queue->stub);
 }
 
-static inline int32_t lockless_queue_count(lockless_queue *queue)
+static inline int32_t lockless_queue_count(const lockless_queue *queue)
 {
     if (lockless_queue_empty(queue)) {
         return 0;
     }
 
-    lockless_queue_node *tail = queue->tail;
+    const lockless_queue_node *tail = queue->tail;
     if (tail == &queue->stub) {
         tail = queue->stub.next;
     }
