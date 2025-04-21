@@ -32,7 +32,7 @@ ssize_t sockio_writev(int fd, const struct iovec *iov, int iovcnt);
 
 
 void sockio_ops_init(void);
-bool sockio_mbox_pending(const struct lwip_sock *sock);
+bool sockio_mbox_pending(struct lwip_sock *sock);
 
 /* just for lwip */
 int do_lwip_init_sock(int fd);

@@ -1410,9 +1410,11 @@ static int sockio_mbox_init(struct lwip_sock *sock)
     return ret;
 }
 
-bool sockio_mbox_pending(const struct lwip_sock *sock)
+bool sockio_mbox_pending(struct lwip_sock *sock)
 {
-    struct rpc_msg *msg;
+    const struct rpc_msg *msg;
+    const struct mbox_ring *mr;
+    err_t err;
 
     if (POSIX_IS_CLOSED(sock))
         return false;
@@ -1427,6 +1429,16 @@ bool sockio_mbox_pending(const struct lwip_sock *sock)
         msg = sock_mbox_private_get(sock->conn->recvmbox);
         if (msg != NULL && !lockless_queue_node_is_poped(&msg->queue_node)) {
             return true;
+        }
+
+        /* PEEK lastdata is only used to mark the last read location and not for releasing.
+         * all peek bufs should free after pk_ring_dequeue_burst. */
+        mr = &sock->conn->recvmbox->mring;
+        if (mr->flags & MBOX_FLAG_PEEK && mr->flags & MBOX_FLAG_TCP) {
+            if (sock->lastdata.pbuf != NULL && 
+                !lwip_netconn_is_err_msg(sock->lastdata.pbuf, &err)) {
+                sock->lastdata.pbuf = NULL;
+            }
         }
     }
 
