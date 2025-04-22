@@ -455,28 +455,6 @@ static int rpc_call_connect(int stack_id, int fd, const struct sockaddr *addr, s
     return ret;
 }
 
-/* for lwip nonblock connected callback */
-void do_lwip_connected_callback(int fd)
-{
-    bool has_kernel;
-    struct lwip_sock *sock = lwip_get_socket(fd);
-    if (POSIX_IS_CLOSED(sock)) {
-        return;
-    }
-
-    has_kernel = POSIX_HAS_TYPE(sock, POSIX_KERNEL);
-    POSIX_SET_TYPE(sock, POSIX_LWIP);
-    if (has_kernel) {
-        /* delete kernel event */
-        if (sock->sk_wait != NULL) {
-            posix_api->epoll_ctl_fn(sock->sk_wait->epfd, EPOLL_CTL_DEL, fd, NULL);
-        }
-        /* shutdown kernel connect, do_connect() has tried both kernel and lwip. */
-        posix_api->shutdown_fn(fd, SHUT_RDWR);
-    }
-    return;
-}
-
 /* when fd is listenfd, listenfd of all protocol stack thread will be closed */
 static int stack_broadcast_close(int fd)
 {

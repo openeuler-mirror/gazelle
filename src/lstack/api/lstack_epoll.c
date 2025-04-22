@@ -219,7 +219,6 @@ static int epoll_close_internal(int epfd)
     sk_wait->type = WAIT_CLOSE;
     epoll_cb_free(&sk_wait->epcb);
 
-    posix_api->close_fn(sk_wait->epfd);
     sock_wait_kernel_free(sk_wait);
     sock_wait_common_free(sk_wait);
 
@@ -259,6 +258,25 @@ int lstack_epoll_close(int epfd)
     return posix_api->close_fn(epfd);
 }
 
+int epoll_ctl_kernel_event(int epfd, int op, int fd, struct epoll_event *event, 
+    struct sock_wait *sk_wait)
+{
+    int ret;
+
+    ret = posix_api->epoll_ctl_fn(epfd, op, fd, event);
+    if (ret != 0) {
+        LSTACK_LOG(ERR, LSTACK, "epoll_ctl_fn failed, fd=%d epfd=%d op=%d\n", fd, epfd, op);
+        return ret;
+    }
+    if (op == EPOLL_CTL_ADD) {
+        sk_wait->kernel_nfds++;
+    } else if (op == EPOLL_CTL_DEL) {
+        sk_wait->kernel_nfds--;
+    }
+
+    return ret;
+}
+
 int lstack_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
     int ret;
@@ -278,22 +296,13 @@ int lstack_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
                 __FUNCTION__, epfd, op, fd, event));
 
     enum posix_type sk_type = select_sock_posix_path(sock);
-    /* has POSIX_LWIP */
-    if (sk_type != POSIX_LWIP) {
-        ret = posix_api->epoll_ctl_fn(epfd, op, fd, event);
-        if (ret != 0) {
-            LSTACK_LOG(ERR, LSTACK, "epoll_ctl_fn failed, fd=%d epfd=%d op=%d\n", fd, epfd, op);
+    if (sk_type & POSIX_KERNEL) {   /* has POSIX_KERNEL */
+        ret = epoll_ctl_kernel_event(epfd, op, fd, event, sk_wait);
+        if (ret != 0 ||
+            sk_type == POSIX_KERNEL) {  /* is POSIX_KERNEL */
             return ret;
         }
-        if (op == EPOLL_CTL_ADD) {
-            sk_wait->kernel_nfds++;
-        } else if (op == EPOLL_CTL_DEL) {
-            sk_wait->kernel_nfds--;
-        }
     }
-    /* is POSIX_KERNEL */
-    if (sk_type == POSIX_KERNEL)
-        return ret;
 
     for (; sock != NULL; sock = sock->listen_next) {
         sk_event = &sock->sk_event;
@@ -412,7 +421,8 @@ int lstack_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int t
         maxevents = POLL_MAX_EVENTS;
     }
     /* avoid the starvation of poll events from both kernel and lwip */
-    lwip_maxevents = (maxevents >> 1) + 1;
+    lwip_maxevents = sk_wait->kernel_nfds > 0 ? 
+                     (maxevents >> 1) + 1 : maxevents;
 
     start = sys_now();
 
@@ -555,7 +565,7 @@ struct sock_wait *poll_construct_wait(int nfds)
     return g_sk_wait;
 }
 
-static bool poll_ctl_kernel_event(int epfd, int fds_id,
+static int poll_ctl_kernel_event(int epfd, int fds_id,
     const struct pollfd *new_fds, const struct pollfd *old_fds)
 {
     int ret;
@@ -575,11 +585,11 @@ static bool poll_ctl_kernel_event(int epfd, int fds_id,
         ret |= posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_ADD, new_fds->fd, &epevent);
     }
 
-    if (ret != 0) {
+    if (ret != 0 && errno != EINTR && errno != ENOENT) {
         LSTACK_LOG(ERR, LSTACK, "epoll_ctl failed, errno %d, new_fd %d, old_fd %d\n", 
             errno, new_fds->fd, old_fds->fd);
     }
-    return true;
+    return ret;
 }
 
 static int poll_wait_kernel_event(int epfd, struct pollfd *fds, int maxevents)
