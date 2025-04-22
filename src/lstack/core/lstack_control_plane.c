@@ -432,7 +432,7 @@ static void thread_register_phase2(struct rpc_msg *msg)
 static int rpc_call_thread_regphase1(int stack_id, void *conn)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, thread_register_phase1);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, thread_register_phase1);
     if (msg == NULL) {
         return -1;
     }
@@ -443,7 +443,7 @@ static int rpc_call_thread_regphase1(int stack_id, void *conn)
 static int rpc_call_thread_regphase2(int stack_id, void *conn)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, thread_register_phase2);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, thread_register_phase2);
     if (msg == NULL) {
         return -1;
     }

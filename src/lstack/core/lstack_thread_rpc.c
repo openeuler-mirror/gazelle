@@ -41,11 +41,11 @@ static void rpc_msg_init(struct rpc_msg *msg, rpc_func_t func)
     lockless_queue_node_set_poped(&msg->queue_node);
 }
 
-struct rpc_msg *rpc_msg_alloc(int stack_id, rpc_func_t func)
+struct rpc_msg *rpc_msg_alloc(int stack_id, bool reserve, rpc_func_t func)
 {
     struct rpc_msg *msg;
 
-    msg = mem_get_rpc(stack_id);
+    msg = mem_get_rpc(stack_id, reserve);
     if (unlikely(msg == NULL)) {
         g_rpc_stats.call_alloc_fail++;
         return NULL;
@@ -152,7 +152,7 @@ static void callback_arp(struct rpc_msg *msg)
 int rpc_call_arp(int stack_id, void *mbuf)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_arp);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_arp);
     if (msg == NULL) {
         return -1;
     }
@@ -290,7 +290,7 @@ static void callback_get_connnum(struct rpc_msg *msg)
 int rpc_call_conntable(int stack_id, void *conn_table, unsigned max_conn)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->dfx_rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_get_conntable);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_get_conntable);
     if (msg == NULL) {
         return -1;
     }
@@ -304,7 +304,7 @@ int rpc_call_conntable(int stack_id, void *conn_table, unsigned max_conn)
 int rpc_call_connnum(int stack_id)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->dfx_rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_get_connnum);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_get_connnum);
     if (msg == NULL) {
         return -1;
     }

@@ -750,7 +750,7 @@ static void stack_exit_by_rpc(struct rpc_msg *msg)
 static int rpc_call_stack_exit(int stack_id)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, stack_exit_by_rpc);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, stack_exit_by_rpc);
     if (msg == NULL) {
         return -1;
     }

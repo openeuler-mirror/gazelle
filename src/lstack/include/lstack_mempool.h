@@ -40,6 +40,7 @@
 
 #define MBUFPOOL_CACHE_NUM      LWIP_MIN(NIC_QUEUE_SIZE_MAX >> 1, RTE_MEMPOOL_CACHE_MAX_SIZE)
 #define MBUFPOOL_RESERVE_NUM    (NIC_QUEUE_SIZE_MAX + MBUFPOOL_CACHE_NUM)
+#define RPCPOOL_RESERVE_NUM     512
 
 #define MEMPOOL_OPS_NAME            "ring_mt_rts"
 #define MEMPOOL_CACHE_NUM           32
@@ -307,7 +308,7 @@ struct rte_mempool *mem_get_rpc_pool(int stack_id);
 unsigned mem_stack_mbuf_pool_count(int stack_id);
 unsigned mem_stack_rpc_pool_count(int stack_id);
 
-void *mem_get_rpc(int stack_id);
+void *mem_get_rpc(int stack_id, bool reserve);
 void mem_put_rpc(void *obj);
 
 struct mem_thread *mem_thread_migrate_get(int stack_id);
