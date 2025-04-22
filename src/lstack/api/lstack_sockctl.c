@@ -60,7 +60,7 @@ static void callback_setsockopt(struct rpc_msg *msg)
 static int rpc_call_getpeername(int stack_id, int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_getpeername);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_getpeername);
     if (msg == NULL) {
         return -1;
     }
@@ -75,7 +75,7 @@ static int rpc_call_getpeername(int stack_id, int fd, struct sockaddr *addr, soc
 static int rpc_call_getsockname(int stack_id, int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_getsockname);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_getsockname);
     if (msg == NULL) {
         return -1;
     }
@@ -90,7 +90,7 @@ static int rpc_call_getsockname(int stack_id, int fd, struct sockaddr *addr, soc
 static int rpc_call_getsockopt(int stack_id, int fd, int level, int optname, void *optval, socklen_t *optlen)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_getsockopt);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_getsockopt);
     if (msg == NULL) {
         return -1;
     }
@@ -107,7 +107,7 @@ static int rpc_call_getsockopt(int stack_id, int fd, int level, int optname, voi
 static int rpc_call_setsockopt(int stack_id, int fd, int level, int optname, const void *optval, socklen_t optlen)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_setsockopt);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_setsockopt);
     if (msg == NULL) {
         return -1;
     }
@@ -169,7 +169,7 @@ static void callback_socket(struct rpc_msg *msg)
 static int rpc_call_socket(int stack_id, int domain, int type, int protocol)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_socket);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, true, callback_socket);
     if (msg == NULL) {
         return -1;
     }
@@ -221,7 +221,7 @@ static void callback_shutdown(struct rpc_msg *msg)
 static int rpc_call_close(int stack_id, int fd)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_close);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_close);
     if (msg == NULL) {
         return -1;
     }
@@ -234,7 +234,7 @@ static int rpc_call_close(int stack_id, int fd)
 static int rpc_call_shutdown(int stack_id, int fd, int how)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_shutdown);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_shutdown);
     if (msg == NULL) {
         return -1;
     }
@@ -256,7 +256,7 @@ static void callback_bind(struct rpc_msg *msg)
 static int rpc_call_bind(int stack_id, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_bind);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_bind);
     if (msg == NULL) {
         return -1;
     }
@@ -289,7 +289,7 @@ static void callback_listen(struct rpc_msg *msg)
 static int rpc_call_listen(int stack_id, int s, int backlog)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_listen);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_listen);
     if (msg == NULL) {
         return -1;
     }
@@ -374,7 +374,7 @@ static void callback_create_shadow_fd(struct rpc_msg *msg)
 static int rpc_call_shadow_fd(int stack_id, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_create_shadow_fd);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_create_shadow_fd);
     if (msg == NULL) {
         return -1;
     }
@@ -407,7 +407,7 @@ static void callback_accept(struct rpc_msg *msg)
 static int rpc_call_accept(int stack_id, int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_accept);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_accept);
     if (msg == NULL) {
         return -1;
     }
@@ -431,7 +431,7 @@ static void callback_connect(struct rpc_msg *msg)
 static int rpc_call_connect(int stack_id, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
-    struct rpc_msg *msg = rpc_msg_alloc(stack_id, callback_connect);
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, callback_connect);
     if (msg == NULL) {
         return -1;
     }

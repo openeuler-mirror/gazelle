@@ -143,7 +143,7 @@ static void sock_mbox_private_free(struct mbox_ring *mr)
 
 static int sock_mbox_private_init(sys_mbox_t mb, rpc_func_t func)
 {
-    struct rpc_msg *msg = rpc_msg_alloc(get_protocol_stack()->stack_idx, func);
+    struct rpc_msg *msg = rpc_msg_alloc(get_protocol_stack()->stack_idx, true, func);
     if (msg == NULL)
         return -1;
 

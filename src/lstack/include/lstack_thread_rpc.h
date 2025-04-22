@@ -64,7 +64,7 @@ struct rpc_msg {
 
 void rpc_get_stat(rpc_queue *queue, struct gazelle_rpc_stat *stat);
 
-struct rpc_msg *rpc_msg_alloc(int stack_id, rpc_func_t func);
+struct rpc_msg *rpc_msg_alloc(int stack_id, bool reserve, rpc_func_t func);
 void rpc_msg_free(struct rpc_msg *msg);
 
 void rpc_queue_init(rpc_queue *queue, uint16_t queue_id);

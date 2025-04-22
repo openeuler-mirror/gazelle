@@ -67,14 +67,22 @@ struct rte_mempool *mem_get_rpc_pool(int stack_id)
 
 unsigned mem_stack_mbuf_pool_count(int stack_id)
 {
-    struct mem_stack *ms = mem_stack_get(stack_id);
+    const struct mem_stack *ms = mem_stack_get(stack_id);
     return rte_mempool_avail_count(ms->mbuf_pool);
 }
 
 unsigned mem_stack_rpc_pool_count(int stack_id)
 {
-    struct mem_stack *ms = mem_stack_get(stack_id);
+    const struct mem_stack *ms = mem_stack_get(stack_id);
     return rte_mempool_avail_count(ms->rpc_pool);
+}
+
+static inline unsigned mem_stack_pool_ring_count(const struct rte_mempool *pool)
+{
+    /* don't use rte_mempool_avail_count, it traverse cpu local cache,
+     * when RTE_MAX_LCORE is too large, it's time-consuming
+     */
+    return rte_ring_count(pool->pool_data);
 }
 
 static inline bool mem_thread_group_in_used(const struct mem_thread_group *mt_grooup, uint32_t timeout)
@@ -484,8 +492,7 @@ static struct rte_mempool *rpc_pool_create(int stack_id, unsigned numa_id)
     struct rte_mempool *pool;
     uint32_t total_bufs;
 
-    total_bufs = MEMPOOL_CACHE_NUM + BUF_CACHE_MIN_NUM + 
-        (get_global_cfg_params()->rpc_msg_max / get_global_cfg_params()->num_queue);
+    total_bufs = RPCPOOL_RESERVE_NUM + MEMP_NUM_SYS_MBOX;
     if (total_bufs > MEMPOOL_MAX_NUM) {
         LSTACK_LOG(ERR, LSTACK, "total_bufs %u out of the dpdk mempool range\n", total_bufs);
         return NULL;
@@ -695,7 +702,7 @@ void mem_mbuf_migrate_enqueue(struct mem_thread *mt, unsigned n)
         return;
 
     /* no sufficient mbuf */
-    if (rte_ring_count(ms->mbuf_pool->pool_data) < MBUFPOOL_RESERVE_NUM) {
+    if (mem_stack_pool_ring_count(ms->mbuf_pool) < MBUFPOOL_RESERVE_NUM) {
         mem_thread_manager_flush_all();
         mt->stk_migrate_count = 0;
         return;
@@ -780,7 +787,8 @@ static unsigned pool_get_bulk_with_cache(const struct mempool_ops *pool_ops,
     /* get from the pool */
     ret = pool_ops->get_bulk(pool, obj_table, n);
     if (unlikely(ret == 0)) {
-        LSTACK_LOG(ERR, LSTACK, "pool %s get_bulk failed, n %u\n", pool->name, n);
+        LSTACK_LOG(ERR, LSTACK, "pool %s get_bulk failed, n %u, count %u\n", 
+            pool->name, n, mem_stack_pool_ring_count(pool));
         return 0;
     }
 
@@ -796,7 +804,8 @@ static unsigned pool_get_bulk_with_cache(const struct mempool_ops *pool_ops,
 
     ret = pool_ops->get_bulk(pool, &cache->objs[cache->head], get_count);
     if (unlikely(ret == 0)) {
-        LSTACK_LOG(ERR, LSTACK, "pool %s get_bulk failed, n %u\n", pool->name, get_count);
+        LSTACK_LOG(ERR, LSTACK, "pool %s get_bulk failed, n %u, count %u\n", 
+            pool->name, get_count, mem_stack_pool_ring_count(pool));
     } else {
         cache->head += get_count;
     }
@@ -839,12 +848,19 @@ static void pool_put_bulk_with_cache(const struct mempool_ops *pool_ops,
 }
 
 
-void *mem_get_rpc(int stack_id)
+void *mem_get_rpc(int stack_id, bool reserve)
 {
     struct mem_stack *ms = mem_stack_get(stack_id);
     struct mem_thread *mt = mem_thread_get(stack_id);
     unsigned ret;
     void *obj;
+
+    if (reserve) {
+        if (mem_stack_pool_ring_count(ms->rpc_pool) < RPCPOOL_RESERVE_NUM) {
+            mem_thread_manager_flush_all();
+            return NULL;
+        }
+    }
 
     if (mt == NULL) {
         ret = mem_mp_ops.get_bulk(ms->rpc_pool, &obj, 1);
@@ -887,10 +903,7 @@ unsigned mem_get_mbuf_bulk(int stack_id, struct rte_mbuf **mbuf_table, unsigned 
     }
 
     if (reserve) {
-        /* don't use rte_mempool_avail_count, it traverse cpu local cache,
-         * when RTE_MAX_LCORE is too large, it's time-consuming
-         */
-        if (rte_ring_count(ms->mbuf_pool->pool_data) < MBUFPOOL_RESERVE_NUM + n) {
+        if (mem_stack_pool_ring_count(ms->mbuf_pool) < MBUFPOOL_RESERVE_NUM + n) {
             mem_thread_manager_flush_all();
             return 0;
         }
