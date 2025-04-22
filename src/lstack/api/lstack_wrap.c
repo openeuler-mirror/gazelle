@@ -378,6 +378,31 @@ static int32_t do_connect(int32_t s, const struct sockaddr *addr, socklen_t addr
     return ret;
 }
 
+/* for lwip nonblock connected callback */
+void do_lwip_connected_callback(int fd)
+{
+    struct lwip_sock *sock = lwip_get_socket(fd);
+    if (POSIX_IS_CLOSED(sock)) {
+        return;
+    }
+
+    if (POSIX_HAS_TYPE(sock, POSIX_KERNEL)) {
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
+        /* delete kernel event */
+        if (sock->sk_wait != NULL) {
+            if (sock->sk_wait->type & WAIT_EPOLL) {
+                epoll_ctl_kernel_event(sock->sk_wait->epfd, EPOLL_CTL_DEL, fd, NULL, sock->sk_wait);
+            }
+        }
+        /* shutdown kernel connect, do_connect() has tried both kernel and lwip. */
+        posix_api->shutdown_fn(fd, SHUT_RDWR);
+    } else {
+        POSIX_SET_TYPE(sock, POSIX_LWIP);
+    }
+
+    return;
+}
+
 static inline int32_t do_listen(int32_t s, int32_t backlog)
 {
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_KERNEL) {

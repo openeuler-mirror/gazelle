@@ -392,7 +392,8 @@ static unsigned sock_event_lose_pending(const struct lwip_sock *sock, enum netco
     switch (evt) {
     case NETCONN_EVT_RCVMINUS:
         if (sock->sk_event.events & EPOLLIN) {
-            if (!NETCONN_NEED_RECV(sock) && 
+            if (!sock->errevent &&
+                !NETCONN_NEED_RECV(sock) && 
                 !NETCONN_NEED_ACCEPT(sock)) {
                 event = EPOLLIN;
             }
