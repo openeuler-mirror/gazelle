@@ -35,6 +35,7 @@ struct mem_thread_manager {
     struct list_node mt_free_list;
     rte_spinlock_t list_lock;
     uint32_t flush_time;
+    unsigned thread_num;
 };
 
 struct mem_thread_group {
@@ -173,6 +174,7 @@ static void mem_thread_manager_add_work(struct mem_thread_group *mt_group)
 {
     rte_spinlock_lock(&g_mem_thread_manager.list_lock);
     list_add_node(&mt_group->mt_node, &g_mem_thread_manager.mt_work_list);
+    g_mem_thread_manager.thread_num++;
     rte_spinlock_unlock(&g_mem_thread_manager.list_lock);
 }
 
@@ -305,6 +307,7 @@ static void *mem_thread_manager_thread(void *arg)
             }
             list_del_node(node);
             list_add_node(node, &g_mem_thread_manager.mt_free_list);
+            g_mem_thread_manager.thread_num--;
         }
 
         rte_spinlock_unlock(&g_mem_thread_manager.list_lock);
@@ -502,7 +505,7 @@ static struct rte_mempool *rpc_pool_create(int stack_id, unsigned numa_id)
     struct rte_mempool *pool;
     uint32_t total_bufs;
 
-    total_bufs = RPCPOOL_RESERVE_NUM + MEMP_NUM_SYS_MBOX;
+    total_bufs = LWIP_MAX(RPCPOOL_RESERVE_NUM, MBUFPOOL_RESERVE_NUM) + MEMP_NUM_SYS_MBOX;
     if (total_bufs > MEMPOOL_MAX_NUM) {
         LSTACK_LOG(ERR, LSTACK, "total_bufs %u out of the dpdk mempool range\n", total_bufs);
         return NULL;
@@ -783,7 +786,7 @@ void pool_put_with_bufcache(struct rte_mempool *pool, struct buf_cache* cache, v
 
 static unsigned pool_get_bulk_with_cache(const struct mempool_ops *pool_ops, 
     struct rte_mempool *pool, struct buf_cache *cache, 
-    void **obj_table, unsigned n)
+    void **obj_table, unsigned n, unsigned pool_count)
 {
     unsigned ret;
     unsigned count = 0;
@@ -800,6 +803,13 @@ static unsigned pool_get_bulk_with_cache(const struct mempool_ops *pool_ops,
         LSTACK_LOG(ERR, LSTACK, "pool %s get_bulk failed, n %u, count %u\n", 
             pool->name, n, mem_stack_pool_ring_count(pool));
         return 0;
+    }
+
+    /* Stop using cache when too many threads. */
+    ret = MBUFPOOL_RESERVE_NUM + BUF_CACHE_MIN_NUM * g_mem_thread_manager.thread_num;
+    if (unlikely(ret > pool_count)) {
+        buf_cache_reset_watermark(cache);
+        return n;
     }
 
     buf_cache_add_watermark(cache);
@@ -862,27 +872,32 @@ void *mem_get_rpc(int stack_id, bool reserve)
 {
     struct mem_stack *ms = mem_stack_get(stack_id);
     struct mem_thread *mt = mem_thread_get(stack_id);
-    unsigned ret;
+    unsigned ret = 0;
+    unsigned pool_count;
     void *obj;
 
-    if (reserve) {
-        if (mem_stack_pool_ring_count(ms->rpc_pool) < RPCPOOL_RESERVE_NUM) {
-            mem_thread_manager_flush_all();
-            return NULL;
-        }
+    pool_count = mem_stack_pool_ring_count(ms->rpc_pool);
+    if (reserve && pool_count < RPCPOOL_RESERVE_NUM) {
+        goto out;
     }
 
     if (mt == NULL) {
         ret = mem_mp_ops.get_bulk(ms->rpc_pool, &obj, 1);
     } else {
         mem_thread_group_used();
-        ret = pool_get_bulk_with_cache(&mem_mp_ops, ms->rpc_pool, mt->rpc_cache, &obj, 1);
+        ret = pool_get_bulk_with_cache(&mem_mp_ops, ms->rpc_pool, mt->rpc_cache, 
+                                       &obj, 1, pool_count);
         mem_thread_group_done();
     }
 
     LWIP_DEBUGF(MEMP_DEBUG, ("%s(stack_id=%d, obj=%p)\n", __FUNCTION__, stack_id, obj));
 
-    return ret == 0 ? NULL : obj;
+out:
+    if (unlikely(ret == 0)) {
+        mem_thread_manager_flush_all();
+        return NULL;
+    }
+    return obj;
 }
 
 void mem_put_rpc(void *obj)
@@ -906,17 +921,16 @@ unsigned mem_get_mbuf_bulk(int stack_id, struct rte_mbuf **mbuf_table, unsigned 
 {
     struct mem_stack *ms = mem_stack_get(stack_id);
     struct mem_thread *mt = mem_thread_get(stack_id);
-    unsigned ret;
+    unsigned ret = 0;
+    unsigned pool_count;
 
     if (unlikely(n == 0)) {
         return 0;
     }
 
-    if (reserve) {
-        if (mem_stack_pool_ring_count(ms->mbuf_pool) < MBUFPOOL_RESERVE_NUM + n) {
-            mem_thread_manager_flush_all();
-            return 0;
-        }
+    pool_count = mem_stack_pool_ring_count(ms->mbuf_pool);
+    if (reserve && pool_count < MBUFPOOL_RESERVE_NUM + n) {
+        goto out;
     }
 
     if (mt == NULL) {
@@ -924,7 +938,8 @@ unsigned mem_get_mbuf_bulk(int stack_id, struct rte_mbuf **mbuf_table, unsigned 
     } else {
         mem_thread_group_used();
         mem_mbuf_migrate_dequeue(mt);
-        ret = pool_get_bulk_with_cache(&mbuf_mp_ops, ms->mbuf_pool, mt->mbuf_cache, (void **)mbuf_table, n);
+        ret = pool_get_bulk_with_cache(&mbuf_mp_ops, ms->mbuf_pool, mt->mbuf_cache, 
+                                       (void **)mbuf_table, n, pool_count);
         mem_thread_group_done();
     }
 
@@ -935,6 +950,10 @@ unsigned mem_get_mbuf_bulk(int stack_id, struct rte_mbuf **mbuf_table, unsigned 
     }
 #endif /* MEMP_DEBUG */
 
+out:
+    if (unlikely(ret == 0)) {
+        mem_thread_manager_flush_all();
+    }
     return ret;
 }
 
