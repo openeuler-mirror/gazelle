@@ -366,15 +366,22 @@ static inline bool NETCONN_NEED_RECV(const struct lwip_sock *sock)
 
 static inline bool NETCONN_ALLOW_SEND(const struct lwip_sock *sock)
 {
+    if (sock->conn->pcb.tcp == NULL) {
+        return false;
+    }
+
     if (get_global_cfg_params()->stack_mode_rtc) {
         if (NETCONN_TYPE(sock->conn) == NETCONN_TCP)
             return lwip_tcp_allow_send(sock->conn->pcb.tcp);
-        return false;
+        else /* if UDP */
+            return true;
+    } else { /* if RTW */
+        if (sys_mbox_valid(&sock->conn->sendmbox)) {
+            const struct mbox_ring *mr = &sock->conn->sendmbox->mring;
+            return mr->ops->free_count(mr) > 0;
+        }
     }
-    if (sys_mbox_valid(&sock->conn->sendmbox)) {
-        const struct mbox_ring *mr = &sock->conn->sendmbox->mring;
-        return mr->ops->free_count(mr) > 0;
-    }
+
     return false;
 }
 
