@@ -23,6 +23,8 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_unistd.h"
 
+#define MEM_THREAD_TASK_PATH            "/proc/%d/task/%d/stat"
+#define MEM_THREAD_MAX_PATH             32  /* cat /proc/sys/kernel/pid_max */
 #define MEM_THREAD_FLUSH_SIG            (SIGRTMIN + 11)
 #define MEM_THREAD_MANAGER_FLUSH_MS     100
 #define MEM_THREAD_MANAGER_FREE_S       2
@@ -36,6 +38,7 @@ struct mem_thread_manager {
 };
 
 struct mem_thread_group {
+    char task_path[MEM_THREAD_MAX_PATH];
     int tid;
     pthread_t thread;
     struct list_node mt_node;
@@ -156,8 +159,13 @@ static inline void mem_thread_group_notify_flush(const struct mem_thread_group *
 
 static inline bool mem_thread_group_exist(const struct mem_thread_group *mt_group)
 {
-    if (pthread_tryjoin_np(mt_group->thread, NULL) == 0)
-        return false;
+    if (access(mt_group->task_path, R_OK) != 0) {
+        if (errno == ENOENT) {
+            return false;
+        }
+        LSTACK_LOG(ERR, LSTACK, "mem_thread_group_exist access %s failed, errno %d\n", 
+            mt_group->task_path, errno);
+    }
     return true;
 }
 
@@ -200,6 +208,8 @@ static int mem_thread_group_init(int stack_id)
 
         g_mem_thread_group->tid = rte_gettid();
         g_mem_thread_group->thread = pthread_self();
+        SYS_FORMAT_NAME(g_mem_thread_group->task_path, sizeof(g_mem_thread_group->task_path),
+            MEM_THREAD_TASK_PATH, getpid(), g_mem_thread_group->tid);
         list_init_node(&g_mem_thread_group->mt_node);
         mem_thread_manager_add_work(g_mem_thread_group);
     }
