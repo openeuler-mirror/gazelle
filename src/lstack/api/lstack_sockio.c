@@ -671,7 +671,8 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
         return -1;
     }
 
-    if (unlikely(mr->app_free_count < 2)) {
+    if (unlikely(mr->app_free_count < 2) || 
+        total_copy_len > mr->app_free_count * TCP_MSS) {
         mr->app_free_count = mr->ops->free_count(mr);
         if (unlikely(mr->app_free_count < 2)) {
             API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
@@ -691,15 +692,7 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
         copied_total += rtw_stack_tcp_write_one(sock, mr, data + copied_total, total_copy_len, flags);
     } else {
         if (total_copy_len > mr->app_free_count * TCP_MSS) {
-            mr->app_free_count = mr->ops->free_count(mr);
-            if (unlikely(mr->app_free_count < 2)) {
-                API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
-                set_errno(EWOULDBLOCK);
-                goto out;
-            }
-            if (total_copy_len > mr->app_free_count * TCP_MSS) {
-                total_copy_len = mr->app_free_count * TCP_MSS;
-            }
+            total_copy_len = mr->app_free_count * TCP_MSS;
         }
         /* write bulk pbuf */
         while (total_copy_len > 0) {

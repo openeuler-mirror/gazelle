@@ -307,8 +307,9 @@ void sock_wait_common_free(struct sock_wait *sk_wait)
     do {
         wait_stack = false;
         for (int i = 0; i < PROTOCOL_STACK_MAX; ++i) {
-            rte_mb();
-            if (!list_node_null(&sk_wait->stk_notify_node[i])) {
+            rte_rmb();
+            if (!list_node_null(&sk_wait->stk_notify_node[i]) ||
+                !list_head_empty(&sk_wait->stk_event_list[i])) {
                 wait_stack = true;
                 usleep(LWIP_EVENT_WAIT_US);
                 break;
