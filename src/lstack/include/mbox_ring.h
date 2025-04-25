@@ -85,12 +85,14 @@ void mbox_ring_common_free(struct mbox_ring *mr)
     if (obj != NULL)
         mr->obj_free_fn(mr, obj, true);
 
-    if (mr->flags & MBOX_FLAG_RECV)
-        mr->ops->recv_finish_burst(mr);
-    while (true) {
-        if (mr->ops->dequeue_burst(mr, &obj, 1) == 0)
-            break;
-        mr->obj_free_fn(mr, obj, false);
+    if (mr->ring != NULL) {
+        if (mr->flags & MBOX_FLAG_RECV)
+            mr->ops->recv_finish_burst(mr);
+        while (true) {
+            if (mr->ops->dequeue_burst(mr, &obj, 1) == 0)
+                break;
+            mr->obj_free_fn(mr, obj, false);
+        }
     }
 }
 
@@ -482,8 +484,10 @@ static inline
 void pk_ring_destroy(struct mbox_ring *mr)
 {
     void *obj;
-    while (mr->ops->recv_start_burst(mr, &obj, 1) > 0) { }
-    mr->ops->recv_finish_burst(mr);
+    if (mr->ring != NULL) {
+        while (mr->ops->recv_start_burst(mr, &obj, 1) > 0) { }
+        mr->ops->recv_finish_burst(mr);
+    }
     return;
 }
 
