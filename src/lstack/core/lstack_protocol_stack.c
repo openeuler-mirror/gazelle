@@ -425,6 +425,7 @@ static struct protocol_stack *stack_thread_init(void *arg)
         stack_affinity_numa(stack->numa_id);
     }
 
+    lwip_wait_init(stack->stack_idx);
     if (mem_stack_mpcache_init(stack->stack_idx, stack->cpu_id) < 0) {
         goto END;
     }

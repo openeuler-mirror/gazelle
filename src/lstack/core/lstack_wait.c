@@ -72,7 +72,7 @@ static inline struct lwip_wait *lwip_wait_get(int stack_id)
     return &g_wait_group.lwaits[stack_id];
 }
 
-static int lwip_wait_init(int stack_id)
+int lwip_wait_init(int stack_id)
 {
     struct lwip_wait *lwait = lwip_wait_get(stack_id);
     LWIP_UNUSED_ARG(lwait);
@@ -191,7 +191,6 @@ void* kernel_wait_thread(void *arg)
     free(arg);
     sem_post(&get_protocol_stack_group()->sem_stack_setup);
 
-    lwip_wait_init(stack_id);
     kernel_wait_init(stack_id);
     kwait = kernel_wait_get(stack_id);
 
