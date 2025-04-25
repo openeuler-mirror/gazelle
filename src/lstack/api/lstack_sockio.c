@@ -483,7 +483,7 @@ static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, siz
     struct pbuf **extcache_list;
     struct netbuf *nbuf;
     err_t err = ERR_OK;
-    uint16_t copied_total = 0;
+    uint16_t total_len = 0;
 
     LWIP_DEBUGF(SOCKETS_DEBUG, ("%s(sock=%p, msg=%p, size=%"SZT_F", flags=0x%x)\n",
                 __FUNCTION__, sock, msg, len, flags));
@@ -506,11 +506,11 @@ static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, siz
 
     /* let not free inside by MSG_PEEK */
     sock->lastdata.netbuf = nbuf;
-    err = lwip_recvfrom_udp_raw(sock, flags | MSG_PEEK, msg, &copied_total, 0);
+    err = lwip_recvfrom_udp_raw(sock, flags | MSG_PEEK, msg, &total_len, 0);
     sock->lastdata.netbuf = NULL;
 
     SOCK_WAIT_STAT(sock->sk_wait, app_read_cnt, 1);
-    SOCK_WAIT_STAT(sock->sk_wait, sock_rx_drop, copied_total < len ? 1 : 0);
+    SOCK_WAIT_STAT(sock->sk_wait, sock_rx_drop, total_len > len ? 1 : 0);
     if (get_protocol_stack_group()->latency_start)
         calculate_lstack_latency(sock->stack_id, &nbuf->p, 1, GAZELLE_LATENCY_READ_LSTACK, 0);
 
@@ -521,7 +521,7 @@ static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, siz
         mem_extcache_put_pbuf(nbuf->p, NULL, extcache_list);
     }
 
-    mr->app_recvd_len += copied_total;
+    mr->app_recvd_len += total_len;
     mr->app_queued_num++;
     if (mr->app_queued_num >= RECV_EXTEND_CACHE_MAX || 
         mr->app_recvd_len >= RECV_EXTEND_CACHE_LEN) {
@@ -534,8 +534,8 @@ static ssize_t stack_udp_readmsg(struct lwip_sock *sock, struct msghdr *msg, siz
     }
 
     if (err == ERR_OK) {
-        API_EVENT(sock->conn, NETCONN_EVT_RCVMINUS, copied_total);
-        return copied_total;
+        API_EVENT(sock->conn, NETCONN_EVT_RCVMINUS, total_len);
+        return LWIP_MIN(len, total_len);
     }
 out:
     SOCK_WAIT_STAT(sock->sk_wait, read_null, 1);
