@@ -110,6 +110,8 @@ struct sock_wait {
 int sock_wait_group_init(void);
 void sock_wait_group_stat(int stack_id, struct gazelle_wakeup_stat *stat);
 
+int lwip_wait_init(int stack_id);
+
 void* kernel_wait_thread(void *arg);
 int kernel_wait_ctl(struct sock_wait *sk_wait, int new_stack_id, int old_stack_id);
 
