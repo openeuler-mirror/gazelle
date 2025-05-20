@@ -264,14 +264,14 @@ The location of the dpdk configuration file depends on the user's privileges:
 
 There are certain constraints when using Gazelle:
 #### Functional Constraints
-- Blocking modes for accept or connect are not supported.
-- A maximum of 1500 TCP connections is supported.
-- Currently, only TCP, ICMP, ARP, and IPv4 protocols are supported.
+- A maximum of 20000 TCP connections is supported.
+- Currently, only TCP, UDP, ICMP, ARP, and IPv4 protocols are supported.
 - When pinging Gazelle from the peer, the packet length must be less than or equal to 14792 bytes.
 - Transparent huge pages are not supported.
 - ltran does not support mixing multiple types of bonded network cards.
 - In ltran's bond1 active-backup mode, only link layer failure is supported (e.g., cable disconnection), not physical layer failure (e.g., NIC power off, unplugging NIC).
 - Virtual machine network cards do not support multi-queue.
+- The bond1, bond4, and bond6 modes are supported. The promiscuous mode must be enabled for the bond4/6 mode, which conflicts with the hardware VLAN filtering function. The software VLAN filtering function requires the GRO function to be disabled. Therefore, if the VLAN filtering function needs to be configured when the bond4/6 mode is used, configure the function on the switch.
 #### Operational Constraints
 - The provided command-line and configuration files default to root privileges. Non-root users need to elevate privileges and change file ownership before use.
 - Returning the user-space network card to the kernel driver requires exiting Gazelle first.
