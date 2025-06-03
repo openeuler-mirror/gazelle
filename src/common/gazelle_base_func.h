@@ -15,6 +15,8 @@
 
 #include <math.h>
 
+#define US_PER_MS 1000
+
 #define GAZELLE_FREE(p)  do { \
     if (p) { \
         free(p); \

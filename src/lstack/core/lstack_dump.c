@@ -18,6 +18,7 @@
 
 #include "lstack_cfg.h"
 #include "lstack_log.h"
+#include "common/gazelle_base_func.h"
 
 #define DUMP_COMMAND_TIMEOUT_MS 2000
 #define DUMP_COMMAND_INTERVAL_MS 1
@@ -50,7 +51,6 @@ static int dump_lstack_check(void)
     return 0;
 }
 
-#define US_PER_MS (MS_PER_S)
 static long timeval_diff_ms(struct timeval *end, struct timeval *begin)
 {
     struct timeval result;

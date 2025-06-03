@@ -17,18 +17,45 @@
 #include <rte_atomic.h>
 #include <lwip/lwipgz_posix_api.h>
 
-#define DUMMY_SLEEP_S 5
+#include "lstack_log.h"
+#include "lstack_protocol_stack.h"
+#include "common/gazelle_base_func.h"
+
+#define DUMMY_WAIT_TIMEOUT_MS 5000
+static void waiting_exit_msg(void)
+{
+    int time = 0;
+    int sleep_interval = 10;
+
+    while (time < DUMMY_WAIT_TIMEOUT_MS) {
+        time += sleep_interval;
+        usleep(sleep_interval * US_PER_MS);
+        /* Must be in a secure context before close sockets */
+        if (get_protocol_stack() &&  stack_polling(0) != 0) {
+            /* Means stack has closed all fds */
+            stack_wait();
+            break;
+        }
+    }
+
+    if (time >= DUMMY_WAIT_TIMEOUT_MS) {
+        LSTACK_LOG(ERR, LSTACK, "APP thread doesn't recv 'stack_exit' message, will force quit within 5 seconds.\n");
+        stack_wait();
+    }
+
+    usleep(DUMMY_WAIT_TIMEOUT_MS * US_PER_MS);
+}
 
 static inline ssize_t dummy_exit(void)
 {
-    sleep(DUMMY_SLEEP_S);
+    waiting_exit_msg();
     errno = ENOTCONN;
     return -1;
 }
 
 static int dummy_socket(int domain, int type, int protocol)
 {
-    sleep(DUMMY_SLEEP_S);
+    waiting_exit_msg();
     return -1;
 }
 
@@ -68,6 +95,4 @@ void dummy_api_init(posix_api_t *api)
     api->sendto_fn  = dummy_sendto;
 
     rte_wmb();
-    /* 1: wait until app thread call send functio complete */
-    sleep(1);
 }
