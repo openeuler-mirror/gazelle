@@ -56,10 +56,18 @@ enum rte_lcore_state_t stack_get_state(struct protocol_stack *stack)
     return __atomic_load_n(&stack->state, __ATOMIC_ACQUIRE);
 }
 
+#define STACK_WAIT_TIMEOUT_MS 5000
 static void stack_wait_quit(struct protocol_stack *stack)
 {
-    while (__atomic_load_n(&stack->state, __ATOMIC_ACQUIRE) != WAIT) {
-        rte_pause();
+    int timeout = 0;
+    int sleep_interval = 10;
+    while (stack_get_state(stack) != WAIT && timeout < STACK_WAIT_TIMEOUT_MS) {
+        timeout += sleep_interval;
+        usleep(sleep_interval * US_PER_MS);
+    }
+
+    if (timeout >= STACK_WAIT_TIMEOUT_MS) {
+        LSTACK_LOG(ERR, LSTACK, "stack %p exits time out!\n", stack);
     }
 }
 
