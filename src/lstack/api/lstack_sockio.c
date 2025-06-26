@@ -683,13 +683,15 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
 
     copied_total = rtw_stack_tcp_append(mr, data, LWIP_MIN(TCP_MSS, total_copy_len), flags);
     SOCK_WAIT_STAT(sock->sk_wait, sock_tx_merge, copied_total > 0 ? 1 : 0);
-    if (copied_total == total_copy_len) {
-        return copied_total;
+    total_copy_len -= copied_total;
+    if (total_copy_len == 0) {
+        goto out;
     }
 
     if (total_copy_len <= TCP_MSS) {
         /* write one pbuf */
         copied_total += rtw_stack_tcp_write_one(sock, mr, data + copied_total, total_copy_len, flags);
+        total_copy_len -= copied_total;
     } else {
         if (total_copy_len > mr->app_free_count * TCP_MSS) {
             total_copy_len = mr->app_free_count * TCP_MSS;
