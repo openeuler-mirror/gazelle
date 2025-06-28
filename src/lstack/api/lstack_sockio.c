@@ -1461,7 +1461,7 @@ int do_lwip_init_sock(int fd)
     }
 
     sock->sk_wait = NULL;
-    ret = sock_event_init(&sock->sk_event);
+    ret = sock_event_init(&sock->sk_event, sock);
     if (ret != 0) {
         LSTACK_LOG(ERR, LSTACK, "sock_event_init failed\n");
         return -1;

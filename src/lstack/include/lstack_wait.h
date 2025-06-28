@@ -67,9 +67,9 @@ struct sock_wait {
     int (*timedwait_fn)(struct sock_wait *sk_wait, int timeout, uint32_t start);
     /* trigger event */
     void (*notify_fn)(struct sock_wait *sk_wait, struct sock_event *sk_event, 
-        unsigned pending, int stack_id);
+        enum netconn_evt evt, int stack_id);
     /* remove event */
-    void (*remove_fn)(struct sock_wait *sk_wait, struct sock_event *sk_event, unsigned pending);
+    void (*remove_fn)(struct sock_wait *sk_wait, struct sock_event *sk_event, enum netconn_evt evt);
 
     /* dfx stat */
     struct list_node group_node;
@@ -117,17 +117,18 @@ int kernel_wait_ctl(struct sock_wait *sk_wait, int new_stack_id, int old_stack_i
 
 #if SOCK_WAIT_BATCH_NOTIFY
 void lwip_wait_add_notify(struct sock_wait *sk_wait, struct sock_event *sk_event, 
-    unsigned pending, int stack_id);
+    enum netconn_evt evt, int stack_id);
 unsigned lwip_wait_foreach_notify(int stack_id);
 bool lwip_wait_notify_empty(int stack_id);
 #endif /* SOCK_WAIT_BATCH_NOTIFY */
 
+unsigned sock_event_lose_pending(const struct lwip_sock *sock, enum netconn_evt evt, unsigned len);
 unsigned sock_event_hold_pending(const struct lwip_sock *sock, 
     enum sock_wait_type type, enum netconn_evt evt, unsigned len);
 void sock_event_notify_pending(struct lwip_sock *sock, enum netconn_evt evt, unsigned len);
 void sock_event_remove_pending(struct lwip_sock *sock, enum netconn_evt evt, unsigned len);
 
-int sock_event_init(struct sock_event *sk_event);
+int sock_event_init(struct sock_event *sk_event, struct lwip_sock *sock);
 void sock_event_free(struct sock_event *sk_event, struct sock_wait *sk_wait);
 
 int sock_wait_common_init(struct sock_wait *sk_wait);

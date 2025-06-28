@@ -256,10 +256,11 @@ void affinity_bind_stack(struct sock_wait *sk_wait, struct wait_affinity *affini
     }
 }
 
-int sock_event_init(struct sock_event *sk_event)
+int sock_event_init(struct sock_event *sk_event, struct lwip_sock *sock)
 {
     memset_s(sk_event, sizeof(struct sock_event), 0, sizeof(struct sock_event));
 
+    sk_event->sock = sock;
     list_init_node(&sk_event->event_node);
 #if SOCK_WAIT_BATCH_NOTIFY
     list_init_node(&sk_event->stk_event_node);
@@ -278,6 +279,7 @@ void sock_event_free(struct sock_event *sk_event, struct sock_wait *sk_wait)
         list_del_node(&sk_event->stk_event_node);
 #endif /* SOCK_WAIT_BATCH_NOTIFY */
     }
+    sk_event->sock = NULL;
 }
 
 int sock_wait_common_init(struct sock_wait *sk_wait)
@@ -385,7 +387,7 @@ static inline bool NETCONN_ALLOW_SEND(const struct lwip_sock *sock)
     return false;
 }
 
-static unsigned sock_event_lose_pending(const struct lwip_sock *sock, enum netconn_evt evt, unsigned len)
+unsigned sock_event_lose_pending(const struct lwip_sock *sock, enum netconn_evt evt, unsigned len)
 {
     unsigned event = 0;
 
@@ -421,8 +423,7 @@ unsigned sock_event_hold_pending(const struct lwip_sock *sock,
     switch (evt) {
     case NETCONN_EVT_RCVPLUS:
         if (sock->sk_event.events & EPOLLIN || type & WAIT_BLOCK) {
-            if (len > 0 ||
-                NETCONN_NEED_RECV(sock) || 
+            if (NETCONN_NEED_RECV(sock) || 
                 NETCONN_NEED_ACCEPT(sock)) {
                 event = EPOLLIN;
             }
@@ -430,8 +431,7 @@ unsigned sock_event_hold_pending(const struct lwip_sock *sock,
         break;
     case NETCONN_EVT_SENDPLUS:
         if (sock->sk_event.events & EPOLLOUT || type & WAIT_BLOCK) {
-            if (len > 0 ||
-                NETCONN_ALLOW_SEND(sock)) {
+            if (NETCONN_ALLOW_SEND(sock)) {
                 event = EPOLLOUT;
             }
         }
@@ -460,11 +460,7 @@ void sock_event_remove_pending(struct lwip_sock *sock, enum netconn_evt evt, uns
         sock->sk_wait = NULL;
         return;
     }
-
-    unsigned pending = sock_event_lose_pending(sock, evt, 0);
-    if (pending) {
-        sock->sk_wait->remove_fn(sock->sk_wait, &sock->sk_event, pending);
-    }
+    sock->sk_wait->remove_fn(sock->sk_wait, &sock->sk_event, evt);
 }
 
 void sock_event_notify_pending(struct lwip_sock *sock, enum netconn_evt evt, unsigned len)
@@ -479,22 +475,18 @@ void sock_event_notify_pending(struct lwip_sock *sock, enum netconn_evt evt, uns
         sock->sk_wait = NULL;
         return;
     }
-
-    unsigned pending = sock_event_hold_pending(sock, sock->sk_wait->type, evt, len);
-    if (pending) {
-        sock->sk_wait->notify_fn(sock->sk_wait, &sock->sk_event, pending, sock->stack_id);
-    }
+    sock->sk_wait->notify_fn(sock->sk_wait, &sock->sk_event, evt, sock->stack_id);
 }
 
 #if SOCK_WAIT_BATCH_NOTIFY
 /* Only allow stack call */
 void lwip_wait_add_notify(struct sock_wait *sk_wait, struct sock_event *sk_event, 
-    unsigned pending, int stack_id)
+     enum netconn_evt evt, int stack_id)
 {
     struct lwip_wait *lwait = lwip_wait_get(stack_id);
 
     if (sk_event != NULL) {
-        sk_event->stk_pending |= pending;
+        sk_event->stk_evts |= evt;
         if (list_node_null(&sk_event->stk_event_node)) {
             list_add_node(&sk_event->stk_event_node, &sk_wait->stk_event_list[stack_id]);
         }
@@ -503,6 +495,23 @@ void lwip_wait_add_notify(struct sock_wait *sk_wait, struct sock_event *sk_event
     if (list_node_null(&sk_wait->stk_notify_node[stack_id])) {
         list_add_node(&sk_wait->stk_notify_node[stack_id], &lwait->stk_notify_list);
     }
+}
+
+static unsigned sock_event_get_pending(struct sock_event *sk_event, enum netconn_evt evts)
+{
+    unsigned pending = 0;
+
+    if (evts & NETCONN_EVT_SENDPLUS) {
+        pending |= sock_event_hold_pending(sk_event->sock, WAIT_EPOLL, NETCONN_EVT_SENDPLUS, 0);
+    }
+    if (evts & NETCONN_EVT_RCVPLUS) {
+        pending |= sock_event_hold_pending(sk_event->sock, WAIT_EPOLL, NETCONN_EVT_RCVPLUS, 0);
+    }
+    if (evts & NETCONN_EVT_ERROR) {
+        pending |= sock_event_hold_pending(sk_event->sock, WAIT_EPOLL, NETCONN_EVT_ERROR, 0);
+    }
+    sk_event->stk_evts = 0;
+    return pending;
 }
 
 static inline
@@ -523,12 +532,14 @@ unsigned sock_wait_foreach_event(struct sock_wait *sk_wait, int stack_id)
         sk_event = container_of(node, struct sock_event, stk_event_node);
 
         /* see rtw_epoll_notify_event() */
-        sk_event->pending |= sk_event->stk_pending;
+        sk_event->pending |= sock_event_get_pending(sk_event, sk_event->stk_evts);
+        if (unlikely(sk_event->pending == 0)) {
+            continue;
+        }
+
         if (list_node_null(&sk_event->event_node)) {
             list_add_node(&sk_event->event_node, &sk_wait->epcb.event_list);
         }
-
-        sk_event->stk_pending = 0;
         count++;
     }
 

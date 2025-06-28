@@ -53,46 +53,64 @@ static int rtw_sock_wait_timedwait(struct sock_wait *sk_wait, int timeout, uint3
 }
 
 static void rtc_epoll_notify_event(struct sock_wait *sk_wait, struct sock_event *sk_event, 
-    unsigned pending, int stack_id)
+    enum netconn_evt evt, int stack_id)
 {
-    sk_event->pending |= pending;
-    if (list_node_null(&sk_event->event_node)) {
-        list_add_node(&sk_event->event_node, &sk_wait->epcb.event_list);
+    sk_event->pending |= sock_event_hold_pending(sk_event->sock, sk_wait->type, evt, 0);
+    if (likely(sk_event->pending != 0)) {
+        if (list_node_null(&sk_event->event_node)) {
+            list_add_node(&sk_event->event_node, &sk_wait->epcb.event_list);
+        }
     }
 }
 
-static void rtc_epoll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, unsigned pending)
+static void rtc_epoll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, enum netconn_evt evt)
 {
-    sk_event->pending &= ~pending;
+    sk_event->pending &= ~sock_event_lose_pending(sk_event->sock, evt, 0);
     if (sk_event->pending == 0) {
         list_del_node(&sk_event->event_node);
     }
 }
 
 static void rtw_epoll_notify_event(struct sock_wait *sk_wait, struct sock_event *sk_event, 
-    unsigned pending, int stack_id)
+    enum netconn_evt evt, int stack_id)
 {
+    /* call sock_event_hold_pending in lock to avoid unnecessary events:
+     * stack: mbox_enqueue -> hold_pending                         ->                        lock -> notify_event -> unlock
+     * recv:                  mbox_dequeue -> lose_pending -> lock -> remove_event -> unlock
+     */
+
 #if SOCK_WAIT_BATCH_NOTIFY
     if (likely(stack_id >= 0)) {
-        lwip_wait_add_notify(sk_wait, sk_event, pending, stack_id);
+        lwip_wait_add_notify(sk_wait, sk_event, evt, stack_id);
         return;
     }
 #endif /* SOCK_WAIT_BATCH_NOTIFY */
 
     rte_spinlock_lock(&sk_wait->epcb.lock);
-    sk_event->pending |= pending;
-    if (list_node_null(&sk_event->event_node)) {
-        list_add_node(&sk_event->event_node, &sk_wait->epcb.event_list);
+    sk_event->pending |= sock_event_hold_pending(sk_event->sock, sk_wait->type, evt, 0);
+    if (likely(sk_event->pending != 0)) {
+        if (list_node_null(&sk_event->event_node)) {
+            list_add_node(&sk_event->event_node, &sk_wait->epcb.event_list);
+        }
     }
     rte_spinlock_unlock(&sk_wait->epcb.lock);
 
     sys_sem_signal_internal(&sk_wait->sem);
 }
 
-static void rtw_epoll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, unsigned pending)
+static void rtw_epoll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, enum netconn_evt evt)
 {
+    /* call sock_event_hold_pending in lock to avoid wrong remove:
+     * stack:              mbox_enqueue -> hold_pending -> lock -> notify_event -> unlock
+     * recv:  lose_pending                              ->                                lock -> remove_event -> unlock
+     */
+
+    if (sock_event_lose_pending(sk_event->sock, evt, 0) == 0) {
+        return;
+    }
+
     rte_spinlock_lock(&sk_wait->epcb.lock);
-    sk_event->pending &= ~pending;
+    sk_event->pending &= ~sock_event_lose_pending(sk_event->sock, evt, 0);
     if (sk_event->pending == 0) {
         list_del_node(&sk_event->event_node);
     }
@@ -100,24 +118,24 @@ static void rtw_epoll_remove_event(struct sock_wait *sk_wait, struct sock_event 
 }
 
 static void rtc_poll_notify_event(struct sock_wait *sk_wait, struct sock_event *sk_event, 
-    unsigned pending, int stack_id)
+    enum netconn_evt evt, int stack_id)
 {
 }
-static void rtc_poll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, unsigned pending)
+static void rtc_poll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, enum netconn_evt evt)
 {
 }
 static void rtw_poll_notify_event(struct sock_wait *sk_wait, struct sock_event *sk_event, 
-    unsigned pending, int stack_id)
+    enum netconn_evt evt, int stack_id)
 {
 #if SOCK_WAIT_BATCH_NOTIFY
     if (likely(stack_id >= 0)) {
-        lwip_wait_add_notify(sk_wait, NULL, 0, stack_id);
+        lwip_wait_add_notify(sk_wait, NULL, evt, stack_id);
         return;
     }
 #endif /* SOCK_WAIT_BATCH_NOTIFY */
     sys_sem_signal_internal(&sk_wait->sem);
 }
-static void rtw_poll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, unsigned pending)
+static void rtw_poll_remove_event(struct sock_wait *sk_wait, struct sock_event *sk_event, enum netconn_evt evt)
 {
 }
 
@@ -284,7 +302,6 @@ int lstack_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
     struct lwip_sock *sock = lwip_get_socket(fd);
     struct sock_wait *sk_wait = epsock->sk_wait;
     struct sock_event *sk_event;
-    unsigned pending;
 
     if (epfd < 0 || fd < 0 || epfd == fd || \
         (event == NULL && op != EPOLL_CTL_DEL)) {
@@ -316,10 +333,9 @@ int lstack_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
             sk_event->events = event->events | EPOLLERR | EPOLLHUP;
             sk_event->ep_data = event->data;
 
-            pending = sock_event_hold_pending(sock, WAIT_EPOLL, NETCONN_EVT_RCVPLUS, 0)  |
-                      sock_event_hold_pending(sock, WAIT_EPOLL, NETCONN_EVT_SENDPLUS, 0) |
-                      sock_event_hold_pending(sock, WAIT_EPOLL, NETCONN_EVT_ERROR, 0);
-            sk_wait->notify_fn(sk_wait, sk_event, pending, -1);
+            sk_wait->notify_fn(sk_wait, sk_event, NETCONN_EVT_RCVPLUS, -1);
+            sk_wait->notify_fn(sk_wait, sk_event, NETCONN_EVT_SENDPLUS, -1);
+            sk_wait->notify_fn(sk_wait, sk_event, NETCONN_EVT_ERROR, -1);
 
             sk_wait->lwip_nfds++;
             sk_wait->affinity.stack_nfds[sock->stack_id]++;
@@ -327,10 +343,9 @@ int lstack_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
         case EPOLL_CTL_DEL:
             sk_event->events = 0;
 
-            pending = sock_event_hold_pending(sock, WAIT_EPOLL, NETCONN_EVT_RCVMINUS, 0)  |
-                      sock_event_hold_pending(sock, WAIT_EPOLL, NETCONN_EVT_SENDMINUS, 0) |
-                      sock_event_hold_pending(sock, WAIT_EPOLL, NETCONN_EVT_ERROR, 0);
-            sk_wait->remove_fn(sk_wait, sk_event, pending);
+            sk_wait->remove_fn(sk_wait, sk_event, NETCONN_EVT_RCVMINUS);
+            sk_wait->remove_fn(sk_wait, sk_event, NETCONN_EVT_SENDMINUS);
+            sk_wait->remove_fn(sk_wait, sk_event, NETCONN_EVT_ERROR);
 
             sk_wait->lwip_nfds--;
             sk_wait->affinity.stack_nfds[sock->stack_id]--;
