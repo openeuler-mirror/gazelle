@@ -392,6 +392,8 @@ void do_lwip_connected_callback(int fd)
         if (sock->sk_wait != NULL) {
             if (sock->sk_wait->type & WAIT_EPOLL) {
                 epoll_ctl_kernel_event(sock->sk_wait->epfd, EPOLL_CTL_DEL, fd, NULL, sock->sk_wait);
+            } else if (sock->sk_wait->type & WAIT_POLL) {
+                poll_ctl_kernel_event(sock->sk_wait->epfd, 0, fd, NULL);
             }
         }
         /* shutdown kernel connect, do_connect() has tried both kernel and lwip. */

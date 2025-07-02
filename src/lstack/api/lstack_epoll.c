@@ -580,43 +580,62 @@ struct sock_wait *poll_construct_wait(int nfds)
     return g_sk_wait;
 }
 
-static int poll_ctl_kernel_event(int epfd, int fds_id,
-    const struct pollfd *new_fds, const struct pollfd *old_fds)
+struct poll_kernel_data {
+    union {
+        struct {
+            uint32_t fd;
+            uint16_t fds_id;
+        };
+        void *ptr;
+    };
+};
+int poll_ctl_kernel_event(int epfd, int fds_id, int old_fd, const struct pollfd *new_fds)
 {
-    int ret;
+    int ret = 0;
     struct epoll_event epevent;
+    struct poll_kernel_data pdata;
 
-    LWIP_DEBUGF(SOCKETS_DEBUG, ("%s(epfd=%d, old_fd=%d, new_fd=%d)\n",
-                __FUNCTION__, epfd, old_fds->fd, new_fds->fd));
-
-    epevent.data.fd = fds_id;
-    epevent.events = new_fds->events;
+    RTE_BUILD_BUG_ON(sizeof(struct poll_kernel_data) > sizeof(void *));
 
     /* EPOLL_CTL_MOD may not be any events, but why? */
-    if (old_fds->fd == 0) {
-        ret = posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_ADD, new_fds->fd, &epevent);
-    } else {
-        ret = posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_DEL, old_fds->fd, NULL);
+    if (old_fd > 0) {
+        ret = posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_DEL, old_fd, NULL);
+    }
+    if (new_fds != NULL && new_fds->fd > 0) {
+        pdata.fd = new_fds->fd;
+        pdata.fds_id = fds_id;
+        epevent.data.ptr = pdata.ptr;
+        epevent.events = new_fds->events;
         ret |= posix_api->epoll_ctl_fn(epfd, EPOLL_CTL_ADD, new_fds->fd, &epevent);
     }
 
+    LWIP_DEBUGF(SOCKETS_DEBUG, ("%s(epfd=%d, fds_id %d, old_fd=%d, new_fd=%d)\n",
+                __FUNCTION__, epfd, fds_id, old_fd, new_fds ? new_fds->fd : -1));
+
     if (ret != 0 && errno != EINTR && errno != ENOENT) {
-        LSTACK_LOG(ERR, LSTACK, "epoll_ctl failed, errno %d, new_fd %d, old_fd %d\n", 
-            errno, new_fds->fd, old_fds->fd);
+        LSTACK_LOG(ERR, LSTACK, "epoll_ctl failed, errno %d, fds_id %d, old_fd %d, new_fd %d\n", 
+            errno, fds_id, old_fd, new_fds ? new_fds->fd : -1);
     }
     return ret;
 }
 
-static int poll_wait_kernel_event(int epfd, struct pollfd *fds, int maxevents)
+static int poll_wait_kernel_event(int epfd, const struct poll_cb *pcb, struct pollfd *fds, int maxevents)
 {
     struct epoll_event epevents[POLL_MAX_EVENTS];
-    int num = 0;
-    int i, fds_id;
+    struct poll_kernel_data pdata;
+    int ret, i, num = 0;
 
-    num = posix_api->epoll_wait_fn(epfd, epevents, maxevents, 0);
-    for (i = 0; i < num; ++i) {
-        fds_id = epevents[i].data.fd;
-        fds[fds_id].revents = epevents[i].events;
+    ret = posix_api->epoll_wait_fn(epfd, epevents, maxevents, 0);
+    for (i = 0; i < ret; ++i) {
+        pdata.ptr = epevents[i].data.ptr;
+        if (pdata.fd != fds[pdata.fds_id].fd) {
+            poll_ctl_kernel_event(epfd, pdata.fds_id, pdata.fd, NULL);
+            continue;
+        }
+        /* may be already counted by poll_scan_lwip_event() */
+        if (fds[pdata.fds_id].revents == 0)
+            num++;
+        fds[pdata.fds_id].revents |= epevents[i].events;
     }
 
     return num;
@@ -635,14 +654,14 @@ static void poll_prepare_wait(struct sock_wait *sk_wait, struct pollfd *fds, nfd
              0, sizeof(sk_wait->affinity.stack_nfds));
 
     for (i = 0; i < nfds; ++i) {
+        fds[i].revents = 0;
         fd = fds[i].fd;
         sock = lwip_get_socket(fd);
         sk_type = select_sock_posix_path(sock);
 
         if (sk_type & POSIX_KERNEL) {
-            poll_ctl_kernel_event(sk_wait->epfd, i, &fds[i], 
-                &pcb->kernel_fds[sk_wait->kernel_nfds]);
-            pcb->kernel_fds[sk_wait->kernel_nfds] = fds[i];
+            poll_ctl_kernel_event(sk_wait->epfd, i, pcb->kernel_fds[i].fd, &fds[i]);
+            pcb->kernel_fds[i] = fds[i];
             sk_wait->kernel_nfds++;
         }
 
@@ -723,7 +742,7 @@ int lstack_poll(struct pollfd *fds, nfds_t nfds, int timeout)
         }
 
         if (sk_wait->kernel_nfds > 0 && rte_atomic16_read(&sk_wait->kernel_pending)) {
-            kernel_num = poll_wait_kernel_event(sk_wait->epfd, fds, sk_wait->kernel_nfds);
+            kernel_num = poll_wait_kernel_event(sk_wait->epfd, &sk_wait->pcb, fds, sk_wait->kernel_nfds);
             if (kernel_num == 0 && errno != EINTR && errno != EAGAIN) {
                 rte_atomic16_set(&sk_wait->kernel_pending, false);
             }
