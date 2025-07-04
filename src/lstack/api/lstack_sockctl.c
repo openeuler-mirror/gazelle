@@ -461,7 +461,7 @@ static int stack_broadcast_close(int fd)
     int ret = 0;
     struct lwip_sock *sock = lwip_get_socket(fd);
 
-    while (sock != NULL) {
+    do {
         if (POSIX_IS_CLOSED(sock)) {
             ret = -1;
             break;
@@ -469,7 +469,7 @@ static int stack_broadcast_close(int fd)
         fd = sock->conn->callback_arg.socket;
         ret |= rpc_call_close(sock->stack_id, fd);
         sock = sock->listen_next;
-    }
+    } while (sock != NULL);
 
     if (ret != 0) {
         GAZELLE_RETURN(EBADF);
@@ -482,7 +482,7 @@ static int stack_broadcast_shutdown(int fd, int how)
     int ret = 0;
     struct lwip_sock *sock = lwip_get_socket(fd);
 
-    while (true) {
+    do {
         if (POSIX_IS_CLOSED(sock)) {
             ret = -1;
             break;
@@ -490,7 +490,7 @@ static int stack_broadcast_shutdown(int fd, int how)
         fd = sock->conn->callback_arg.socket;
         ret |= rpc_call_shutdown(sock->stack_id, fd, how);
         sock = sock->listen_next;
-    }
+    } while (sock != NULL);
 
     if (ret != 0) {
         GAZELLE_RETURN(EBADF);
