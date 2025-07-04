@@ -448,7 +448,7 @@ static int rpc_call_connect(int stack_id, int fd, const struct sockaddr *addr, s
 
     if (ret < 0 && errno == EINPROGRESS) {
         struct lwip_sock *sock = lwip_get_socket(fd);
-        if (sock_event_wait(sock, NETCONN_EVT_SENDPLUS, netconn_is_nonblocking(sock->conn))) {
+        if (sock_event_wait(sock, NETCONN_EVT_SENDPLUS, false)) {
             ret = 0;
         }
     }
@@ -585,7 +585,7 @@ static int stack_broadcast_accept4(int fd, struct sockaddr *addr, socklen_t *add
 
     min_sock = get_min_accept_sock(fd);
     if (min_sock == NULL) {
-        if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, netconn_is_nonblocking(sock->conn) || (flags & SOCK_NONBLOCK))) {
+        if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, flags & SOCK_NONBLOCK)) {
             min_sock = get_min_accept_sock(fd);
         }
     }
@@ -764,7 +764,7 @@ static int rtc_connect(int s, const struct sockaddr *name, socklen_t namelen)
     ret = lwip_connect(s, name, namelen);
     if (ret < 0 && errno == EINPROGRESS) {
         struct lwip_sock *sock = lwip_get_socket(s);
-        if (sock_event_wait(sock, NETCONN_EVT_SENDPLUS, netconn_is_nonblocking(sock->conn))) {
+        if (sock_event_wait(sock, NETCONN_EVT_SENDPLUS, false)) {
             ret = 0;
         }
     }
@@ -782,7 +782,7 @@ static int rtc_accept4(int s, struct sockaddr *addr, socklen_t *addrlen, int fla
 
     ret = lwip_accept4(s, addr, addrlen, flags);
     if (ret < 0 && errno == EWOULDBLOCK) {
-        if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, netconn_is_nonblocking(sock->conn) || (flags & SOCK_NONBLOCK))) {
+        if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, flags & SOCK_NONBLOCK)) {
             ret = lwip_accept4(s, addr, addrlen, flags);
         }
     }

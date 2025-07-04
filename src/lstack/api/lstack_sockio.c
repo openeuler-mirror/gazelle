@@ -359,7 +359,7 @@ static ssize_t stack_udp_write(struct lwip_sock *sock, const void *data, size_t 
         mr->app_free_count = mr->ops->free_count(mr);
         if (unlikely(mr->app_free_count < 1)) {
             API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
-            set_errno(EWOULDBLOCK);
+            set_errno(ENOBUFS);
             return -1;
         }
     }
@@ -370,7 +370,10 @@ static ssize_t stack_udp_write(struct lwip_sock *sock, const void *data, size_t 
         copied_total = stack_udp_write_bulk(sock, mr, data, len, flags, to, tolen);
     }
 
-    return copied_total > 0 ? copied_total : -1;
+    if (likely(copied_total > 0))
+        return copied_total;
+    API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
+    return -1;
 }
 
 static ssize_t stack_udp_output(struct netconn *conn, bool *output_again, struct mem_thread *mt)
@@ -676,7 +679,7 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
         mr->app_free_count = mr->ops->free_count(mr);
         if (unlikely(mr->app_free_count < 2)) {
             API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
-            set_errno(EWOULDBLOCK);
+            set_errno(ENOBUFS);
             return -1;
         }
     }
@@ -709,6 +712,8 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
     }
 
 out:
+    if (unlikely(total_copy_len > 0))
+        API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
     return copied_total > 0 ? copied_total : -1;
 }
 
@@ -1058,11 +1063,6 @@ static ssize_t rtc_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
     }
 
     total_copy_len = LWIP_MIN((uint32_t)len, (uint32_t)pcb->snd_buf);
-    if (unlikely(total_copy_len == 0)) {
-        API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
-        set_errno(EWOULDBLOCK);
-        return -1;
-    }
 
     while (total_copy_len > 0) {
         if (total_copy_len <= TCP_SND_SIZE_MAX) {
@@ -1074,14 +1074,23 @@ static ssize_t rtc_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
 
         err = tcp_write(pcb, data + copied_total, buf_copy_len, write_flags | write_more);
         if (err != ERR_OK) {
-            LSTACK_LOG(ERR, LSTACK, "tcp_write failed, errno %d\n", err_to_errno(err));
             break;
         }
         total_copy_len -= buf_copy_len;
         copied_total += buf_copy_len;
     }
 
-    if (copied_total > 0) {
+    /* if OK or memory error, check available space */
+    if (err == ERR_OK || err == ERR_MEM) {
+        if (!lwip_tcp_allow_send(sock->conn->pcb.tcp)) {
+            API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
+            err = ERR_BUF;
+        } else if (total_copy_len > 0) {
+            API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
+        }
+    }
+
+    if (likely(copied_total > 0)) {
         return copied_total;
     }
     set_errno(err_to_errno(err));
@@ -1120,7 +1129,7 @@ ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
         /* TODO: support MSG_WAITALL */
         recvd = ioops.stack_tcp_read(sock, mem, len, flags, from, fromlen);
         if (recvd < 0 && errno == EWOULDBLOCK) {
-            if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, netconn_is_nonblocking(sock->conn) || (flags & MSG_DONTWAIT))) {
+            if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, flags & MSG_DONTWAIT)) {
                 recvd = ioops.stack_tcp_read(sock, mem, len, flags, from, fromlen);
             }
         }
@@ -1140,7 +1149,7 @@ ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
         msg.msg_namelen = (fromlen ? *fromlen : 0);
         recvd = ioops.stack_udp_readmsg(sock, &msg, len, flags);
         if (recvd < 0 && errno == EWOULDBLOCK) {
-            if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, netconn_is_nonblocking(sock->conn) || (flags & MSG_DONTWAIT))) {
+            if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, flags & MSG_DONTWAIT)) {
                 recvd = ioops.stack_udp_readmsg(sock, &msg, len, flags);
             }
         }
@@ -1186,7 +1195,7 @@ ssize_t sockio_recvmsg(int fd, struct msghdr *msg, int flags)
     case NETCONN_UDP:
         recvd = ioops.stack_udp_readmsg(sock, msg, len, flags);
         if (recvd < 0 && errno == EWOULDBLOCK) {
-            if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, netconn_is_nonblocking(sock->conn) || (flags & MSG_DONTWAIT))) {
+            if (sock_event_wait(sock, NETCONN_EVT_RCVPLUS, flags & MSG_DONTWAIT)) {
                 recvd = ioops.stack_udp_readmsg(sock, msg, len, flags);
             }
         }
@@ -1220,22 +1229,24 @@ ssize_t sockio_sendto(int fd, const void *mem, size_t len, int flags,
 
     switch (NETCONN_TYPE(sock->conn)) {
     case NETCONN_TCP:
-        ret = ioops.stack_tcp_write(sock, mem, len, flags);
-        if (ret < 0) {
-            if (errno == EWOULDBLOCK) {
-                sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
-            }
-        } else {
+        do {
+            ret = ioops.stack_tcp_write(sock, mem, len, flags);
+            if (likely(ret > 0) || errno != ENOBUFS)
+                break;
+            sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
+        } while (true);
+        if (ret > 0) {
             ioops.stack_tcp_send(sock);
         }
         break;
     case NETCONN_UDP:
-        ret = ioops.stack_udp_write(sock, mem, len, flags, to, tolen);
-        if (ret < 0) {
-            if (errno == EWOULDBLOCK) {
-                sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
-            }
-        } else {
+        do {
+            ret = ioops.stack_udp_write(sock, mem, len, flags, to, tolen);
+            if (likely(ret > 0) || errno != ENOBUFS)
+                break;
+            sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
+        } while (true);
+        if (ret > 0) {
             ioops.stack_udp_send(sock);
         }
         break;
@@ -1271,11 +1282,15 @@ ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
             if (i == msg->msg_iovlen - 1) {
                 write_more = 0;
             }
-            ret = ioops.stack_tcp_write(sock, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags | write_more);
+            do {
+                ret = ioops.stack_tcp_write(sock, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags | write_more);
+                if (likely(ret > 0) || errno != ENOBUFS)
+                    break;
+                if (written > 0)
+                    ioops.stack_tcp_send(sock);
+                sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
+            } while (true);
             if (ret < 0) {
-                if (errno == EWOULDBLOCK) {
-                    sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
-                }
                 break;
             }
             written += ret;
@@ -1289,11 +1304,13 @@ ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
             if (i == msg->msg_iovlen - 1) {
                 write_more = 0;
             }
-            ret = ioops.stack_udp_write(sock, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags | write_more, NULL, 0);
+            do {
+                ret = ioops.stack_udp_write(sock, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags | write_more, NULL, 0);
+                if (likely(ret > 0) || errno != ENOBUFS)
+                    break;
+                sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
+            } while (true);
             if (ret < 0) {
-                if (errno == EWOULDBLOCK) {
-                    sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
-                }
                 break;
             }
             written += ret;
