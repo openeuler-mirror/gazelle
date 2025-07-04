@@ -27,7 +27,7 @@
 #define MEM_THREAD_MAX_PATH             32  /* cat /proc/sys/kernel/pid_max */
 #define MEM_THREAD_FLUSH_SIG            (SIGRTMIN + 11)
 #define MEM_THREAD_MANAGER_FLUSH_MS     100
-#define MEM_THREAD_MANAGER_FREE_S       2
+#define MEM_THREAD_MANAGER_FREE_S       20
 #define MEM_THREAD_MANAGER_FREE_MAX     64
 
 struct mem_thread_manager {
