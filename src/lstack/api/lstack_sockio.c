@@ -964,26 +964,13 @@ static void callback_tcp_send(struct rpc_msg *sendmsg)
     struct protocol_stack *stack = get_protocol_stack();
     struct lwip_sock *sock = sendmsg->args[MSG_ARG_0].p;
     struct mem_thread *mt = sendmsg->args[MSG_ARG_1].p;
+    const struct tcp_pcb *pcb = sock->conn->pcb.tcp;
+    const struct mbox_ring *mr = &sock->conn->sendmbox->mring;
     bool output_again;
     err_t err;
 
-    if (unlikely(sock->conn->pcb.tcp == NULL))
+    if (unlikely(pcb == NULL))
         return;
-
-    if (get_protocol_stack_group()->latency_start)
-        calculate_sock_latency(sock, GAZELLE_LATENCY_WRITE_RPC_MSG);
-
-    do {
-        if (!lwip_tcp_allow_send(sock->conn->pcb.tcp)) {
-            rpc_async_call(&stack->rpc_queue, sendmsg, RPC_MSG_REUSE | RPC_MSG_RECALL);
-            break;
-        }
-        sendmsg->result += rtw_stack_tcp_output(sock->conn, &output_again, mt);
-    } while (output_again);
-    err = tcp_output(sock->conn->pcb.tcp);
-    if (unlikely(err != ERR_OK)) {
-        LSTACK_LOG(ERR, LSTACK, "tcp_output failed, sock %p, err %u\n", sock, err);
-    }
 
 #if GAZELLE_TCP_ASYNC_RECVD
     struct rpc_msg *recvmsg;
@@ -993,6 +980,30 @@ static void callback_tcp_send(struct rpc_msg *sendmsg)
         callback_tcp_recvd(recvmsg);
     }
 #endif /* GAZELLE_TCP_ASYNC_RECVD */
+
+    /* If LWIP_MIN(snd_wnd, cwnd) limit output. */
+    if (pcb->unsent != NULL && pcb->unacked != NULL) {
+        rpc_async_call(&stack->rpc_queue, sendmsg, RPC_MSG_REUSE | RPC_MSG_RECALL);
+        return;
+    }
+
+    if (get_protocol_stack_group()->latency_start)
+        calculate_sock_latency(sock, GAZELLE_LATENCY_WRITE_RPC_MSG);
+
+    sendmsg->result = 0;
+    do {
+        /* Not output too many bufs at once. */
+        if (sendmsg->result >= mr->ops->get_capacity(mr) || !lwip_tcp_allow_send(sock->conn->pcb.tcp)) {
+            rpc_async_call(&stack->rpc_queue, sendmsg, RPC_MSG_REUSE | RPC_MSG_RECALL);
+            break;
+        }
+        sendmsg->result += rtw_stack_tcp_output(sock->conn, &output_again, mt);
+    } while (output_again);
+
+    err = tcp_output(sock->conn->pcb.tcp);
+    if (unlikely(err != ERR_OK)) {
+        LSTACK_LOG(ERR, LSTACK, "tcp_output failed, sock %p, err %u\n", sock, err);
+    }
 
     return;
 }
