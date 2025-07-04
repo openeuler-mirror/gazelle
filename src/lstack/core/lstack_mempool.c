@@ -45,8 +45,9 @@ struct mem_thread_group {
     struct list_node mt_node;
     struct mem_thread mt_array[PROTOCOL_STACK_MAX];
 
-    bool used_flag;
     uint32_t used_time;
+    bool used_flag;
+    bool siged_flag;
 };
 
 static struct mem_stack g_mem_stack_group[PROTOCOL_STACK_MAX] = {0};
@@ -106,6 +107,15 @@ static inline void mem_thread_group_done(void)
     g_mem_thread_group->used_flag = false;
 }
 
+bool mem_thread_ignore_flush_intr(void)
+{
+    if (likely(g_mem_thread_group != NULL) && g_mem_thread_group->siged_flag) {
+        g_mem_thread_group->siged_flag = false;
+        return true;
+    }
+    return false;
+}
+
 static void mem_thread_cache_flush(struct mem_thread *mt);
 static unsigned mem_thread_cache_count(const struct mem_thread *mt);
 static void mem_thread_group_action_flush(int signum)
@@ -115,6 +125,9 @@ static void mem_thread_group_action_flush(int signum)
 
     if (g_mem_thread_group == NULL)
         return;
+
+    g_mem_thread_group->siged_flag = true;
+
     if (mem_thread_group_in_used(g_mem_thread_group, MEM_THREAD_MANAGER_FLUSH_MS))
         return;
 

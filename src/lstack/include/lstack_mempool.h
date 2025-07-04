@@ -300,6 +300,7 @@ int mem_stack_pool_init(int stack_id, unsigned numa_id);
 int mem_stack_mpcache_init(int stack_id, unsigned cpu_id);
 
 int mem_thread_manager_init(void);
+bool mem_thread_ignore_flush_intr(void);
 void mem_thread_cache_free(struct mem_thread *mt);
 int mem_thread_cache_init(struct mem_thread *mt, int stack_id);
 

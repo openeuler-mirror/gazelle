@@ -28,6 +28,7 @@
 #include "lstack_cfg.h"
 #include "lstack_log.h"
 #include "lstack_protocol_stack.h"
+#include "lstack_mempool.h"
 
 #define POLL_MAX_EVENTS         32
 
@@ -36,20 +37,29 @@ static PER_THREAD struct sock_wait *g_sk_wait = NULL;
 
 static int rtc_sock_wait_timedwait(struct sock_wait *sk_wait, int timeout, uint32_t start)
 {
+    mem_thread_ignore_flush_intr();
+
     stack_polling(0);
 
     if (timeout > 0 && timeout <= (int)(sys_now() - start)) {
         timeout = 0;
     } else if (timeout < 0) {
-        errno = 0;
+        if (errno != EINTR || mem_thread_ignore_flush_intr()) {
+            errno = 0;
+        }
     }
     return timeout;
 }
 
 static int rtw_sock_wait_timedwait(struct sock_wait *sk_wait, int timeout, uint32_t start)
 {
+    int ret;
     /* when sem interrupted by signals, errno = EINTR */
-    return sys_sem_wait_internal(&sk_wait->sem, timeout);
+    mem_thread_ignore_flush_intr();
+    do {
+        ret = sys_sem_wait_internal(&sk_wait->sem, timeout);
+    } while (ret < 0 && errno == EINTR && mem_thread_ignore_flush_intr());
+    return ret;
 }
 
 static void rtc_epoll_notify_event(struct sock_wait *sk_wait, struct sock_event *sk_event, 
