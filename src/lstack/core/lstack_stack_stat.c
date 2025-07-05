@@ -26,29 +26,15 @@
 #include "common/gazelle_dfx_msg.h"
 #include "lstack_thread_rpc.h"
 #include "lstack_protocol_stack.h"
-#include "lstack_epoll.h"
 #include "lstack_dpdk.h"
 #include "lstack_stack_stat.h"
 #include "lstack_virtio.h"
-#include "lstack_dump.h"
+#include "lstack_wait.h"
+#include "lstack_mempool.h"
 
-void time_stamp_transfer_pbuf(struct pbuf *pbuf_old, struct pbuf *pbuf_new)
+void time_stamp_into_write(struct pbuf *pbufs[], uint32_t num)
 {
-    if (!get_protocol_stack_group()->latency_start) {
-        return;
-    }
-    struct latency_timestamp *lt_old;
-    struct latency_timestamp *lt_new;
-
-    lt_old = &pbuf_to_private(pbuf_old)->lt;
-    lt_new = &pbuf_to_private(pbuf_new)->lt;
-
-    lt_new->stamp = lt_old->stamp;
-    lt_new->check = lt_old->check;
-    lt_new->type = lt_old->type;
-    for (int i = 0; i < GAZELLE_LATENCY_MAX; i++) {
-        lt_new->stamp_seg[i] = lt_old->stamp_seg[i];
-    }
+    time_stamp_into_pbuf(num, pbufs, sys_now_us());
 }
 
 void time_stamp_into_rpcmsg(struct lwip_sock *sock)
@@ -56,27 +42,29 @@ void time_stamp_into_rpcmsg(struct lwip_sock *sock)
     sock->stamp.rpc_time_stamp = sys_now_us();
 }
 
-void time_stamp_into_recvmbox(struct lwip_sock *sock)
+static void time_stamp_into_recvmbox(struct lwip_sock *sock)
 {
     sock->stamp.mbox_time_stamp = sys_now_us();
 }
 
 void time_stamp_record(int fd, struct pbuf *pbuf)
 {
-    struct lwip_sock *sock = lwip_get_socket(fd);
-
-    if (get_protocol_stack_group()->latency_start && sock && sock->stack && pbuf) {
-        calculate_lstack_latency(&sock->stack->latency, pbuf, GAZELLE_LATENCY_INTO_MBOX, 0);
-        time_stamp_into_recvmbox(sock);
+    if (get_protocol_stack_group()->latency_start && pbuf) {
+        struct lwip_sock *sock = lwip_get_socket(fd);
+        if (sock != NULL) {
+            calculate_sock_latency(sock, GAZELLE_LATENCY_RECVMBOX_READY);
+            calculate_lstack_latency(sock->stack_id, &pbuf, 1, GAZELLE_LATENCY_INTO_MBOX, 0);
+            time_stamp_into_recvmbox(sock);
+        }
     }
 }
 
-void calculate_sock_latency(struct gazelle_stack_latency *stack_latency, struct lwip_sock *sock,
-    enum GAZELLE_LATENCY_TYPE type)
+void calculate_sock_latency(struct lwip_sock *sock, enum GAZELLE_LATENCY_TYPE type)
 {
     uint64_t latency;
     uint64_t stamp;
     struct stack_latency *latency_stat;
+    struct protocol_stack *stack;
 
     if (type == GAZELLE_LATENCY_WRITE_RPC_MSG) {
         stamp = sock->stamp.rpc_time_stamp;
@@ -86,12 +74,13 @@ void calculate_sock_latency(struct gazelle_stack_latency *stack_latency, struct 
         return;
     }
 
-    if (stamp < stack_latency->start_time) {
+    stack = get_protocol_stack();
+    if (stamp < stack->latency.start_time) {
         return;
     }
 
     latency = sys_now_us() - stamp;
-    latency_stat = &stack_latency->latency[type];
+    latency_stat = &stack->latency.latency[type];
 
     latency_stat->latency_total += latency;
     latency_stat->latency_max = (latency_stat->latency_max > latency) ? latency_stat->latency_max : latency;
@@ -111,47 +100,54 @@ void calculate_latency_stat(struct gazelle_stack_latency *stack_latency, uint64_
     latency_stat->latency_pkts++;
 }
 
-void calculate_lstack_latency(struct gazelle_stack_latency *stack_latency, const struct pbuf *pbuf,
+void calculate_lstack_latency(int stack_id, struct pbuf *const *pbufs, uint32_t num, 
     enum GAZELLE_LATENCY_TYPE type, uint64_t time_record)
 {
     uint64_t latency;
     uint16_t lt_type;
     struct latency_timestamp *lt;
+    struct gazelle_stack_latency *stack_latency;
+    struct protocol_stack *stack;
 
-    if (pbuf == NULL || type >= GAZELLE_LATENCY_MAX) {
+    stack = get_protocol_stack_by_id(stack_id);
+    if (stack == NULL)
         return;
-    }
-
-    lt = &pbuf_to_private(pbuf)->lt;
-    if (lt == NULL) {
-        return;
-    }
-
+    stack_latency = &stack->latency;
     lt_type = (type / GAZELLE_LATENCY_READ_MAX) ? GAZELLE_LATENCY_WR : GAZELLE_LATENCY_RD;
-    if (lt->stamp != ~(lt->check) || lt->stamp < stack_latency->start_time || lt_type != lt->type) {
-        return;
-    }
 
-    if (time_record == 0) {
-        lt->stamp_seg[type] = sys_now_us() - lt->stamp;
-    } else {
-        lt->stamp_seg[type] = time_record > (lt->stamp_seg[type - 1] + lt->stamp) ?
-            (time_record - lt->stamp) : lt->stamp_seg[type - 1];
-    }
+    for (uint32_t i = 0; i < num; ++i) {
+        if (pbufs[i] == NULL) {
+            continue;
+        }
+        lt = &pbuf_to_private(pbufs[i])->lt;
 
-    latency = lt->stamp_seg[type];
-    if (((lt_type == GAZELLE_LATENCY_RD && type > GAZELLE_LATENCY_READ_LWIP) ||
-        (lt_type == GAZELLE_LATENCY_WR && type > GAZELLE_LATENCY_WRITE_INTO_RING)) &&
-        latency >= lt->stamp_seg[type - 1]) {
-        latency -= lt->stamp_seg[type - 1];
-    }
+        if (lt->stamp != ~(lt->check) || 
+            lt->stamp < stack_latency->start_time || 
+            lt_type != lt->type) {
+            continue;
+        }
 
-    /* calculate the time of the entire read/write process */
-    if (type == GAZELLE_LATENCY_READ_MAX - 1 || type == GAZELLE_LATENCY_WRITE_MAX - 1) {
-        calculate_latency_stat(stack_latency, lt->stamp_seg[type], type + 1);
-    }
+        if (time_record == 0) {
+            lt->stamp_seg[type] = sys_now_us() - lt->stamp;
+        } else {
+            lt->stamp_seg[type] = time_record > (lt->stamp_seg[type - 1] + lt->stamp) ?
+                (time_record - lt->stamp) : lt->stamp_seg[type - 1];
+        }
 
-    calculate_latency_stat(stack_latency, latency, type);
+        latency = lt->stamp_seg[type];
+        if (((lt_type == GAZELLE_LATENCY_RD && type > GAZELLE_LATENCY_INTO_MBOX) ||
+            (lt_type == GAZELLE_LATENCY_WR && type > GAZELLE_LATENCY_WRITE_INTO_RING)) &&
+            latency >= lt->stamp_seg[type - 1]) {
+            latency -= lt->stamp_seg[type - 1];
+        }
+
+        /* calculate the time of the entire read/write process */
+        if (type == GAZELLE_LATENCY_READ_MAX - 1 || type == GAZELLE_LATENCY_WRITE_MAX - 1) {
+            calculate_latency_stat(stack_latency, lt->stamp_seg[type], type + 1);
+        }
+
+        calculate_latency_stat(stack_latency, latency, type);
+    }
 }
 
 void lstack_calculate_aggregate(int type, uint32_t len)
@@ -209,29 +205,6 @@ static void set_latency_start_flag(bool start)
     }
 }
 
-static void get_wakeup_stat(struct protocol_stack_group *stack_group, struct protocol_stack *stack,
-    struct gazelle_wakeup_stat *stat)
-{
-    struct list_node *node, *temp;
-
-    pthread_spin_lock(&stack_group->poll_list_lock);
-
-    list_for_each_node(node, temp, &stack_group->poll_list) {
-        struct wakeup_poll *wakeup = list_entry(node, struct wakeup_poll, poll_list);
-
-        if (wakeup->bind_stack == stack) {
-            stat->kernel_events += wakeup->stat.kernel_events;
-            stat->app_events += wakeup->stat.app_events;
-            stat->read_null += wakeup->stat.read_null;
-            stat->app_write_cnt += wakeup->stat.app_write_cnt;
-            stat->app_write_rpc += wakeup->stat.app_write_rpc;
-            stat->app_read_cnt += wakeup->stat.app_read_cnt;
-        }
-    }
-
-    pthread_spin_unlock(&stack_group->poll_list_lock);
-}
-
 void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_info)
 {
     struct cfg_params *cfg = get_global_cfg_params();
@@ -244,12 +217,12 @@ void lstack_get_low_power_info(struct gazelle_stat_low_power_info *low_power_inf
 
 static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack)
 {
-    struct protocol_stack_group *stack_group = get_protocol_stack_group();
-
     dfx->loglevel = rte_log_get_level(RTE_LOGTYPE_LSTACK);
 
     lstack_get_low_power_info(&dfx->low_power_info);
 
+    stack->stats.conn_num = stack->conn_num;
+    stack->stats.mbuf_pool_cnt = mem_stack_mbuf_pool_count(stack->stack_idx);
     int32_t ret = memcpy_s(&dfx->data.pkts.stack_stat, sizeof(struct gazelle_stack_stat),
         &stack->stats, sizeof(struct gazelle_stack_stat));
     if (ret != EOK) {
@@ -257,22 +230,10 @@ static void get_stack_stats(struct gazelle_stack_dfx_data *dfx, struct protocol_
         return;
     }
 
-    get_wakeup_stat(stack_group, stack, &dfx->data.pkts.wakeup_stat);
+    sock_wait_group_stat(stack->stack_idx, &dfx->data.pkts.wakeup_stat);
+    rpc_get_stat(&stack->rpc_queue, &dfx->data.pkts.rpc_stat);
 
-    dfx->data.pkts.call_alloc_fail = rpc_stats_get()->call_alloc_fail;
-
-    int32_t rpc_call_result = rpc_msgcnt(&stack->rpc_queue);
-    dfx->data.pkts.call_msg_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
-
-    if (stack_get_state(stack) == RUNNING) {
-        rpc_call_result = rpc_call_mbufpoolsize(&stack->dfx_rpc_queue);
-        dfx->data.pkts.mbufpool_avail_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
-
-        rpc_call_result = rpc_call_recvlistcnt(&stack->dfx_rpc_queue);
-        dfx->data.pkts.recv_list_cnt = (rpc_call_result < 0) ? 0 : rpc_call_result;
-    }
-
-    dfx->data.pkts.conn_num = stack->conn_num;
+    return;
 }
 
 static void get_stack_dfx_data_proto(struct gazelle_stack_dfx_data *dfx, struct protocol_stack *stack,
@@ -347,13 +308,12 @@ static void get_stack_dfx_data(struct gazelle_stack_dfx_data *dfx, struct protoc
             break;
         case GAZELLE_STAT_LSTACK_SHOW_CONN:
             if (stack_get_state(stack) == RUNNING) {
-                rpc_call_result = rpc_call_conntable(&stack->dfx_rpc_queue, dfx->data.conn.conn_list,
+                rpc_call_result = rpc_call_conntable(stack->stack_idx, dfx->data.conn.conn_list,
                                                      GAZELLE_LSTACK_MAX_CONN);
                 dfx->data.conn.conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
-                rpc_call_result = rpc_call_connnum(&stack->dfx_rpc_queue);
+                rpc_call_result = rpc_call_connnum(stack->stack_idx);
                 dfx->data.conn.total_conn_num = (rpc_call_result < 0) ? 0 : rpc_call_result;
             }
-
             break;
         case GAZELLE_STAT_LSTACK_SHOW_LATENCY:
             ret = memcpy_s(&dfx->data.latency, sizeof(dfx->data.latency), &stack->latency, sizeof(stack->latency));

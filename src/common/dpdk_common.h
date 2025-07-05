@@ -38,10 +38,11 @@ struct latency_timestamp {
         uint16_t type;  // latency type
 };
 struct mbuf_private {
-    /* struct pbuf_custom must at first */
+    /* struct pbuf_custom must at first. do not copy in copy_mbuf_private() !!! */
     struct pbuf_custom pc;
-    /* don't use `struct tcp_seg` directly to avoid conflicts by include lwip tcp header */
-    char ts[32]; // 32 > sizeof(struct tcp_seg)
+    /* the stack to which buf belongs. do not copy in copy_mbuf_private() !!! */
+    int stack_id;
+
     struct latency_timestamp lt;
 };
 
@@ -49,24 +50,25 @@ static __rte_always_inline struct mbuf_private *mbuf_to_private(const struct rte
 {
     return (struct mbuf_private *)RTE_PTR_ADD(m, sizeof(struct rte_mbuf));
 }
-static __rte_always_inline struct pbuf_custom *mbuf_to_pbuf(const struct rte_mbuf *m)
+static __rte_always_inline struct pbuf *mbuf_to_pbuf(const struct rte_mbuf *m)
 {
-    return &mbuf_to_private(m)->pc;
-}
-static __rte_always_inline struct rte_mbuf *pbuf_to_mbuf(const struct pbuf *p)
-{
-    return (struct rte_mbuf *)RTE_PTR_SUB(p, sizeof(struct rte_mbuf));
+    return &mbuf_to_private(m)->pc.pbuf;
 }
 static __rte_always_inline struct mbuf_private *pbuf_to_private(const struct pbuf *p)
 {
     return mbuf_to_private(pbuf_to_mbuf(p));
 }
 
+static __rte_always_inline void copy_mbuf_private(struct mbuf_private *dst, const struct mbuf_private *src)
+{
+    rte_memcpy(&dst->lt, &src->lt, sizeof(struct latency_timestamp));
+}
+
 /* NOTE!!! magic code, even the order.
 *  I wrote it carefully, and check the assembly. for example, there is 24 ins in A72,
 *  and if there is no cache miss, it only take less than 20 cycle(store pipe is the bottleneck).
 */
-static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf *src)
+static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, const struct rte_mbuf *src)
 {
     /* In the direction of tx, data is copied from lstack to ltran. It is necessary to judge whether
        the length of data transmitted from lstack has been tampered with to prevent overflow
@@ -84,10 +86,7 @@ static __rte_always_inline void copy_mbuf(struct rte_mbuf *dst, struct rte_mbuf 
     uint8_t *src_data = rte_pktmbuf_mtod(src, void*);
     rte_memcpy(dst_data, src_data, data_len);
 
-    // copy private date.
-    dst_data = (uint8_t *)mbuf_to_private(dst);
-    src_data = (uint8_t *)mbuf_to_private(src);
-    rte_memcpy(dst_data, src_data, sizeof(struct mbuf_private));
+    copy_mbuf_private(mbuf_to_private(dst), mbuf_to_private(src));
 }
 
 static __rte_always_inline void time_stamp_into_mbuf(uint32_t rx_count, struct rte_mbuf *buf[], uint64_t time_stamp)
@@ -125,49 +124,6 @@ void eth_params_checksum(struct rte_eth_conf *conf, struct rte_eth_dev_info *dev
 
 /*
     gazelle custom rte ring interface
-    lightweight ring reduce atomic and smp_mb.
-    only surpport single-consumers or the single-consumer.
- */
-static __rte_always_inline uint32_t gazelle_light_ring_enqueue_busrt(struct rte_ring *r, void **obj_table, uint32_t n)
-{
-    uint32_t cons = __atomic_load_n(&r->cons.tail, __ATOMIC_ACQUIRE);
-    uint32_t prod = r->prod.tail;
-    uint32_t free_entries = r->capacity + cons - prod;
-
-    if (n > free_entries) {
-        return 0;
-    }
-
-    __rte_ring_enqueue_elems(r, prod, obj_table, sizeof(void *), n);
-
-    __atomic_store_n(&r->prod.tail, prod + n, __ATOMIC_RELEASE);
-
-    return n;
-}
-
-static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_ring *r, void **obj_table, uint32_t n)
-{
-    uint32_t prod = __atomic_load_n(&r->prod.tail, __ATOMIC_ACQUIRE);
-    uint32_t cons = r->cons.tail;
-    uint32_t entries = prod - cons;
-
-    if (n > entries) {
-        n = entries;
-    }
-
-    if (n == 0) {
-        return 0;
-    }
-
-    __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
-
-    __atomic_store_n(&r->cons.tail, cons + n, __ATOMIC_RELEASE);
-
-    return n;
-}
-
-/*
-    gazelle custom rte ring interface
     one thread enqueue and dequeue, other thread read object use and object still in queue.
     so malloc and free in same thread. only surpport single-consumers or the single-consumer.
 
@@ -177,15 +133,16 @@ static __rte_always_inline uint32_t gazelle_light_ring_dequeue_burst(struct rte_
     gazelle_ring_read:       prod.head-->> cons.head, read object, prod.head = prod.tail + N
     gazelle_ring_read_over:  prod.tail  =  prod.head, update prod.tail
  */
-static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void **obj_table, uint32_t n)
+static __rte_always_inline uint32_t gazelle_ring_sp_enqueue(struct rte_ring *r, void *const *obj_table, uint32_t n)
 {
     uint32_t head = __atomic_load_n(&r->cons.head, __ATOMIC_ACQUIRE);
     uint32_t tail = r->cons.tail;
 
-    uint32_t entries = r->capacity + tail - head;
-    if (n > entries) {
+    uint32_t free_entries = r->capacity + tail - head;
+    if (unlikely(free_entries == 0))
         return 0;
-    }
+    if (n > free_entries)
+        n = free_entries;
 
     __rte_ring_enqueue_elems(r, head, obj_table, sizeof(void *), n);
 
@@ -200,12 +157,10 @@ static __rte_always_inline uint32_t gazelle_ring_sc_dequeue(struct rte_ring *r, 
     uint32_t cons = r->cons.tail;
 
     uint32_t entries = prod - cons;
-    if (n > entries) {
-        n = entries;
-    }
-    if (unlikely(n == 0)) {
+    if (unlikely(entries == 0))
         return 0;
-    }
+    if (n > entries)
+        n = entries;
 
     __rte_ring_dequeue_elems(r, cons, obj_table, sizeof(void *), n);
 

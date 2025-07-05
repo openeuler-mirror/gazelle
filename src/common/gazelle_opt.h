@@ -23,6 +23,9 @@
 #define GAZELLE_TRUE     1
 #define GAZELLE_FALSE    0
 
+#define CPUS_MAX_NUM            640
+#define GAZELLE_MAX_NUMA_NODES  8
+
 #define PROTOCOL_STACK_MAX          32
 #define KERNEL_EPOLL_MAX            512
 
@@ -41,7 +44,7 @@
 #define VDEV_IDLE_QUEUE_SZ          DEFAULT_RING_SIZE
 
 #define VDEV_TX_QUEUE_SZ            DEFAULT_RING_SIZE
-#define FREE_RX_QUEUE_SZ            DPDK_PKT_BURST_SIZE
+#define FREE_RX_QUEUE_SZ            DEFAULT_RING_SIZE
 
 #define NIC_QUEUE_SIZE_MAX          8192
 #define NIC_QUEUE_SIZE_MIN          512
@@ -53,14 +56,6 @@
 #define STACK_THREAD_DEFAULT        4
 #define STACK_NIC_READ_DEFAULT      128
 
-#define MTU_DEFAULT_DATA_LEN        1460
-#define VLAN_HEAD_LEN               4
-#define IPV6_EXTRA_HEAD_LEN         20
-#define MBUF_MAX_DATA_LEN           (MTU_DEFAULT_DATA_LEN - VLAN_HEAD_LEN - IPV6_EXTRA_HEAD_LEN)
-
-#define DPDK_PKT_BURST_SIZE         512
-
-#define GAZELLE_UDP_PKGLEN_MAX      (65535 - IP_HLEN - UDP_HLEN)
 
 /* total:33 client, index 32 is invaild client */
 #define GAZELLE_CLIENT_NUM_ALL      33
@@ -108,8 +103,5 @@
 #define LSTACK_THREAD_NAME      "gazellelstack"
 
 #define SLEEP_US_BEFORE_LINK_UP 10000
-
-#define CPUS_MAX_NUM            640
-#define GAZELLE_MAX_NUMA_NODES  8
 
 #endif /* _GAZELLE_OPT_H_ */

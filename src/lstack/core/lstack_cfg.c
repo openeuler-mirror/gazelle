@@ -14,6 +14,7 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <sys/socket.h>
 #include <inttypes.h>
 #include <securec.h>
 #include <string.h>
@@ -28,15 +29,14 @@
 #include <netpacket/packet.h>
 
 #include <rte_eth_bond.h>
-#include <rte_eal.h>
-#include <rte_lcore.h>
-#include <lwip/lwipgz_sock.h>
+#include <lwip/arch/sys_arch.h>
 
 #include "common/gazelle_reg_msg.h"
 #include "common/gazelle_base_func.h"
 #include "lstack_log.h"
 #include "lstack_dpdk.h"
 #include "lstack_cfg.h"
+#include "lstack_mempool.h"
 
 #define DEFAULT_CONF_FILE    "/etc/gazelle/lstack.conf"
 #define LSTACK_CONF_ENV      "LSTACK_CONF_PATH"
@@ -65,13 +65,10 @@ static int32_t parse_kni_switch(void);
 static int32_t parse_listen_shadow(void);
 static int32_t parse_main_thread_affinity(void);
 static int32_t parse_unix_prefix(void);
-static int32_t parse_read_connect_number(void);
 static int32_t parse_rpc_number(void);
 static int32_t parse_nic_read_number(void);
 static int32_t parse_tcp_conn_count(void);
 static int32_t parse_mbuf_count_per_conn(void);
-static int32_t parse_send_ring_size(void);
-static int32_t parse_recv_ring_size(void);
 static int32_t parse_num_process(void);
 static int32_t parse_process_numa(void);
 static int32_t parse_process_index(void);
@@ -86,6 +83,8 @@ static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
 static int32_t parse_rpc_msg_max(void);
+static int32_t parse_mem_cache_num(void);
+static int32_t parse_mem_async_mode(void);
 static int32_t parse_send_cache_mode(void);
 static int32_t parse_flow_bifurcation(void);
 static int32_t parse_stack_interrupt(void);
@@ -123,9 +122,8 @@ static struct config_vector_t g_config_tbl[] = {
     { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
     { "nic_txqueue_size", parse_nic_txqueue_size},
-    { "send_ring_size", parse_send_ring_size },
-    { "recv_ring_size", parse_recv_ring_size },
     { "rpc_msg_max", parse_rpc_msg_max },
+    { "mem_cache_num", parse_mem_cache_num },
     { "app_bind_numa",  parse_app_bind_numa },
     { "stack_num",   parse_stack_num },
     { "num_cpus",     parse_stack_cpu_number },
@@ -142,7 +140,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "app_exclude_cpus",   parse_app_exclude_cpus },
     { "main_thread_affinity",  parse_main_thread_affinity },
     { "unix_prefix",    parse_unix_prefix },
-    { "read_connect_number", parse_read_connect_number },
     { "rpc_number", parse_rpc_number },
     { "nic_read_number", parse_nic_read_number },
     { "num_process",  parse_num_process },
@@ -155,6 +152,7 @@ static struct config_vector_t g_config_tbl[] = {
     { "use_sockmap", parse_use_sockmap },
     { "udp_enable", parse_udp_enable },
     { "stack_thread_mode", parse_stack_thread_mode },
+    { "mem_async_mode", parse_mem_async_mode },
     { "nic_vlan_mode", parse_nic_vlan_mode },
     { "send_cache_mode", parse_send_cache_mode },
     { "flow_bifurcation", parse_flow_bifurcation},
@@ -1012,22 +1010,6 @@ static int32_t parse_tcp_conn_count(void)
     return ret;
 }
 
-static int32_t parse_send_ring_size(void)
-{
-    int32_t ret;
-    /* send ring size default value is 32 */
-    PARSE_ARG(g_config_params.send_ring_size, "send_ring_size", 32, 1, SOCK_SEND_RING_SIZE_MAX, ret);
-    return ret;
-}
-
-static int32_t parse_recv_ring_size(void)
-{
-    int32_t ret;
-    /* recv ring size default value is 128 */
-    PARSE_ARG(g_config_params.recv_ring_size, "recv_ring_size", 128, 1, SOCK_RECV_RING_SIZE_MAX, ret);
-    return ret;
-}
-
 static int32_t parse_mbuf_count_per_conn(void)
 {
     int32_t ret;
@@ -1036,13 +1018,6 @@ static int32_t parse_mbuf_count_per_conn(void)
     return ret;
 }
 
-static int32_t parse_read_connect_number(void)
-{
-    int32_t ret;
-    PARSE_ARG(g_config_params.read_connect_number, "read_connect_number",
-              STACK_THREAD_DEFAULT, 1, INT32_MAX, ret);
-    return ret;
-}
 
 static int32_t parse_rpc_number(void)
 {
@@ -1126,6 +1101,16 @@ static int32_t parse_conf_file(const char *path)
     return 0;
 }
 
+static void lwip_conf_init(void)
+{
+    const struct cfg_params *cfg = get_global_cfg_params();
+
+    struct sys_config sys_conf = {
+        .rtc_mode = cfg->stack_mode_rtc,
+    };
+    sys_config_init(&sys_conf);
+}
+
 int32_t cfg_init(void)
 {
     int32_t ret;
@@ -1145,8 +1130,9 @@ int32_t cfg_init(void)
     }
 
     ret = parse_conf_file(config_file);
-
     free(config_file);
+
+    lwip_conf_init();
     return ret;
 }
 
@@ -1443,8 +1429,26 @@ static int32_t parse_nic_vlan_mode(void)
 static int32_t parse_rpc_msg_max(void)
 {
     int32_t ret;
-    PARSE_ARG(g_config_params.rpc_msg_max, "rpc_msg_max", 4096, 1, 8192, ret);
+    PARSE_ARG(g_config_params.rpc_msg_max, "rpc_msg_max", 
+        4096, GAZELLE_RESERVED_CLIENTS, MEMP_NUM_SYS_MBOX + GAZELLE_RESERVED_CLIENTS, ret);
     return ret;
+}
+
+static int32_t parse_mem_cache_num(void)
+{
+    int32_t ret;
+    PARSE_ARG(g_config_params.mem_cache_num, "mem_cache_num", 
+        MEMPOOL_CACHE_NUM, BUF_CACHE_MIN_NUM, BUF_CACHE_MAX_NUM, ret);
+    return ret;
+}
+
+static int32_t parse_mem_async_mode(void)
+{
+    // TODO
+    g_config_params.mem_async_mode = 1;
+    if (g_config_params.stack_mode_rtc || xdp_eth_enabled())
+        g_config_params.mem_async_mode = 0;
+    return 0;
 }
 
 static int32_t parse_send_cache_mode(void)

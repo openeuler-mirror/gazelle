@@ -29,9 +29,6 @@
     return -1; \
 } while (0)
 
-#define NODE_ENTRY(node, type, member) \
-    ((type*)((char*)(node) - (size_t)&((type*)0)->member))
-
 #define MB_IN_BYTES    (1024 * 1024)
 static inline int bytes_to_mb(uint32_t bytes)
 {

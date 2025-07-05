@@ -278,6 +278,8 @@ static int32_t proc_memory_init(const struct reg_response_msg *rsp_msg)
     }
 
     ret = rte_eal_init(lc_argc, lc_argv);
+    /* rte_eal_init() would call __rte_thread_init(), and set _lcore_id. */
+    RTE_PER_LCORE(_lcore_id) = LCORE_ID_ANY;
     if (ret < 0) {
         if (rte_errno == EALREADY)
             LSTACK_PRE_LOG(LSTACK_INFO, "rte_eal_init aleady init ret=%d\n", ret);
@@ -389,7 +391,7 @@ static int32_t reg_conn(enum GAZELLE_TCP_LIST_STATE table_state, enum reg_ring_t
     return 0;
 }
 
-void thread_register_phase1(struct rpc_msg *msg)
+static void thread_register_phase1(struct rpc_msg *msg)
 {
     int32_t ret;
 
@@ -415,7 +417,7 @@ void thread_register_phase1(struct rpc_msg *msg)
     msg->result = ret;
 }
 
-void thread_register_phase2(struct rpc_msg *msg)
+static void thread_register_phase2(struct rpc_msg *msg)
 {
     struct gazelle_stat_lstack_conn *conn = (struct gazelle_stat_lstack_conn *)msg->args[MSG_ARG_0].p;
 
@@ -425,6 +427,28 @@ void thread_register_phase2(struct rpc_msg *msg)
     }
 
     msg->result = ret;
+}
+
+static int rpc_call_thread_regphase1(int stack_id, void *conn)
+{
+    rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, thread_register_phase1);
+    if (msg == NULL) {
+        return -1;
+    }
+    msg->args[MSG_ARG_0].p = conn;
+    return rpc_sync_call(queue, msg);
+}
+
+static int rpc_call_thread_regphase2(int stack_id, void *conn)
+{
+    rpc_queue *queue = &get_protocol_stack_by_id(stack_id)->rpc_queue;
+    struct rpc_msg *msg = rpc_msg_alloc(stack_id, false, thread_register_phase2);
+    if (msg == NULL) {
+        return -1;
+    }
+    msg->args[MSG_ARG_0].p = conn;
+    return rpc_sync_call(queue, msg);
 }
 
 int32_t client_reg_thrd_ring(void)
@@ -625,10 +649,9 @@ static int32_t thread_register(void)
     /* register all connected conn before listen conn, avoid creating new conn */
     struct protocol_stack_group *stack_group = get_protocol_stack_group();
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
-        conn->conn_num = rpc_call_conntable(&stack_group->stacks[i]->rpc_queue,
-                                            conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
+        conn->conn_num = rpc_call_conntable(i, conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
 
-        ret = rpc_call_thread_regphase1(&stack_group->stacks[i]->rpc_queue, conn);
+        ret = rpc_call_thread_regphase1(i, conn);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "thread_register_phase1  failed ret=%d!\n", ret);
             free(conn);
@@ -637,10 +660,9 @@ static int32_t thread_register(void)
     }
 
     for (int32_t i = 0; i < stack_group->stack_num; i++) {
-        conn->conn_num = rpc_call_conntable(&stack_group->stacks[i]->rpc_queue,
-                                            conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
+        conn->conn_num = rpc_call_conntable(i, conn->conn_list, GAZELLE_LSTACK_MAX_CONN);
 
-        ret = rpc_call_thread_regphase2(&stack_group->stacks[i]->rpc_queue, conn);
+        ret = rpc_call_thread_regphase2(i, conn);
         if (ret != 0) {
             LSTACK_LOG(ERR, LSTACK, "thread_register_phase2  failed ret=%d!\n", ret);
             free(conn);

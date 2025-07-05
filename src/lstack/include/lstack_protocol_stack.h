@@ -14,7 +14,6 @@
 #define __GAZELLE_PROTOCOL_STACK_H__
 
 #include <semaphore.h>
-#include <sys/epoll.h>
 #include <stdbool.h>
 
 #include <rte_ring.h>
@@ -30,12 +29,6 @@
 #include "lstack_ethdev.h"
 #include "lstack_tx_cache.h"
 
-#define SOCK_RECV_RING_SIZE         (get_global_cfg_params()->recv_ring_size)
-#define SOCK_RECV_RING_SIZE_MAX     (2048)
-#define SOCK_SEND_RING_SIZE_MAX     (2048)
-
-#define MBUFPOOL_RESERVE_NUM (2 * get_global_cfg_params()->rxqueue_size + 1024)
-
 struct protocol_stack {
     uint32_t tid;
     uint16_t queue_id;
@@ -43,41 +36,31 @@ struct protocol_stack {
     uint16_t numa_id;
     uint16_t cpu_id;
     uint32_t stack_idx;
-    cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
-    int32_t epollfd; /* kernel event thread epoll fd */
-    volatile enum rte_lcore_state_t state;
 
-    struct rte_mempool *rxtx_mbuf_pool;
-    struct rte_ring  *rx_ring;
+    struct netif netif;
+    struct lstack_dev_ops dev_ops;
+
+    cpu_set_t idle_cpuset; /* idle cpu in numa of stack, app thread bind to it */
+
+    volatile enum rte_lcore_state_t state;
+    volatile bool low_power;
+    volatile uint16_t conn_num;
+
+    struct rte_ring *rx_ring;
     struct rte_ring *tx_ring;
     struct rte_ring *reg_ring;
-    struct rte_ring *wakeup_ring;
     struct reg_ring_msg *reg_buf;
     uint32_t reg_head;
 
-    volatile bool low_power;
+    uint32_t rx_ring_used;
+    uint32_t tx_ring_used;
+    struct rte_mbuf *pkts[NIC_QUEUE_SIZE_MAX];
 
     char pad1 __rte_cache_aligned;
     rpc_queue dfx_rpc_queue;
     rpc_queue rpc_queue;
     char pad2 __rte_cache_aligned;
 
-    /* kernel event thread read/write frequently */
-    struct epoll_event kernel_events[KERNEL_EPOLL_MAX];
-    int32_t kernel_event_num;
-    char pad3 __rte_cache_aligned;
-
-    struct netif netif;
-    struct lstack_dev_ops dev_ops;
-    uint32_t rx_ring_used;
-    uint32_t tx_ring_used;
-
-    struct rte_mbuf *pkts[NIC_QUEUE_SIZE_MAX];
-    struct list_node recv_list;
-    struct list_node same_node_recv_list; /* used for same node processes communication */
-    struct list_node wakeup_list;
-
-    volatile uint16_t conn_num;
     struct stats_ *lwip_stats;
     struct gazelle_stack_latency latency;
     struct gazelle_stack_stat stats;
@@ -93,10 +76,8 @@ struct protocol_stack_group {
     struct rte_mempool *kni_pktmbuf_pool;
     struct eth_params *eth_params;
     struct protocol_stack *stacks[PROTOCOL_STACK_MAX];
-    struct list_node  poll_list;
-    pthread_spinlock_t poll_list_lock;
+
     sem_t sem_listen_thread;
-    struct rte_mempool *total_rxtx_pktmbuf_pool[PROTOCOL_STACK_MAX];
     sem_t sem_stack_setup;
     bool stack_setup_fail;
 
@@ -106,16 +87,26 @@ struct protocol_stack_group {
     pthread_spinlock_t socket_lock;
 };
 
-long get_stack_tid(void);
+struct thread_params {
+    uint16_t queue_id;
+    uint16_t idx;
+};
 
-struct protocol_stack *get_protocol_stack(void);
-struct protocol_stack *get_protocol_stack_by_fd(int fd);
-struct protocol_stack *get_bind_protocol_stack(void);
 struct protocol_stack_group *get_protocol_stack_group(void);
 
+extern PER_THREAD struct protocol_stack *g_stack_p;
+static inline struct protocol_stack *get_protocol_stack(void)
+{
+    return g_stack_p;
+}
+struct protocol_stack *get_protocol_stack_by_id(int stack_id);
+struct protocol_stack *get_bind_protocol_stack(void);
+
+#if GAZELLE_TCP_REUSE_IPPORT
 int get_min_conn_stack(struct protocol_stack_group *stack_group);
-void bind_to_stack_numa(struct protocol_stack *stack);
-void thread_bind_stack(struct protocol_stack *stack);
+#endif /* GAZELLE_TCP_REUSE_IPPORT */
+void bind_to_stack_numa(int stack_id);
+void thread_bind_stack(int stack_id);
 
 int stack_group_init(void);
 void stack_group_exit(void);

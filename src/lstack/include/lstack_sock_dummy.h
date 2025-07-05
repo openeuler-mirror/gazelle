@@ -10,16 +10,9 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef _LSTACK_RTC_API_H_
-#define _LSTACK_RTC_API_H_
+#ifndef _LSTACK_SOCK_DUMMY_H_
+#define _LSTACK_SOCK_DUMMY_H_
 
-#include <lwip/lwipgz_posix_api.h>
+void sock_dummy_api_init(posix_api_t *api);
 
-/* don't include lwip/sockets.h, conflict with sys/socket.h */
-extern int lwip_fcntl(int s, int cmd, int val);
-extern int lwip_ioctl(int s, long cmd, void *argp);
-
-void dummy_api_init(posix_api_t *api);
-void rtc_api_init(posix_api_t *api);
-
-#endif /* __LSTACK_RTC_API_H_  */
+#endif /* _LSTACK_SOCK_DUMMY_H_  */

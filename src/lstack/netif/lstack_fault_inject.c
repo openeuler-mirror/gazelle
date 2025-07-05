@@ -161,10 +161,8 @@ static int32_t inject_packet_loss_random(struct protocol_stack *stack, struct rt
     if (rand_num > boundary) {
         return nr_pkts;
     }
-    
-    for (int32_t i = 0; i < nr_pkts; ++i) {
-        rte_pktmbuf_free(pkts[i]);
-    }
+
+    mem_put_mbuf_bulk(pkts, nr_pkts);
     return nr_pkts;
 }
 
@@ -184,7 +182,7 @@ static int32_t inject_packet_duplicate_random(struct protocol_stack *stack, stru
         return nr_pkts;
     }
 
-    struct rte_mempool *mp = stack->rxtx_mbuf_pool;
+    struct rte_mempool *mp = mem_get_mbuf_pool(stack->stack_idx);
     struct rte_mbuf *mbuf_clone = NULL;
     int32_t ret = 0;
     
@@ -192,14 +190,14 @@ static int32_t inject_packet_duplicate_random(struct protocol_stack *stack, stru
         int32_t count = count_max;
         while (count--) {
             mbuf_clone = rte_pktmbuf_clone(pkts[i], mp);
-            rte_pktmbuf_free(pkts[i]);
+            mem_put_mbuf_bulk(&pkts[i], 1);
             if (mbuf_clone == NULL) {
                 LSTACK_LOG(ERR, LSTACK, "fault inject mbuf_clone fail.\n");
                 return 0;
             }
             ret = vdev_tx_xmit(stack, &mbuf_clone, 1);
             if (ret < 1) {
-                rte_pktmbuf_free(mbuf_clone);
+                mem_put_mbuf_bulk(&mbuf_clone, 1);
                 return ret;
             }
         }
@@ -215,7 +213,7 @@ static int32_t send_reorder_array(struct protocol_stack *stack)
     for (int32_t i = 0; i < g_reorder[idx].cur_cnt; ++i) {
         ret = vdev_tx_xmit(stack, g_reorder[idx].array + i, 1);
         if (ret < 1) {
-            rte_pktmbuf_free(*(g_reorder[idx].array + i));
+            mem_put_mbuf_bulk(g_reorder[idx].array + i, 1);
         }
     }
     g_reorder[idx].cur_cnt = 0;
@@ -239,7 +237,7 @@ static int32_t inject_packet_reorder_random(struct protocol_stack *stack, struct
         return nr_pkts;
     }
 
-    struct rte_mempool *mp = stack->rxtx_mbuf_pool;
+    struct rte_mempool *mp = mem_get_mbuf_pool(stack->stack_idx);
     struct rte_mbuf *mbuf_clone = NULL;
     int32_t idx = stack->stack_idx;
     for (int32_t i = 0; i < nr_pkts; ++i) {
@@ -251,8 +249,8 @@ static int32_t inject_packet_reorder_random(struct protocol_stack *stack, struct
             }
             *(g_reorder[idx].array + g_reorder[idx].cur_cnt++) = mbuf_clone;
             /* func rte_pktmbuf_clone will add refcnt of mbuf, so following operation will free mbuf double */
-            rte_pktmbuf_free(pkts[i]);
-            rte_pktmbuf_free(pkts[i]);
+            mem_put_mbuf_bulk(&pkts[i], 1);
+            mem_put_mbuf_bulk(&pkts[i], 1);
         } else {
             send_reorder_array(stack);
         }
