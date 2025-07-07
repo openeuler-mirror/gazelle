@@ -380,7 +380,7 @@ static inline bool NETCONN_ALLOW_SEND(const struct lwip_sock *sock)
     } else { /* if RTW */
         if (sys_mbox_valid(&sock->conn->sendmbox)) {
             const struct mbox_ring *mr = &sock->conn->sendmbox->mring;
-            return mr->ops->free_count(mr) > 0;
+            return mr->ops->free_count(mr) >= SOCK_SENDMBOX_ALLOW_NOTIFY_SIZE;
         }
     }
 
