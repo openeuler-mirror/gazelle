@@ -13,6 +13,7 @@
 #include <securec.h>
 
 #include <rte_errno.h>
+#include <rte_cycles.h>
 #include <lwip/arch/sys_arch.h>
 
 #include "lstack_mempool.h"
