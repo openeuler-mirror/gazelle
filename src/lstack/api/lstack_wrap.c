@@ -53,7 +53,7 @@ void wrap_api_init(void)
     }
 
     epoll_api_init(g_wrap_api);
-    sockio_ops_init();
+    sockio_api_init(g_wrap_api);
     mbox_ring_ops_init();
 }
 
@@ -566,7 +566,7 @@ static inline int32_t do_socket(int32_t domain, int32_t type, int32_t protocol)
 static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t flags)
 {
     if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
-        return sockio_recv(sockfd, buf, len, flags);
+        return g_wrap_api->recv_fn(sockfd, buf, len, flags);
     }
     return posix_api->recv_fn(sockfd, buf, len, flags);
 }
@@ -574,7 +574,7 @@ static inline ssize_t do_recv(int32_t sockfd, void *buf, size_t len, int32_t fla
 static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 {
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
-        return sockio_read(s, mem, len);
+        return g_wrap_api->read_fn(s, mem, len);
     }
     return posix_api->read_fn(s, mem, len);
 }
@@ -582,7 +582,7 @@ static inline ssize_t do_read(int32_t s, void *mem, size_t len)
 static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 {
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
-        return sockio_readv(s, iov, iovcnt);
+        return g_wrap_api->readv_fn(s, iov, iovcnt);
     }
     return posix_api->readv_fn(s, iov, iovcnt);
 }
@@ -590,7 +590,7 @@ static inline ssize_t do_readv(int32_t s, const struct iovec *iov, int iovcnt)
 static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32_t flags)
 {
     if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
-        return sockio_send(sockfd, buf, len, flags);
+        return g_wrap_api->send_fn(sockfd, buf, len, flags);
     }
     return posix_api->send_fn(sockfd, buf, len, flags);
 }
@@ -598,7 +598,7 @@ static inline ssize_t do_send(int32_t sockfd, const void *buf, size_t len, int32
 static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 {
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
-        return sockio_write(s, mem, size);
+        return g_wrap_api->write_fn(s, mem, size);
     }
     return posix_api->write_fn(s, mem, size);
 }
@@ -606,7 +606,7 @@ static inline ssize_t do_write(int32_t s, const void *mem, size_t size)
 static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
 {
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
-        return sockio_writev(s, iov, iovcnt);
+        return g_wrap_api->writev_fn(s, iov, iovcnt);
     }
     return posix_api->writev_fn(s, iov, iovcnt);
 }
@@ -614,7 +614,7 @@ static inline ssize_t do_writev(int32_t s, const struct iovec *iov, int iovcnt)
 static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flags)
 {
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
-        return sockio_recvmsg(s, message, flags);
+        return g_wrap_api->recvmsg_fn(s, message, flags);
     }
     return posix_api->recvmsg_fn(s, message, flags);
 }
@@ -622,7 +622,7 @@ static inline ssize_t do_recvmsg(int32_t s, struct msghdr *message, int32_t flag
 static inline ssize_t do_sendmsg(int32_t s, const struct msghdr *message, int32_t flags)
 {
     if (select_sock_posix_path(lwip_get_socket(s)) == POSIX_LWIP) {
-        return sockio_sendmsg(s, message, flags);
+        return g_wrap_api->sendmsg_fn(s, message, flags);
     }
     return posix_api->sendmsg_fn(s, message, flags);
 }
@@ -631,7 +631,7 @@ static inline ssize_t do_recvfrom(int32_t sockfd, void *buf, size_t len, int32_t
                                   struct sockaddr *addr, socklen_t *addrlen)
 {
     if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
-        return sockio_recvfrom(sockfd, buf, len, flags, addr, addrlen);
+        return g_wrap_api->recvfrom_fn(sockfd, buf, len, flags, addr, addrlen);
     }
     return posix_api->recvfrom_fn(sockfd, buf, len, flags, addr, addrlen);
 }
@@ -640,7 +640,7 @@ static inline ssize_t do_sendto(int32_t sockfd, const void *buf, size_t len, int
                                 const struct sockaddr *addr, socklen_t addrlen)
 {
     if (select_sock_posix_path(lwip_get_socket(sockfd)) == POSIX_LWIP) {
-        return sockio_sendto(sockfd, buf, len, flags, addr, addrlen);
+        return g_wrap_api->sendto_fn(sockfd, buf, len, flags, addr, addrlen);
     }
     return posix_api->sendto_fn(sockfd, buf, len, flags, addr, addrlen);
 }

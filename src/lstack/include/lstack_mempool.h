@@ -10,8 +10,8 @@
 * See the Mulan PSL v2 for more details.
 */
 
-#ifndef __GAZELLE_MEM_H__
-#define __GAZELLE_MEM_H__
+#ifndef __GAZELLE_MEMPOOL_H__
+#define __GAZELLE_MEMPOOL_H__
 
 #include <stdlib.h>
 
@@ -336,4 +336,4 @@ void mem_extcache_flush_pbuf(struct pbuf **extcache_list);
 void mem_init_pbuf(struct pbuf *p, pbuf_layer layer, uint16_t tot_len, uint16_t len, pbuf_type type);
 
 
-#endif /* __GAZELLE_MEM_H__ */
+#endif /* __GAZELLE_MEMPOOL_H__ */
