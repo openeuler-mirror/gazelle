@@ -443,6 +443,11 @@ static void callback_udp_send(struct rpc_msg *msg)
     struct mem_thread *mt = msg->args[MSG_ARG_1].p;
     bool output_again;
 
+    if (unlikely(POSIX_IS_CLOSED(sock))) {
+        msg->result = -1;
+        return;
+    }
+
     if (get_protocol_stack_group()->latency_start)
         calculate_sock_latency(sock, GAZELLE_LATENCY_WRITE_RPC_MSG);
 
@@ -922,6 +927,11 @@ static void callback_tcp_recvd(struct rpc_msg *recvmsg)
     struct mbox_ring *mr;
     u32_t recvd;
 
+    if (unlikely(POSIX_IS_CLOSED(sock))) {
+        recvmsg->result = -1;
+        return;
+    }
+
     mr = &sock->conn->recvmbox->mring;
     if (mr->flags & MBOX_FLAG_PEEK) {
         sockio_peek_recv_free(mr, 0);
@@ -973,13 +983,21 @@ static void callback_tcp_send(struct rpc_msg *sendmsg)
     struct protocol_stack *stack = get_protocol_stack();
     struct lwip_sock *sock = sendmsg->args[MSG_ARG_0].p;
     struct mem_thread *mt = sendmsg->args[MSG_ARG_1].p;
-    const struct tcp_pcb *pcb = sock->conn->pcb.tcp;
-    const struct mbox_ring *mr = &sock->conn->sendmbox->mring;
+    const struct tcp_pcb *pcb;
+    const struct mbox_ring *mr;
     bool output_again;
     err_t err;
 
-    if (unlikely(pcb == NULL))
+    if (unlikely(POSIX_IS_CLOSED(sock))) {
+        sendmsg->result = -1;
         return;
+    }
+    mr = &sock->conn->sendmbox->mring;
+    pcb = sock->conn->pcb.tcp;
+    if (unlikely(pcb == NULL)) {
+        sendmsg->result = -1;
+        return;
+    }
 
 #if GAZELLE_TCP_ASYNC_RECVD
     struct rpc_msg *recvmsg;
@@ -1105,7 +1123,7 @@ static void rtc_stack_tcp_send(struct lwip_sock *sock)
 }
 
 
-ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
+static ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
     struct sockaddr *from, socklen_t *fromlen)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
@@ -1167,7 +1185,7 @@ ssize_t sockio_recvfrom(int fd, void *mem, size_t len, int flags,
     return recvd;
 }
 
-ssize_t sockio_recvmsg(int fd, struct msghdr *msg, int flags)
+static ssize_t sockio_recvmsg(int fd, struct msghdr *msg, int flags)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
     ssize_t len, recvd = 0;
@@ -1210,7 +1228,7 @@ ssize_t sockio_recvmsg(int fd, struct msghdr *msg, int flags)
     return recvd;
 }
 
-ssize_t sockio_sendto(int fd, const void *mem, size_t len, int flags,
+static ssize_t sockio_sendto(int fd, const void *mem, size_t len, int flags,
     const struct sockaddr *to, socklen_t tolen)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
@@ -1260,7 +1278,7 @@ ssize_t sockio_sendto(int fd, const void *mem, size_t len, int flags,
     return ret;
 }
 
-ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
+static ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
 {
     struct lwip_sock *sock = lwip_get_socket(fd);
     ssize_t ret = -1;
@@ -1329,27 +1347,27 @@ ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
     return written > 0 ? written : ret;
 }
 
-ssize_t sockio_read(int fd, void *mem, size_t len)
+static ssize_t sockio_read(int fd, void *mem, size_t len)
 {
     return sockio_recvfrom(fd, mem, len, 0, NULL, NULL);
 }
 
-ssize_t sockio_write(int fd, const void *mem, size_t len)
+static ssize_t sockio_write(int fd, const void *mem, size_t len)
 {
     return sockio_sendto(fd, mem, len, 0, NULL, 0);
 }
 
-ssize_t sockio_recv(int fd, void *mem, size_t len, int flags)
+static ssize_t sockio_recv(int fd, void *mem, size_t len, int flags)
 {
     return sockio_recvfrom(fd, mem, len, flags, NULL, NULL);
 }
 
-ssize_t sockio_send(int fd, const void *mem, size_t len, int flags)
+static ssize_t sockio_send(int fd, const void *mem, size_t len, int flags)
 {
     return sockio_sendto(fd, mem, len, flags, NULL, 0);
 }
 
-ssize_t sockio_readv(int fd, const struct iovec *iov, int iovcnt)
+static ssize_t sockio_readv(int fd, const struct iovec *iov, int iovcnt)
 {
     struct msghdr msg;
 
@@ -1364,7 +1382,7 @@ ssize_t sockio_readv(int fd, const struct iovec *iov, int iovcnt)
     return sockio_recvmsg(fd, &msg, 0);
 }
 
-ssize_t sockio_writev(int fd, const struct iovec *iov, int iovcnt)
+static ssize_t sockio_writev(int fd, const struct iovec *iov, int iovcnt)
 {
     struct msghdr msg;
 
@@ -1379,7 +1397,7 @@ ssize_t sockio_writev(int fd, const struct iovec *iov, int iovcnt)
     return sockio_sendmsg(fd, &msg, 0);
 }
 
-void sockio_ops_init(void)
+static void sockio_ops_init(void)
 {
     struct sockio_ops *ops = &ioops;
 
@@ -1398,6 +1416,24 @@ void sockio_ops_init(void)
         ops->stack_tcp_send  = rtw_stack_tcp_send;
         ops->stack_tcp_recvd = rtw_stack_tcp_recvd;
     }
+}
+
+void sockio_api_init(posix_api_t *api)
+{
+    sockio_ops_init();
+
+    api->recvfrom_fn    = sockio_recvfrom;
+    api->recvmsg_fn     = sockio_recvmsg;
+    api->sendto_fn      = sockio_sendto;
+    api->sendmsg_fn     = sockio_sendmsg;
+
+    api->read_fn        = sockio_read;
+    api->write_fn       = sockio_write;
+    api->recv_fn        = sockio_recv;
+    api->send_fn        = sockio_send;
+
+    api->readv_fn       = sockio_readv;
+    api->writev_fn      = sockio_writev;
 }
 
 static int sockio_mbox_init(struct lwip_sock *sock)
