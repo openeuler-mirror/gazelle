@@ -30,6 +30,8 @@
 #include "lstack_protocol_stack.h"
 #include "lstack_cfg.h"
 
+#define SOCK_SENDMBOX_ALLOW_WRITE_SIZE  4
+#define SOCK_SENDMBOX_ALLOW_NOTIFY_SIZE 16
 
 #define NETCONN_TYPE(conn)  NETCONNTYPE_GROUP(netconn_type((conn)))
 

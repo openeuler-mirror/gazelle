@@ -355,9 +355,9 @@ static ssize_t stack_udp_write(struct lwip_sock *sock, const void *data, size_t 
         return -1;
     }
 
-    if (unlikely(mr->app_free_count < 1)) {
+    if (unlikely(mr->app_free_count < SOCK_SENDMBOX_ALLOW_WRITE_SIZE)) {
         mr->app_free_count = mr->ops->free_count(mr);
-        if (unlikely(mr->app_free_count < 1)) {
+        if (unlikely(mr->app_free_count < SOCK_SENDMBOX_ALLOW_WRITE_SIZE)) {
             API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
             set_errno(ENOBUFS);
             return -1;
@@ -370,9 +370,12 @@ static ssize_t stack_udp_write(struct lwip_sock *sock, const void *data, size_t 
         copied_total = stack_udp_write_bulk(sock, mr, data, len, flags, to, tolen);
     }
 
+    if (mr->app_free_count < SOCK_SENDMBOX_ALLOW_NOTIFY_SIZE) {
+        API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
+    }
+
     if (likely(copied_total > 0))
         return copied_total;
-    API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
     return -1;
 }
 
@@ -674,10 +677,10 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
         return -1;
     }
 
-    if (unlikely(mr->app_free_count < 2) || 
+    if (unlikely(mr->app_free_count < SOCK_SENDMBOX_ALLOW_WRITE_SIZE) || 
         total_copy_len > mr->app_free_count * TCP_MSS) {
         mr->app_free_count = mr->ops->free_count(mr);
-        if (unlikely(mr->app_free_count < 2)) {
+        if (unlikely(mr->app_free_count < SOCK_SENDMBOX_ALLOW_WRITE_SIZE)) {
             API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
             set_errno(ENOBUFS);
             return -1;
@@ -712,8 +715,9 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
     }
 
 out:
-    if (unlikely(total_copy_len > 0))
+    if (mr->app_free_count < SOCK_SENDMBOX_ALLOW_NOTIFY_SIZE) {
         API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
+    }
     return copied_total > 0 ? copied_total : -1;
 }
 
@@ -1082,11 +1086,9 @@ static ssize_t rtc_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
 
     /* if OK or memory error, check available space */
     if (err == ERR_OK || err == ERR_MEM) {
+        API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
         if (!lwip_tcp_allow_send(sock->conn->pcb.tcp)) {
-            API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
             err = ERR_BUF;
-        } else if (total_copy_len > 0) {
-            API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
         }
     }
 
