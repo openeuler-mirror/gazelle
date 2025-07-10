@@ -65,7 +65,7 @@ struct poll_cb {
 struct sock_wait {
     enum sock_wait_type type;
 
-    /* blocking and return 0 on timeout */
+    /* blocking and return 0 on timeout, or return -errno.  */
     int (*timedwait_fn)(struct sock_wait *sk_wait, int timeout, uint32_t start);
     /* trigger event */
     void (*notify_fn)(struct sock_wait *sk_wait, struct sock_event *sk_event, 
