@@ -34,18 +34,28 @@
 
 static PER_THREAD struct sock_wait *g_sk_wait = NULL;
 
+static int sock_wait_prepare(void)
+{
+    int old_errno = errno;
+    mem_thread_ignore_flush_intr();
+    if (unlikely(old_errno == EINTR)) {
+        errno = 0;
+    }
+    return old_errno;
+}
 
 static int rtc_sock_wait_timedwait(struct sock_wait *sk_wait, int timeout, uint32_t start)
 {
-    mem_thread_ignore_flush_intr();
-
     stack_polling(0);
 
     if (timeout > 0 && timeout <= (int)(sys_now() - start)) {
         timeout = 0;
-    } else if (timeout < 0) {
-        if (errno != EINTR || mem_thread_ignore_flush_intr()) {
+    }
+    if (unlikely(errno == EINTR)) {
+        if (mem_thread_ignore_flush_intr()) {
             errno = 0;
+        } else {
+            timeout = -EINTR;
         }
     }
     return timeout;
@@ -55,10 +65,9 @@ static int rtw_sock_wait_timedwait(struct sock_wait *sk_wait, int timeout, uint3
 {
     int ret;
     /* when sem interrupted by signals, errno = EINTR */
-    mem_thread_ignore_flush_intr();
     do {
         ret = sys_sem_wait_internal(&sk_wait->sem, timeout);
-    } while (ret < 0 && errno == EINTR && mem_thread_ignore_flush_intr());
+    } while (ret == -EINTR && mem_thread_ignore_flush_intr());
     return ret;
 }
 
@@ -451,6 +460,7 @@ int lstack_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int t
 
     start = timeout <= 0 ? 0 : sys_now();
 
+    sock_wait_prepare();
     /* RTC try to recv polling. */
     sk_wait->timedwait_fn(sk_wait, 0, start);
     do {
@@ -471,7 +481,10 @@ int lstack_epoll_wait(int epfd, struct epoll_event* events, int maxevents, int t
         }
 
         timeout = sk_wait->timedwait_fn(sk_wait, timeout, start);
-    } while (timeout > 0 || (timeout < 0 && errno == 0));
+    } while (timeout > 0 || timeout == -1);
+    if (unlikely(timeout == -EINTR)) {
+        return -1;
+    }
 
     sk_wait->stat.app_events += lwip_num;
     sk_wait->stat.kernel_events += kernel_num;
@@ -744,6 +757,7 @@ int lstack_poll(struct pollfd *fds, nfds_t nfds, int timeout)
 
     start = timeout <= 0 ? 0 : sys_now();
 
+    sock_wait_prepare();
     /* RTC try to recv polling. */
     sk_wait->timedwait_fn(sk_wait, 0, start);
     do {
@@ -763,7 +777,10 @@ int lstack_poll(struct pollfd *fds, nfds_t nfds, int timeout)
         }
 
         timeout = sk_wait->timedwait_fn(sk_wait, timeout, start);
-    } while (timeout > 0 || (timeout < 0 && errno == 0));
+    } while (timeout > 0 || timeout == -1);
+    if (unlikely(timeout == -EINTR)) {
+        return -1;
+    }
 
     sk_wait->stat.app_events += lwip_num;
     sk_wait->stat.kernel_events += kernel_num;
@@ -892,13 +909,12 @@ bool sock_event_wait(struct lwip_sock *sock, enum netconn_evt evt, bool nonblock
         rte_wmb();
     }
 
-    old_errno = errno;
+    old_errno = sock_wait_prepare();
     if (rtc_mode) {
         /* RTC try to recv polling. */
         sock->sk_wait->timedwait_fn(sock->sk_wait, 0, 0);
         if (nonblocking) {
-            errno = old_errno;
-            return false;
+            goto out;
         }
     }
 
@@ -914,13 +930,15 @@ bool sock_event_wait(struct lwip_sock *sock, enum netconn_evt evt, bool nonblock
             break;
         }
         timeout = sock->sk_wait->timedwait_fn(sock->sk_wait, timeout, start);
-    } while (timeout > 0 || (timeout < 0 && errno == 0));
+    } while (timeout > 0 || timeout == -1);
 
     if (evt == NETCONN_EVT_SENDPLUS) {
         /* remove WAIT_BLOCK type */
         sock->sk_wait->type &= ~WAIT_BLOCK;
     }
 
-    errno = old_errno;
+out:
+    if (likely(timeout != -EINTR))
+        errno = old_errno;
     return pending != 0;
 }
