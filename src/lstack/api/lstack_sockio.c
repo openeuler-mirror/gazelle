@@ -171,7 +171,8 @@ static inline uint16_t write_pbuf(struct pbuf *p, const char *data, uint16_t len
     if (get_protocol_stack_group()->latency_start)
         time_stamp_into_write(&p, 1);
 
-    pbuf_take(p, data, len);
+    if (likely(len > 0))
+        pbuf_take(p, data, len);
     return len;
 }
 
@@ -374,7 +375,7 @@ static ssize_t stack_udp_write(struct lwip_sock *sock, const void *data, size_t 
         API_EVENT(sock->conn, NETCONN_EVT_SENDMINUS, 0);
     }
 
-    if (likely(copied_total > 0))
+    if (likely(copied_total >= 0))
         return copied_total;
     return -1;
 }
@@ -680,6 +681,9 @@ static ssize_t rtw_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
     if (unlikely(sock_event_hold_pending(sock, WAIT_BLOCK, NETCONN_EVT_ERROR, 0))) {
         set_errno(ENOTCONN);
         return -1;
+    }
+    if (unlikely(len == 0)) {
+        return 0;
     }
 
     if (unlikely(mr->app_free_count < SOCK_SENDMBOX_ALLOW_WRITE_SIZE) || 
@@ -1083,6 +1087,9 @@ static ssize_t rtc_stack_tcp_write(struct lwip_sock *sock, const char *data, siz
         set_errno(ENOTCONN);
         return -1;
     }
+    if (unlikely(len == 0)) {
+        return 0;
+    }
 
     total_copy_len = LWIP_MIN((uint32_t)len, (uint32_t)pcb->snd_buf);
 
@@ -1237,7 +1244,9 @@ static ssize_t sockio_sendto(int fd, const void *mem, size_t len, int flags,
     LWIP_DEBUGF(SOCKETS_DEBUG, ("%s(%d, mem=%p, size=%"SZT_F", flags=0x%x)\n",
                 __FUNCTION__, fd, mem, len, flags));
 
-    if (unlikely(mem == NULL || len <= 0)) {
+    /* TCP: allow zero-length sends, and only check connection state.
+     * UDP: allow zero-length sends, and send an empty packet. */
+    if (unlikely(mem == NULL || len < 0)) {
         set_errno(EINVAL);
         return -1;
     }
@@ -1251,7 +1260,7 @@ static ssize_t sockio_sendto(int fd, const void *mem, size_t len, int flags,
     case NETCONN_TCP:
         do {
             ret = ioops.stack_tcp_write(sock, mem, len, flags);
-            if (likely(ret > 0) || errno != ENOBUFS)
+            if (likely(ret >= 0) || errno != ENOBUFS)
                 break;
             sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
         } while (true);
@@ -1262,11 +1271,11 @@ static ssize_t sockio_sendto(int fd, const void *mem, size_t len, int flags,
     case NETCONN_UDP:
         do {
             ret = ioops.stack_udp_write(sock, mem, len, flags, to, tolen);
-            if (likely(ret > 0) || errno != ENOBUFS)
+            if (likely(ret >= 0) || errno != ENOBUFS)
                 break;
             sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
         } while (true);
-        if (ret > 0) {
+        if (ret >= 0) {
             ioops.stack_udp_send(sock);
         }
         break;
@@ -1286,8 +1295,10 @@ static ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
     int write_more = MSG_MORE;
     int i;
 
+    /* TCP: allow zero-length sends, and only check connection state.
+     * UDP: allow zero-length sends, and send an empty packet. */
     ret = lwip_sendmsg_check(sock, msg, flags);
-    if (unlikely(ret <= 0)) {
+    if (unlikely(ret < 0)) {
         return ret;
     }
 
@@ -1304,7 +1315,7 @@ static ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
             }
             do {
                 ret = ioops.stack_tcp_write(sock, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags | write_more);
-                if (likely(ret > 0) || errno != ENOBUFS)
+                if (likely(ret >= 0) || errno != ENOBUFS)
                     break;
                 if (written > 0)
                     ioops.stack_tcp_send(sock);
@@ -1326,7 +1337,7 @@ static ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
             }
             do {
                 ret = ioops.stack_udp_write(sock, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, flags | write_more, NULL, 0);
-                if (likely(ret > 0) || errno != ENOBUFS)
+                if (likely(ret >= 0) || errno != ENOBUFS)
                     break;
                 sock_event_wait(sock, NETCONN_EVT_SENDPLUS, true);
             } while (true);
@@ -1335,7 +1346,7 @@ static ssize_t sockio_sendmsg(int fd, const struct msghdr *msg, int flags)
             }
             written += ret;
         }
-        if (written > 0) {
+        if (written >= 0) {
             ioops.stack_udp_send(sock);
         }
         break;
