@@ -125,6 +125,7 @@ static int transfer_pkt_to_other_process(char *buf, int process_index, int write
     sprintf_s(serun.sun_path, PATH_MAX, "%s%d", SERVER_PATH, process_index);
     int32_t len = offsetof(struct sockaddr_un, sun_path) + strlen(serun.sun_path);
     if (posix_api->connect_fn(sockfd, (struct sockaddr *)&serun, len) < 0) {
+        posix_api->close_fn(sockfd);
         return CONNECT_ERROR;
     }
     posix_api->write_fn(sockfd, buf, write_len);
@@ -506,10 +507,12 @@ int recv_pkts_from_other_process(int process_index, void* arg)
     unlink(process_server_path);
     if (posix_api->bind_fn(listenfd, (struct sockaddr *)&serun, size) < 0) {
         perror("bind error");
+        posix_api->close_fn(listenfd);
         return -1;
     }
     if (posix_api->listen_fn(listenfd, 20) < 0) { /* 20: max backlog */
         perror("listen error");
+        posix_api->close_fn(listenfd);
         return -1;
     }
     sem_post((sem_t *)arg);
