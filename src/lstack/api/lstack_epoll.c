@@ -588,6 +588,7 @@ struct sock_wait *poll_construct_wait(int nfds)
 
         if (poll_init_wait(g_sk_wait, nfds) < 0) {
             free(g_sk_wait);
+            g_sk_wait = NULL;
             return NULL;
         }
     }
@@ -596,6 +597,8 @@ struct sock_wait *poll_construct_wait(int nfds)
     if (g_sk_wait->pcb.max_nfds < nfds) {
         poll_cb_free(&g_sk_wait->pcb);
         if (poll_cb_init(&g_sk_wait->pcb, nfds) != 0) {
+            free(g_sk_wait);
+            g_sk_wait = NULL;
             return NULL;
         }
     }

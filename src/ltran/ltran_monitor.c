@@ -524,6 +524,7 @@ void *ctrl_thread_fn(void *unuse)
     ret = gazelle_ctl_init();
     if (ret != GAZELLE_OK) {
         LTRAN_ERR("gazelle_ctl_init failed. ret=%d.\n", ret);
+        gazelle_ctl_destroy();
         return NULL;
     }
     LTRAN_INFO("control thread init success.\n");
