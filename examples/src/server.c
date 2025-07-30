@@ -101,7 +101,7 @@ int32_t sermud_worker_create_epfd_and_reg(struct ServerMudWorker *worker_unit)
 
     struct epoll_event ep_ev;
     ep_ev.data.ptr = (void *)&(worker_unit->worker);
-    ep_ev.events = EPOLLIN | EPOLLET;
+    ep_ev.events = EPOLLIN;
     if (epoll_ctl(worker_unit->epfd, EPOLL_CTL_ADD, worker_unit->worker.fd, &ep_ev) < 0) {
         PRINT_ERROR("server can't control epoll %d! ", errno);
         return PROGRAM_FAULT;
@@ -125,7 +125,7 @@ int32_t sermud_listener_create_epfd_and_reg(struct ServerMud *server_mud)
     }
 
     struct epoll_event ep_ev;
-    ep_ev.events = EPOLLIN | EPOLLET;
+    ep_ev.events = EPOLLIN;
     for (int i = 0; i < PROTOCOL_MODE_MAX; i++) {
         if (server_mud->listener.listen_fd_array[i] != -1) {
             struct ServerHandler *server_handler = (struct ServerHandler *)malloc(sizeof(struct ServerHandler));
@@ -572,7 +572,7 @@ int32_t sersum_create_epfd_and_reg(struct ServerMumUnit *server_unit)
     }
 
     struct epoll_event ep_ev = {0};
-    ep_ev.events = EPOLLIN | EPOLLET;
+    ep_ev.events = EPOLLIN;
 
     for (int32_t i = 0; i < PROTOCOL_MODE_MAX; i++) {
         if (server_unit->listener.listen_fd_array[i] != -1) {
@@ -639,7 +639,7 @@ int32_t sersum_accept_connects(struct epoll_event *cur_epev, struct ServerMumUni
 
         struct epoll_event ep_ev;
         ep_ev.data.ptr = (void *)server_handler;
-        ep_ev.events = EPOLLIN | EPOLLET;
+        ep_ev.events = EPOLLIN;
         if (epoll_ctl(server_unit->epfd, EPOLL_CTL_ADD, accept_fd, &ep_ev) < 0) {
             PRINT_ERROR("server can't add socket '%d' to control epoll %d! ", accept_fd, errno);
             return PROGRAM_FAULT;

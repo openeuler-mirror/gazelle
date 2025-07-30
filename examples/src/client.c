@@ -262,7 +262,7 @@ int32_t client_thread_retry_connect(struct ClientUnit *client_unit, struct Clien
         return PROGRAM_FAULT;
     }
     struct epoll_event ep_ev;
-    ep_ev.events = EPOLLIN | EPOLLET;
+    ep_ev.events = EPOLLIN;
     ep_ev.data.ptr = (void *)client_handler;
     if (epoll_ctl(client_unit->epfd, EPOLL_CTL_ADD, client_handler->fd, &ep_ev) < 0) {
         PRINT_ERROR("client cant't set epoll %d! ", errno);
@@ -319,7 +319,7 @@ int32_t client_thread_create_epfd_and_reg(struct ClientUnit *client_unit)
             return PROGRAM_FAULT;
         } else {
             struct epoll_event ep_ev;
-            ep_ev.events = EPOLLIN | EPOLLET;
+            ep_ev.events = EPOLLIN;
             ep_ev.data.ptr = (struct ClientHandler *)(client_unit->handlers + i);
             if (epoll_ctl(client_unit->epfd, EPOLL_CTL_ADD, (client_unit->handlers + i)->fd, &ep_ev) < 0) {
                 PRINT_ERROR("client cant't set epoll %d! ", errno);
