@@ -519,7 +519,7 @@ static struct rte_mempool *rpc_pool_create(int stack_id, unsigned numa_id)
     struct rte_mempool *pool;
     uint32_t total_bufs;
 
-    total_bufs = LWIP_MAX(RPCPOOL_RESERVE_NUM, MBUFPOOL_RESERVE_NUM) + MEMP_NUM_SYS_MBOX;
+    total_bufs = RPCPOLL_MAX_NUM;
     if (total_bufs > MEMPOOL_MAX_NUM) {
         LSTACK_LOG(ERR, LSTACK, "total_bufs %u out of the dpdk mempool range\n", total_bufs);
         return NULL;

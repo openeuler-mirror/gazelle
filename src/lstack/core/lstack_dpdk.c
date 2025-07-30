@@ -933,7 +933,7 @@ uint32_t dpdk_total_socket_memory(void)
 
     total_socket_memory = fixed_mem + bytes_to_mb(
         (per_pktmbuf_mempool_size * dpdk_pktmbuf_mempool_num()) * cfg->num_queue +
-        per_rpc_mempool_size * cfg->rpc_msg_max +
+        per_rpc_mempool_size * RPCPOLL_MAX_NUM +
         per_conn_ring_size * GAZELLE_LSTACK_MAX_CONN);
 
     return total_socket_memory;

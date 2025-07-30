@@ -82,7 +82,6 @@ static int32_t parse_nic_rxqueue_size(void);
 static int32_t parse_nic_txqueue_size(void);
 static int32_t parse_stack_thread_mode(void);
 static int32_t parse_nic_vlan_mode(void);
-static int32_t parse_rpc_msg_max(void);
 static int32_t parse_mem_cache_num(void);
 static int32_t parse_mem_async_mode(void);
 static int32_t parse_send_cache_mode(void);
@@ -122,7 +121,6 @@ static struct config_vector_t g_config_tbl[] = {
     { "mbuf_count_per_conn", parse_mbuf_count_per_conn },
     { "nic_rxqueue_size", parse_nic_rxqueue_size},
     { "nic_txqueue_size", parse_nic_txqueue_size},
-    { "rpc_msg_max", parse_rpc_msg_max },
     { "mem_cache_num", parse_mem_cache_num },
     { "app_bind_numa",  parse_app_bind_numa },
     { "stack_num",   parse_stack_num },
@@ -1423,14 +1421,6 @@ static int32_t parse_nic_vlan_mode(void)
 {
     int32_t ret;
     PARSE_ARG(g_config_params.vlan_mode, "nic_vlan_mode", -1, -1, 4094, ret);
-    return ret;
-}
-
-static int32_t parse_rpc_msg_max(void)
-{
-    int32_t ret;
-    PARSE_ARG(g_config_params.rpc_msg_max, "rpc_msg_max", 
-        4096, GAZELLE_RESERVED_CLIENTS, MEMP_NUM_SYS_MBOX + GAZELLE_RESERVED_CLIENTS, ret);
     return ret;
 }
 
