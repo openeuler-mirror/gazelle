@@ -115,8 +115,6 @@
 | mask_addr | "255.255.xx.xx" | Mask address. |
 | gateway_addr | "192.168.xx.1" | Gateway address. |
 | devices | "aa:bb:cc:dd:ee:ff" | MAC address for communication via the NIC, must be consistent with the bond_macs configuration in ltran.conf; in lstack bond1 mode, specify the primary interface of bond1, taking one of the bond_slave_mac values. |
-| send_connect_number | 4 | Positive integer indicating the number of connections processed per cycle in the protocol stack for packet transmission. |
-| read_connect_number | 4 | Positive integer indicating the number of connections processed per cycle in the protocol stack for packet reception. |
 | rpc_number | 4 | Positive integer indicating the number of RPC messages processed per cycle in the protocol stack. |
 | nic_read_num | 128 | Positive integer indicating the number of data packets read from the NIC per cycle in the protocol stack. |
 | tcp_conn_count | 1500 | Maximum number of TCP connections. This parameter multiplied by mbuf_count_per_conn is the size of the mbuf pool allocated during initialization. If set too small, startup may fail. tcp_conn_count * mbuf_count_per_conn * 2048 bytes must not exceed the size of the huge page. |
@@ -146,8 +144,6 @@ mask_addr="255.255.255.0"
 gateway_addr="192.168.1.1"
 devices="aa:bb:cc:dd:ee:ff"
 
-send_connect_number=4
-read_connect_number=4
 rpc_number=4
 nic_read_num=128
 tcp_conn_count=1500
@@ -284,7 +280,6 @@ There are certain constraints when using Gazelle:
 - Ensure sysctl configures the network card's rp_filter parameter to 1; otherwise, Gazelle protocol stack may not be used as expected, and the kernel protocol stack may still be used.
 - Without using ltran mode, KNI interfaces cannot be configured to only support local communication and require NetworkManager to be configured not to manage KNI interfaces before starting.
 - The IP and MAC addresses of virtual KNI interfaces must match those specified in the lstack.conf configuration file.
-- When sending UDP packets longer than 45952 (32 * 1436) bytes, the send_ring_size needs to be increased to at least 64.
 
 ## Risk Alert
 
