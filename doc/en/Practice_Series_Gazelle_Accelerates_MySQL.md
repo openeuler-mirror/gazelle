@@ -4,19 +4,19 @@
 
 The current improvement in network card performance far outpaces that of single-core CPUs. Single-core CPUs are no longer able to fully utilize the bandwidth dividend of network cards. Meanwhile, CPUs are evolving towards multi-core direction, and NUMA architecture is one of the multi-core solutions. From a hardware perspective, there are mainly two solutions to bridge the computational gap between CPU and network card: offloading CPU work to the network card, a hardware acceleration solution; and making full use of the NUMA architecture, a software acceleration solution. It may be instinctive to think that hardware acceleration is faster, but in practical tests, Gazelle software acceleration achieves greater performance improvement, especially in the segment where data efficiently transfers to applications, Gazelle handles it better.
 
-![Network Card Trend](images/网卡趋势_en.png)
+![Network Card Trend](../images/网卡趋势_en.png)
 
 Currently, there is a wide variety of software programming models, but they can be summarized into two typical network models, as shown below:
 - IO multiplexing model: Application A's network threads are completely isolated from each other, and protocol state contexts are fixed within a thread.
 - Asymmetric model: Application B's network threads are asymmetric, and protocol state contexts migrate across multiple threads.
 
-![Network Models](images/网络模型_en.png)
+![Network Models](../images/网络模型_en.png)
 
 ## Challenges in Improving MySQL Performance
 
 MySQL's network model belongs to the aforementioned asymmetric model, where TCP migrates across threads. Common user-space protocol stacks in the industry are designed for asymmetric applications (such as f-stack), which cannot support TCP migration across threads, or they use global TCP resources (such as lwip). When the number of connections exceeds 40, performance rapidly deteriorates due to competition issues.
 
-![MySQL Model](images/mysql模型_en.png) ![Accelerating MySQL in the Industry](images/业界加速mysql效果_en.png)
+![MySQL Model](../images/mysql模型_en.png) ![Accelerating MySQL in the Industry](../images/业界加速mysql效果_en.png)
 
 ## Gazelle Solution
 
@@ -26,7 +26,7 @@ Gazelle is a high-performance user-space protocol stack. It directly reads and w
 
 Gazelle decouples application threads from protocol stack threads, thereby supporting any thread model. Through the routing table of application thread fd and protocol stack thread sock, operations such as read/write of application threads can be executed in the corresponding protocol stack threads. Gazelle is deployed in a multi-core multi-threaded manner, avoiding NUMA traps through regionalized large page memory.
 
-![Technical Features](images/框图_en.png)
+![Technical Features](../images/框图_en.png)
 
 - POSIX compatibility
 - DPDK bypass kernel
@@ -36,7 +36,7 @@ Gazelle decouples application threads from protocol stack threads, thereby suppo
 - Decoupling of protocol stack threads and application threads
 - Efficient transmission of packets to applications
 
-![MySQL Kernel](images/mysql_kernel.png) ![MySQL with Gazelle](images/mysql_gazelle.png)
+![MySQL Kernel](../images/mysql_kernel.png) ![MySQL with Gazelle](../images/mysql_gazelle.png)
 
 As shown, using the kernel protocol stack achieves a score of 548,400, while using Gazelle achieves a score of 668,500, an increase of 20%+.
 
@@ -68,7 +68,7 @@ The software package defaults to using openEuler 22.03 yum source.
 
 #### 1.3 Networking
 
-![Deployment](images/部署_en.png)
+![Deployment](../images/部署_en.png)
 
 ### 2. Server-Side Deployment
 
@@ -82,7 +82,7 @@ yum install -y cmake doxygen bison ncurses-devel openssl-devel libtool tar rpcge
 
 - Download the source code package from the [official website](https://downloads.mysql.com/archives/community/).
 
-![Download MySQL Source Code Package](images/下载mysql源码包.png)
+![Download MySQL Source Code Package](../images/下载mysql源码包.png)
 
 - Download optimization patches: [Fine-grained lock optimization feature patch](https://github.com/kunpengcompute/mysql-server/releases/download/tp_v1.0.0/0001-SHARDED-LOCK-SYS.patch), [NUMA scheduling patch](https://github.com/kunpengcompute/mysql-server/releases/download/21.0.RC1.B031/0001-SCHED-AFFINITY.patch), [Lock-free optimization feature patch](https://github.com/kunpengcompute/mysql-server/releases/download/tp_v1.0.0/0002-LOCK-FREE-TRX-SYS.patch).
 
@@ -251,7 +251,7 @@ pkill -9 mysqld
 
 Test results are as follows:
 
-<img src="images/mysql_kernel.png">
+<img src="../images/mysql_kernel.png">
 
 ### 7. Gazelle Testing for MySQL
 Install software packages
@@ -268,7 +268,7 @@ Modify the `/etc/gazelle/lstack.conf` configuration file as follows:
 | listen_shadow      | 1                                                            | Use listen shadow FD, as one MySQL listen thread corresponds to 4 protocol stack threads |
 | num_cpus           | "18,38,58,78"                                                | Choose one CPU for each NUMA                              |
 
-<img src="images/lstack_mysql_conf.png">
+<img src="../images/lstack_mysql_conf.png">
 
 ```sh
 # Server-side allocate huge pages
@@ -301,4 +301,4 @@ For detailed Gazelle deployment, refer to the [Gazelle User Guide](user-guide.md
 
 Test results are as follows:
 
-<img src="images/mysql_gazelle.png">
+<img src="../images/mysql_gazelle.png">

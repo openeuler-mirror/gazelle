@@ -27,11 +27,11 @@ gazelle-pdump -d /usr/lib64/librte_net_af_xdp.so -- --pdump 'device_id=net_af_xd
 #mlx
 gazelle-pdump -d /usr/lib64/librte_net_mlx5.so -- --pdump 'device_id=0000:01:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
 ```
-![scene](images/pdump.png)
+![scene](../images/pdump.png)
 
 Use ctrl+C to stop the capture. Once the capture is complete, the data packets will be saved in pcap file format, which can be further processed using the `tcpdump` command.
 
-![scene](images/pdump-tcpdump.png)
+![scene](../images/pdump-tcpdump.png)
 
 The following command filters packets with a source IP of `192.168.1.10`:
 ```

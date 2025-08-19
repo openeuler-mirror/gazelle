@@ -9,7 +9,7 @@
 
 ### 1. Separate Thread Model
 
-![](images/programmer_分离线程模型_en.png)
+![](../images/programmer_分离线程模型_en.png)
 
 * Suitable for scenarios with a large number of business threads, supporting cross-thread FD usage (general use case).
 * Separate protocol stack threads from business threads: similar to Linux kernel's soft interrupt implementation, the protocol stack wakes up business threads upon receiving requests.
@@ -17,7 +17,7 @@
 
 ### 2. Shared Thread Model
 
-![](images/programmer_共线程模型_en.png)
+![](../images/programmer_共线程模型_en.png)
 
 * Suitable for scenarios where there are not many business network threads, and the number of threads is fixed. FDs are not shared across threads.
 * Protocol stack and business threads share the same context: business and protocol stack run in the same context, executing packet polling within `poll/epoll`.
@@ -28,7 +28,7 @@
 
 ### 1. Process Exclusive NIC
 
-![](images/programmer_sriov.png)
+![](../images/programmer_sriov.png)
 
 * SR-IOV NIC hardware virtualization is a widely used technology, where a NIC PF can virtualize multiple VF NICs, sharing NIC bandwidth.
 * PF/VF virtualization is based on hardware switch for layer 2 forwarding, with DMA copying between NICs. Hence, each NIC can be bound separately to kernel-space and user-space drivers.
@@ -39,7 +39,7 @@
 * Suitable for scenarios where the number of NICs is limited, and multiple processes need to share a single NIC. However, process isolation may be poor.
 * Each business process/thread may `listen` on different ports or have fewer NIC queues than threads, requiring **traffic balancing and forwarding**.
 
-![](images/programmer_进程共用网卡_en.png)
+![](../images/programmer_进程共用网卡_en.png)
 
 Current software forwarding solution (ltran): good isolation, poor performance
 
@@ -62,7 +62,7 @@ Design goals:
 * Integrate software and hardware forwarding solutions.
 * Remove central forwarding nodes and cross-process copying, preventing resource leaks upon process abnormal termination.
 
-![](images/programmer_流量均衡与转发_en.png)
+![](../images/programmer_流量均衡与转发_en.png)
 
 #### Software Forwarding Solution
 
@@ -91,7 +91,7 @@ Upon exiting a protocol stack thread:
 
 ## mbuf Memory Management
 
-![img](images/programmer_mbufpool_en.png)
+![img](../images/programmer_mbufpool_en.png)
 
 Packet Data Flow:
 
@@ -111,7 +111,7 @@ Mbufpool Contention Issues:
 
 ## DT Testing
 
-![](images/programmer_veth.png)
+![](../images/programmer_veth.png)
 
 Current Issues:
 

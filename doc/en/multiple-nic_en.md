@@ -89,4 +89,4 @@ devices="ff:ee:dd:cc:bb:aa"
 
 ## Usage
 - The two processes can independently send and receive data packets using different network cards.
-<img src="images/multiple-nic.png" alt=scene style="zoom:100%">
+<img src="../images/multiple-nic.png" alt=scene style="zoom:100%">

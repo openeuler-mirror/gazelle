@@ -2,26 +2,26 @@
 
 
 
-<img src="images/logo.png" alt=Gazelle style="zoom:20%"> 
+<img src="../images/logo.png" alt=Gazelle style="zoom:20%"> 
 
 # 实践系列(一)Gazelle加速mysql 20%
 
 ## 背景介绍
 
    当前网卡性能提升速度远远快于单核CPU，单核CPU已无法充分利用网卡带宽发展红利。同时cpu朝着多核方向发展，NUMA体系结构是现在众核解决方案之一。从硬件视角看解决CPU/网卡之间的算力差距，主要是两种方案，将CPU工作卸载到网卡，硬件加速方案；将NUMA体系结构充分利用起来，软件加速方案。下意识可能都会认为硬件加速方案更快，但是实测中，Gazelle软件加速性能提升更多，后续文章会详讲，主要是数据高效传递到应用这一段路径，Gazelle处理的更好。 
-<img src="images/网卡趋势.png" style="zoom:60%"> 
+<img src="../images/网卡趋势.png" style="zoom:60%"> 
 
 现在软件的编程模型非常多样，但是可以总结出2类典型的网络模型，如下图：
 - IO复用模型：应用A网络线程之间完全隔离，协议状态上下文固定在某个线程内
 - 非对称模型：应用B网络线程之间非对称，协议状态上下文会在多个线程之间迁移 
 
-<img src="images/网络模型.png" style="zoom:60%">
+<img src="../images/网络模型.png" style="zoom:60%">
 
 ## 提升mysql性能遇到的问题
 
 ​		mysql的网络模型属于上述非对称模型，TCP会跨线程迁移。目前业界常见的用户态协议栈都是针对非对称应用设计（如f-stack），不能支持TCP跨线程迁移场景；或使用全局的TCP资源（如lwip），当连接数超过40时，因为竞争问题性能迅速恶化。
 
-<img src="images/mysql模型.png" width="400" High="100"><img src="images/业界加速mysql效果.png">
+<img src="../images/mysql模型.png" width="400" High="100"><img src="../images/业界加速mysql效果.png">
 
 ## Gazelle方案
 
@@ -31,7 +31,7 @@
 
 ​       Gazelle解耦应用线程与协议栈线程，从而支持任意的线程模型。通过应用线程fd与协议栈线程sock的路由表，应用线程的read/write等操作能在对应的协议栈线程执行。Gazelle是多核多线程部署，通过区域化大页内存，避免NUMA陷阱。
 
-<img src="images/框图.png" align="left" style="zoom:60%"> 技术特征
+<img src="../images/框图.png" align="left" style="zoom:60%"> 技术特征
 
 - POSIX兼容
 
@@ -47,9 +47,9 @@
 
 - 报文高效传递到应用
 
-<img src="images/mysql_kernel.png"> 
+<img src="../images/mysql_kernel.png"> 
 
-<img src="images/mysql_gazelle.png"> 
+<img src="../images/mysql_gazelle.png"> 
 
 效果如图，使用内核协议栈跑分为54.84万，使用Gazelle跑分为66.85万，Gazelle提升20%+。
 
@@ -81,7 +81,7 @@
 
 #### 1.3 组网
 
-<img src="images/部署.png" alt=部署>
+<img src="../images/部署.png" alt=部署>
 
 ### 2. Server端部署
 
@@ -95,7 +95,7 @@ yum install -y cmake doxygen bison ncurses-devel openssl-devel libtool tar rpcge
 
 - 从[官网下载](https://downloads.mysql.com/archives/community/)下载源码包
 
-<img src="images/下载mysql源码包.png" alt=下载  style="zoom:60%">
+<img src="../images/下载mysql源码包.png" alt=下载  style="zoom:60%">
 
 - 下载优化补丁: [细粒度锁优化特性补丁](https://github.com/kunpengcompute/mysql-server/releases/download/tp_v1.0.0/0001-SHARDED-LOCK-SYS.patch)         [NUMA调度补丁](https://github.com/kunpengcompute/mysql-server/releases/download/21.0.RC1.B031/0001-SCHED-AFFINITY.patch)         [无锁优化特性补丁](https://github.com/kunpengcompute/mysql-server/releases/download/tp_v1.0.0/0002-LOCK-FREE-TRX-SYS.patch)    
 
@@ -264,7 +264,7 @@ pkill -9 mysqld
 
 测试结果如下：
 
-<img src="images/mysql_kernel.png">
+<img src="../images/mysql_kernel.png">
 
 ### 7. Gazelle测试mysql
 安装软件包
@@ -281,7 +281,7 @@ yum -y install gazelle dpdk libconfig numactl libboundscheck libcap
 | listen_shadow | 1                                                            | 使用listen影子fd，因为mysql一个listen线程对应4个协议栈线程   |
 | num_cpus      | "18,38,58,78"                                                | 每个NUMA选择一个cpu                                          |
 
-<img src="images/lstack_mysql_conf.png">
+<img src="../images/lstack_mysql_conf.png">
 
 ```sh
 #服务端分配大页
@@ -314,5 +314,5 @@ Gazelle部署详见[Gazelle用户指南](user-guide.md)
 
 测试结果如下:
 
-<img src="images/mysql_gazelle.png">
+<img src="../images/mysql_gazelle.png">
 

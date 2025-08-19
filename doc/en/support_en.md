@@ -1,6 +1,7 @@
-<img src="images/logo.png" alt=Gazelle style="zoom:20%"> 
+<img src="../images/logo.png" alt=Gazelle style="zoom:20%">
 
-# Gazelle支持posix接口列表
+# Gazelle Supported POSIX Interface List
+
 - int32_t epoll_create1(int32_t flags)
 - int32_t epoll_create(int32_t size)
 - int32_t epoll_ctl(int32_t epfd, int32_t op, int32_t fd, struct epoll_event* event)
@@ -31,7 +32,8 @@
 - int32_t ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo_p, const sigset_t *sigmask)
 - int32_t sigaction(int32_t signum, const struct sigaction *act, struct sigaction *oldact)
 
-# Gazelle支持应用列表
+# Gazelle Supported Applications List
+
 - mysql
 - ceph client
 - Redis

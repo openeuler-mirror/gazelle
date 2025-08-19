@@ -26,11 +26,11 @@ gazelle-pdump -d /usr/lib64/librte_net_af_xdp.so -- --pdump 'device_id=net_af_xd
 #mlx
 gazelle-pdump -d /usr/lib64/librte_net_mlx5.so -- --pdump 'device_id=0000:07:00.0,queue=*,rx-dev=/root/capture-rx.pcap,tx-dev=/root/capture-tx.pcap'
 ```
-<img src="images/pdump.png" alt="scene" style="zoom:100%"> 
+<img src="../images/pdump.png" alt="scene" style="zoom:100%"> 
 
 使用ctrl+C停止抓包，抓包完成后数据包将保存为pcap文件格式，它可以被`tcpdump`命令进一步处理。
 
-<img src="images/pdump-tcpdump.png" alt="scene" style="zoom:50%"> 
+<img src="../images/pdump-tcpdump.png" alt="scene" style="zoom:50%"> 
 
 下面的命令将过滤数据包中源IP为`192.168.1.10`的数据包：
 ```

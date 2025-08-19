@@ -88,5 +88,5 @@ devices="ff:ee:dd:cc:bb:aa"
 
 ## 使用
 - 两个进程可以分别使用不同网卡收发数据包
-<img src="images/multiple-nic.png" alt=scene style="zoom:100%"> 
+<img src="../images/multiple-nic.png" alt=scene style="zoom:100%"> 
 
