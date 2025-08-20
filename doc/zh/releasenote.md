@@ -1,4 +1,4 @@
-<img src="images/logo.png" alt=Gazelle style="zoom:20%"> 
+<img src="../images/logo.png" alt=Gazelle style="zoom:20%"> 
 
 # Gazelle特性变更
 ## 2024-01-01

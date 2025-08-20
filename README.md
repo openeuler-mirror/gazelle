@@ -30,23 +30,23 @@ Gazelle是一款高性能用户态协议栈。它基于DPDK在用户态直接读
 | 主题 | 内容简介 | 发布时间 |
 |:---|:-----|:---|
 |[openEuler指南](https://gitee.com/openeuler/community/blob/master/zh/contributors/README.md)| 如何参与openEuler社区 | 已发布 |
-|[Gazelle用户指南](doc/user-guide.md)| 1. 安装、部署环境、启动应用程序<br>2. 配置参数说明<br>3. 调测命令说明<br>4. 使用约束、风险、注意事项|已发布|
-|[Gazelle开发者指南](doc/programmer-guide.md)| 1. 技术原理<br>2. 架构设计| 待定 |
-|[实践系列-Gazelle加速mysql 20%](doc/%E5%AE%9E%E8%B7%B5%E7%B3%BB%E5%88%97-Gazelle%E5%8A%A0%E9%80%9Fmysql.md)|1. 详细测试步骤<br>2. 性能效果|已发布|
+|[Gazelle用户指南](doc/zh/user-guide.md)| 1. 安装、部署环境、启动应用程序<br>2. 配置参数说明<br>3. 调测命令说明<br>4. 使用约束、风险、注意事项|已发布|
+|[Gazelle开发者指南](doc/zh/programmer-guide.md)| 1. 技术原理<br>2. 架构设计| 待定 |
+|[实践系列-Gazelle加速mysql 20%](doc/zh/%E5%AE%9E%E8%B7%B5%E7%B3%BB%E5%88%97-Gazelle%E5%8A%A0%E9%80%9Fmysql.md)|1. 详细测试步骤<br>2. 性能效果|已发布|
 |[实践系列-Gazelle加速ceph client 20%](https://www.hikunpeng.com/document/detail/zh/kunpengcpfs/basicAccelFeatures/storageAccel/kunpengcpfs_hpcd_0002.html)|1. 详细测试步骤<br>2. 性能效果|已发布|
-|[实践系列-Gazelle加速redis](doc/redis.md) |1. 详细测试步骤<br>2. 性能效果| 已发布 |
+|[实践系列-Gazelle加速redis](doc/zh/redis.md) |1. 详细测试步骤<br>2. 性能效果| 已发布 |
 |实践系列-Gazelle加速openGauss |1. 详细测试步骤<br>2. 性能效果| 待定 |
-|[实践系列-Gazelle支持netperf性能测试](doc/netperf.md)| 1.版本说明 <br>2. 详细测试步骤| 待定 |
+|[实践系列-Gazelle支持netperf性能测试](doc/zh/netperf.md)| 1.版本说明 <br>2. 详细测试步骤| 待定 |
 
 ## 特性变更
-- [多进程模式即将下线](doc/releasenote.md)
+- [多进程模式即将下线](doc/zh/releasenote.md)
 
 ## 支持列表
-- [posix接口列表及应用支持列表](doc/support.md)
+- [posix接口列表及应用支持列表](doc/zh/support.md)
 
 ## FAQ
-- [如何使用pdump工具抓包](doc/pdump.md) 
-- [多进程各自独立使用网卡](doc/multiple-nic.md)
+- [如何使用pdump工具抓包](doc/zh/pdump.md) 
+- [多进程各自独立使用网卡](doc/zh/multiple-nic.md)
 
 ## 路标
 TODO

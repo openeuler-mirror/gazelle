@@ -1,0 +1,6 @@
+label: Gazelle User Guide
+isManual: true
+description: Improved network I/O throughput for applications
+sections:
+  - label: Gazelle User Guide
+    href: ./gazelle_user_guide.md

@@ -11,7 +11,7 @@
 
 ### 1、分离线程模型 
 
-![](images/programmer_分离线程模型.png)  
+![](../images/programmer_分离线程模型.png)  
 
 * 适用场景：业务线程数量很多，支持fd跨线程使用。（通用场景）
 * 协议栈线程和业务线程分离：类似linux内核协议栈的软中断实现，收到请求时由协议栈唤醒业务线程。
@@ -19,7 +19,7 @@
 
 ### 2、共线程模型
 
-![](images/programmer_共线程模型.png)  
+![](../images/programmer_共线程模型.png)  
 
 * 适用场景：业务网络线程数量不多，数量固定。业务线程fd不跨线程使用。
 * 协议栈和业务共线程：业务和协议栈在一个上下文运行，`poll/epoll`内执行协议栈轮询收包。
@@ -32,7 +32,7 @@
 
 ### 1、进程独占网卡
 
-![](images/programmer_sriov.png)  
+![](../images/programmer_sriov.png)  
 
 * `SR-IOV`网卡硬件虚拟化是一个应用普遍的技术，一个网卡PF可以虚拟出多个VF网卡，共享网卡带宽。
 * PF/VF通过网卡硬件switch基于二层转发，网卡间转发会做DMA拷贝。因此各网卡可以分别绑定内核态、用户态驱动。
@@ -58,7 +58,7 @@
 * 适用场景：网卡数量不够，需要多个进程共用一个网卡。但是进程隔离性可能较差。
 * 各业务进程/线程可能`listen`不同port、或者网卡队列数小于线程数，这时需要**流量均衡与转发**。
 
-![](images/programmer_进程共用网卡.png)  
+![](../images/programmer_进程共用网卡.png)  
 
 当前ltran软件转发方案：隔离性好，性能差
 
@@ -81,7 +81,7 @@
 * 融合“软件转发方案”和“硬件转发方案”。
 * 去除中心转发节点和跨进程拷贝，进程异常退出不能泄露资源。
 
-![](images/programmer_流量均衡与转发.png)  
+![](../images/programmer_流量均衡与转发.png)  
 
 #### 软件转发方案
 
@@ -121,7 +121,7 @@
 
 ## mbuf内存管理
 
-![img](images/programmer_mbufpool.png)  
+![img](../images/programmer_mbufpool.png)  
 
 报文数据流：
 
@@ -146,7 +146,7 @@ mbufpool竞争问题：
 
 ## DT测试
 
-![](images/programmer_veth.png)  
+![](../images/programmer_veth.png)  
 
 当前问题：
 
