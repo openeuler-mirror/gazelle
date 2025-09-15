@@ -43,7 +43,12 @@
 #define RPCPOOL_RESERVE_NUM     512
 #define RPCPOLL_MAX_NUM         (LWIP_MAX(RPCPOOL_RESERVE_NUM, MBUFPOOL_RESERVE_NUM) + MEMP_NUM_SYS_MBOX)
 
+#if RTE_VERSION < RTE_VERSION_NUM(21, 11, 0, 0)
+#define MEMPOOL_OPS_NAME            "ring_mp_mc"
+#else
 #define MEMPOOL_OPS_NAME            "ring_mt_rts"
+#endif /* RTE_VERSION < RTE_VERSION_NUM(21, 11, 0, 0) */
+
 #define MEMPOOL_CACHE_NUM           32
 
 #define BUF_CACHE_MIN_NUM           16
