@@ -622,6 +622,7 @@ int stack_group_init(void)
 
     stack_group->stack_setup_fail = 0;
 
+    sys_init();
     if (mem_thread_manager_init() != 0) {
         LSTACK_LOG(ERR, LSTACK, "mem_thread_manager_init failed\n");
         return -1;
